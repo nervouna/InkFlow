@@ -29,8 +29,18 @@ below without selecting a Team ID or signing identity.
 - Test UTF-8 byte offsets at Unicode-scalar boundaries, including a boundary
   inside a multi-scalar grapheme, and convert them to UTF-16 ranges.
 - Test the iOS action pipeline for FIFO execution and delivery, stale candidate
-  rejection, exactly-once commit, delayed text/selection invalidation, reset
-  barriers, and lifecycle-scoped finish completion.
+  rejection, exactly-once commit, synchronous own-proxy callback suppression,
+  delayed text/selection invalidation, reset barriers, and lifecycle-scoped
+  finish completion.
+- Wrap every `UITextDocumentProxy` insertion and deletion in a main-actor,
+  synchronous mutation scope. Ignore a text or selection callback only when it
+  re-enters during that exact proxy call stack, because its origin is then
+  provably local. After the proxy call returns UIKit provides neither an origin
+  token nor an acknowledgement, so later callbacks remain ambiguous and are
+  conservatively treated as external: they invalidate queued work and enqueue a
+  coalesced engine reset. This can cancel queued input if UIKit reports a local
+  write only asynchronously; without an origin token that case cannot be safely
+  distinguished from an actual host edit.
 
 ## Native products
 

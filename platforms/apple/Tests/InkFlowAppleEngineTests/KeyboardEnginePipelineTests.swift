@@ -62,11 +62,14 @@ private final class ControllerPipelineSink {
     private(set) var context = KeyboardContextGeneration()
     private var visibility = KeyboardVisibilityEpoch()
     private var finishGuard = KeyboardFinishGuard()
+    private let proxyMutationScope = KeyboardProxyMutationScope()
     private(set) var resetBarrier = KeyboardResetBarrier()
     private(set) var insertedTexts: [String] = []
     private(set) var preedit = ""
     private(set) var candidateTexts: [String] = []
     private(set) var advanceCount = 0
+    private(set) var externalResetRequests = 0
+    private var simulatesSynchronousProxyCallback = false
 
     var isFinishing: Bool {
         finishGuard.isFinishing
@@ -121,6 +124,17 @@ private final class ControllerPipelineSink {
         return resetBarrier.begin(generation: generation)
     }
 
+    func observeContextCallback() -> KeyboardResetBarrier.Token? {
+        guard !proxyMutationScope.isActive else { return nil }
+        guard let token = beginExternalReset() else { return nil }
+        externalResetRequests += 1
+        return token
+    }
+
+    func simulateSynchronousProxyCallback() {
+        simulatesSynchronousProxyCallback = true
+    }
+
     func completeExternalReset(_ token: KeyboardResetBarrier.Token) -> Bool {
         resetBarrier.engineResetCompleted(
             token,
@@ -137,14 +151,14 @@ private final class ControllerPipelineSink {
         case let .update(update):
             switch KeyboardUpdateRendering(update) {
             case let .clearAfterCommit(text):
-                insertedTexts.append(text)
+                performProxyInsertion(text)
                 clearComposition()
             case let .composition(newPreedit, candidates):
                 preedit = newPreedit
                 candidateTexts = candidates.map(\.text)
             }
         case let .insertText(text):
-            insertedTexts.append(text)
+            performProxyInsertion(text)
         case .deleteBackward:
             break
         case .noOp:
@@ -155,6 +169,15 @@ private final class ControllerPipelineSink {
     private func clearComposition() {
         preedit = ""
         candidateTexts = []
+    }
+
+    private func performProxyInsertion(_ text: String) {
+        proxyMutationScope.perform {
+            insertedTexts.append(text)
+            if simulatesSynchronousProxyCallback {
+                _ = observeContextCallback()
+            }
+        }
     }
 }
 
@@ -391,6 +414,86 @@ final class KeyboardEnginePipelineTests: XCTestCase {
         XCTAssertEqual(sink.captureGeneration(), generation)
         XCTAssertTrue(sink.allowsEngineInput)
         XCTAssertFalse(sink.resetBarrier.isBlocking)
+    }
+
+    func testSynchronousSelfMutationCallbackPreservesQueuedSpaceThenLetter() async throws {
+        let session = try AppleEngineTestEnvironment.makeSession()
+        _ = try session.reset()
+        let pipeline = try KeyboardEnginePipeline(session: session)
+        let sink = ControllerPipelineSink()
+        sink.simulateSynchronousProxyCallback()
+        let generation = sink.captureGeneration()
+        let recorder = PipelineOutputRecorder(expectedCount: 2)
+
+        pipeline.space { output in
+            sink.consume(output, capturedGeneration: generation)
+            recorder.record(output)
+        }
+        pipeline.process(EngineKeyEvent(key: UInt32(Character("n").asciiValue!))) { output in
+            sink.consume(output, capturedGeneration: generation)
+            recorder.record(output)
+        }
+
+        _ = await recorder.values()
+        XCTAssertEqual(sink.insertedTexts, [" "])
+        XCTAssertEqual(sink.preedit, "n")
+        XCTAssertEqual(sink.captureGeneration(), generation)
+        XCTAssertEqual(sink.externalResetRequests, 0)
+        XCTAssertFalse(sink.resetBarrier.isBlocking)
+    }
+
+    func testCallbackAfterSelfMutationScopeClosesInvalidatesAndRequestsReset() async throws {
+        let session = try AppleEngineTestEnvironment.makeSession()
+        _ = try session.reset()
+        let pipeline = try KeyboardEnginePipeline(session: session)
+        let sink = ControllerPipelineSink()
+        let generation = sink.captureGeneration()
+        let insertion = PipelineOutputRecorder(expectedCount: 1)
+
+        pipeline.space { output in
+            sink.consume(output, capturedGeneration: generation)
+            insertion.record(output)
+        }
+        _ = await insertion.values()
+        XCTAssertEqual(sink.insertedTexts, [" "])
+
+        let resetToken = try XCTUnwrap(sink.observeContextCallback())
+        XCTAssertFalse(sink.context.accepts(generation))
+        XCTAssertEqual(sink.externalResetRequests, 1)
+        XCTAssertTrue(sink.resetBarrier.isBlocking)
+
+        let cancellation = PipelineOutputRecorder(expectedCount: 1)
+        pipeline.cancel { output in
+            XCTAssertTrue(sink.completeExternalReset(resetToken))
+            cancellation.record(output)
+        }
+        _ = await cancellation.values()
+        XCTAssertFalse(sink.resetBarrier.isBlocking)
+    }
+
+    func testProxyMutationScopeIsNestedAndDeferSafe() {
+        enum ProbeError: Error {
+            case expected
+        }
+
+        let scope = KeyboardProxyMutationScope()
+        XCTAssertFalse(scope.isActive)
+        scope.perform {
+            XCTAssertTrue(scope.isActive)
+            scope.perform {
+                XCTAssertTrue(scope.isActive)
+            }
+            XCTAssertTrue(scope.isActive)
+        }
+        XCTAssertFalse(scope.isActive)
+
+        XCTAssertThrowsError(
+            try scope.perform {
+                XCTAssertTrue(scope.isActive)
+                throw ProbeError.expected
+            }
+        )
+        XCTAssertFalse(scope.isActive)
     }
 
     func testSpaceLetterThenFinishCommitsAllAndAdvancesOnce() async throws {

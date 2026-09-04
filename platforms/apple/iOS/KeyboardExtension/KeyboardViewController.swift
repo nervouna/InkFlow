@@ -11,6 +11,7 @@ final class KeyboardViewController: UIInputViewController {
     private var visibilityEpoch = KeyboardVisibilityEpoch()
     private var resetBarrier = KeyboardResetBarrier()
     private var finishGuard = KeyboardFinishGuard()
+    private let proxyMutationScope = KeyboardProxyMutationScope()
     private var candidateButtonMetadata: [ObjectIdentifier: (index: Int, revision: UInt64)] = [:]
     private var engineInputButtons: [UIButton] = []
     private var isLoadingEngine = false
@@ -173,7 +174,7 @@ final class KeyboardViewController: UIInputViewController {
               !finishGuard.isFinishing,
               !resetBarrier.isBlocking else { return }
         guard let pipeline else {
-            textDocumentProxy.deleteBackward()
+            performProxyDeletion()
             return
         }
         let generation = contextGeneration.generation
@@ -260,14 +261,15 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func observeExternalContextCallback() {
+        guard !proxyMutationScope.isActive else { return }
         guard let generation = contextGeneration.beginExternalCallback() else { return }
         finishGuard.invalidate()
         clearCompositionPresentation()
         _ = enqueueEngineReset(generation: generation)
 
-        // UITextDocumentProxy has no completion or mutation-origin token, and
-        // UIKit does not promise callbacks for our own proxy writes. Treat every
-        // callback as external; this coalescing only avoids duplicate resets.
+        // Only callbacks that re-enter during a proxy call are provably ours.
+        // Once that call returns, UIKit exposes no mutation-origin token, so an
+        // asynchronous callback remains ambiguous and is treated as external.
         DispatchQueue.main.async { [weak self] in
             self?.contextGeneration.endExternalCallbackBatch()
         }
@@ -343,11 +345,15 @@ final class KeyboardViewController: UIInputViewController {
     }
 
     private func performProxyInsertion(_ text: String) {
-        textDocumentProxy.insertText(text)
+        proxyMutationScope.perform {
+            textDocumentProxy.insertText(text)
+        }
     }
 
     private func performProxyDeletion() {
-        textDocumentProxy.deleteBackward()
+        proxyMutationScope.perform {
+            textDocumentProxy.deleteBackward()
+        }
     }
 
     private func updateCandidateButtons(

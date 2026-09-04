@@ -1,6 +1,21 @@
 import Foundation
 import InkFlowAppleEngine
 
+@MainActor
+final class KeyboardProxyMutationScope {
+    private var depth = 0
+
+    var isActive: Bool {
+        depth > 0
+    }
+
+    func perform<Result>(_ mutation: () throws -> Result) rethrows -> Result {
+        depth += 1
+        defer { depth -= 1 }
+        return try mutation()
+    }
+}
+
 struct KeyboardContextGeneration: Sendable {
     private(set) var generation: UInt64 = 0
     private var isExternalCallbackBatchOpen = false
