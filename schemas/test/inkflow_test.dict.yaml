@@ -1,0 +1,11 @@
+---
+name: inkflow_test
+version: "1.0.0"
+sort: by_weight
+use_preset_vocabulary: false
+columns:
+  - text
+  - code
+  - weight
+...
+你好	nihao	100

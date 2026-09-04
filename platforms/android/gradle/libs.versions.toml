@@ -1,0 +1,10 @@
+[versions]
+agp = "9.1.1"
+compile-sdk = "36"
+target-sdk = "36"
+min-sdk = "26"
+ndk = "28.2.13676358"
+cmake = "3.22.1"
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }

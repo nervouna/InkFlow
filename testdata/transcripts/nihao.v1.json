@@ -1,0 +1,67 @@
+{
+  "formatVersion": 1,
+  "id": "nihao-v1",
+  "schemaId": "inkflow_test",
+  "description": "Type nihao and select the first candidate to commit 你好.",
+  "actions": [
+    {
+      "type": "key",
+      "key": "n",
+      "expect": {
+        "handled": true,
+        "preedit": "n",
+        "commit": null
+      }
+    },
+    {
+      "type": "key",
+      "key": "i",
+      "expect": {
+        "handled": true,
+        "preedit": "ni",
+        "commit": null
+      }
+    },
+    {
+      "type": "key",
+      "key": "h",
+      "expect": {
+        "handled": true,
+        "preedit": "nih",
+        "commit": null
+      }
+    },
+    {
+      "type": "key",
+      "key": "a",
+      "expect": {
+        "handled": true,
+        "preedit": "niha",
+        "commit": null
+      }
+    },
+    {
+      "type": "key",
+      "key": "o",
+      "expect": {
+        "handled": true,
+        "preedit": "nihao",
+        "commit": null,
+        "candidates": ["你好"],
+        "highlightedCandidate": 0,
+        "hasPreviousPage": false,
+        "hasNextPage": false
+      }
+    },
+    {
+      "type": "selectCandidate",
+      "index": 0,
+      "expect": {
+        "handled": true,
+        "preedit": "",
+        "commit": "你好",
+        "candidates": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "formatVersion": 1,
+  "dependencies": {
+    "librime": {
+      "repository": "https://github.com/rime/librime.git",
+      "path": "third_party/librime",
+      "version": "1.17.0",
+      "tagRef": "refs/tags/1.17.0",
+      "tagObject": "a52a3400f8b7679e839bc5fb8e6309a0fc4424da",
+      "commit": "33e78140250125871856cdc5b42ddc6a5fcd3cd4",
+      "submodules": "recursive",
+      "license": "BSD-3-Clause"
+    }
+  }
+}

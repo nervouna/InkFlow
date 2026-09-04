@@ -1,0 +1,62 @@
+# macOS and editors
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local.xcconfig
+*.mobileprovision
+*.jks
+*.keystore
+keystore.properties
+platforms/apple/Config/Signing.local.xcconfig
+platforms/android/local.properties
+
+# Shared build output
+/build/
+/out/
+/generated/
+CMakeUserPresets.json
+compile_commands.json
+
+# CMake output outside the root build directory
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/Makefile
+/Testing/
+
+# Apple generated output
+DerivedData/
+*.xcarchive
+*.dSYM/
+*.ipa
+*.xcuserstate
+xcuserdata/
+platforms/apple/InkFlow.xcodeproj/
+platforms/apple/Generated/
+platforms/apple/build/
+
+# Android generated output
+.gradle/
+.externalNativeBuild/
+.cxx/
+captures/
+*.apk
+*.aab
+platforms/android/app/build/
+platforms/android/build/
+
+# Rime generated and user data
+schemas/generated/
+*.bin
+*.prism.bin
+*.reverse.bin
+*.table.bin
+*.userdb/
+*.userdb.kct

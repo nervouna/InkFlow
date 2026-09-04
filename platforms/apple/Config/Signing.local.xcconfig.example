@@ -1,0 +1,3 @@
+// Copy to Signing.local.xcconfig and keep real signing values out of Git.
+DEVELOPMENT_TEAM =
+INKFLOW_BUNDLE_ID_PREFIX = io.example.inkflow

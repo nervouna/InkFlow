@@ -1,0 +1,41 @@
+schema:
+  schema_id: inkflow
+  name: InkFlow
+  version: "0.1.0"
+  author:
+    - InkFlow contributors
+  description: >-
+    Minimal offline table schema used to establish the canonical data path.
+
+switches:
+  - name: ascii_mode
+    reset: 0
+    states: [中文, ASCII]
+
+engine:
+  processors:
+    - ascii_composer
+    - speller
+    - selector
+    - navigator
+    - express_editor
+  segmentors:
+    - ascii_segmentor
+    - abc_segmentor
+    - fallback_segmentor
+  translators:
+    - table_translator
+
+menu:
+  page_size: 9
+
+speller:
+  alphabet: abcdefghijklmnopqrstuvwxyz
+  delimiter: " '"
+
+translator:
+  dictionary: inkflow
+  enable_completion: false
+  enable_sentence: false
+  enable_user_dict: true
+  encode_commit_history: true

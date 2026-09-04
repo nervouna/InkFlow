@@ -1,0 +1,20 @@
+name: InkFlow
+
+options:
+  minimumXcodeGenVersion: 2.46.0
+  createIntermediateGroups: true
+
+configs:
+  Debug: debug
+  Release: release
+
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+    SWIFT_VERSION: "6.0"
+
+targets: {}
+
+aggregateTargets:
+  InkFlowFoundation:
+    targets: []
