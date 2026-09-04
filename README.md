@@ -4,9 +4,11 @@ InkFlow is a local-first, cross-platform Chinese input method experiment. The
 repository is organized around one shared [librime](https://github.com/rime/librime)
 engine boundary and native shells for macOS, iOS, and Android.
 
-> **Current status:** the shared librime-backed engine and its host contract
-> tests are implemented. There is no installable input method yet, and no
-> production target silently substitutes a fake engine for librime.
+> **Current status:** the shared librime-backed engine and native Apple source
+> shells are implemented. Signing-disabled macOS and iOS Simulator products are
+> buildable; installation, launch, device use, and distribution are separate
+> acceptance layers. No production target substitutes a fake engine for
+> librime. The native Android frontend remains a later implementation task.
 
 ## Architecture
 
@@ -56,6 +58,16 @@ C consumer, full native link-closure symbol surface, and dynamic linkage, with:
 
 See `docs/foundation-acceptance.md` and `docs/engine-acceptance.md` for the
 evidence each check produces.
+
+Build and verify the native Apple adapter, macOS input method, and iOS keyboard
+extension with:
+
+```sh
+./tools/verify/apple.sh
+```
+
+See `docs/apple-acceptance.md` for the exact artifact, lifecycle, privacy, and
+signing-disabled evidence contract.
 
 ## Licensing
 

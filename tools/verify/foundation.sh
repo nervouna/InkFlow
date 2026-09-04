@@ -56,6 +56,45 @@ ruby "${verify_script_dir}/check_toolchains.rb"
 printf '%s\n' "Verifying canonical schemas and transcripts..."
 ruby "${verify_script_dir}/check_schema_data.rb"
 
+verify_schema_probe="${verify_repo_root}/inkflow-schema-copy-probe.$$.schema.yaml"
+if [ -e "${verify_schema_probe}" ]; then
+  printf '%s\n' "error: schema-copy probe path already exists" >&2
+  exit 1
+fi
+verify_cleanup_schema_probe() {
+  case "${verify_schema_probe}" in
+    "${verify_repo_root}"/inkflow-schema-copy-probe.*.schema.yaml)
+      rm -f -- "${verify_schema_probe}"
+      ;;
+    *)
+      printf '%s\n' \
+        "warning: refusing to clean unexpected schema probe: ${verify_schema_probe}" >&2
+      ;;
+  esac
+}
+trap verify_cleanup_schema_probe EXIT HUP INT TERM
+cp "${verify_repo_root}/schemas/source/inkflow.schema.yaml" \
+  "${verify_schema_probe}"
+if git -C "${verify_repo_root}" check-ignore --quiet -- "${verify_schema_probe}"; then
+  printf '%s\n' "error: schema-copy probe is unexpectedly ignored" >&2
+  exit 1
+fi
+if verify_schema_probe_output=$(ruby "${verify_script_dir}/check_schema_data.rb" 2>&1); then
+  printf '%s\n' "error: schema verification accepted a non-ignored copy" >&2
+  exit 1
+fi
+case "${verify_schema_probe_output}" in
+  *"schema copies exist outside canonical/test roots"*"${verify_schema_probe}"*)
+    ;;
+  *)
+    printf '%s\n' "error: schema-copy probe failed for an unexpected reason" >&2
+    printf '%s\n' "${verify_schema_probe_output}" >&2
+    exit 1
+    ;;
+esac
+verify_cleanup_schema_probe
+printf '%s\n' "PASS non-ignored schema copies remain rejected"
+
 printf '%s\n' "Verifying exact dependency metadata..."
 if [ "${verify_mode}" = "metadata-only" ]; then
   ruby "${verify_script_dir}/check_dependency_lock.rb" --metadata-only

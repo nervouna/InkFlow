@@ -1,0 +1,10 @@
+CODE_SIGN_STYLE = Automatic
+CURRENT_PROJECT_VERSION = 1
+ENABLE_DEBUG_DYLIB = NO
+INKFLOW_BUNDLE_ID_PREFIX = io.inkflow.local
+MARKETING_VERSION = 0.1.0
+ONLY_ACTIVE_ARCH = YES
+SWIFT_EMIT_LOC_STRINGS = NO
+
+// Personal Team IDs stay in the ignored optional file.
+#include? "Signing.local.xcconfig"

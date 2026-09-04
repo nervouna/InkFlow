@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "json"
+require "open3"
 require "yaml"
 
 repo_root = File.expand_path("../..", __dir__)
@@ -28,6 +29,21 @@ def load_dictionary(path)
   [header, body_text]
 rescue Psych::Exception => error
   fail_check("#{path}: #{error.message}")
+end
+
+def git_ignored?(repo_root, path)
+  relative_path = path.delete_prefix(repo_root + File::SEPARATOR)
+  # Deliberately omit --no-index: tracked files must remain visible even when
+  # a later ignore rule would otherwise match their path.
+  _stdout, stderr, status = Open3.capture3(
+    "git", "-C", repo_root, "check-ignore", "--quiet", "--", relative_path
+  )
+  return true if status.exitstatus == 0
+  return false if status.exitstatus == 1
+
+  fail_check(
+    "git check-ignore failed for #{relative_path}: #{stderr.strip}"
+  )
 end
 
 schema_directories = {
@@ -104,7 +120,8 @@ unexpected_schema_paths = Dir.glob(File.join(repo_root, "**", "*.{schema,dict}.y
   path.start_with?(schema_directories["source"] + File::SEPARATOR) ||
     path.start_with?(schema_directories["test"] + File::SEPARATOR) ||
     path.start_with?(File.join(repo_root, "third_party") + File::SEPARATOR) ||
-    path.start_with?(File.join(repo_root, "build") + File::SEPARATOR)
+    path.start_with?(File.join(repo_root, "build") + File::SEPARATOR) ||
+    git_ignored?(repo_root, path)
 end
 fail_check("schema copies exist outside canonical/test roots: #{unexpected_schema_paths.join(', ')}") unless unexpected_schema_paths.empty?
 

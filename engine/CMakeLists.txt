@@ -1,6 +1,8 @@
 set(INKFLOW_ENGINE_BACKEND "rime" CACHE STRING "Production engine backend")
 option(INKFLOW_ENABLE_SANITIZERS
        "Instrument InkFlow engine and test code with ASan and UBSan" OFF)
+option(INKFLOW_BUILD_APPLE_PACKAGING_TOOLS
+       "Build host-only tools used to stage Apple product resources" OFF)
 set_property(CACHE INKFLOW_ENGINE_BACKEND PROPERTY STRINGS rime)
 if(NOT INKFLOW_ENGINE_BACKEND STREQUAL "rime")
   message(FATAL_ERROR
@@ -239,6 +241,22 @@ configure_file(
   COPYONLY
 )
 
+# These dependency targets are created before librime configures its own
+# visibility defaults. They are merged into Apple product archives, so make
+# their object-level globals private before that merge. The InkFlow C header
+# explicitly restores default visibility for the 27 supported entry points.
+foreach(INKFLOW_BUNDLED_DEPENDENCY_TARGET IN ITEMS
+    yaml-cpp leveldb marisa libopencc)
+  set_target_properties(
+    ${INKFLOW_BUNDLED_DEPENDENCY_TARGET}
+    PROPERTIES
+      C_VISIBILITY_PRESET hidden
+      CXX_VISIBILITY_PRESET hidden
+      VISIBILITY_INLINES_HIDDEN YES
+  )
+endforeach()
+unset(INKFLOW_BUNDLED_DEPENDENCY_TARGET)
+
 set(BUILD_TESTING "${INKFLOW_SAVED_BUILD_TESTING}")
 set(BUILD_MERGED_PLUGINS ON CACHE BOOL "" FORCE)
 set(BUILD_DATA OFF CACHE BOOL "" FORCE)
@@ -461,6 +479,28 @@ function(inkflow_enable_sanitizers target)
 endfunction()
 
 inkflow_enable_sanitizers(inkflow_engine)
+
+if(INKFLOW_BUILD_APPLE_PACKAGING_TOOLS)
+  if(NOT APPLE OR CMAKE_CROSSCOMPILING)
+    message(FATAL_ERROR
+      "Apple packaging tools require a native macOS host build")
+  endif()
+  add_executable(
+    inkflow_apple_schema_deployer
+    "${PROJECT_SOURCE_DIR}/platforms/apple/Native/schema_deployer.c"
+  )
+  target_link_libraries(inkflow_apple_schema_deployer PRIVATE InkFlow::Engine)
+  target_compile_features(inkflow_apple_schema_deployer PRIVATE c_std_11)
+  set_target_properties(
+    inkflow_apple_schema_deployer
+    PROPERTIES C_EXTENSIONS NO C_STANDARD 11 C_STANDARD_REQUIRED YES
+  )
+  if(CMAKE_C_COMPILER_ID MATCHES "AppleClang|Clang|GNU")
+    target_compile_options(
+      inkflow_apple_schema_deployer PRIVATE -Wall -Wextra -Wpedantic -Werror
+    )
+  endif()
+endif()
 
 if(BUILD_TESTING)
   set(INKFLOW_ENGINE_TEST_DATA_DIR "${CMAKE_CURRENT_BINARY_DIR}/test-data")
