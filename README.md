@@ -4,8 +4,9 @@ InkFlow is a local-first, cross-platform Chinese input method experiment. The
 repository is organized around one shared [librime](https://github.com/rime/librime)
 engine boundary and native shells for macOS, iOS, and Android.
 
-> **Current status:** repository foundation only. There is no installable input
-> method yet, and no target silently substitutes a fake engine for librime.
+> **Current status:** the shared librime-backed engine and its host contract
+> tests are implemented. There is no installable input method yet, and no
+> production target silently substitutes a fake engine for librime.
 
 ## Architecture
 
@@ -43,9 +44,18 @@ Run the checks again without changing dependency state:
 ./tools/verify/foundation.sh
 ```
 
-The verification is intentionally offline after the submodules have been
-initialized. See `docs/foundation-acceptance.md` for the evidence each check
-produces.
+The first engine configuration downloads the exact Boost archive pinned by
+librime and `dependencies.lock.json`; later configurations share that ignored,
+hash-verified source cache while keeping generator-specific CMake state
+separate. Verify the shared engine, including its real isolated Chinese schema,
+C consumer, full native link-closure symbol surface, and dynamic linkage, with:
+
+```sh
+./tools/verify/engine.sh
+```
+
+See `docs/foundation-acceptance.md` and `docs/engine-acceptance.md` for the
+evidence each check produces.
 
 ## Licensing
 

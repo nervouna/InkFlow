@@ -10,6 +10,14 @@
       "commit": "33e78140250125871856cdc5b42ddc6a5fcd3cd4",
       "submodules": "recursive",
       "license": "BSD-3-Clause"
+    },
+    "boost": {
+      "role": "librime transitive build dependency",
+      "source": "https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.gz",
+      "version": "1.89.0",
+      "sha256": "9de758db755e8330a01d995b0a24d09798048400ac25c03fc5ea9be364b13c93",
+      "provenance": "third_party/librime/install-boost.sh",
+      "license": "BSL-1.0"
     }
   }
 }

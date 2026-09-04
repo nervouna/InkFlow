@@ -9,9 +9,9 @@ evidence without product code or a fake production backend:
    and the deterministic transcript refers to an isolated test schema.
 3. Product schema files exist only in `schemas/source/`; test-only schema files
    exist only in `schemas/test/`; generated platform mirrors are absent.
-4. `cmake --preset foundation` configures the repository without pretending an
-   engine implementation exists, and installed toolchains satisfy the locked
-   minimum, exact, or major-version requirements.
+4. `cmake --preset foundation` configures the real pinned engine and rejects a
+   fake production backend; installed toolchains satisfy the locked minimum,
+   exact, or major-version requirements.
 5. XcodeGen can generate the non-product aggregate project from
    `platforms/apple/project.yml` in a temporary directory.
 6. The Android settings project and version catalog agree with

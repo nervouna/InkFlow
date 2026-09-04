@@ -28,6 +28,8 @@ fail_check("unsupported lock format") unless lock["formatVersion"] == 1
 
 librime = lock.dig("dependencies", "librime")
 fail_check("librime lock record is missing") unless librime.is_a?(Hash)
+boost = lock.dig("dependencies", "boost")
+fail_check("Boost lock record is missing") unless boost.is_a?(Hash)
 
 required_fields = %w[repository path version tagRef tagObject commit submodules license]
 missing_fields = required_fields.reject { |field| librime[field].is_a?(String) && !librime[field].empty? }
@@ -35,6 +37,30 @@ fail_check("librime lock fields missing: #{missing_fields.join(', ')}") unless m
 fail_check("librime must use recursive submodules") unless librime["submodules"] == "recursive"
 fail_check("librime commit must be a full SHA-1") unless librime["commit"].match?(/\A[0-9a-f]{40}\z/)
 fail_check("librime tag object must be a full SHA-1") unless librime["tagObject"].match?(/\A[0-9a-f]{40}\z/)
+
+boost_required_fields = %w[role source version sha256 provenance license]
+boost_missing_fields = boost_required_fields.reject do |field|
+  boost[field].is_a?(String) && !boost[field].empty?
+end
+fail_check("Boost lock fields missing: #{boost_missing_fields.join(', ')}") unless boost_missing_fields.empty?
+fail_check("Boost digest must be SHA-256") unless boost["sha256"].match?(/\A[0-9a-f]{64}\z/)
+
+librime_boost_script_path =
+  File.join(repo_root, "third_party/librime/install-boost.sh")
+if File.file?(librime_boost_script_path)
+  librime_boost_script = File.read(librime_boost_script_path, encoding: "UTF-8")
+  unless librime_boost_script.include?("boost_version=\"${boost_version=#{boost['version']}}\"") &&
+         librime_boost_script.include?("#{boost['sha256']}  ${boost_tarball}")
+    fail_check("Boost lock does not match librime's pinned install script")
+  end
+elsif !metadata_only
+  fail_check("librime Boost install script is missing")
+end
+
+engine_cmake = File.read(File.join(repo_root, "engine/CMakeLists.txt"), encoding: "UTF-8")
+unless engine_cmake.include?(boost["source"]) && engine_cmake.include?(boost["sha256"])
+  fail_check("engine CMake Boost source or digest does not match dependency lock")
+end
 
 gitmodules_path = File.join(repo_root, ".gitmodules")
 if !File.file?(gitmodules_path)
