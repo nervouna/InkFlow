@@ -1,4 +1,4 @@
-#import <Foundation/Foundation.h>
+#import <AppKit/AppKit.h>
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL metadata line %d: %s\n",__LINE__,#c); return 1; } } while(0)
 int main(int argc, const char **argv) { @autoreleasepool {
     CHECK(argc==2);
@@ -27,5 +27,29 @@ int main(int argc, const char **argv) { @autoreleasepool {
         CHECK([names[@"CFBundleName"] isEqual:productName]);
         CHECK([names[@"CFBundleDisplayName"] isEqual:productName]);
     }
+    CHECK([mode[@"tsInputModeMenuIconFileKey"] isEqual:@"MenuIconTemplate.tiff"]);
+    CHECK([mode[@"tsInputModeAlternateMenuIconFileKey"] isEqual:mode[@"tsInputModeMenuIconFileKey"]]);
+    NSImage *menuIcon=[bundle imageForResource:@"MenuIconTemplate"];
+    CHECK(menuIcon!=nil && menuIcon.isTemplate);
+    CHECK(NSEqualSizes(menuIcon.size,NSMakeSize(22,16)));
+    CHECK(menuIcon.representations.count==2);
+    NSMutableSet *widths=[NSMutableSet set];
+    for (NSBitmapImageRep *rep in menuIcon.representations) {
+        CHECK([rep isKindOfClass:NSBitmapImageRep.class] && rep.hasAlpha);
+        CHECK(rep.pixelsHigh*22==rep.pixelsWide*16);
+        CHECK(NSEqualSizes(rep.size,NSMakeSize(22,16)));
+        [widths addObject:@(rep.pixelsWide)];
+        CHECK([rep colorAtX:0 y:0].alphaComponent<0.1);
+        NSUInteger clearInterior=0,solidInterior=0;
+        for (NSInteger y=rep.pixelsHigh/4;y<rep.pixelsHigh*3/4;y++) {
+            for (NSInteger x=rep.pixelsWide/3;x<rep.pixelsWide*2/3;x++) {
+                CGFloat alpha=[rep colorAtX:x y:y].alphaComponent;
+                if (alpha<0.5) clearInterior++;
+                else solidInterior++;
+            }
+        }
+        CHECK(clearInterior>0 && solidInterior>0);
+    }
+    CHECK(([widths isEqual:[NSSet setWithArray:@[@22,@44]]]));
     puts("PASS metadata: one named visible/default Chinese mode with packaged icons and localizations");
 } return 0; }

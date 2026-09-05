@@ -11,6 +11,7 @@ icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
+cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
 
 for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib"; do
   xcrun lipo "$binary" -verify_arch arm64
@@ -28,5 +29,5 @@ trap 'rm -rf "$user_dir"' EXIT
 build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
 echo 'PASS bundle: arm64, plist, system/bundled dylib closure, bundled dictionary transcript'
 
-xcrun clang -fobjc-arc -Wall -Wextra -Werror macOS/Tests/MetadataTests.m -framework Foundation -o build/metadata-tests
+xcrun clang -fobjc-arc -Wall -Wextra -Werror macOS/Tests/MetadataTests.m -framework AppKit -o build/metadata-tests
 build/metadata-tests "$app"

@@ -34,8 +34,8 @@
       <key>tsInputModeIsVisibleKey</key><true/>
       <key>tsInputModePrimaryInScriptKey</key><true/>
       <key>tsInputModeScriptKey</key><string>smUnicodeScript</string>
-      <key>tsInputModeMenuIconFileKey</key><string>InputMethod.icns</string>
-      <key>tsInputModeAlternateMenuIconFileKey</key><string>InputMethod.icns</string>
+      <key>tsInputModeMenuIconFileKey</key><string>MenuIconTemplate.tiff</string>
+      <key>tsInputModeAlternateMenuIconFileKey</key><string>MenuIconTemplate.tiff</string>
       <key>tsInputModePaletteIconFileKey</key><string>InputMethod.icns</string>
     </dict>
   </dict>
