@@ -47,6 +47,27 @@ int main(int argc, const char **argv) { @autoreleasepool {
  NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:1];
  while (deadline.timeIntervalSinceNow>0) { NSEvent *event=[NSApp nextEventMatchingMask:NSEventMaskAny untilDate:deadline inMode:NSDefaultRunLoopMode dequeue:YES]; if (event) [NSApp sendEvent:event]; }
  CHECK(window.visible); CHECK(window.keyWindow); CHECK(NSApp.active);
+ CHECK(window.styleMask & NSWindowStyleMaskResizable);
+ CHECK(window.styleMask & NSWindowStyleMaskFullSizeContentView);
+ CHECK([window.contentViewController isKindOfClass:NSSplitViewController.class]);
+ NSSplitViewController *split=(NSSplitViewController *)window.contentViewController;
+ CHECK(split.splitViewItems.count==2);
+ NSRect initialFrame=window.frame;
+ for (NSValue *size in @[[NSValue valueWithSize:NSMakeSize(700,380)],[NSValue valueWithSize:NSMakeSize(700,560)]]) {
+  [window setContentSize:size.sizeValue];
+  [window.contentView layoutSubtreeIfNeeded];
+  NSView *sidebar=split.splitViewItems[0].viewController.view;
+  NSRect sidebarFrame=[sidebar convertRect:sidebar.bounds toView:nil];
+  CHECK(NSMaxY(sidebarFrame)>NSMaxY(window.contentLayoutRect)+1);
+  NSButton *closeButton=[window standardWindowButton:NSWindowCloseButton];
+  NSRect closeFrame=[closeButton convertRect:closeButton.bounds toView:nil];
+  CHECK(NSContainsRect(sidebarFrame,closeFrame));
+  NSView *form=split.splitViewItems[1].viewController.view.subviews.firstObject;
+  CHECK(form && NSWidth(form.bounds)>0 && NSHeight(form.bounds)>0);
+  CHECK(NSContainsRect(window.contentLayoutRect,[form convertRect:form.bounds toView:nil]));
+ }
+ [window setFrame:initialFrame display:YES];
+ puts("PASS settings layout: full-height sidebar behind traffic lights, form within content layout at minimum and enlarged sizes");
  [window close];
  [controller doCommandBySelector:item.action commandDictionary:@{kIMKCommandMenuItemName:item}];
  CHECK(IFSettingsWindowController.sharedController.window==window && window.visible && window.keyWindow);

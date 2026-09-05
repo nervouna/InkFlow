@@ -41,7 +41,7 @@
 }
 - (NSMenu *)menu {
     NSMenu *menu=[[NSMenu alloc] initWithTitle:@"InkFlow"];
-    [menu addItemWithTitle:@"设置…" action:@selector(showPreferences:) keyEquivalent:@""].target=self;
+    [menu addItemWithTitle:@"打开设置" action:@selector(showPreferences:) keyEquivalent:@""].target=self;
     return menu;
 }
 - (void)showPreferences:(id)sender {
