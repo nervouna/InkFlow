@@ -21,6 +21,8 @@ if [[ "$mode" == --developer-id ]]; then
 fi
 [[ "$metadata" == *'Identifier=io.damao.inputmethod.inkflow'* ]] || { echo 'Unexpected bundle identifier.' >&2; exit 1; }
 target="$HOME/Library/Input Methods/InkFlow.app"
+updating=false
+if [[ -e "$target" ]]; then updating=true; fi
 mkdir -p "$(dirname "$target")"
 [[ ! -L "$target" ]] || { echo 'Refusing to replace a symlinked installation.' >&2; exit 1; }
 stage=$(mktemp -d "$(dirname "$target")/.inkflow-install.XXXXXX")
@@ -43,4 +45,12 @@ mv "$stage/InkFlow.app" "$target"
 codesign --verify --deep --strict "$target"
 echo "Installed $target ($mode)"
 macOS/scripts/register.sh "$target"
-echo '在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'
+if [[ "$updating" == true ]]; then
+  if ! bash macOS/scripts/refresh-menu.sh; then
+    echo '应用已更新，但输入菜单刷新未完成。可重试 bash macOS/scripts/refresh-menu.sh。' >&2
+    exit 1
+  fi
+  echo '更新完成，请重新展开输入菜单查看名称和图标。菜单刷新不代表 InkFlow 引擎已重启或功能验收通过。'
+else
+  echo '首次安装：在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'
+fi

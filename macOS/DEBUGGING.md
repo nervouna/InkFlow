@@ -1,5 +1,15 @@
 # Debugging index
 
+## Updated name and icon remain stale in the input menu
+
+Observed on macOS 26.6.2, 2026-09-05.
+
+**Symptom:** The installed bundle contains the new localized name and menu icon, and TIS registration/enabled checks pass, but the input menu still shows both old values.
+
+**Fix:** Restart only the current user's `TextInputMenuAgent`. Its system LaunchAgent has `KeepAlive` enabled. In this case, a new process plus reopening the menu made both changes visible; the user confirmed the result. No logout, input-source removal, or cache-file deletion was needed.
+
+Routine updates now run `bash macOS/scripts/refresh-menu.sh` after successful installation and registration. The helper sends TERM once to existing current-user menu agents and waits up to 10 seconds for replacement PIDs. If no agent is running it skips the refresh. A process restart proves refresh execution, not correct visual rendering. It does not restart InkFlow's engine; functional acceptance must separately ensure the new engine is running.
+
 ## Blank name or icon in Keyboard Settings
 
 Observed on macOS 26.6.2, 2026-09-05.
