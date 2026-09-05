@@ -6,7 +6,7 @@
 <key>CFBundleExecutable</key><string>InkFlow</string>
 <key>CFBundleIdentifier</key><string>io.damao.inputmethod.inkflow</string>
 <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
-<key>CFBundleIconFile</key><string>InputMethod.icns</string>
+<key>CFBundleIconFile</key><string>AppIcon.icns</string>
 <key>tsInputMethodIconFileKey</key><string>InputMethod.icns</string>
 <key>CFBundleName</key><string>InkFlow</string>
 <key>CFBundlePackageType</key><string>APPL</string>

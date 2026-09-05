@@ -8,6 +8,9 @@ plutil -lint "$app/Contents/Info.plist"
 [[ "$(plutil -extract InputMethodConnectionName raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow_Connection ]]
 icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 [[ "$icon" == InputMethod.icns && -s "$app/Contents/Resources/$icon" ]]
+app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
+[[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
+cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 
 for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib"; do
   xcrun lipo "$binary" -verify_arch arm64
