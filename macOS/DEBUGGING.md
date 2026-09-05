@@ -1,5 +1,19 @@
 # Debugging index
 
+## Minimum width for the vertical candidate panel
+
+Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.
+
+**Requirement:** The vertical panel has a minimum width of 150 points. Preserve the native height behavior and horizontal layout; longer candidates may make the panel wider.
+
+**Compatibility fix:** The [public IMKCandidates API](https://developer.apple.com/documentation/inputmethodkit/imkcandidates) does not expose a minimum window width. After applying font and direction, use the SDK's protected `_private` reference and guarded, typed `candidateWindowController` / `layoutTraits` accessors to set `lineDefaultLength` to 150 (`double` ABI). This changes the native vertical layout's minimum width before it sizes and positions the window. Font and direction setters rebuild these traits, so the width must be applied afterward. No height parameter is changed.
+
+**Limitation:** These accessors and the layout setter are private implementation details. If any selector is unavailable, the adjustment is skipped and the native width is retained. This compatibility path is verified only on the OS above.
+
+**Regression:** Run `bash macOS/scripts/test-settings-ui.sh` after building, in a logged-in GUI session. Actual candidate frames verify width >=150 for all allowed font sizes, stable height as 1/3/5/9 candidates grow and shrink, expansion for longer text, unchanged horizontal sizing after direction switches, and preserved candidate identifiers / selection keys. At 14 points with one short candidate, the baseline was 47x247 and the fix is 150x247. Evidence for this session is under `/private/tmp/inkflow-panel-size/width-{red,green}.log`.
+
+**Discarded experiments:** `setPopoverMinimumSize:` affects a popover controller rather than this native window. `setWindowShouldAdjustToTotalCandidateSize:`, `setWindowSizeCanShrink:`, and changing selection-key counts did not enforce the requested dimensions in the isolated probe. They are not part of the fix.
+
 ## Candidate font setting changes but rendered text stays the same
 
 Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.

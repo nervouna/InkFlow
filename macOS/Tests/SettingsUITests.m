@@ -2,6 +2,7 @@
 #import "Engine.h"
 #import "IsolatedSettings.h"
 @interface InkFlowInputController : IMKInputController
+- (void)applySettings;
 @end
 // Simulate an OS without the private selector while retaining the public API.
 @interface PublicFontOnlyCandidates : IMKCandidates
@@ -34,6 +35,45 @@ static BOOL checkCandidateFont(IMKCandidates *panel, IFEngine *engine, NSDiction
  printf("%s native font: %s %s requested=%ld itemLayout.title=%g composition=%s digitKeys=%s\n",passed ? "PASS" : "FAIL",phase,vertical ? "vertical" : "horizontal",(long)size,font.pointSize,preserved ? "preserved" : "CHANGED",keys ? "preserved" : "CHANGED");
  fflush(stdout);
  return passed;
+}
+static BOOL checkCandidateSizes(InkFlowInputController *controller, IMKCandidates *panel) {
+ NSArray *shortWords=@[@"你",@"好",@"世",@"界",@"字",@"号",@"候",@"选",@"词"];
+ NSArray *keys=panel.selectionKeys;
+ for (NSNumber *fontSize in @[@14,@36,@14,@16,@18,@24]) {
+  testSettings.fontSize=fontSize.integerValue;
+  testSettings.vertical=YES;
+  CGFloat fixedHeight=0;
+  for (NSNumber *count in @[@1,@3,@5,@9,@3,@1]) {
+   NSArray *words=[shortWords subarrayWithRange:NSMakeRange(0,count.unsignedIntegerValue)];
+   [controller applySettings];
+   [panel setCandidateData:words]; [panel show:kIMKLocateCandidatesBelowHint];
+   NSSize size=panel.candidateFrame.size;
+   if (!fixedHeight) fixedHeight=size.height;
+   BOOL passed=[panel isVisible] && size.width>=150 && size.height>0
+    && fabs(size.height-fixedHeight)<1 && [panel.selectionKeys isEqual:keys];
+   for (NSUInteger index=0;index<words.count;index++) {
+    passed &= [panel candidateIdentifierAtLineNumber:index]==[panel candidateStringIdentifier:words[index]];
+   }
+   printf("%s vertical size: font=%ld count=%ld actual=%gx%g\n",passed ? "PASS" : "FAIL",fontSize.longValue,count.longValue,size.width,size.height);
+   if (!passed) return NO;
+  }
+ }
+ // A minimum must still allow wider text, and must not carry over to horizontal layout.
+ NSArray *longWords=@[@"候选面板根据实际内容调整"];
+ [controller applySettings];
+ [panel setCandidateData:longWords]; [panel show:kIMKLocateCandidatesBelowHint];
+ if (panel.candidateFrame.size.width<=150) return NO;
+ testSettings.fontSize=14;
+ for (NSNumber *vertical in @[@NO,@YES,@NO,@YES]) {
+  testSettings.vertical=vertical.boolValue;
+  [controller applySettings];
+  [panel setCandidateData:@[@"你"]]; [panel show:kIMKLocateCandidatesBelowHint];
+  CGFloat width=panel.candidateFrame.size.width;
+  if (vertical.boolValue ? width<150 : width>=150) return NO;
+ }
+ [panel hide];
+ puts("PASS native sizes: minimum vertical width 150, stable height, wider content expands, direction switches preserve horizontal sizing and digit keys");
+ return YES;
 }
 int main(int argc, const char **argv) { @autoreleasepool {
  CHECK(argc>=3); isolateSettings(); [NSApplication sharedApplication]; [NSApp finishLaunching];
@@ -112,6 +152,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
  CHECK([panel.selectionKeys isEqual:(@[@18,@19,@20,@21,@23,@22,@26,@28,@25])]);
  CHECK([[engine snapshot][@"candidates"] count]==9);
  [panel setCandidateData:[engine snapshot][@"candidates"]]; [panel hide];
+ CHECK(checkCandidateSizes(controller,panel));
  [engine clear]; testSettings.candidateCount=5; testSettings.fontSize=14;
  if (fontFailures) {
   [window close]; controller=nil; [IFEngine stop]; cleanupSettings();

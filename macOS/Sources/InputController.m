@@ -4,6 +4,27 @@
 @interface IMKCandidates (InkFlowFontCompatibility)
 - (void)setFontSize:(double)size;
 @end
+// Optional private layout accessors observed on macOS 26.6.2.
+@protocol IFNativeCandidateLayout <NSObject>
+- (id<IFNativeCandidateLayout>)candidateWindowController;
+- (id<IFNativeCandidateLayout>)layoutTraits;
+- (void)setLineDefaultLength:(double)length;
+@end
+@interface IMKCandidates (InkFlowWidthCompatibility)
+- (void)if_applyMinimumVerticalWidth;
+@end
+@implementation IMKCandidates (InkFlowWidthCompatibility)
+- (void)if_applyMinimumVerticalWidth {
+    if (self.panelType!=kIMKSingleColumnScrollingCandidatePanel) return;
+    // The SDK exposes this protected implementation reference. Avoid KVC or raw offsets.
+    id<IFNativeCandidateLayout> implementation=(id)_private;
+    if (![implementation respondsToSelector:@selector(candidateWindowController)]) return;
+    id<IFNativeCandidateLayout> controller=[implementation candidateWindowController];
+    if (![controller respondsToSelector:@selector(layoutTraits)]) return;
+    id<IFNativeCandidateLayout> traits=[controller layoutTraits];
+    if ([traits respondsToSelector:@selector(setLineDefaultLength:)]) [traits setLineDefaultLength:150.0];
+}
+@end
 @interface InkFlowInputController : IMKInputController
 @end
 @implementation InkFlowInputController {
@@ -59,6 +80,8 @@
     // macOS 26.6.2 stores public font attributes without updating the native layout.
     // Use the optional private setter with its double ABI; retain the public path above.
     if ([_panel respondsToSelector:@selector(setFontSize:)]) [_panel setFontSize:(double)settings.fontSize];
+    // Font/direction changes rebuild the layout traits, so apply the width afterward.
+    [_panel if_applyMinimumVerticalWidth];
     _updating=updating;
 }
 - (void)settingsChanged:(NSNotification *)notification {
