@@ -41,6 +41,7 @@ for required_file in \
     "platforms/apple/project.yml" \
     "platforms/android/settings.gradle.kts" \
     "platforms/android/gradle/libs.versions.toml" \
+    "tools/build/python-isolated" \
     "tools/bootstrap/bootstrap.sh" \
     "tools/verify/check_gradle_version.rb"; do
   if [ ! -f "${verify_repo_root}/${required_file}" ]; then
@@ -168,16 +169,24 @@ verify_gradle_version=$(ruby -rjson -e '
   lock = JSON.parse(File.read(ARGV.fetch(0)))
   print lock.fetch("android").fetch("gradleVersion")
 ' "${verify_repo_root}/toolchains.lock.json")
+verify_java_major=$(ruby -rjson -e '
+  lock = JSON.parse(File.read(ARGV.fetch(0)))
+  print lock.fetch("host").fetch("java").fetch("requiredMajorVersion")
+' "${verify_repo_root}/toolchains.lock.json")
 verify_gradle_checker="${verify_script_dir}/check_gradle_version.rb"
 
-if printf '%s\n' 'Gradle 8.13' | \
-    ruby "${verify_gradle_checker}" "${verify_gradle_version}" >/dev/null 2>&1; then
+if printf '%s\n' 'Gradle 8.13' "Launcher JVM: ${verify_java_major}" | \
+    ruby "${verify_gradle_checker}" "${verify_gradle_version}" \
+      "${verify_java_major}" >/dev/null 2>&1; then
   printf '%s\n' "error: Gradle version gate accepted synthetic version 8.13" >&2
   exit 1
 fi
-printf '%s\n' "Gradle ${verify_gradle_version}" | \
-  ruby "${verify_gradle_checker}" "${verify_gradle_version}" >/dev/null
-printf '%s\n' "PASS Gradle version gate rejects 8.13 and accepts ${verify_gradle_version}"
+printf '%s\n' "Gradle ${verify_gradle_version}" \
+  "Launcher JVM: ${verify_java_major}" | \
+  ruby "${verify_gradle_checker}" "${verify_gradle_version}" \
+    "${verify_java_major}" >/dev/null
+printf '%s\n' \
+  "PASS Gradle/JVM gate rejects 8.13 and accepts ${verify_gradle_version}/Java ${verify_java_major}"
 
 if [ -x "${verify_repo_root}/platforms/android/gradlew" ]; then
   verify_gradle_executable="${verify_repo_root}/platforms/android/gradlew"
@@ -193,7 +202,8 @@ fi
 if [ -n "${verify_gradle_executable}" ]; then
   verify_gradle_output=$("${verify_gradle_executable}" --version)
   printf '%s\n' "${verify_gradle_output}" | \
-    ruby "${verify_gradle_checker}" "${verify_gradle_version}"
+    ruby "${verify_gradle_checker}" "${verify_gradle_version}" \
+      "${verify_java_major}"
   "${verify_gradle_executable}" \
     -p "${verify_repo_root}/platforms/android" \
     --offline --no-daemon --quiet projects >/dev/null

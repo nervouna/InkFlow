@@ -72,7 +72,7 @@ schema_directories.each do |kind, directory|
     end
 
     seen_entries = {}
-    entries = body.lines.filter_map.with_index(1) do |line, line_number|
+    entries = body.lines.map.with_index(1) do |line, line_number|
       stripped = line.strip
       next if stripped.empty? || stripped.start_with?("#")
 
@@ -85,7 +85,7 @@ schema_directories.each do |kind, directory|
       fail_check("#{path}:#{line_number}: duplicate text/code entry") if seen_entries.key?(entry_key)
       seen_entries[entry_key] = true
       fields
-    end
+    end.compact
     fail_check("#{path}: dictionary body is empty") if entries.empty?
     dictionary_entries[[kind, name]] = entries.map { |fields| fields.first(2) }
     [name, path]
@@ -140,7 +140,9 @@ transcript_paths.each do |path|
 
   actions = transcript["actions"]
   fail_check("#{path}: actions must be non-empty") unless actions.is_a?(Array) && !actions.empty?
-  key_sequence = actions.filter_map { |action| action["key"] if action["type"] == "key" }.join
+  key_sequence = actions.map do |action|
+    action["key"] if action["type"] == "key"
+  end.compact.join
   fail_check("#{path}: canonical transcript must type nihao") unless key_sequence == "nihao"
   last_action = actions.last
   expected_commit = last_action.dig("expect", "commit")

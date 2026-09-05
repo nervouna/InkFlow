@@ -15,5 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "InkFlowAndroid"
-
-// Product modules are intentionally added with the real Android implementation.
+include(":app")

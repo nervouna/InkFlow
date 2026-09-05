@@ -26,6 +26,10 @@
   },
   "android": {
     "gradleVersion": "9.3.1",
+    "gradleDistributionTreeSha256": "d5d8a01e2e20d489a64a016103c878641a787048d79841dbf547da51e738d104",
+    "nativeBuildPython": "tools/build/python-isolated",
+    "nativeBuildPythonSha256": "8c11b48a6eb9afecc1f9fd70b6add942217acf22013eb54a65b0904a84acde37",
+    "nativeBuildPythonInterpreter": "/usr/bin/python3",
     "androidGradlePluginVersion": "9.1.1",
     "compileSdk": 36,
     "targetSdk": 36,

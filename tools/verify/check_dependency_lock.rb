@@ -2,6 +2,8 @@
 
 require "json"
 require "open3"
+require_relative "check_git_worktree"
+require_relative "check_source_tree"
 
 repo_root = File.expand_path("../..", __dir__)
 metadata_only = ARGV == ["--metadata-only"]
@@ -31,19 +33,43 @@ fail_check("librime lock record is missing") unless librime.is_a?(Hash)
 boost = lock.dig("dependencies", "boost")
 fail_check("Boost lock record is missing") unless boost.is_a?(Hash)
 
-required_fields = %w[repository path version tagRef tagObject commit submodules license]
+required_fields = %w[
+  repository
+  path
+  version
+  tagRef
+  tagObject
+  commit
+  sourceTreeSha256
+  submodules
+  license
+]
 missing_fields = required_fields.reject { |field| librime[field].is_a?(String) && !librime[field].empty? }
 fail_check("librime lock fields missing: #{missing_fields.join(', ')}") unless missing_fields.empty?
 fail_check("librime must use recursive submodules") unless librime["submodules"] == "recursive"
 fail_check("librime commit must be a full SHA-1") unless librime["commit"].match?(/\A[0-9a-f]{40}\z/)
 fail_check("librime tag object must be a full SHA-1") unless librime["tagObject"].match?(/\A[0-9a-f]{40}\z/)
+unless librime["sourceTreeSha256"].match?(/\A[0-9a-f]{64}\z/)
+  fail_check("librime source-tree digest must be SHA-256")
+end
 
-boost_required_fields = %w[role source version sha256 provenance license]
+boost_required_fields = %w[
+  role
+  source
+  version
+  sha256
+  sourceTreeSha256
+  provenance
+  license
+]
 boost_missing_fields = boost_required_fields.reject do |field|
   boost[field].is_a?(String) && !boost[field].empty?
 end
 fail_check("Boost lock fields missing: #{boost_missing_fields.join(', ')}") unless boost_missing_fields.empty?
 fail_check("Boost digest must be SHA-256") unless boost["sha256"].match?(/\A[0-9a-f]{64}\z/)
+unless boost["sourceTreeSha256"].match?(/\A[0-9a-f]{64}\z/)
+  fail_check("Boost source-tree digest must be SHA-256")
+end
 
 librime_boost_script_path =
   File.join(repo_root, "third_party/librime/install-boost.sh")
@@ -117,13 +143,51 @@ fail_check("recursive submodule is missing or at the wrong commit: #{bad_status}
 recursive_paths = recursive_status.lines.map { |line| line.split[1] }.compact
 recursive_paths.each do |path|
   checkout = File.join(repo_root, path)
-  dirty_status = capture(
-    "git", "-C", checkout, "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=none"
+  begin
+    InkFlow::GitWorktree.verify_clean(checkout)
+  rescue InkFlow::GitWorktree::Violation => error
+    fail_check("submodule is not clean: #{path}\n#{error.message}")
+  end
+end
+
+begin
+  InkFlow::SourceTree.verify(
+    checkout_path,
+    expected: librime.fetch("sourceTreeSha256"),
+    exclude_git_metadata: true,
   )
-  fail_check("submodule has tracked modifications: #{path}\n#{dirty_status}") unless dirty_status.empty?
+rescue InkFlow::SourceTree::Violation => error
+  fail_check("librime source tree is not pristine: #{error.message}")
+end
+
+boost_cache_key = "boost-#{boost.fetch('version')}-#{boost.fetch('sha256')}"
+boost_cache_root = File.join(repo_root, "build/dependencies")
+boost_source_path = File.join(boost_cache_root, "sources", boost_cache_key)
+boost_ready_path = File.join(boost_cache_root, "ready", "#{boost_cache_key}.sha256")
+boost_source_exists = File.directory?(boost_source_path)
+boost_ready_exists = File.file?(boost_ready_path)
+if boost_source_exists != boost_ready_exists
+  fail_check("Boost source cache and ready marker must either both exist or both be absent")
+elsif boost_source_exists
+  ready_digest = File.read(boost_ready_path, encoding: "UTF-8").strip
+  fail_check("Boost ready marker does not match the archive lock") unless ready_digest == boost["sha256"]
+  begin
+    InkFlow::SourceTree.verify(
+      boost_source_path,
+      expected: boost.fetch("sourceTreeSha256"),
+    )
+  rescue InkFlow::SourceTree::Violation => error
+    fail_check("Boost source cache is not pristine: #{error.message}")
+  end
+else
+  puts "SKIP absent Boost source cache (the pinned URL_HASH must populate it before use)"
 end
 
 librime_license_path = File.join(checkout_path, "LICENSE")
 fail_check("librime license file is missing") unless File.file?(librime_license_path)
 
-puts "PASS dependency lock, submodule declaration, and recursive checkout"
+if boost_source_exists
+  puts "PASS dependency lock, recursive checkout, librime tree, and Boost tree digests"
+else
+  puts "PASS dependency lock, recursive checkout, and librime source-tree digest"
+end

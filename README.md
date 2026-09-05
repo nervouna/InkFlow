@@ -4,11 +4,11 @@ InkFlow is a local-first, cross-platform Chinese input method experiment. The
 repository is organized around one shared [librime](https://github.com/rime/librime)
 engine boundary and native shells for macOS, iOS, and Android.
 
-> **Current status:** the shared librime-backed engine and native Apple source
-> shells are implemented. Signing-disabled macOS and iOS Simulator products are
-> buildable; installation, launch, device use, and distribution are separate
-> acceptance layers. No production target substitutes a fake engine for
-> librime. The native Android frontend remains a later implementation task.
+> **Current status:** the shared librime-backed engine and native macOS, iOS,
+> and Android source shells are implemented. Signing-disabled Apple products
+> and unsigned Android products are buildable; installation, launch, device
+> use, signing, and distribution are separate acceptance layers. No production
+> target substitutes a fake engine for librime.
 
 ## Architecture
 
@@ -48,9 +48,11 @@ Run the checks again without changing dependency state:
 
 The first engine configuration downloads the exact Boost archive pinned by
 librime and `dependencies.lock.json`; later configurations share that ignored,
-hash-verified source cache while keeping generator-specific CMake state
-separate. Verify the shared engine, including its real isolated Chinese schema,
-C consumer, full native link-closure symbol surface, and dynamic linkage, with:
+archive- and source-tree-verified cache while keeping generator-specific CMake
+state separate. Platform gates bind their active native build metadata back to
+that verified cache. Verify the shared engine, including its real isolated
+Chinese schema, C consumer, full native link-closure symbol surface, and
+dynamic linkage, with:
 
 ```sh
 ./tools/verify/engine.sh
@@ -68,6 +70,16 @@ extension with:
 
 See `docs/apple-acceptance.md` for the exact artifact, lifecycle, privacy, and
 signing-disabled evidence contract.
+
+Build and audit the native Android input method, its JVM tests, generated
+schema assets, arm64 JNI closure, and R8 release output with:
+
+```sh
+./tools/verify/android.sh
+```
+
+See `docs/android-acceptance.md` for device-test and manual input-method
+acceptance steps that remain outside a host-only build.
 
 ## Licensing
 
