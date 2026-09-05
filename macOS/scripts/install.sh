@@ -43,4 +43,4 @@ mv "$stage/InkFlow.app" "$target"
 codesign --verify --deep --strict "$target"
 echo "Installed $target ($mode)"
 macOS/scripts/register.sh "$target"
-echo '在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow 简体拼音，然后从输入菜单选择。'
+echo '在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'

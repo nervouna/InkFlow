@@ -40,7 +40,7 @@ int main(int argc, const char **argv) { @autoreleasepool {
         BOOL selectable=[property(source,kTISPropertyInputSourceIsSelectCapable) boolValue];
         BOOL keyboardMode=[property(source,kTISPropertyInputSourceType) isEqual:(__bridge NSString *)kTISTypeKeyboardInputMode];
         printf("mode_name=%s\nmode_select_capable=%d\n",name.UTF8String ?: "",selectable);
-        valid=[name hasPrefix:@"InkFlow"] && selectable && keyboardMode;
+        valid=([name isEqual:@"墨流拼音"] || [name isEqual:@"InkFlow Pinyin"]) && selectable && keyboardMode;
     }
     if (sources) CFRelease(sources);
     // A separate invocation observes persistent state without registering again.

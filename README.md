@@ -21,7 +21,7 @@ INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh --de
 
 首次构建需要联网下载校验过的引擎和词典；安装后的输入与词典处理不需要联网。签名使用 Team `T7976FL2LP` 的 Developer ID Application 证书，使用前检查证书主体 OU。应用标识为 `io.damao.inputmethod.inkflow`。
 
-安装位置为 `~/Library/Input Methods/InkFlow.app`。安装后，在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow 简体拼音，然后从输入菜单选择。注册检查不能代替这一步实际确认。再次安装会将旧应用归档到 `build/backups`。用户词典与部署数据保存在 `~/Library/Application Support/InkFlow`，安装不会删除它们。
+安装位置为 `~/Library/Input Methods/InkFlow.app`。安装后，在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。注册检查不能代替这一步实际确认。再次安装会将旧应用归档到 `build/backups`。用户词典与部署数据保存在 `~/Library/Application Support/InkFlow`，安装不会删除它们。
 
 若系统设置显示空白输入源，参见[调试说明](macOS/DEBUGGING.md)。
 

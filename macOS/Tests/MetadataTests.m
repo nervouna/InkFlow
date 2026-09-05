@@ -21,8 +21,11 @@ int main(int argc, const char **argv) { @autoreleasepool {
     for (NSString *language in @[@"en",@"zh-Hans"]) {
         NSString *path=[bundle.resourcePath stringByAppendingPathComponent:[language stringByAppendingString:@".lproj/InfoPlist.strings"]];
         NSDictionary *names=[NSDictionary dictionaryWithContentsOfFile:path];
-        CHECK([names[modeID] hasPrefix:@"InkFlow"]);
-        CHECK([names[@"CFBundleDisplayName"] isEqual:@"InkFlow"]);
+        NSString *productName=[language isEqual:@"zh-Hans"] ? @"墨流拼音" : @"InkFlow";
+        NSString *modeName=[language isEqual:@"zh-Hans"] ? @"墨流拼音" : @"InkFlow Pinyin";
+        CHECK([names[modeID] isEqual:modeName]);
+        CHECK([names[@"CFBundleName"] isEqual:productName]);
+        CHECK([names[@"CFBundleDisplayName"] isEqual:productName]);
     }
     puts("PASS metadata: one named visible/default Chinese mode with packaged icons and localizations");
 } return 0; }
