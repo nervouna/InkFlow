@@ -5,6 +5,7 @@
 @implementation InkFlowInputController {
     IFEngine *_engine;
     IMKCandidates *_panel;
+    TISInputSourceRef _selectionLayout;
     NSArray<NSString *> *_strings;
     BOOL _updating;
     BOOL _ownsMarkedText;
@@ -12,12 +13,26 @@
 - (id)initWithServer:(IMKServer *)server delegate:(id)delegate client:(id)client {
     if ((self=[super initWithServer:server delegate:delegate client:client])) {
         _engine=[IFEngine new];
-        _panel=[[IMKCandidates alloc] initWithServer:server panelType:kIMKSingleColumnScrollingCandidatePanel];
-        [_panel setSelectionKeys:@[@18,@19,@20,@21,@23,@22,@26,@28,@25]];
+        _panel=[[IMKCandidates alloc] initWithServer:server panelType:kIMKSingleRowSteppingCandidatePanel];
+        // An explicit layout lets the native panel render labels for these key codes.
+        CFArrayRef layouts=TISCreateInputSourceList((__bridge CFDictionaryRef)@{(__bridge NSString *)kTISPropertyInputSourceID:@"com.apple.keylayout.US"},true);
+        if (layouts) {
+            if (CFArrayGetCount(layouts)) {
+                // IMKCandidates borrows this source; retain it until after panel teardown.
+                _selectionLayout=(TISInputSourceRef)CFRetain(CFArrayGetValueAtIndex(layouts,0));
+                [_panel setSelectionKeysKeylayout:_selectionLayout];
+            }
+            CFRelease(layouts);
+        }
+        [_panel setSelectionKeys:@[@18,@19,@20,@21,@23]];
         [_panel setDismissesAutomatically:NO];
         [_panel setAttributes:@{IMKCandidatesSendServerKeyEventFirst:@YES}];
     }
     return self;
+}
+- (void)dealloc {
+    _panel=nil;
+    if (_selectionLayout) CFRelease(_selectionLayout);
 }
 - (void)refresh:(id<IMKTextInput>)client {
     NSString *commit=[_engine takeCommit];

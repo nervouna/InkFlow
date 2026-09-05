@@ -18,10 +18,16 @@ int main(int argc, const char **argv) { @autoreleasepool {
  type(a,@"ni"); [a key:0xff08 modifiers:0]; CHECK([[a snapshot][@"preedit"] isEqual:@"n"]);
  [a clear]; type(a,@"ni"); CHECK([a event:event(51,@"\b")]); CHECK([[a snapshot][@"preedit"] isEqual:@"n"]); CHECK([a event:event(53,@"\e")]); CHECK([[a snapshot][@"preedit"] length]==0);
  [a clear]; type(a,@"shi"); NSArray *first=[a snapshot][@"candidates"];
+ CHECK(first.count==5);
  [a event:event(121,@"")]; CHECK([[a snapshot][@"page"] intValue]==1);
- CHECK(![[a snapshot][@"candidates"] isEqual:first]);
+ NSArray *second=[a snapshot][@"candidates"]; CHECK(second.count==5);
+ CHECK(![second isEqual:first]);
  [a event:event(116,@"")]; CHECK([[a snapshot][@"page"] intValue]==0);
+ CHECK([[a snapshot][@"candidates"] isEqual:first]);
  [a event:event(19,@"2")]; CHECK([[a takeCommit] isEqual:first[1]]);
+ type(a,@"shi"); [a event:event(121,@"")];
+ second=[a snapshot][@"candidates"]; CHECK(second.count==5);
+ [a event:event(23,@"5")]; CHECK([[a takeCommit] isEqual:second[4]]);
  type(a,@"nihao"); [a key:' ' modifiers:0]; CHECK([[a takeCommit] isEqual:@"你好"]);
  NSEvent *toggle=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:NSEventModifierFlagControl|NSEventModifierFlagShift timestamp:0 windowNumber:0 context:nil characters:@" " charactersIgnoringModifiers:@" " isARepeat:NO keyCode:49];
  CHECK([a event:toggle]); CHECK(![a key:'a' modifiers:0]);
