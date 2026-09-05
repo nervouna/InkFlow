@@ -5,25 +5,5 @@ charset = utf-8
 end_of_line = lf
 insert_final_newline = true
 trim_trailing_whitespace = true
-
-[*.{json,toml,yaml,yml}]
 indent_style = space
 indent_size = 2
-
-[*.{c,h,cc,cpp,hpp,swift}]
-indent_style = space
-indent_size = 2
-
-[*.{kt,kts}]
-indent_style = space
-indent_size = 4
-
-[*.{sh,rb}]
-indent_style = space
-indent_size = 2
-
-[*.dict.yaml]
-indent_style = unset
-
-[Makefile]
-indent_style = tab
