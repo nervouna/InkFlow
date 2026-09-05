@@ -8,7 +8,7 @@ static BOOL ready;
     if (ready) return YES;
     for (NSString *name in @[@"default.yaml", @"inkflow_pinyin.schema.yaml", @"pinyin_simp.dict.yaml"]) {
         if (![[NSFileManager defaultManager] isReadableFileAtPath:[shared stringByAppendingPathComponent:name]]) {
-            if (error) *error=[NSError errorWithDomain:@"io.damao.inkflow" code:2 userInfo:@{NSLocalizedDescriptionKey:@"InkFlow 缺少内置拼音资源，请重新构建并安装。"}];
+            if (error) *error=[NSError errorWithDomain:@"io.damao.inputmethod.inkflow" code:2 userInfo:@{NSLocalizedDescriptionKey:@"InkFlow 缺少内置拼音资源，请重新构建并安装。"}];
             return NO;
         }
     }
@@ -35,7 +35,7 @@ static BOOL ready;
 
     if (!ready) {
         api->finalize();
-        if (error) *error=[NSError errorWithDomain:@"io.damao.inkflow" code:1 userInfo:@{NSLocalizedDescriptionKey:@"无法载入拼音方案，请重新构建并安装 InkFlow。"}];
+        if (error) *error=[NSError errorWithDomain:@"io.damao.inputmethod.inkflow" code:1 userInfo:@{NSLocalizedDescriptionKey:@"无法载入拼音方案，请重新构建并安装 InkFlow。"}];
     }
     return ready;
 }

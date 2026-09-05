@@ -9,12 +9,19 @@
 ```sh
 macOS/scripts/build.sh
 macOS/scripts/test.sh
-INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh
+macOS/scripts/check-bundle.sh
+macOS/scripts/install.sh --debug
 ```
 
-首次构建需要联网下载校验过的引擎和词典；安装后的输入与词典处理不需要联网。签名使用 Team `T7976FL2LP` 的 Developer ID Application 证书，使用前检查证书主体 OU。应用标识为 `io.damao.inkflow`。
+日常开发使用 `--debug` 本地临时签名，无需证书或签名服务器。构建保留调试符号，调试安装声明 `get-task-allow`，便于 LLDB 附加；最终签名移除此调试权限。最终安装使用：
 
-安装位置为 `~/Library/Input Methods/InkFlow.app`。在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow，必要时注销后重新登录。再次安装会保留旧应用备份。用户词典与部署数据保存在 `~/Library/Application Support/InkFlow`，安装不会删除它们。
+```sh
+INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh --developer-id
+```
+
+首次构建需要联网下载校验过的引擎和词典；安装后的输入与词典处理不需要联网。签名使用 Team `T7976FL2LP` 的 Developer ID Application 证书，使用前检查证书主体 OU。应用标识为 `io.damao.inputmethod.inkflow`。
+
+安装位置为 `~/Library/Input Methods/InkFlow.app`。在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow，必要时注销后重新登录。安装后自动注册并检查输入源存在，不会替你切换输入源。再次安装会保留旧应用备份。用户词典与部署数据保存在 `~/Library/Application Support/InkFlow`，安装不会删除它们。
 
 ## 使用
 

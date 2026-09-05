@@ -7,3 +7,5 @@
 - `schemas/inkflow_pinyin.schema.yaml` adapts the upstream schema for one full-pinyin mode. Stroke reverse lookup and external symbol presets are omitted; punctuation and paging bindings are explicit. The dictionary is copied unmodified.
 
 The native app targets this Apple Silicon Mac. Its minimum deployment target is macOS 13. Build uses the current Xcode SDK, ARC, and warnings as errors. InputMethodKit controls the candidate UI. Each controller owns one Rime session, and the process initializes/deploys the engine on the main thread before serving input. Deployment and user dictionaries are writable only in Application Support/InkFlow. Routine logs omit input text.
+
+The input method icon is copied at build time from the local macOS CoreTypes generic application icon. No custom icon assets are maintained. The bundle identifier includes `.inputmethod.` for macOS input method discovery/launch compatibility. `register.sh` verifies TIS registration after installation without enabling or selecting the input source.
