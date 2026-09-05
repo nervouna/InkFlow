@@ -10,6 +10,8 @@ int main(int argc, const char **argv) { @autoreleasepool {
     CHECK([group[@"tsVisibleInputModeOrderedArrayKey"] isEqual:@[modeID]]);
     CHECK([mode[@"TISInputSourceID"] isEqual:modeID]);
     CHECK([mode[@"TISIntendedLanguage"] isEqual:@"zh-Hans"]);
+    CHECK([bundle.infoDictionary[@"TISIconIsTemplate"] boolValue]);
+    CHECK([mode[@"TISIconIsTemplate"] boolValue]);
     CHECK([mode[@"tsInputModeIsVisibleKey"] boolValue]);
     CHECK([mode[@"tsInputModeDefaultStateKey"] boolValue]);
     CHECK([mode[@"tsInputModePrimaryInScriptKey"] boolValue]);
