@@ -22,17 +22,31 @@ static NSBitmapImageRep *render(NSUInteger scale, NSBezierPath *glyph) {
 
 int main(int argc,const char **argv) { @autoreleasepool {
     if (argc!=2) { fprintf(stderr,"Usage: generate-menu-icon output-directory\n"); return 2; }
-    NSFont *font=[NSFont fontWithName:@"PingFangSC-Medium" size:16];
-    UniChar character=0x58A8; CGGlyph g=0;
-    if (!font || !CTFontGetGlyphsForCharacters((__bridge CTFontRef)font,&character,&g,1)) {
-        fprintf(stderr,"PingFang SC Medium with the 墨 glyph is required.\n"); return 1;
-    }
+    NSFont *typeface=[NSFont fontWithName:@"Futura-Bold" size:24];
+    if (!typeface) { fprintf(stderr,"Futura Bold is required to regenerate the menu icon.\n"); return 1; }
+    NSAttributedString *word=[[NSAttributedString alloc] initWithString:@"Ink"
+        attributes:@{NSFontAttributeName:typeface}];
+    CTLineRef line=CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)word);
     NSBezierPath *glyph=[NSBezierPath bezierPath];
-    [glyph moveToPoint:NSZeroPoint]; [glyph appendBezierPathWithCGGlyph:g inFont:font];
+    for (id object in (__bridge NSArray *)CTLineGetGlyphRuns(line)) {
+        CTRunRef run=(__bridge CTRunRef)object;
+        CFIndex count=CTRunGetGlyphCount(run);
+        if (count==0) continue;
+        CGGlyph glyphs[count]; CGPoint positions[count];
+        CTRunGetGlyphs(run,CFRangeMake(0,0),glyphs);
+        CTRunGetPositions(run,CFRangeMake(0,0),positions);
+        NSFont *font=(__bridge NSFont *)CFDictionaryGetValue(CTRunGetAttributes(run),kCTFontAttributeName);
+        for (CFIndex i=0;i<count;i++) {
+            [glyph moveToPoint:positions[i]];
+            [glyph appendBezierPathWithCGGlyph:glyphs[i] inFont:font];
+        }
+    }
+    CFRelease(line);
     NSRect bounds=glyph.bounds;
+    if (NSIsEmptyRect(bounds)) { fprintf(stderr,"Unable to render Ink.\n"); return 1; }
     NSAffineTransform *transform=[NSAffineTransform transform];
     [transform translateXBy:11 yBy:8];
-    [transform scaleBy:11/MAX(bounds.size.width,bounds.size.height)];
+    [transform scaleBy:MIN(17/bounds.size.width,10.5/bounds.size.height)];
     [transform translateXBy:-NSMidX(bounds) yBy:-NSMidY(bounds)];
     [glyph transformUsingAffineTransform:transform];
 
@@ -53,5 +67,5 @@ int main(int argc,const char **argv) { @autoreleasepool {
     if (![tiff writeToFile:[directory stringByAppendingPathComponent:@"MenuIconTemplate.tiff"] options:NSDataWritingAtomic error:&error]) {
         fprintf(stderr,"%s\n",error.localizedDescription.UTF8String); return 1;
     }
-    puts("PASS menu icon: PingFang SC Medium, 22x16pt, transparent glyph, 1x/2x TIFF");
+    puts("PASS menu icon: Ink, Futura Bold, 22x16pt, transparent lettering, 1x/2x TIFF");
 } return 0; }
