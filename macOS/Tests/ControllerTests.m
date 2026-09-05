@@ -1,6 +1,7 @@
 #import <InputMethodKit/InputMethodKit.h>
 #import <objc/runtime.h>
 #import "Engine.h"
+#import "IsolatedSettings.h"
 @interface InkFlowInputController : IMKInputController
 - (void)refresh:(id<IMKTextInput>)client;
 @end
@@ -22,7 +23,7 @@ static NSEvent *key(unsigned short code, NSString *text, NSEventModifierFlags fl
 }
 static void ignoreServerDeactivation(id object, SEL selector, id sender) { (void)object; (void)selector; (void)sender; }
 int main(int argc, const char **argv) { @autoreleasepool {
-    CHECK(argc==3); NSError *error=nil;
+    isolateSettings(); CHECK(argc==3); NSError *error=nil;
     CHECK([IFEngine startWithShared:@(argv[1]) user:@(argv[2]) error:&error]);
     // Stub only the framework server teardown, which requires a GUI server.
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(deactivateServer:)),(IMP)ignoreServerDeactivation);
@@ -54,6 +55,6 @@ int main(int argc, const char **argv) { @autoreleasepool {
     CHECK([client.mutations isEqual:@[@"insert:你好"]]);
     [controller commitComposition:client]; [controller deactivateServer:client];
     CHECK([client.mutations isEqual:@[@"insert:你好"]]);
-    controller=nil; [IFEngine stop];
+    controller=nil; [IFEngine stop]; cleanupSettings();
     puts("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement");
 } return 0; }

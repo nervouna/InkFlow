@@ -1,5 +1,17 @@
 # Debugging index
 
+## Candidate font setting changes but rendered text stays the same
+
+Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.
+
+**Cause:** `IMKCandidates setAttributes:` stores `NSFontAttributeName`, but the native candidate window's `itemLayout` title font stays at 16 points in both orientations, even when the attributes getter returns 14 or 36. A getter round-trip alone does not verify rendering.
+
+**Compatibility fix:** Keep the documented attributes call, then call the existing private `setFontSize:` only when the panel responds to that selector. A typed category declares its scalar argument as `double`, matching the observed runtime ABI. This setter rebuilds the native font layout on the observed OS. Production code does not traverse private objects or use KVC for this fix.
+
+**Limitation:** The setter is absent from public SDK headers and may change or disappear on another macOS version. If unavailable, InkFlow skips it and retains the documented attributes path; actual font rendering is not guaranteed by this fallback or by selector availability on untested OS versions.
+
+**Regression:** After building, run `bash macOS/scripts/test-settings-ui.sh` in a logged-in GUI session. Test-only private layout inspection checks all allowed sizes (14/16/18/24/36), 14→36→14 in each orientation, direction switches, and preservation of composition and digit keys. A simulated unavailable selector verifies that public attributes still apply without calling the private setter. If the diagnostic layout path changes, the test fails explicitly and needs investigation. Baseline public-only behavior failed 18 of 20 layout checks, retaining 16 points; the requested-16 checks passed. Diagnosis and exact RED/GREEN logs are under `/private/tmp/inkflow-font-diagnosis` and `/private/tmp/inkflow-font-fix` for this session.
+
 ## Cursor input switcher icon disappears when selected
 
 Observed on macOS 26.6.2, 2026-09-05. The user accepted the template-flag fix: Ink remains visible when selected and reverses colors normally.

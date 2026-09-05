@@ -1,5 +1,6 @@
 #import <InputMethodKit/InputMethodKit.h>
 #import "Engine.h"
+#import "IsolatedSettings.h"
 
 @interface InkFlowInputController : IMKInputController
 @end
@@ -7,7 +8,7 @@
 #define CHECK(c) do { if (!(c)) { fprintf(stderr,"FAIL initialization line %d: %s\n",__LINE__,#c); return 1; } } while(0)
 
 int main(int argc, const char **argv) { @autoreleasepool {
-    CHECK(argc==3);
+    isolateSettings(); CHECK(argc==3);
     [NSApplication sharedApplication];
     NSError *error=nil;
     CHECK([IFEngine startWithShared:@(argv[1]) user:@(argv[2]) error:&error]);
@@ -37,6 +38,6 @@ int main(int argc, const char **argv) { @autoreleasepool {
         controller=nil;
     }
     CHECK(!releasedController);
-    [IFEngine stop];
+    [IFEngine stop]; cleanupSettings();
     puts("PASS initialization: real controller, selection-key configuration, layout reuse and teardown");
 } return 0; }

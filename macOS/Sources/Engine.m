@@ -2,7 +2,7 @@
 #include <rime_api.h>
 static RimeApi *api;
 static BOOL ready;
-@implementation IFEngine { RimeSessionId _session; }
+@implementation IFEngine { RimeSessionId _session; NSInteger _candidateCount; NSInteger _requestedCount; }
 + (BOOL)startWithShared:(NSString *)shared user:(NSString *)user error:(NSError **)error {
     NSAssert(NSThread.isMainThread, @"Engine must run on main thread");
     if (ready) return YES;
@@ -44,13 +44,39 @@ static BOOL ready;
     if ((self=[super init])) {
         if (!ready || !(_session=api->create_session())) return nil;
         if (!api->select_schema(_session,"inkflow_pinyin")) { api->destroy_session(_session); _session=0; return nil; }
+        _candidateCount=5; _requestedCount=5;
     }
     return self;
 }
 - (void)dealloc { if (ready && _session) api->destroy_session(_session); }
 - (BOOL)key:(int)key modifiers:(int)modifiers {
     NSAssert(NSThread.isMainThread, @"Engine must run on main thread");
+    [self applyCandidateCountIfIdle];
     return api->process_key(_session,key,modifiers);
+}
+- (NSInteger)candidateCount { return _candidateCount; }
+- (void)setCandidateCount:(NSInteger)count {
+    NSAssert(NSThread.isMainThread, @"Engine must run on main thread");
+    _requestedCount=count>=3 && count<=9 ? count : 5;
+    [self applyCandidateCountIfIdle];
+}
+- (void)applyCandidateCountIfIdle {
+    NSAssert(NSThread.isMainThread, @"Engine must run on main thread");
+    if (_candidateCount==_requestedCount || [[self snapshot][@"preedit"] length]) return;
+    // librime caches page_size in Schema. Temporarily patch the shared in-memory
+    // config while constructing this session's schema, then restore it. Never
+    // redeploy or save the config, and never reload a composing session.
+    RimeConfig config={0};
+    if (!api->schema_open("inkflow_pinyin",&config)) { NSLog(@"Cannot open candidate configuration"); return; }
+    int previous=5; BOOL hadValue=api->config_get_int(&config,"menu/page_size",&previous);
+    BOOL ascii=api->get_option(_session,"ascii_mode");
+    BOOL changed=api->config_set_int(&config,"menu/page_size",(int)_requestedCount);
+    if (changed && api->select_schema(_session,"inkflow_pinyin")) _candidateCount=_requestedCount;
+    else NSLog(@"Cannot apply candidate count");
+    if (hadValue) api->config_set_int(&config,"menu/page_size",previous);
+    else api->config_clear(&config,"menu/page_size");
+    api->config_close(&config);
+    api->set_option(_session,"ascii_mode",ascii);
 }
 - (BOOL)event:(NSEvent *)event {
     NSEventModifierFlags flags=event.modifierFlags;

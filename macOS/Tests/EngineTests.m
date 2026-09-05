@@ -9,6 +9,8 @@ int main(int argc, const char **argv) { @autoreleasepool {
  CHECK(argc==3); NSError *error=nil;
  CHECK(![IFEngine startWithShared:@"/nonexistent/inkflow" user:@(argv[2]) error:&error]); CHECK(error!=nil); error=nil;
  CHECK([IFEngine startWithShared:@(argv[1]) user:@(argv[2]) error:&error]);
+ NSString *schemaPath=[@(argv[2]) stringByAppendingPathComponent:@"build/inkflow_pinyin.schema.yaml"];
+ NSData *schemaBefore=[NSData dataWithContentsOfFile:schemaPath]; CHECK(schemaBefore);
  IFEngine *a=[IFEngine new], *b=[IFEngine new]; CHECK(a && b);
  type(a,@"nihao"); CHECK([[a snapshot][@"candidates"] containsObject:@"你好"]);
  CHECK([[b snapshot][@"preedit"] length]==0);
@@ -34,5 +36,15 @@ int main(int argc, const char **argv) { @autoreleasepool {
  CHECK([a event:toggle]); type(a,@"nihao"); [a commit]; CHECK([[a takeCommit] isEqual:@"你好"]);
  NSEvent *cmd=[NSEvent keyEventWithType:NSEventTypeKeyDown location:NSZeroPoint modifierFlags:NSEventModifierFlagCommand timestamp:0 windowNumber:0 context:nil characters:@"a" charactersIgnoringModifiers:@"a" isARepeat:NO keyCode:0];
  CHECK(![a event:cmd]);
- a=nil;b=nil; [IFEngine stop]; puts("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough");
+ [a clear]; type(a,@"shi"); NSDictionary *before=[a snapshot];
+ [a setCandidateCount:9]; CHECK([[a snapshot] isEqual:before]);
+ CHECK([[a takeCommit] length]==0);
+ [a clear]; type(a,@"shi"); CHECK([[a snapshot][@"candidates"] count]==9);
+ [a event:event(121,@"")]; NSArray *nine=[a snapshot][@"candidates"]; CHECK(nine.count==9);
+ [a event:event(25,@"9")]; CHECK([[a takeCommit] isEqual:nine[8]]);
+ IFEngine *fresh=[IFEngine new]; type(fresh,@"shi"); CHECK([[fresh snapshot][@"candidates"] count]==5);
+ [fresh clear]; [fresh setCandidateCount:9]; type(fresh,@"shi"); CHECK([[fresh snapshot][@"candidates"] count]==9); fresh=nil;
+ [b clear]; type(b,@"shi"); CHECK([[b snapshot][@"candidates"] count]==5);
+ [a setCandidateCount:3]; type(a,@"shi"); CHECK([[a snapshot][@"candidates"] count]==3);
+ a=nil;b=nil; [IFEngine stop]; CHECK([[NSData dataWithContentsOfFile:schemaPath] isEqual:schemaBefore]); puts("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation");
  } return 0; }

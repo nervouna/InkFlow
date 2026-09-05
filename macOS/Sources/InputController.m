@@ -1,5 +1,9 @@
 #import <InputMethodKit/InputMethodKit.h>
 #import "Engine.h"
+#import "Settings.h"
+@interface IMKCandidates (InkFlowFontCompatibility)
+- (void)setFontSize:(double)size;
+@end
 @interface InkFlowInputController : IMKInputController
 @end
 @implementation InkFlowInputController {
@@ -24,15 +28,42 @@
             }
             CFRelease(layouts);
         }
-        [_panel setSelectionKeys:@[@18,@19,@20,@21,@23]];
         [_panel setDismissesAutomatically:NO];
-        [_panel setAttributes:@{IMKCandidatesSendServerKeyEventFirst:@YES}];
+        [self applySettings];
+        [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(settingsChanged:) name:IFSettingsDidChangeNotification object:IFSettings.sharedSettings];
     }
     return self;
 }
 - (void)dealloc {
+    [NSNotificationCenter.defaultCenter removeObserver:self];
     _panel=nil;
     if (_selectionLayout) CFRelease(_selectionLayout);
+}
+- (NSMenu *)menu {
+    NSMenu *menu=[[NSMenu alloc] initWithTitle:@"InkFlow"];
+    [menu addItemWithTitle:@"设置…" action:@selector(showPreferences:) keyEquivalent:@""].target=self;
+    return menu;
+}
+- (void)showPreferences:(id)sender {
+    // IMK dispatches an action dictionary, not an NSMenuItem.
+    (void)sender; [IFSettingsWindowController.sharedController present];
+}
+- (void)applySettings {
+    IFSettings *settings=IFSettings.sharedSettings;
+    [_engine setCandidateCount:settings.candidateCount];
+    BOOL updating=_updating; _updating=YES;
+    [_panel setPanelType:settings.vertical ? kIMKSingleColumnScrollingCandidatePanel : kIMKSingleRowSteppingCandidatePanel];
+    NSArray *keys=@[@18,@19,@20,@21,@23,@22,@26,@28,@25];
+    [_panel setSelectionKeys:[keys subarrayWithRange:NSMakeRange(0,_engine.candidateCount ?: 5)]];
+    [_panel setAttributes:@{IMKCandidatesSendServerKeyEventFirst:@YES,NSFontAttributeName:[NSFont systemFontOfSize:settings.fontSize]}];
+    // macOS 26.6.2 stores public font attributes without updating the native layout.
+    // Use the optional private setter with its double ABI; retain the public path above.
+    if ([_panel respondsToSelector:@selector(setFontSize:)]) [_panel setFontSize:(double)settings.fontSize];
+    _updating=updating;
+}
+- (void)settingsChanged:(NSNotification *)notification {
+    (void)notification; [self applySettings];
+    if ([[ _engine snapshot][@"preedit"] length] && self.client) [self refresh:self.client];
 }
 - (void)refresh:(id<IMKTextInput>)client {
     NSString *commit=[_engine takeCommit];
@@ -55,6 +86,7 @@
 
     _strings=state[@"candidates"] ?: @[];
     _updating=YES;
+    [self applySettings];
     [_panel updateCandidates];
     if (_strings.count) {
         NSUInteger index=MIN([state[@"highlight"] unsignedIntegerValue],_strings.count-1);
