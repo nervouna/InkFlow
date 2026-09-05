@@ -22,14 +22,25 @@ fi
 [[ "$metadata" == *'Identifier=io.damao.inputmethod.inkflow'* ]] || { echo 'Unexpected bundle identifier.' >&2; exit 1; }
 target="$HOME/Library/Input Methods/InkFlow.app"
 mkdir -p "$(dirname "$target")"
+[[ ! -L "$target" ]] || { echo 'Refusing to replace a symlinked installation.' >&2; exit 1; }
+stage=$(mktemp -d "$(dirname "$target")/.inkflow-install.XXXXXX")
+cleanup() {
+  if [[ -e "$stage/previous" && ! -e "$target" ]]; then mv "$stage/previous" "$target"; fi
+  rm -rf "$stage"
+}
+trap cleanup EXIT
+ditto "$app" "$stage/InkFlow.app"
+codesign --verify --deep --strict "$stage/InkFlow.app"
 if [[ -e "$target" ]]; then
-  backup="$target.backup.$(date +%Y%m%d%H%M%S)"
-  [[ ! -e "$backup" ]] || { echo 'Backup path already exists.' >&2; exit 1; }
-  mv "$target" "$backup"
-  echo "Previous app preserved at $backup"
+  mkdir -p build/backups
+  backup_dir=$(mktemp -d "$PWD/build/backups/installation.XXXXXX")
+  ditto -c -k --keepParent "$target" "$backup_dir/InkFlow.zip"
+  unzip -tq "$backup_dir/InkFlow.zip"
+  echo "Previous app archived at $backup_dir/InkFlow.zip"
+  mv "$target" "$stage/previous"
 fi
-ditto "$app" "$target"
+mv "$stage/InkFlow.app" "$target"
 codesign --verify --deep --strict "$target"
 echo "Installed $target ($mode)"
 macOS/scripts/register.sh "$target"
-echo '在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow；必要时注销后重新登录。'
+echo '在系统设置 → 键盘 → 文本输入 → 编辑中添加 InkFlow 简体拼音，然后从输入菜单选择。'

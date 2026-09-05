@@ -5,6 +5,7 @@ macOS/scripts/dependencies.sh
 app="$PWD/build/InkFlow.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources/Rime" "$app/Contents/Resources/Licenses"
 cp /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns "$app/Contents/Resources/InputMethod.icns"
+ditto macOS/Resources "$app/Contents/Resources"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.dylib"
 cp schemas/*.yaml "$app/Contents/Resources/Rime/"

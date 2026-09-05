@@ -5,7 +5,7 @@ app="$PWD/build/InkFlow.app"
 plutil -lint "$app/Contents/Info.plist"
 [[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]
 [[ "$(plutil -extract TISInputSourceID raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]
-[[ "$(plutil -extract InputMethodConnectionName raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow.Connection ]]
+[[ "$(plutil -extract InputMethodConnectionName raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow_Connection ]]
 icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 [[ "$icon" == InputMethod.icns && -s "$app/Contents/Resources/$icon" ]]
 
@@ -24,3 +24,6 @@ user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
 echo 'PASS bundle: arm64, plist, system/bundled dylib closure, bundled dictionary transcript'
+
+xcrun clang -fobjc-arc -Wall -Wextra -Werror macOS/Tests/MetadataTests.m -framework Foundation -o build/metadata-tests
+build/metadata-tests "$app"
