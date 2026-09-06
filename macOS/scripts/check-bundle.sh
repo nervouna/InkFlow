@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 app="$PWD/build/InkFlow.app"
+bash macOS/scripts/quality-metadata.sh "$app" --verify
 plutil -lint "$app/Contents/Info.plist"
 [[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]
 [[ "$(plutil -extract TISInputSourceID raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]

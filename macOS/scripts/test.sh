@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+bash macOS/scripts/test-quality-store.sh
+bash macOS/scripts/test-quality-metadata.sh
 macOS/scripts/dependencies.sh
 bash macOS/scripts/test-prepare-rime.sh
 bash macOS/scripts/prepare-rime.sh build/test-shared

@@ -16,5 +16,6 @@ bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
 source macOS/scripts/swift-common.sh
 rime_rpath='@executable_path/../Frameworks' build_swift "$app/Contents/MacOS/InkFlow" "${swift_sources[@]}" macOS/Sources/main.swift
+bash macOS/scripts/quality-metadata.sh "$app"
 plutil -lint "$app/Contents/Info.plist"
 echo "Built $app"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sourced from scripts that have already changed to the repository root.
-swift_sources=(macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
+swift_sources=(macOS/Sources/QualityRecords.swift macOS/Sources/QualityStore.swift macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
 
 build_swift() {
   local output="$1"
@@ -13,7 +13,7 @@ build_swift() {
     -target arm64-apple-macosx26.0 -module-cache-path build/swift-module-cache \
     -I build/deps/dist/include -import-objc-header macOS/Sources/InkFlow-Bridging-Header.h \
     "$@" "$objects/NativeCandidates.o" \
-    -framework AppKit -framework SwiftUI -framework InputMethodKit -framework Carbon \
+    -framework AppKit -framework SwiftUI -framework InputMethodKit -framework Carbon -lsqlite3 \
     "${rime_library:-$PWD/build/deps/dist/lib/librime.1.17.0.dylib}" \
     -Xlinker -rpath -Xlinker "${rime_rpath:-$PWD/build/deps/dist/lib}" -o "$output"
 }
