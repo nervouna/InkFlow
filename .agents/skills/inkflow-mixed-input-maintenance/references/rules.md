@@ -1,0 +1,78 @@
+# Current mixed-input rules and correction-table contract
+
+This describes the implemented baseline, not an expansion plan. Recheck the linked sources in the [skill entrypoint](../SKILL.md) when changing a rule. The rules distinguish data inherited from upstream, native Rime behavior, and InkFlow policy.
+
+## Data, admission and weights
+
+1. **Upstream spelling, InkFlow frequency policy.** The complete pinned `rime-easy-en` dictionary remains an unmodified build input under `build/deps`. It supplies existing displayed words and code aliases. Its original numeric weights are not used for admission or English ranking.
+2. **Static measured source.** `macOS/Data/english-wordfreq.tsv` maps exact displayed text to observed Zipf from pinned wordfreq 3.1.1 `en/large`. Regeneration performs `preprocess_text(text, "en")` followed by direct frequency-key lookup, then stores `log10(probability) + 9` to two decimals. It does not use the multi-token estimators in `word_frequency`/`zipf_frequency`.
+3. **Missing is not zero.** An absent observation is omitted; there is no estimated value or fallback to the old upstream weight. The provider folds capitalization, so it cannot distinguish senses such as `US/us`. The snapshot is keyed by exact original display text so explicit corrections can distinguish spellings.
+4. **One admission gate.** `prepare-rime.sh` chooses the exact-word override when present, otherwise the observed snapshot value. With neither, the record is excluded. An effective value must be positive and at least `ENGLISH_MIN_ZIPF`. Zero always excludes, including when the threshold itself is zero.
+5. **Every candidate path uses the gate.** Generate filtered `easy_en.dict.yaml` first, then derive the mixed dictionary only from it. Exact queries, completions, existing code aliases, case variants and later pages cannot query the original unfiltered input as a fallback. Each distinct displayed spelling is evaluated separately.
+6. **Build-time configuration.** Values live in `macOS/config/english.conf`, with no GUI or runtime setting:
+
+   | Variable | Default | Meaning and accepted range |
+   | --- | --- | --- |
+   | `ENGLISH_MIN_ZIPF` | `4.0` | Inclusive minimum, decimal from 0 through 9 |
+   | `ENGLISH_WEIGHT_SCALE` | `250000` | Positive integer up to 238609294 |
+   | `MIXED_ENGLISH_WEIGHT_DIVISOR` | `100` | Positive decimal divisor applied only after admission |
+
+7. **Weight mapping.** English weight is `floor(effective_Zipf * scale + 0.5)`; mixed weight is `floor(English_weight / divisor)`. This linear engineering mapping preserves frequency order subject to integer ties; it is not a probability-ratio mapping. The mixed divisor cannot change standalone English admission or weights. Scale/divisor changes can affect mixed sentence decoding; they do not replace the cross-language priority rule.
+8. **Failure behavior.** Configuration and data validation occurs in staging before replacing either generated dictionary. Malformed numbers/rows, duplicate exact words or a missing required snapshot fail generation. Previous generated dictionaries survive these validation failures; there is no full-dictionary fallback. Empty snapshot/override files or an empty admitted result are valid. This is validation staging, not a guarantee of an atomic two-file replacement against arbitrary filesystem failures.
+
+## Candidate behavior and ownership
+
+1. **Native Rime coverage first, InkFlow quality second.** Rime compares covered input length before quality. For equal coverage, the current translator setup prioritizes native Chinese, then mixed candidates (`quality = -0.5`), then standalone English (`quality = -1`). A complete English/mixed result can lead a Chinese candidate covering only a shorter span.
+2. **Unfinished Chinese is protected.** A Chinese interpretation of an unfinished final syllable still counts as full coverage. There is no semantic classifier for “生硬拼音”; an awkward full-coverage Chinese reading keeps its priority. Raising an English word's frequency does not promote its whole stream over an equally covering Chinese candidate.
+3. **Standalone query shape is customized.** The English Lua translator accepts only a query consisting entirely of ASCII letters. One- and two-letter queries use exact code lookup only; prefix completion starts at three letters. These are code-query rules, not a minimum displayed-word length. Existing aliases such as `i` → `I` can still work. Admission of a nonalphabetic display word does not itself make a nonalphabetic query reachable.
+4. **English ordering is customized.** Look up all matching admitted entries through Rime `Memory`, without a length-first or fixed top-N cutoff. Deduplicate by exact displayed text, keeping the largest weight. Sort by weight descending; ties prefer displayed text exactly equal to the case-sensitive query, then bytewise lexical order. A frequent completion can precede a lower-frequency exact word. Cache only the current query per translator/session, including paging.
+5. **Case and aliases come from data.** Different displayed case variants remain distinct candidates. Neither sorting nor frequency preprocessing invents output spellings or code aliases. Uppercase input is accepted by the speller; an admitted exact `D` may lead for input `D`, while lowercase `d` preserves Chinese priority. Exact queries and capitals never bypass admission.
+6. **Mixed dictionary membership is customized.** In addition to the shared gate, an English record must have ASCII-letter-only display text, literal `text == code`, and at least four letters. Short words and nonliteral aliases may remain reachable through standalone English but do not enter automatic mixed sentence composition through those records.
+7. **Mixed decoding is native, filtering is customized.** The supplemental dictionary imports `pinyin_simp`; Rime's `script_translator` performs segmentation and sentence generation with completion disabled. Lua emits only candidates reaching the current segment end and containing both ASCII letters and non-ASCII bytes. That byte test assumes the dictionary's Chinese/English contents; it is not a general Han-script detector. Partial results and pure Chinese/English results are filtered out. Unknown Latin tails are not appended as a mixed fallback.
+8. **Positions and boundaries.** Complete admitted English words may occur before, within or after Chinese where native segmentation yields a mixed result. There is no independent English sentence splitter or promise to resolve every ambiguous boundary. Candidate text is committed as produced, without a custom word-spacing or case-normalization pass. Mixed composition does not offer standalone English's prefix-completion behavior.
+9. **Compilation and Pinyin.** The dependency-only `easy_en` schema compiles literal English independently of Pinyin algebra. The mixed and primary schemas retain the `n/l` `ue`→`ve` and `j/q/x/y` `u`→`v` spelling derivations. The main speller accepts upper/lower ASCII letters and declares space/apostrophe delimiters. These remain native Pinyin delimiters, not an English phrase-input API; `xi'an` continues to produce 西安.
+10. **Learning stays Chinese.** The original Chinese dictionary/translator and `pinyin_simp.userdb` remain independent. Both supplemental translators disable user dictionaries. Selecting English does not create a new English learning/ranking mechanism.
+11. **Selection and editing share the existing engine/controller.** Paging, number/space selection, backspace, cursor edits, cancellation and session isolation are not separate English features. Preserve their behavior and exact committed candidate text when changing admission or ranking.
+12. **Explicit ASCII mode is native passthrough.** It does not consult either dictionary and remains available for excluded words. The compilation-only English/mixed schemas do not add separate selectable input sources.
+
+## Override-table editing rules
+
+Edit `macOS/config/english-overrides.tsv` for accepted individual corrections. The default table is empty; no correction-list policy beyond this format has been adopted. The old `email = 0` workaround and four hard-coded variants are obsolete: the measured snapshot already admits those common spellings.
+
+1. **Record format:** exactly three columns separated by literal TAB characters: `displayed word`, `replacement Zipf`, `reason`. Blank lines and lines whose first non-whitespace character is `#` are ignored. Use no padding or extra tabs; fields are not trimmed or unquoted. The word and reason must each contain non-whitespace text.
+2. **Number syntax:** digits, optionally followed by a dot and more digits, within 0..9 inclusive. `4`, `4.0`, `0` are valid; `.5`, `4.`, negatives, scientific notation, `NaN` and infinity are invalid. A replacement is a Zipf value, not an engine weight. The generator accepts more than two decimals; snapshot precision does not constrain overrides.
+3. **Exact display-text key:** match spelling and case exactly, not the typed code, a prefix, wildcard, or case-folded family. One record applies to all existing code aliases of that displayed word. Case variants, plurals and related forms require separate deliberate records.
+4. **Replacement, not bonus:** a record replaces observed or missing evidence before the gate. It can raise or lower a word's effective value. A positive value below the current minimum remains excluded; a value equal to it passes. `0` explicitly excludes regardless of the configured threshold.
+5. **No vocabulary synthesis:** the original dictionary must already contain that displayed spelling and a usable code. An override for an absent spelling creates nothing and is not rejected as an unknown word by the parser. Check source membership yourself. Mixed length/ASCII/literal-code restrictions still apply after any promotion.
+6. **No duplicate-key precedence:** repeated exact displayed words are errors, not “last row wins.” Edit the existing row. Deleting it restores the observed snapshot behavior, or exclusion if the observation is missing.
+7. **Reason and evidence:** write a concrete reason for the accepted local correction, identifying the observed bad case or relevant evidence. Do not invent a measured frequency. Distinguish a product-policy adjustment from provider data. Choose the smallest value/change meeting the intended admission or English-ordering outcome; leave broad cleaning/case/new-word policies for a separately agreed iteration.
+8. **Regeneration boundary:** rebuild generated dictionaries after editing the source table/config. Do not patch `build/**`, installed resources, the upstream archive, or the measured snapshot to implement an ordinary correction. Editing the TSV alone does not update a running input method. Update the relevant regression expectations and this reference when semantics change.
+
+Illustrative rows only, **not default recommendations or active rules**. Separators below are literal tabs:
+
+```tsv
+plugin	4.0	Example policy: admit this existing spelling at the default gate
+WOMENS	0	Example policy: explicitly exclude this exact display spelling
+```
+
+The first row has no effect on a differently cased spelling and would fail a threshold above 4.0. The second affects all existing aliases of `WOMENS`, not `women`. Neither row adds vocabulary. Do not copy either merely because it appears in this guide.
+
+## Regression anchors and accepted limits
+
+These anchors describe the current defaults and fixtures; future intentional data/config changes should update their expectations, not hard-code special cases in Lua.
+
+| Case | Current expectation / reason |
+| --- | --- |
+| `d`, `niyebuxiangnid`, `womenshenzh` | Chinese leads through forward typing and backspaces; no promoted `D`, `nid` or `zh` mixed tail |
+| `women` | 我们 leads; measured `women` (5.57) remains selectable |
+| `WOMENS`, `womenfolk`, `tameness`, `Nimes`, `nimetti`, `nimetz`, `Haiti`, `Haitian`, `Haitienne`, `haitians` | Rejected at the default gate, including exact/prefix/case/alias paths, later pages and mixed boundaries; `WOMENS` is 3.40 |
+| `email`, `emails`, `online`, `bug` | Measured 4.68, 4.24, 5.19, 4.20 respectively; no zero-weight exception needed; admitted does not mean first-page/first-place |
+| `email`, `wofaleemail` | 额买了 / 我发了额买了 lead at equal coverage; `email` / 我发了email remain selectable and commit exactly |
+| `compute`, `actual` | `computer` can complete excluded `compute`; admitted `actually` precedes admitted exact `actual` by frequency |
+| `a`, `i`, `D` | Admitted exact short codes remain reachable; `i` can select `I`; intentional uppercase `D` remains available |
+| `niruguoxiangyaozhefenoffer`, `niruguoxiangyaozhefenofferkeyihuifuwo`, `offerhenhao`, `wofaleemails`, `wofaleEmail`, `womenquoffice` | Preserve complete mixed results at initial/internal/final boundaries and exact selection; also exercise edits within `zhefenoffer` |
+| `offline`, `API`, `plugin` | Default exclusion is an accepted baseline limit, not a runtime-gate defect |
+
+Frequency is a static common-word proxy, not word validity, a current vocabulary source, or a frequency model for English specifically inserted into Chinese. It cannot fix source forms such as `APP/App` or `Demo/DEMO`, infer lowercase variants, or synthesize missing new words. There is no English spelling correction, personal English learning, network lookup, or contextual model in this feature.
+
+For deliberate snapshot/provider maintenance, use `macOS/Data/README.md` and its regeneration script: verify pinned source/data hashes and version, regenerate deterministically, review additions/removals and representative values, update output checksum/provenance and bundled license attribution. Python/wordfreq is needed only for that operation; ordinary builds read the committed TSV with AWK and runtime performs no frequency download. Do not regenerate the snapshot for an ordinary override edit.
