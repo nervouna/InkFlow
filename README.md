@@ -1,6 +1,6 @@
 # InkFlow
 
-本地运行的 macOS 简体拼音输入法，使用 librime 和系统候选窗口。
+本地运行的 macOS 简体拼音输入法，使用 librime 和系统候选窗口。以中文输入体验为优先，支持在中文中零星插入英文单词。
 
 运行需要 Apple Silicon Mac、macOS 26 或更新版本；构建需要支持 Swift 6.2 或更新版本的 Xcode 命令行工具。
 
@@ -30,7 +30,7 @@ INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh --de
 ## 使用
 
 - 输入全拼，用空格或数字 1–9 选词，也可以点击候选。
-- 中文模式下也可连续输入拼音与英文，例如 `niruguoxiangyaozhefenoffer` 候选为“你如果想要这份offer”，后面还能继续输入拼音。英文与拼音共用候选窗口和选词按键，词典支持的大小写拼写按原样上屏。
+- 在中文拼音中可夹带英文单词，例如 `niruguoxiangyaozhefenoffer` 候选为“你如果想要这份offer”，后面还能继续输入拼音。英文与拼音共用候选窗口和选词按键，词典支持的大小写拼写按原样上屏。
 - 单独输入英文时，从三个字母开始提供补全，按词典权重排序；高频补全可排在低频精确词前，例如 `compute` 优先显示 `computer`，`compute` 仍可选择。
 - 中文候选能覆盖全部输入时优先显示中文，包括末尾拼音音节尚未输入完整的情况；英文仍可翻页选择。自动混输采用较长的常用英文词，短词可单独输入后选词。
 - 用 Page Up / Page Down 或 `[` / `]`、`-` / `=` 翻页。

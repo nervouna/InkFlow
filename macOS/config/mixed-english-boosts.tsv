@@ -1,0 +1,6 @@
+# Exact spelling<TAB>replacement source weight<TAB>reason
+# Apply only to existing zero-weight entries, before admission and scaling.
+email	990000	Upstream assigns zero to this common mail term.
+Email	990000	Initial-capital spelling of email.
+emails	990000	Regular plural of email, also zero upstream.
+Emails	990000	Initial-capital spelling of emails.
