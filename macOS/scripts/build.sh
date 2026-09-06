@@ -13,6 +13,7 @@ cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.
 cp schemas/*.yaml "$app/Contents/Resources/Rime/"
 cp build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml "$app/Contents/Resources/Rime/"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
-xcrun clang -g -fobjc-arc -Wall -Wextra -Werror -mmacosx-version-min=13.0 -I build/deps/dist/include macOS/Sources/*.m -framework AppKit -framework InputMethodKit -framework Carbon -L build/deps/dist/lib -lrime -Wl,-rpath,@executable_path/../Frameworks -o "$app/Contents/MacOS/InkFlow"
+source macOS/scripts/swift-common.sh
+rime_rpath='@executable_path/../Frameworks' build_swift "$app/Contents/MacOS/InkFlow" "${swift_sources[@]}" macOS/Sources/main.swift
 plutil -lint "$app/Contents/Info.plist"
 echo "Built $app"

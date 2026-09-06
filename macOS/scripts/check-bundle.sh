@@ -23,11 +23,13 @@ for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.
     esac
   done
 done
-xcrun clang -fobjc-arc -Wall -Wextra -Werror -mmacosx-version-min=13.0 -I macOS/Sources -I build/deps/dist/include macOS/Sources/Engine.m macOS/Tests/EngineTests.m -framework AppKit "$app/Contents/Frameworks/librime.1.dylib" -Wl,-rpath,"$app/Contents/Frameworks" -o build/bundle-engine-tests
+source macOS/scripts/swift-common.sh
+rime_library="$app/Contents/Frameworks/librime.1.dylib" rime_rpath="$app/Contents/Frameworks" \
+  build_swift_test build/bundle-engine-tests macOS/Tests/EngineTests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
 echo 'PASS bundle: arm64, plist, system/bundled dylib closure, bundled dictionary transcript'
 
-xcrun clang -fobjc-arc -Wall -Wextra -Werror macOS/Tests/MetadataTests.m -framework AppKit -o build/metadata-tests
+build_swift_test build/metadata-tests macOS/Tests/MetadataTests.swift
 build/metadata-tests "$app"

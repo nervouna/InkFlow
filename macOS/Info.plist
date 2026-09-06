@@ -16,7 +16,7 @@
 <key>InputMethodServerControllerClass</key><string>InkFlowInputController</string>
 <key>LSBackgroundOnly</key><true/>
 <key>LSUIElement</key><true/>
-<key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>LSMinimumSystemVersion</key><string>26.0</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 <key>TISInputSourceID</key><string>io.damao.inputmethod.inkflow</string>
 <key>TISIntendedLanguage</key><string>zh-Hans</string>
