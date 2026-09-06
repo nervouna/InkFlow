@@ -4,190 +4,189 @@ cd "$(dirname "$0")/../.."
 
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
-mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/schemas" \
+mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \
   "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
 cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
 cp -R schemas/. "$fixture/schemas/"
 printf '中文\tzhong wen\t1000\n' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
-cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'EOF'
-# Fixture with the upstream dictionary header and record shape.
+cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'DATA'
 ---
 name: easy_en
 version: '0.2'
 sort: by_weight
 use_preset_vocabulary: false
 ...
-offer	offer	999319
 email	email	0
 Email	Email	0
 emails	emails	0
-Emails	Emails	0
 computer	computer	998830
 compute	compute	981698
 widget	widget	0
-widget	Widget	0
-Widget	Widget	0
+widget	Widget	1
+Widget	Widget	999999
 novel	novel	980000
-boundary	boundary	990000
-above	above	990001
-below	below	989999
+boundary	boundary	1
+above	above	1
+below	below	999999
 api	api	999999
 Alias	alias	999999
 foo-bar	foo-bar	999999
-unknown	unknown	0
+unknown	unknown	999999
 unrated	unrated
-EOF
-
+DATA
+cat > "$fixture/macOS/Data/english-wordfreq.tsv" <<'DATA'
+# Exact source text and observed Zipf; absence means missing evidence.
+email	4.68
+Email	4.68
+emails	4.24
+computer	4.97
+compute	3.41
+Widget	2.00
+novel	3.00
+boundary	4.00
+above	4.01
+below	3.99
+api	4.50
+Alias	4.50
+foo-bar	4.50
+DATA
 configure() {
-  printf 'ENGLISH_MIN_SOURCE_WEIGHT=%s\nMIXED_ENGLISH_WEIGHT_DIVISOR=%s\n' "$1" "$2" \
+  printf 'ENGLISH_MIN_ZIPF=%s\nENGLISH_WEIGHT_SCALE=%s\nMIXED_ENGLISH_WEIGHT_DIVISOR=%s\n' "$1" "$2" "$3" \
     > "$fixture/macOS/config/english.conf"
 }
-
 records() {
   awk -F '\t' '$0 == "..." { entries=1; next } entries && NF == 3' "$1"
 }
-
 generate() {
   bash "$fixture/macOS/scripts/prepare-rime.sh" "$fixture/output"
   records "$fixture/output/easy_en.dict.yaml" > "$fixture/english.tsv"
   records "$fixture/output/inkflow_mixed.dict.yaml" > "$fixture/mixed.tsv"
   cmp "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml" "$fixture/output/pinyin_simp.dict.yaml"
 }
-
 expect_failure() {
   cp "$fixture/output/easy_en.dict.yaml" "$fixture/before-english.yaml"
   cp "$fixture/output/inkflow_mixed.dict.yaml" "$fixture/before-mixed.yaml"
   if bash "$fixture/macOS/scripts/prepare-rime.sh" "$fixture/output" > "$fixture/error.log" 2>&1; then
-    echo "FAIL: invalid policy accepted ($1)" >&2
-    exit 1
+    echo "FAIL: invalid policy accepted ($1)" >&2; exit 1
   fi
   if ! grep -q "$2" "$fixture/error.log"; then
     cat "$fixture/error.log" >&2
-    echo "FAIL: missing policy error ($1)" >&2
-    exit 1
+    echo "FAIL: missing policy error ($1)" >&2; exit 1
   fi
-  # Failure must not overwrite either dictionary with complete or partial input.
   cmp "$fixture/before-english.yaml" "$fixture/output/easy_en.dict.yaml"
   cmp "$fixture/before-mixed.yaml" "$fixture/output/inkflow_mixed.dict.yaml"
 }
 
-configure 990000 100
-cat > "$fixture/macOS/config/english-boosts.tsv" <<'EOF'
-# Exact spelling, replacement source weight, rationale.
-email	990000	Common mail term
-Email	990000	Common mail term
-emails	990000	Plural mail term
-Emails	990000	Plural mail term
-widget	995000	Correct zero weights for this displayed spelling and its code aliases
-novel	999999	Must not change an existing nonzero source weight
-api	999999	Must not bypass the mixed minimum word length
-ghost	999999	Must not synthesize absent dictionary entries
-unrated	990100	A missing source weight is treated as zero
-EOF
+configure 4.0 250000 100
+: > "$fixture/macOS/config/english-overrides.tsv"
 generate
-cat > "$fixture/expected-english.tsv" <<'EOF'
-offer	offer	999319
-email	email	990000
-Email	Email	990000
-emails	emails	990000
-Emails	Emails	990000
-computer	computer	998830
-widget	widget	995000
-widget	Widget	995000
-boundary	boundary	990000
-above	above	990001
-api	api	999999
-Alias	alias	999999
-foo-bar	foo-bar	999999
-unrated	unrated	990100
-EOF
-diff -u "$fixture/expected-english.tsv" "$fixture/english.tsv"
-cat > "$fixture/expected-mixed.tsv" <<'EOF'
-offer	offer	9993
-email	email	9900
-Email	Email	9900
-emails	emails	9900
-Emails	Emails	9900
-computer	computer	9988
-widget	widget	9950
-boundary	boundary	9900
-above	above	9900
-unrated	unrated	9901
-EOF
+cat > "$fixture/expected.tsv" <<'DATA'
+email	email	1170000
+Email	Email	1170000
+emails	emails	1060000
+computer	computer	1242500
+boundary	boundary	1000000
+above	above	1002500
+api	api	1125000
+Alias	alias	1125000
+foo-bar	foo-bar	1125000
+DATA
+diff -u "$fixture/expected.tsv" "$fixture/english.tsv"
+cat > "$fixture/expected-mixed.tsv" <<'DATA'
+email	email	11700
+Email	Email	11700
+emails	emails	10600
+computer	computer	12425
+boundary	boundary	10000
+above	above	10025
+DATA
 diff -u "$fixture/expected-mixed.tsv" "$fixture/mixed.tsv"
 
-# The one threshold admits both original and corrected records to both paths.
-configure 998000 10
+# The engine mapping is configurable independently of observed frequencies.
+configure 4.0 100000 100
 generate
-cat > "$fixture/expected-high-english.tsv" <<'EOF'
-offer	offer	999319
-computer	computer	998830
-api	api	999999
-Alias	alias	999999
-foo-bar	foo-bar	999999
-EOF
-diff -u "$fixture/expected-high-english.tsv" "$fixture/english.tsv"
-printf 'offer\toffer\t99931\ncomputer\tcomputer\t99883\n' > "$fixture/expected-high-mixed.tsv"
-diff -u "$fixture/expected-high-mixed.tsv" "$fixture/mixed.tsv"
+awk -F '\t' 'BEGIN {OFS="\t"} {$3=$3/2.5; print}' "$fixture/expected.tsv" > "$fixture/rescaled.tsv"
+diff -u "$fixture/rescaled.tsv" "$fixture/english.tsv"
+configure 4.0 250000 100
 
-# The divisor changes mixed weights only, including corrected entries.
-configure 990000 10
+# Overrides cover absent and nonzero evidence, exact text aliases, and exclusion.
+cat > "$fixture/macOS/config/english-overrides.tsv" <<'DATA'
+widget	4.50	Supply missing evidence to every existing code alias
+novel	4.10	Replace a nonzero observed frequency
+email	0	Explicit exclusion even at a zero gate
+unrated	4.001	Source weights are not used, including absent weights
+ghost	9	Never create a missing source word
+DATA
 generate
-diff -u "$fixture/expected-english.tsv" "$fixture/english.tsv"
-cat > "$fixture/expected-scaled.tsv" <<'EOF'
-offer	offer	99931
-email	email	99000
-Email	Email	99000
-emails	emails	99000
-Emails	Emails	99000
-computer	computer	99883
-widget	widget	99500
-boundary	boundary	99000
-above	above	99000
-unrated	unrated	99010
-EOF
-diff -u "$fixture/expected-scaled.tsv" "$fixture/mixed.tsv"
-
-# An empty correction list must not be confused with the dictionary input.
-configure 990000 100
-: > "$fixture/macOS/config/english-boosts.tsv"
+cat > "$fixture/expected-overrides.tsv" <<'DATA'
+Email	Email	1170000
+emails	emails	1060000
+computer	computer	1242500
+widget	widget	1125000
+widget	Widget	1125000
+novel	novel	1025000
+boundary	boundary	1000000
+above	above	1002500
+api	api	1125000
+Alias	alias	1125000
+foo-bar	foo-bar	1125000
+unrated	unrated	1000250
+DATA
+diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
+# Only mixed scaling changes; its structural constraints remain independent.
+cp "$fixture/mixed.tsv" "$fixture/mixed-before.tsv"
+configure 4.0 250000 10
 generate
-cat > "$fixture/expected-unboosted.tsv" <<'EOF'
-offer	offer	999319
-computer	computer	998830
-boundary	boundary	990000
-above	above	990001
-api	api	999999
-Alias	alias	999999
-foo-bar	foo-bar	999999
-EOF
-diff -u "$fixture/expected-unboosted.tsv" "$fixture/english.tsv"
-printf 'offer\toffer\t9993\ncomputer\tcomputer\t9988\nboundary\tboundary\t9900\nabove\tabove\t9900\n' > "$fixture/expected-unboosted-mixed.tsv"
-diff -u "$fixture/expected-unboosted-mixed.tsv" "$fixture/mixed.tsv"
+diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
+awk -F '\t' 'BEGIN {OFS="\t"} {$3=$1=="unrated" ? 100025 : $3*10; print}' "$fixture/mixed-before.tsv" > "$fixture/scaled.tsv"
+diff -u "$fixture/scaled.tsv" "$fixture/mixed.tsv"
 
-# Duplicate source spellings remain separate admitted records; runtime deduplicates.
+configure 4.6 250000 100
+generate
+printf 'Email\tEmail\t1170000\ncomputer\tcomputer\t1242500\n' > "$fixture/high.tsv"
+diff -u "$fixture/high.tsv" "$fixture/english.tsv"
+configure 0 250000 100
+generate
+awk -F '\t' '$1 == "email" || $1 == "unknown" || $1 == "ghost" { exit 1 }' "$fixture/english.tsv"
+# Duplicate dictionary rows and aliases get the same observed weight.
 printf 'computer\tcomputer\t999000\ncomputer\tComputer\t1\n' >> "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml"
+configure 4.0 250000 100
 generate
-printf 'computer\tcomputer\t999000\n' >> "$fixture/expected-unboosted.tsv"
-diff -u "$fixture/expected-unboosted.tsv" "$fixture/english.tsv"
-
-# A policy may admit nothing; both outputs still have complete dictionary headers.
-configure 1000000 100
+printf 'computer\tcomputer\t1242500\ncomputer\tComputer\t1242500\n' >> "$fixture/expected-overrides.tsv"
+diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
+configure 9 250000 100
 generate
-test ! -s "$fixture/english.tsv" && test ! -s "$fixture/mixed.tsv"
+test ! -s "$fixture/english.tsv"
+test ! -s "$fixture/mixed.tsv"
 for dictionary in easy_en inkflow_mixed; do
   grep -q "^name: $dictionary$" "$fixture/output/$dictionary.dict.yaml"
   grep -q '^\.\.\.$' "$fixture/output/$dictionary.dict.yaml"
 done
 
-configure 990000 0
+configure 4 250000 0
 expect_failure 'zero divisor' 'MIXED_ENGLISH_WEIGHT_DIVISOR'
-configure invalid 100
-expect_failure 'invalid threshold' 'ENGLISH_MIN_SOURCE_WEIGHT'
-configure 990000 100
-printf 'widget\tinvalid\treason\n' > "$fixture/macOS/config/english-boosts.tsv"
-expect_failure 'invalid correction weight' 'english-boosts.tsv'
-printf 'widget\t995000\tfirst\nwidget\t996000\tduplicate\n' > "$fixture/macOS/config/english-boosts.tsv"
-expect_failure 'duplicate correction' 'english-boosts.tsv'
+configure invalid 250000 100
+expect_failure 'invalid threshold' 'ENGLISH_MIN_ZIPF'
+configure 4 0 100
+expect_failure 'zero scale' 'ENGLISH_WEIGHT_SCALE'
+configure 4 250000 100
+for invalid in invalid NaN inf -1 9.01; do
+  printf 'widget\t%s\treason\n' "$invalid" > "$fixture/macOS/config/english-overrides.tsv"
+  expect_failure 'invalid override' 'english-overrides.tsv'
+done
+printf 'widget\t4\tfirst\nwidget\t5\tduplicate\n' > "$fixture/macOS/config/english-overrides.tsv"
+expect_failure 'duplicate override' 'english-overrides.tsv'
+: > "$fixture/macOS/config/english-overrides.tsv"
+printf 'email\t5\n' >> "$fixture/macOS/Data/english-wordfreq.tsv"
+expect_failure 'duplicate snapshot word' 'english-wordfreq.tsv'
+printf 'email\tinvalid\n' > "$fixture/macOS/Data/english-wordfreq.tsv"
+expect_failure 'malformed snapshot' 'english-wordfreq.tsv'
+# Empty data is valid and cannot fall back to old source weights.
+: > "$fixture/macOS/Data/english-wordfreq.tsv"
+generate
+test ! -s "$fixture/english.tsv"
+test ! -s "$fixture/mixed.tsv"
+rm "$fixture/macOS/Data/english-wordfreq.tsv"
+expect_failure 'missing snapshot' 'english-wordfreq.tsv'
 
-echo 'PASS Rime policy: shared admission, boundary weights, aliases/case, zero/missing corrections, divisor isolation, empty rules/dictionaries, duplicate records, original Chinese, failure without fallback'
+echo 'PASS Rime policy: observed/missing Zipf, shared inclusive admission, exact-case aliases, overrides/exclusion, scaling isolation, empty data/rules, malformed/duplicate data, Chinese preservation, failure without fallback'

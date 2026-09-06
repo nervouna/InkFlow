@@ -137,7 +137,7 @@ struct EngineTests {
             check(english.first == input, "Prefer an exact case match among English with equal source weights")
             engine.clear()
         }
-        for input in ["can", "you", "man", "woman", "time", "name", "line", "email"] {
+        for input in ["can", "you", "man", "woman", "time", "name", "line", "email", "bug"] {
             type(engine, input)
             check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
                   "Chinese leads ambiguous English \(input)")
@@ -180,7 +180,7 @@ struct EngineTests {
 
     @MainActor static func englishAdmission() {
         let engine = IFEngine()!
-        let rejected = ["WOMENS", "women", "womenfolk", "tameness", "Nimes", "nimetti", "nimetz",
+        let rejected = ["WOMENS", "womenfolk", "tameness", "Nimes", "nimetti", "nimetz",
                         "Haiti", "Haitian", "Haitienne", "haitians", "compute"]
         let forbidden = Set(rejected.map { $0.lowercased() })
         func verify(_ candidates: [String], _ input: String) {
@@ -195,6 +195,10 @@ struct EngineTests {
             type(engine, input)
             let candidates = allCandidates(engine)
             verify(candidates, input)
+            if input == "women" {
+                check(candidates.first == "我们" && candidates.contains("women"),
+                      "Measured common English remains available after Chinese: \(candidates)")
+            }
             print("TRACE English admission \(input) => \(candidates)")
             engine.clear()
         }
@@ -232,7 +236,7 @@ struct EngineTests {
         check(engine.event(keyEvent(49, " ", [.control, .shift])))
         for letter in "women compute Haiti".utf16 { check(!engine.key(Int32(letter))) }
         check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
-        print("PASS English admission: screenshot words and compute absent from exact/prefix/case/all pages, edits, re-entry, mixed boundaries; explicit ASCII unaffected")
+        print("PASS English admission: women admitted after Chinese; low-frequency screenshot words and compute absent from exact/prefix/case/all pages, edits, re-entry, mixed boundaries; explicit ASCII unaffected")
     }
 
     @MainActor static func runCases() throws {
@@ -305,7 +309,7 @@ struct EngineTests {
             engine.clear()
         }
         check(missingLetters.isEmpty, "Keep single-letter English reachable: \(missingLetters)")
-        for word in ["hello", "apple", "computer", "world", "email", "file", "code", "update", "Hello", "Apple"] {
+        for word in ["hello", "apple", "computer", "world", "email", "emails", "online", "file", "code", "update", "Hello", "Apple"] {
             type(engine, word)
             let candidates = engine.snapshot().candidates
             guard let index = candidates.firstIndex(of: word) else {
@@ -316,6 +320,10 @@ struct EngineTests {
         }
         type(engine, "comput")
         check(engine.snapshot().candidates.contains("computer"), "English prefix completion")
+        engine.clear(); type(engine, "emai")
+        let mail = allCandidates(engine)
+        check(mail.firstIndex(of: "email") != nil && mail.firstIndex(of: "emails") != nil)
+        check(mail.firstIndex(of: "email")! < mail.firstIndex(of: "emails")!, "Measured email frequency exceeds emails")
         engine.clear(); type(engine, "comm")
         let first = engine.snapshot().candidates
         check(engine.key(0xff56))

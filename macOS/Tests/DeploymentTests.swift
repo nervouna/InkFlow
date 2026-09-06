@@ -70,9 +70,10 @@ struct DeploymentTests {
         type(engine, "women")
         let candidates = engine.snapshot().candidates
         check(candidates.first == "我们", "Chinese remains first during dictionary upgrade")
-        let rejected = Set(["WOMENS", "women", "womenfolk"])
+        let rejected = Set(["WOMENS", "womenfolk"])
         check(expectsOriginal ? !rejected.isDisjoint(with: candidates) : rejected.isDisjoint(with: candidates),
               "Expected \(expectsOriginal ? "original" : "admitted") English after deployment: \(candidates)")
+        check(candidates.contains("women"), "Common English remains admitted with measured frequency")
         print("TRACE deployment \(expectsOriginal ? "original" : "admitted") women => \(candidates)")
         engine.clear(); type(engine, "computer")
         check(engine.snapshot().candidates.contains("computer"), "Admitted English survives deployment")

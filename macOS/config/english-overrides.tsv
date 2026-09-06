@@ -1,0 +1,5 @@
+# Exact displayed word<TAB>replacement Zipf (0..9)<TAB>reason
+# Replaces observed or missing evidence before the shared admission gate.
+# Zero explicitly excludes; other values still need to pass ENGLISH_MIN_ZIPF.
+# Applies to all existing code aliases of this exact case/spelling; creates no words.
+# Empty by default. Future correction policy is deliberately left open.

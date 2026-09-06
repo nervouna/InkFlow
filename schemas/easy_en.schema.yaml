@@ -3,6 +3,6 @@
 schema:
   schema_id: easy_en
   name: English dictionary
-  version: '1.1'
+  version: '1.2'
 translator:
   dictionary: easy_en
