@@ -9,6 +9,7 @@ struct EngineTests {
             try IFEngine.start(shared: "/nonexistent/inkflow", user: user)
             check(false, "Missing resources must fail")
         } catch { check(!(error as NSError).localizedDescription.isEmpty) }
+        try missingEmojiResources(shared: shared, user: user)
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
@@ -17,6 +18,27 @@ struct EngineTests {
         let schemaAfter = try Data(contentsOf: schemaURL)
         check(schemaAfter == schemaBefore)
         print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+    }
+
+    @MainActor static func missingEmojiResources(shared: String, user: String) throws {
+        let directory = URL(fileURLWithPath: user).appendingPathComponent("incomplete-resources")
+        let files = FileManager.default
+        try files.createDirectory(at: directory.appendingPathComponent("opencc"), withIntermediateDirectories: true)
+        defer { try? files.removeItem(at: directory) }
+        for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
+                     "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
+            try files.createSymbolicLink(at: directory.appendingPathComponent(name),
+                                         withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))
+        }
+        for name in ["opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
+            let link = directory.appendingPathComponent(name)
+            try files.removeItem(at: link)
+            do {
+                try IFEngine.start(shared: directory.path, user: user)
+                check(false, "Missing \(name) must fail before engine initialization")
+            } catch { check((error as NSError).code == 2) }
+            try files.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))
+        }
     }
 
     @MainActor static func runCases() throws {
@@ -62,6 +84,58 @@ struct EngineTests {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation()
+        emojiCandidates()
+    }
+
+    @MainActor static func emojiCandidates() {
+        let cases = [("weixiao", "微笑", "😊"), ("kafei", "咖啡", "☕"),
+                     ("aixin", "爱心", "❤️"), ("zhongguo", "中国", "🇨🇳"),
+                     ("yisheng", "医生", "👨‍⚕️")]
+        for (input, word, emoji) in cases {
+            let engine = IFEngine()!
+            type(engine, input)
+            var seen: [String] = []
+            var selected = false
+            for _ in 0..<10 {
+                let state = engine.snapshot()
+                seen += state.candidates
+                if let index = state.candidates.firstIndex(of: emoji) {
+                    check(seen.contains(word), "Chinese candidate must precede \(emoji)")
+                    check(Set(seen).count == seen.count, "Candidates must be unique")
+                    engine.select(index)
+                    check(engine.takeCommit() == emoji, "Commit complete emoji sequence for \(input)")
+                    check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+                    selected = true
+                    break
+                }
+                engine.key(0xff56)
+                if engine.snapshot().page == state.page { break }
+            }
+            check(selected, "Missing emoji candidate for \(input): \(emoji)")
+        }
+        for count in [3, 5, 9] {
+            let engine = IFEngine()!
+            engine.setCandidateCount(count)
+            type(engine, "nihao")
+            let first = engine.snapshot().candidates
+            check(first.first == "你好")
+            check(first.contains("👋"), "Emoji must survive page-size schema reload")
+            engine.key(32); check(engine.takeCommit() == "你好")
+            type(engine, "nihao")
+            let index = engine.snapshot().candidates.firstIndex(of: "👋")!
+            engine.key(Int32(49 + index)); check(engine.takeCommit() == "👋")
+            type(engine, "nihao")
+            for _ in 0..<index { engine.key(0xff54) }
+            engine.key(32); check(engine.takeCommit() == "👋")
+            type(engine, "nihao"); engine.key(0xff56)
+            check(engine.snapshot().page == 1)
+            engine.key(0xff55); check(engine.snapshot().candidates == first)
+            engine.key(0xff1b); check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+            check(engine.event(keyEvent(49, " ", [.control, .shift])))
+            for key in "nihao".utf8 { check(!engine.key(Int32(key))) }
+            check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
+        }
+        print("PASS emoji: simplified keywords, original words preserved, unique candidates, full Unicode commits, digit/space selection, 3/5/9 paging, cancel, English passthrough")
     }
 
     @MainActor static func punctuation() {

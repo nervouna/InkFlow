@@ -5,6 +5,8 @@ macOS/scripts/dependencies.sh
 mkdir -p build/test-shared
 cp schemas/*.yaml build/test-shared/
 cp build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml build/test-shared/
+mkdir -p build/test-shared/opencc
+cp schemas/opencc/inkflow_emoji.json build/deps/emoji.txt build/test-shared/opencc/
 source macOS/scripts/swift-common.sh
 build_swift_test build/engine-tests macOS/Tests/EngineTests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-tests.XXXXXX")

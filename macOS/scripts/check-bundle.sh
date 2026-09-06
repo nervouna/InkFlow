@@ -12,6 +12,9 @@ app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
+cmp schemas/opencc/inkflow_emoji.json "$app/Contents/Resources/Rime/opencc/inkflow_emoji.json"
+cmp build/deps/emoji.txt "$app/Contents/Resources/Rime/opencc/emoji.txt"
+cmp macOS/Licenses/rime-ice.txt "$app/Contents/Resources/Licenses/rime-ice.txt"
 
 for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib"; do
   xcrun lipo "$binary" -verify_arch arm64

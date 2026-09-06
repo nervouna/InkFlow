@@ -4,7 +4,10 @@
 
 - librime 1.17.0, upstream revision `33e78140250125871856cdc5b42ddc6a5fcd3cd4`: official universal macOS binary. BSD license in `Licenses/librime.txt`. The release dylib links only macOS system libraries and carries its own transitive engine dependencies.
 - rime-pinyin-simp revision `0c6861ef7420ee780270ca6d993d18d4101049d0`: complete upstream `pinyin_simp.dict.yaml`, derived from Android PinyinIME. Apache-2.0 license in `Licenses/pinyin-simp.txt`.
+- [rime-ice emoji data](https://github.com/iDvel/rime-ice/blob/fbb516b2786e4d5444383706d13c31c2e4d10c08/opencc/emoji.txt), revision `fbb516b2786e4d5444383706d13c31c2e4d10c08`: unmodified simplified-Chinese `emoji.txt`, GPL-3.0 license in `Licenses/rime-ice.txt`. Only this text table is fetched; the app bundles the editable source and license. InkFlow's `schemas/opencc/inkflow_emoji.json` uses this table alone, excluding upstream non-emoji symbol conversions.
 - `schemas/inkflow_pinyin.schema.yaml` adapts the upstream schema for one full-pinyin mode. Stroke reverse lookup and external symbol presets are omitted; punctuation and paging bindings are explicit. The dictionary is copied unmodified.
+
+Emoji suggestions use librime's built-in OpenCC `simplifier` filter, followed by `uniquifier`. The table keeps the original word before its emoji alternatives. Suggestions are enabled by default, use the normal candidate paging/selection path, and run offline. Coverage depends on Chinese candidates produced by the pinyin dictionary and keywords present in the emoji table; this is not a separate emoji search mode. Glyph availability follows the host's emoji font.
 
 The native app targets this Apple Silicon Mac. Its minimum deployment target is macOS 26. Build uses the current Xcode SDK, Swift 6, ARC, and warnings as errors. InputMethodKit controls the candidate UI. Each controller owns one Rime session, and the process initializes/deploys the engine on the main thread before serving input. Deployment and user dictionaries are writable only in Application Support/InkFlow. Routine logs omit input text.
 

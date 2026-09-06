@@ -30,6 +30,7 @@ INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh --de
 ## 使用
 
 - 输入全拼，用空格或数字 1–9 选词，也可以点击候选。
+- 中文候选默认包含相关 emoji，例如 `weixiao` → 微笑、😊，`kafei` → 咖啡、☕，`aixin` → 爱心、❤️。原词保留在对应 emoji 前，沿用相同的选词和翻页方式。
 - 用 Page Up / Page Down 或 `[` / `]`、`-` / `=` 翻页。
 - 退格删除，Escape 取消组合；回车或切换输入源结束当前组合。
 - Control + Shift + Space 切换中文与英文，并先提交当前组合。

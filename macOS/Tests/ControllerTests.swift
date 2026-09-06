@@ -78,5 +78,28 @@ struct ControllerTests {
             check(client.mutations == expected)
             controller.commitComposition(client); controller.deactivateServer(client); check(client.mutations == expected)
         }
+        for (input, emoji) in [("aixin", "❤️"), ("zhongguo", "🇨🇳"), ("yisheng", "👨‍⚕️")] {
+            for letter in input { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+            var selected = false
+            for _ in 0..<10 {
+                let candidates = controller.candidates(nil) as! [String]
+                if let index = candidates.firstIndex(of: emoji) {
+                    client.mutations.removeAll()
+                    let keys: [UInt16] = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+                    check(controller.handle(keyEvent(keys[index], String(index + 1)), client: client))
+                    check(client.mutations == ["insert:\(emoji)"], "Insert whole emoji once: \(input)")
+                    check(controller.candidates(nil).isEmpty)
+                    controller.commitComposition(client); controller.deactivateServer(client)
+                    check(client.mutations == ["insert:\(emoji)"])
+                    selected = true
+                    break
+                }
+                let page = controller.engine!.snapshot().page
+                check(controller.handle(keyEvent(121, ""), client: client))
+                if controller.engine!.snapshot().page == page { break }
+            }
+            check(selected, "Controller must expose \(emoji)")
+        }
+        print("PASS controller emoji: candidate bridge, paging, variation selector / flag / ZWJ sequences inserted once, composition cleared")
     }
 }
