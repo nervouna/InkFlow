@@ -170,8 +170,11 @@ struct SettingsView: View {
 }
 
 @MainActor
-final class IFSettingsWindowController: NSWindowController {
+final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
+    var dictionaries: IFDictionaryCoordinator?
+
+    func windowWillClose(_ notification: Notification) { dictionaries?.presentationClosed() }
     private let settings: IFSettings
 
     init(settings: IFSettings) {
@@ -193,10 +196,12 @@ final class IFSettingsWindowController: NSWindowController {
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
         self.window = window
+        window.delegate = self
         window.center()
     }
 
     func present() {
+        dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
         NSApp.setActivationPolicy(.accessory)
         showWindow(nil)

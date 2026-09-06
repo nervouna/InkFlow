@@ -110,3 +110,19 @@ macOS/scripts/register.sh "$HOME/Library/Input Methods/InkFlow.app" --verify-ena
 ```
 
 Select InkFlow to confirm it works as a system input source. If Settings shows a blank entry, use the preceding case.
+
+## Dictionary activation waits or recovers a previous version
+
+Dictionary preparation leaves the current engine running. The final switch waits for every live session, including inactive clients, to have no composition or pending commit. A controller owns a delivery lease until its `insertText` and marked-text callbacks return, so a nested client run loop cannot activate halfway through delivery. Complete or cancel the composition in each client to release this wait.
+
+The coordinator records a pending transaction before waiting. After an interrupted process it discards that pending choice, validates the confirmed cache, and rebuilds incompatible caches from inert dictionary data with the current app's resources. If recovery fails it tries the previous confirmed version and then the immutable bundled dictionary. Settings always reports the version and activation date of the engine that actually started. A failed rollback leaves the engine unavailable; the input menu and Settings remain reachable for retry.
+
+Closing Settings clears its displayed diagnostic, while the process continues the task. Reopening shows current progress and does not replay earlier failures. Operational diagnostics remain in the macOS unified log:
+
+```sh
+/usr/bin/log show --last 1d --style compact --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "dictionary"'
+```
+
+The coordinator logs failures at error level. Large diagnostics use UTF-8-safe chunks of at most 700 payload bytes, sharing an event ID and numbered `part=i/n` fields; collect every part of that event for complete details. Details include stage, source/file identity, HTTP or helper exit status, and bounded worker diagnostics. They exclude document input/context, custom phrases and learned database contents; error payloads are never saved in the dictionary journal, manifest or preferences.
+
+Run `bash macOS/scripts/build.sh`, then `bash macOS/scripts/test-dictionary-activation.sh` for isolated multi-session, commit-delivery, semantic-learning, failure/rollback, task-lifetime and restart-recovery checks. The tests use synthetic temporary user roots. They do not replace real-client typing acceptance.

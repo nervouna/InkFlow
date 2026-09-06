@@ -212,6 +212,11 @@ struct IFDictionaryStore: Sendable {
     }
     func beginActivation(_ version: IFDictionaryVersion) throws {
         _ = try resolve(version, fingerprint: version.runtimeFingerprint)
+        try beginValidatedActivation(version)
+    }
+    /// Caller already resolved the immutable artifact in this serialized operation. Compact journal write only.
+    func beginValidatedActivation(_ version: IFDictionaryVersion) throws {
+        try version.validate()
         var state = try state()
         guard state.pending == nil else { throw IFDictionaryUpdateError(.apply, "activation-in-progress") }
         state.pending = version; state.transaction = .apply; try save(state)
@@ -234,6 +239,11 @@ struct IFDictionaryStore: Sendable {
     }
     func confirmFallback(_ version: IFDictionaryVersion) throws {
         _ = try resolve(version, fingerprint: version.runtimeFingerprint)
+        try confirmValidatedFallback(version)
+    }
+    /// Caller has validated the artifact and successfully started its engine/sessions. No cache hashing here.
+    func confirmValidatedFallback(_ version: IFDictionaryVersion) throws {
+        try version.validate()
         var state = try state(); state.current = version; state.bundled = nil; state.pending = nil; state.transaction = nil
         try save(state)
     }
@@ -244,6 +254,47 @@ struct IFDictionaryStore: Sendable {
         }
         try save(state)
     }
+    /// Repair an unreadable journal only after the bundled engine has actually started.
+    func repairBundled(_ manifest: IFDictionaryManifest, now: Date = Date()) throws {
+        try Self.validateMetadata(manifest)
+        var fresh = IFDictionaryState()
+        fresh.bundled = .init(contentVersion: manifest.contentVersion, activatedAt: now)
+        try save(fresh)
+    }
+
+    /// Bounded housekeeping within the owned store. Never visits the learning/custom-phrase root.
+    /// Serialize with other store mutations and run off MainActor while input is served.
+    @discardableResult
+    func cleanup(limit: Int = 32) throws -> Int {
+        let state = try state()
+        let retained = Set([state.current, state.previous, state.pending].compactMap { $0?.directory })
+        var removed = 0
+        for name in ["candidates", "versions"] {
+            let folder = try IFDictionaryFiles.child(name, in: root)
+            let entries = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
+                guard removed < max(0, limit) else { return removed }
+                let relative = name + "/" + entry.lastPathComponent
+                guard !retained.contains(relative) else { continue }
+                let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+                guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
+                let valid: Bool
+                if name == "candidates" { valid = UUID(uuidString: entry.lastPathComponent) != nil }
+                else {
+                    // version directory = rN-contentSHA-runtimeSHA-UUID, all generated locally.
+                    let parts = entry.lastPathComponent.split(separator: "-", maxSplits: 3).map(String.init)
+                    valid = parts.count == 4 && parts[0] == "r\(IFDictionaryCatalog.recipeVersion)" &&
+                        IFDictionaryHash.isHex(parts[1], length: 64) && IFDictionaryHash.isHex(parts[2], length: 64) &&
+                        UUID(uuidString: parts[3]) != nil
+                }
+                guard valid else { continue }
+                try FileManager.default.removeItem(at: IFDictionaryFiles.child(relative, in: root))
+                removed += 1
+            }
+        }
+        return removed
+    }
+
     static func validateMetadata(_ manifest: IFDictionaryManifest) throws {
         try IFDictionaryVersion(contentVersion: manifest.contentVersion, runtimeFingerprint: String(repeating: "0", count: 64), preparedAt: .distantPast).validate()
         guard manifest.formatVersion == 1, manifest.recipeVersion == IFDictionaryCatalog.recipeVersion, manifest.entryCount > 0,

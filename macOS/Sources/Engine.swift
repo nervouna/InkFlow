@@ -13,7 +13,47 @@ struct EngineSnapshot: Equatable {
 @MainActor
 final class IFEngine {
     private static let api = rime_get_api()!
-    private static var ready = false
+    private(set) static var ready = false
+    private static var generation: UInt64 = 0
+    private final class WeakSession {
+        weak var value: IFEngine?
+        init(_ value: IFEngine) { self.value = value }
+    }
+    private static var instances: [ObjectIdentifier: WeakSession] = [:]
+    private static var idleScheduled = false
+    static var idleHandler: (@MainActor () -> Void)?
+    private var sessionGeneration: UInt64 = 0
+    private var sessionRestored = false
+    private var deliveryDepth = 0
+    private var savedASCII = false
+
+    static var liveSessions: [IFEngine] { instances.values.compactMap(\.value) }
+    var available: Bool { Self.ready && session != 0 && sessionGeneration == Self.generation }
+    var asciiMode: Bool {
+        get { available ? Self.api.pointee.get_option(session, "ascii_mode") != 0 : savedASCII }
+        set {
+            savedASCII = newValue
+            if available { Self.api.pointee.set_option(session, "ascii_mode", newValue ? 1 : 0) }
+        }
+    }
+    /// Keep the lease until every native client callback returns, including nested run loops.
+    func beginDelivery() { deliveryDepth += 1 }
+    func endDelivery() { deliveryDepth = max(0, deliveryDepth - 1); Self.signalIdle() }
+    static var allSessionsIdle: Bool {
+        liveSessions.allSatisfy { engine in
+            guard engine.deliveryDepth == 0 else { return false }
+            engine.bufferedCommit += engine.readCommit()
+            return engine.rawSnapshot().preedit.isEmpty && engine.bufferedCommit.isEmpty
+        }
+    }
+    static func signalIdle() {
+        guard idleHandler != nil, !idleScheduled else { return }
+        idleScheduled = true
+        Task { @MainActor in
+            idleScheduled = false
+            idleHandler?()
+        }
+    }
     private static var userDirectory = ""
     private static var contextRanker: IFContextRanker?
     private var session: RimeSessionId = 0
@@ -30,87 +70,164 @@ final class IFEngine {
 
     static var version: String { string(api.pointee.get_version()) }
 
+    /// Legacy startup path used by standalone engine tests. Production supplies a validated descriptor/index.
     static func start(shared: String, user: String) throws {
         if ready { return }
+        let configuration = IFEngineConfiguration(shared: URL(fileURLWithPath: shared), cache: nil,
+            user: user, ranker: try IFContextRanker(dictionary: (shared as NSString).appendingPathComponent("pinyin_simp.dict.yaml")))
+        do { try start(configuration) }
+        catch let error as IFDictionaryUpdateError where error.code == "missing-runtime-resource" {
+            // Preserve the established standalone API's missing-resource error contract.
+            throw NSError(domain: "io.damao.inputmethod.inkflow", code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "InkFlow 缺少内置词典资源，请重新构建并安装。"])
+        }
+        NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+    }
+
+    static func start(_ configuration: IFEngineConfiguration,
+                      fault: (IFEngineSwitchStep) throws -> Void = { _ in }) throws {
+        guard !ready else { return }
+        try fault(.start)
+        let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
-                     "easy_en.schema.yaml", "easy_en.dict.yaml",
-                     "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua",
-                     "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
-            guard FileManager.default.isReadableFile(atPath: (shared as NSString).appendingPathComponent(name)) else {
-                throw NSError(domain: "io.damao.inputmethod.inkflow", code: 2,
-                              userInfo: [NSLocalizedDescriptionKey: "InkFlow 缺少内置词典资源，请重新构建并安装。"])
+                     "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
+            guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
+                throw IFDictionaryUpdateError(.apply, "missing-runtime-resource", file: name)
             }
         }
-        contextRanker = try IFContextRanker(dictionary: (shared as NSString).appendingPathComponent("pinyin_simp.dict.yaml"))
+        let user = configuration.user
         try FileManager.default.createDirectory(atPath: user, withIntermediateDirectories: true)
         var traits = RimeTraits()
         traits.data_size = Int32(MemoryLayout<RimeTraits>.size - MemoryLayout.size(ofValue: traits.data_size))
         traits.distribution_name = cString("InkFlow")
         traits.distribution_code_name = cString("inkflow")
         traits.distribution_version = cString("1.0")
-        // glog retains app_name, so use process-lifetime literal storage.
         traits.app_name = cString("rime.inkflow")
         traits.min_log_level = 3
         traits.log_dir = cString("")
-        // librime copies these paths during setup/initialize; keep them alive for both calls.
         shared.withCString { sharedPath in
             user.withCString { userPath in
-                traits.shared_data_dir = sharedPath
-                traits.user_data_dir = userPath
-                api.pointee.setup(&traits)
-                api.pointee.initialize(&traits)
+                @MainActor func initialize(_ cachePath: UnsafePointer<CChar>?) {
+                    traits.shared_data_dir = sharedPath
+                    traits.user_data_dir = userPath
+                    traits.staging_dir = cachePath
+                    traits.prebuilt_data_dir = cachePath
+                    api.pointee.setup(&traits)
+                    api.pointee.initialize(&traits)
+                }
+                if let cache = configuration.cache { cache.path.withCString { initialize($0) } }
+                else { initialize(nil) }
             }
         }
-        // Bundled resources may predate the user's last deployment. Run native
-        // content checks regardless of mtimes; unchanged compiled tables are reused.
-        if api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
-        let probe = api.pointee.create_session()
-        ready = probe != 0 && api.pointee.select_schema(probe, "inkflow_pinyin") != 0
-        // A missing schema can report success; require an actual translator result.
-        if ready {
+        generation &+= 1
+        // Prepared caches were compiled/probed by the isolated worker. Never deploy on a live switch.
+        if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
+        do {
+            try fault(.probe)
+            let probe = api.pointee.create_session()
+            defer {
+                if probe != 0 { api.pointee.clear_composition(probe); _ = api.pointee.destroy_session(probe) }
+            }
+            guard probe != 0, api.pointee.select_schema(probe, "inkflow_pinyin") != 0 else {
+                throw IFDictionaryUpdateError(.apply, "schema-unavailable")
+            }
             for key in "nihao".utf8 { _ = api.pointee.process_key(probe, Int32(key), 0) }
             var context = makeContext()
-            ready = api.pointee.get_context(probe, &context) != 0
-            if ready {
-                ready = context.menu.num_candidates > 0
-                _ = api.pointee.free_context(&context)
-            }
-        }
-        if probe != 0 {
-            api.pointee.clear_composition(probe)
-            _ = api.pointee.destroy_session(probe)
-        }
-        guard ready else {
-            api.pointee.finalize()
-            throw NSError(domain: "io.damao.inputmethod.inkflow", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: "无法载入拼音方案，请重新构建并安装 InkFlow。"])
-        }
+            guard api.pointee.get_context(probe, &context) != 0 else { throw IFDictionaryUpdateError(.apply, "probe-context") }
+            let hasCandidates = context.menu.num_candidates > 0
+            _ = api.pointee.free_context(&context)
+            // A learned user's first candidate need not equal the clean worker probe's first candidate.
+            guard hasCandidates else { throw IFDictionaryUpdateError(.apply, "probe-empty") }
+        } catch { api.pointee.finalize(); throw error }
+        ready = true
         userDirectory = user
+        contextRanker = configuration.ranker
+        do {
+            for (index, engine) in liveSessions.enumerated() {
+                try fault(.session(index))
+                try engine.restoreSession(afterCreate: { try fault(.sessionCreated(index)) })
+            }
+        } catch { stop(); throw error }
     }
 
     static func stop() {
+        // Invalidate every object before finalize; a stale deinit can never destroy a reused native ID.
+        for engine in liveSessions { engine.detachSession() }
         if ready { api.pointee.finalize(); ready = false }
         contextRanker = nil
+        generation &+= 1
+    }
+
+    static func replace(with next: IFEngineConfiguration, restoring old: IFEngineConfiguration?,
+                        fault: (IFEngineSwitchStep, Bool) throws -> Void = { _, _ in },
+                        confirm: () throws -> Void) throws {
+        guard allSessionsIdle else { throw IFDictionaryUpdateError(.apply, "sessions-busy") }
+        stop()
+        do {
+            try start(next, fault: { try fault($0, false) })
+            try confirm()
+        } catch {
+            let original = IFDictionaryUpdateError.wrapping(error, stage: .apply)
+            stop()
+            do {
+                guard let old else { throw IFDictionaryUpdateError(.rollback, "no-confirmed-engine") }
+                try start(old, fault: { try fault($0, true) })
+            } catch {
+                stop()
+                NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+                throw IFDictionaryUpdateError(.rollback, "engine-unavailable", detail: original.technicalDetails + "\n" +
+                    IFDictionaryUpdateError.wrapping(error, stage: .rollback).technicalDetails)
+            }
+            NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+            throw original
+        }
+        NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
     }
 
     init?() {
         guard Self.ready else { return nil }
+        do { try restoreSession() } catch { detachSession(); return nil }
+        Self.instances[ObjectIdentifier(self)] = WeakSession(self)
+    }
+
+    private func restoreSession(afterCreate: () throws -> Void = {}) throws {
+        sessionRestored = false
         session = Self.api.pointee.create_session()
-        guard session != 0 else { return nil }
+        sessionGeneration = Self.generation
+        guard session != 0 else { throw IFDictionaryUpdateError(.apply, "session-create") }
+        try afterCreate()
         guard Self.api.pointee.select_schema(session, "inkflow_pinyin") != 0 else {
-            _ = Self.api.pointee.destroy_session(session)
-            session = 0
-            return nil
+            throw IFDictionaryUpdateError(.apply, "session-create")
         }
+        candidateCount = 5; appliedPhrases = []; configurationError = nil
+        candidateOrder = []; orderedContent = EngineSnapshot(); precedingText = ""
+        applyConfigurationIfIdle()
+        if let configurationError { throw IFDictionaryUpdateError(.apply, "session-settings", detail: configurationError) }
+        asciiMode = savedASCII
+        sessionRestored = true
+    }
+
+    private func detachSession() {
+        if available {
+            // A partially initialized session still has native defaults. Keep the captured mode for rollback.
+            if sessionRestored { savedASCII = asciiMode }
+            _ = Self.api.pointee.destroy_session(session)
+        }
+        session = 0; sessionGeneration = 0; sessionRestored = false
+        candidateOrder = []; orderedContent = EngineSnapshot(); precedingText = ""
     }
 
     isolated deinit {
-        if Self.ready && session != 0 { _ = Self.api.pointee.destroy_session(session) }
+        detachSession()
+        Self.instances.removeValue(forKey: ObjectIdentifier(self))
+        Self.signalIdle()
     }
 
     @discardableResult
     func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
+        guard available else { return false }
+        defer { Self.signalIdle() }
         applyConfigurationIfIdle()
         let state = snapshot()
         if modifiers == 0, (49...57).contains(key), Int(key - 49) < state.candidates.count {
@@ -146,6 +263,7 @@ final class IFEngine {
     }
 
     private func applyConfigurationIfIdle() {
+        guard available else { return }
         // Retain a failed cleanup for retry instead of silently leaving phrase text on disk.
         guard removeTemporaryDictionary() else { return }
         guard candidateCount != requestedCount || appliedPhrases != requestedPhrases else {
@@ -232,6 +350,8 @@ final class IFEngine {
 
     @discardableResult
     func event(_ event: NSEvent) -> Bool {
+        guard available else { return false }
+        defer { Self.signalIdle() }
         let flags = event.modifierFlags
         if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
             commit()
@@ -264,12 +384,16 @@ final class IFEngine {
     }
 
     func select(_ index: Int) {
+        guard available else { return }
+        defer { Self.signalIdle() }
         guard candidateOrder.indices.contains(index) else { return }
         _ = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index])
         updateOrdering()
     }
 
     func highlight(_ index: Int) {
+        guard available else { return }
+        defer { Self.signalIdle() }
         guard candidateOrder.indices.contains(index) else { return }
         _ = Self.api.pointee.highlight_candidate_on_current_page(session, candidateOrder[index])
         // Highlighting a partial choice can change Rime's preedit and cursor.
@@ -278,11 +402,15 @@ final class IFEngine {
     }
 
     func commit() {
+        guard available else { return }
+        defer { Self.signalIdle() }
         _ = Self.api.pointee.commit_composition(session)
         updateOrdering()
     }
 
     func clear() {
+        guard available else { return }
+        defer { Self.signalIdle() }
         Self.api.pointee.clear_composition(session)
         updateOrdering()
     }
@@ -308,6 +436,7 @@ final class IFEngine {
     }
 
     private func updateOrdering(force: Bool = false) {
+        guard available else { return }
         let raw = rawSnapshot()
         let content = content(of: raw)
         guard force || content != orderedContent else { return }
@@ -327,12 +456,14 @@ final class IFEngine {
     }
 
     func takeCommit() -> String {
+        defer { Self.signalIdle() }
         let text = bufferedCommit + readCommit()
         bufferedCommit = ""
         return text
     }
 
     private func readCommit() -> String {
+        guard available else { return "" }
         var commit = RimeCommit()
         commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout.size(ofValue: commit.data_size))
         guard Self.api.pointee.get_commit(session, &commit) != 0 else { return "" }
@@ -354,6 +485,7 @@ final class IFEngine {
     }
 
     private func rawSnapshot() -> EngineSnapshot {
+        guard available else { return EngineSnapshot() }
         var context = Self.makeContext()
         guard Self.api.pointee.get_context(session, &context) != 0 else { return EngineSnapshot() }
         defer { _ = Self.api.pointee.free_context(&context) }
@@ -384,4 +516,18 @@ final class IFEngine {
     private static func string(_ pointer: UnsafePointer<CChar>?) -> String {
         pointer.map(String.init(cString:)) ?? ""
     }
+}
+
+extension Notification.Name {
+    static let engineAvailabilityDidChange = Notification.Name("InkFlowEngineAvailabilityDidChange")
+}
+
+enum IFEngineSwitchStep: Equatable { case start, probe, session(Int), sessionCreated(Int) }
+
+/// Immutable index construction and descriptor validation happen away from live native input callbacks.
+struct IFEngineConfiguration: Sendable {
+    let shared: URL
+    let cache: URL?
+    let user: String
+    let ranker: IFContextRanker
 }

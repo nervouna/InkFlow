@@ -45,6 +45,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             panel?.setDismissesAutomatically(false)
         }
         applySettings()
+        NotificationCenter.default.addObserver(self, selector: #selector(engineChanged(_:)),
+                                               name: .engineAvailabilityDidChange, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged(_:)),
                                                name: .settingsDidChange, object: settings)
     }
@@ -97,7 +99,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         }
     }
 
+    @objc private func engineChanged(_ notification: Notification) {
+        if engine == nil, IFEngine.ready { engine = IFEngine() }
+        applySettings()
+    }
+
     func refresh(_ client: IMKTextInput?) {
+        let deliveringEngine = engine
+        deliveringEngine?.beginDelivery()
+        defer { deliveringEngine?.endDelivery() }
         let commit = engine?.takeCommit() ?? ""
         if !commit.isEmpty {
             // Insertion consumes our mark; never replace the resulting selection with an empty mark.
@@ -134,7 +144,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
-            guard let engine, let callbackEvent, callbackEvent.type == .keyDown else { return false }
+            if engine == nil, IFEngine.ready { engine = IFEngine(); applySettings() }
+            guard let engine, engine.available, let callbackEvent, callbackEvent.type == .keyDown else { return false }
             // A selection/flush must use the order already shown, even if the client
             // stops exposing its document or moves the selection before that event.
             if engine.snapshot().preedit.isEmpty {

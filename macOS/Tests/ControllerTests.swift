@@ -3,6 +3,7 @@ import InputMethodKit
 @MainActor
 final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     var mutations: [String] = []
+    var onMutation: (() -> Void)?
     var document: String?
     var selection = NSRange(location: NSNotFound, length: 0)
     var mark = NSRange(location: NSNotFound, length: 0)
@@ -27,6 +28,7 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     func insertText(_ string: Any!, replacementRange: NSRange) {
         check(replacementRange == NSRange(location: NSNotFound, length: 0))
         mutations.append("insert:\(string as! String)")
+        onMutation?()
         replace(string as! String, marked: false)
     }
     func setMarkedText(_ string: Any!, selectionRange: NSRange, replacementRange: NSRange) {
@@ -34,6 +36,7 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         let text = string as! String
         check(selectionRange.location <= text.utf16.count)
         mutations.append("mark:\(text)")
+        onMutation?()
         replace(text, marked: true, cursor: selectionRange)
     }
     func selectedRange() -> NSRange { selection }
@@ -79,8 +82,42 @@ struct ControllerTests {
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
+        try deliveryAndRecovery(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         IFEngine.stop()
         print("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement, consecutive quotes and shifted punctuation")
+    }
+
+    @MainActor static func deliveryAndRecovery(settings: IFSettings, shared: String, user: String) throws {
+        // Earlier headless IMK fixtures can remain autoreleased with deliberate test compositions.
+        for engine in IFEngine.liveSessions { engine.clear(); _ = engine.takeCommit() }
+        check(IFEngine.allSessionsIdle, "Delivery fixture has no other composing or pending session")
+        let client = RecordingClient()
+        var controller: InkFlowInputController? = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        var callbacks = 0
+        client.onMutation = {
+            callbacks += 1
+            check(!IFEngine.allSessionsIdle, "Delivery lease blocks activation inside insert/mark callback")
+            // Native clients may pump a nested event loop before returning the commit callback.
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+            check(!IFEngine.allSessionsIdle, "Lease remains owned across nested client run loop")
+        }
+        type(controller!.engine!, "nihao"); controller!.refresh(client)
+        controller!.engine!.commit(); controller!.refresh(client)
+        check(callbacks >= 2 && IFEngine.allSessionsIdle, "Lease ends after all client callbacks return")
+        client.onMutation = nil; controller = nil
+        IFEngine.stop()
+        controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        check(controller!.engine == nil, "Controller can be constructed while engine is unavailable")
+        settings.candidateCount = 7
+        _ = try settings.saveCustomPhrase(code: "hft", text: "恢复隔离短语")
+        try IFEngine.start(shared: shared, user: user)
+        check(controller!.engine?.available == true && controller!.engine?.candidateCount == 7, "Existing controller reacquires restored session and count")
+        type(controller!.engine!, "hft")
+        check(controller!.engine!.snapshot().candidates.first == "恢复隔离短语", "Reacquired session receives current custom phrases")
+        controller!.engine!.clear()
+        print("PASS controller activation: insert/mark nested-runloop delivery lease and unavailable-controller reacquisition")
     }
 
     @MainActor static func customPhraseFailure(settings: IFSettings, user: String) throws {
