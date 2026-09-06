@@ -1,19 +1,24 @@
 #import "NativeTestSupport.h"
 #import <objc/runtime.h>
 
-// Intercept only framework initialization/teardown. The Swift subclass's real initializer
+// Intercept only framework initialization/teardown and the supplied test client lookup. The Swift subclass's real initializer
 // still initializes every stored property. Never class_createInstance a Swift class.
+static char testClientKey;
 static id initializeWithoutServer(id object, SEL selector, id server, id delegate, id client) {
-    (void)selector; (void)server; (void)delegate; (void)client;
+    (void)selector; (void)server; (void)delegate;
     IMP initialize=class_getMethodImplementation(NSObject.class,@selector(init));
-    return ((id (*)(id,SEL))initialize)(object,@selector(init));
+    id initialized=((id (*)(id,SEL))initialize)(object,@selector(init));
+    objc_setAssociatedObject(initialized,&testClientKey,client,OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return initialized;
 }
+static id suppliedTestClient(id object, SEL selector) { (void)selector; return objc_getAssociatedObject(object,&testClientKey); }
 static void ignoreServerDeactivation(id object, SEL selector, id sender) {
     (void)object; (void)selector; (void)sender;
 }
 void IFStubHeadlessControllerFramework(void) {
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(initWithServer:delegate:client:)),(IMP)initializeWithoutServer);
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(deactivateServer:)),(IMP)ignoreServerDeactivation);
+    method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(client)),(IMP)suppliedTestClient);
 }
 
 NSFont *IFNativeCandidateFont(IMKCandidates *panel) {
@@ -48,6 +53,7 @@ static void collectAccessibility(id object, NSMutableArray *result, NSHashTable 
     if ([object respondsToSelector:@selector(accessibilityIdentifier)]) entry[@"id"]=element.accessibilityIdentifier ?: @"";
     if ([object respondsToSelector:@selector(accessibilityLabel)]) entry[@"label"]=element.accessibilityLabel ?: @"";
     if ([object respondsToSelector:@selector(accessibilityValue)]) entry[@"value"]=element.accessibilityValue ?: @"";
+    if ([object respondsToSelector:@selector(isAccessibilityEnabled)]) entry[@"enabled"]=@(element.isAccessibilityEnabled);
     if ([object respondsToSelector:@selector(accessibilityFrame)]) entry[@"frame"]=[NSValue valueWithRect:element.accessibilityFrame];
     [result addObject:entry];
     if ([object respondsToSelector:@selector(accessibilityChildren)]) {

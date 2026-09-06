@@ -33,6 +33,7 @@ struct SettingsUITests {
             for element in IFAccessibilityTree(window) { print("AX \(element)") }
         }
         checkLayout(window)
+        checkCustomPhrasesLayout(window, settings: settings)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         drainEvents()
@@ -88,6 +89,36 @@ struct SettingsUITests {
             while window.isVisible { drainEvents(seconds: 0.25) }
         }
         window.close()
+    }
+
+    @MainActor static func checkCustomPhrasesLayout(_ window: NSWindow, settings: IFSettings) {
+        // In-process SwiftUI sidebar children are AX proxies without selectable NSAccessibility
+        // rows. Choose the initial section for layout checks; exercise navigation in CUA.
+        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
+        drainEvents()
+        check(window.title == "个性化")
+        for size in [NSSize(width: 700, height: 380), NSSize(width: 900, height: 560)] {
+            window.setContentSize(size); drainEvents()
+            let elements = IFAccessibilityTree(window)
+            let identifiers = ["phrases.list", "phrases.add", "phrases.edit", "phrases.delete"]
+            let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
+            if controls.count != identifiers.count {
+                for element in elements { print("AX personalization \(element)") }
+            }
+            check(controls.count == identifiers.count, "Native phrase table and CRUD controls must be accessible")
+            for control in controls {
+                let frame = (control["frame"] as! NSValue).rectValue
+                check(frame.width > 0 && frame.height > 0 && window.convertToScreen(window.contentLayoutRect).contains(frame))
+                if ["phrases.edit", "phrases.delete"].contains(control["id"] as! String) {
+                    check(control["enabled"] as? Bool == false)
+                }
+            }
+            check(elements.contains { $0["id"] as? String == "phrases.empty" })
+        }
+        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
+        drainEvents()
+        window.setContentSize(NSSize(width: 700, height: 450))
+        print("PASS personalization layout: native table/buttons at minimum/enlarged sizes, empty state, edit/delete disabled without selection")
     }
 
     @MainActor static func checkLayout(_ window: NSWindow) {
