@@ -69,3 +69,59 @@ awk -F '\t' '
   }
 ' build/thu-idiom.txt build/test-chinese/pinyin_simp.dict.yaml
 ```
+
+## Verified update preparation
+
+`IFDictionarySourceClient` checks only the fixed Frost and Ice repositories. A
+branch check resolves a commit and its complete Git tree; only allowlisted regular
+file paths, Git blob identifiers and sizes are accepted. Unrelated upstream
+commits do not offer an update. Downloads bind the checked immutable commit,
+reject unapproved HTTPS redirects, and validate byte count, Git blob and SHA-256
+before the shared generator parses text. The ephemeral transport has no cookies,
+credential storage or authentication header and bounds bytes during reception.
+The transport is injectable for deterministic offline tests.
+
+`InkFlowDictionaryWorker` is a bundled Foundation/CryptoKit executable using the
+pinned Rime C API. It copies current application-owned schema, Lua, English and
+emoji resources, generates the Chinese dictionary from verified inputs, then
+compiles in an isolated user directory. A second clean user directory loads only
+the prepared cache and probes the two required first choices plus mixed English,
+standalone English and emoji candidates. Native deployment notifications report
+compilation failures separately from verification failures. No real learning or
+custom-phrase data enters the helper.
+
+The runner calls the local helper through `sandbox-exec`, without a shell or
+inherited credentials. Its profile denies network access and real-user-directory
+access, allowing writes only to the explicitly configured candidate UUID
+subtree. Both pipes drain concurrently; diagnostic retention and execution time
+are bounded. Cancellation or timeout terminates the child, escalating to KILL if
+necessary. `sandbox-exec` is deprecated by macOS; inability to start this sandbox
+is a preparation error, never a reason to run the helper unsandboxed.
+
+`IFDictionaryStore` keeps confirmed current, previous and pending versions in an
+atomic journal. Each artifact combines the reproducible content version, the
+current resource/library/helper fingerprint and a build UUID, so a fresh rebuild
+never overwrites an active artifact. Checksums cover prepared resources and
+cache files. A pending activation does not change the confirmed pointer or its
+date; confirmation advances them only after the caller verifies the engine and
+all sessions. Interrupted pending work is abandoned without an automatic retry.
+The caller serializes mutations and owns live-engine activation and rollback.
+
+Cache compatibility fingerprints include current schemas, Lua, English, emoji,
+corrections, helper and libraries. Rebuilding consumes inert dictionary data and
+current application resources. Downloaded artifacts retain verified raw sources
+so changed correction policy can regenerate offline. A flat-only artifact whose
+correction policy changed must fall back to the current bundled dictionary.
+Proven same-content source receipts are stored separately, bound to that active
+content version; merely checking or downloading never suppresses a future retry.
+
+Diagnostic errors carry a Chinese stage summary and bounded technical fields and
+can be logged through an injected sink. The journal, manifest and observations
+never contain error payloads. Settings error presentation and its close/reopen
+lifetime are owned by the UI coordinator, independently from background work.
+
+After building the app, run `bash macOS/scripts/test-dictionary-updates.sh` for
+fake-network failures, transaction boundaries, fingerprint/cache integrity,
+subprocess isolation and full generated-dictionary helper preparation. The helper
+is included in build, bundle dependency checks and inner-before-outer signing;
+these checks do not install the input method or imply real-client acceptance.

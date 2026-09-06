@@ -23,7 +23,7 @@ lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 for plugin in "$app/Contents/Frameworks/rime-plugins"/*; do
   [[ "$plugin" == "$lua_plugin" ]] || { echo "Unexpected engine plugin: $plugin" >&2; exit 1; }
 done
-for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin"; do
+for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/MacOS/InkFlowDictionaryWorker" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin"; do
   xcrun lipo "$binary" -verify_arch arm64
   otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
     case "$dependency" in

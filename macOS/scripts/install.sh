@@ -15,6 +15,8 @@ esac
 [[ -s "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" ]] || { echo 'Missing Lua plugin; rebuild InkFlow first.' >&2; exit 1; }
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
+[[ -x "$app/Contents/MacOS/InkFlowDictionaryWorker" ]] || { echo "Missing dictionary helper; rebuild InkFlow first." >&2; exit 1; }
+codesign --force "${signing[@]}" "$app/Contents/MacOS/InkFlowDictionaryWorker"
 codesign --force "${signing[@]}" --entitlements "$entitlements" "$app"
 codesign --verify --deep --strict "$app"
 metadata=$(codesign -dv "$app" 2>&1)
