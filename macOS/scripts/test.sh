@@ -5,6 +5,8 @@ macOS/scripts/dependencies.sh
 bash macOS/scripts/test-prepare-rime.sh
 bash macOS/scripts/prepare-rime.sh build/test-shared
 source macOS/scripts/swift-common.sh
+build_swift_test build/deployment-tests macOS/Tests/DeploymentTests.swift
+build/deployment-tests "$PWD/build/test-shared" "$PWD"/build/deps/rime-easy-en-*/easy_en.dict.yaml
 build_swift_test build/engine-tests macOS/Tests/EngineTests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT

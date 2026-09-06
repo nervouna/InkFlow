@@ -49,7 +49,9 @@ final class IFEngine {
                 api.pointee.initialize(&traits)
             }
         }
-        if api.pointee.start_maintenance(0) != 0 { api.pointee.join_maintenance_thread() }
+        // Bundled resources may predate the user's last deployment. Run native
+        // content checks regardless of mtimes; unchanged compiled tables are reused.
+        if api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
         let probe = api.pointee.create_session()
         ready = probe != 0 && api.pointee.select_schema(probe, "inkflow_pinyin") != 0
         // A missing schema can report success; require an actual translator result.

@@ -12,7 +12,6 @@ app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
-cmp build/deps/rime-easy-en-*/easy_en.dict.yaml "$app/Contents/Resources/Rime/easy_en.dict.yaml"
 bash macOS/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
 for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt; do

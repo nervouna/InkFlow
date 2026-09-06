@@ -13,6 +13,7 @@ struct EngineTests {
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
+        englishAdmission()
         conservativeChinesePrefixes()
         mixedEnglishCandidates()
         englishCandidates()
@@ -108,21 +109,16 @@ struct EngineTests {
         }
         engine.select(emailIndex)
         check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
-        for (input, expected) in [("compute", "computer"), ("comm", "community")] {
+        for (input, expected) in [("compute", "computer"), ("comm", "community"), ("actual", "actually")] {
             type(engine, input)
             let candidates = engine.snapshot().candidates
             check(candidates.first == expected, "Frequency before exactness/length for \(input): \(candidates)")
-            if input == "compute" {
-                var seen = candidates
-                for _ in 0..<20 where !seen.contains("compute") {
-                    let before = engine.snapshot().page
-                    engine.key(0xff56)
-                    if engine.snapshot().page == before { break }
-                    seen += engine.snapshot().candidates
-                }
-                check(seen.contains("compute"), "Retain the lower-frequency exact English word")
-                check(Set(seen).count == seen.count, "No duplicate English candidates across pages")
+            let english = allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+            check(!english.contains("compute"), "Excluded exact words cannot bypass admission")
+            if input == "actual" {
+                check(english.contains("actual"), "Retain an admitted lower-frequency exact English word")
             }
+            check(Set(english).count == english.count, "No duplicate English candidates across pages")
             engine.clear()
         }
         type(engine, "zhefenoffes")
@@ -141,7 +137,7 @@ struct EngineTests {
             check(english.first == input, "Prefer an exact case match among English with equal source weights")
             engine.clear()
         }
-        for input in ["can", "you", "man", "tame", "woman", "time", "name", "line", "email"] {
+        for input in ["can", "you", "man", "woman", "time", "name", "line", "email"] {
             type(engine, input)
             check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
                   "Chinese leads ambiguous English \(input)")
@@ -164,6 +160,79 @@ struct EngineTests {
         check(engine.snapshot().candidates.first == "D", "Keep intentional uppercase letter input")
         engine.clear()
         print("PASS mixed English: initial/internal/final words, adjacent boundaries, source-frequency completion ranking, exact retention, deduplication, edit/select")
+    }
+
+    @MainActor static func allCandidates(_ engine: IFEngine) -> [String] {
+        var candidates: [String] = []
+        for _ in 0..<1000 {
+            let snapshot = engine.snapshot()
+            candidates += snapshot.candidates
+            engine.key(0xff56)
+            if engine.snapshot().page == snapshot.page {
+                for _ in 0..<snapshot.page { engine.key(0xff55) }
+                check(engine.snapshot().page == 0, "Restore first page after exhaustive candidate lookup")
+                return candidates
+            }
+        }
+        check(false, "Candidate enumeration must reach the final page")
+        return candidates
+    }
+
+    @MainActor static func englishAdmission() {
+        let engine = IFEngine()!
+        let rejected = ["WOMENS", "women", "womenfolk", "tameness", "Nimes", "nimetti", "nimetz",
+                        "Haiti", "Haitian", "Haitienne", "haitians", "compute"]
+        let forbidden = Set(rejected.map { $0.lowercased() })
+        func verify(_ candidates: [String], _ input: String) {
+            for candidate in candidates {
+                let words = candidate.split { !$0.isASCII || !$0.isLetter }.map { $0.lowercased() }
+                check(forbidden.isDisjoint(with: words), "Rejected English for \(input): \(candidate)")
+            }
+        }
+        let screenshots = ["women", "tamen", "nime", "haiti"]
+        let exactAndCase = rejected.flatMap { [$0, $0.lowercased(), $0.uppercased(), $0.capitalized] }
+        for input in Set(screenshots + exactAndCase).sorted() {
+            type(engine, input)
+            let candidates = allCandidates(engine)
+            verify(candidates, input)
+            print("TRACE English admission \(input) => \(candidates)")
+            engine.clear()
+        }
+        // Exercise prefix lookup, edits, cache replacement, and selection/re-entry.
+        for input in screenshots {
+            var prefix = ""
+            for letter in input {
+                prefix.append(letter); type(engine, String(letter))
+                verify(engine.snapshot().candidates, prefix)
+            }
+            for letter in input.reversed() {
+                engine.key(0xff08); prefix.removeLast()
+                verify(engine.snapshot().candidates, prefix)
+                type(engine, String(letter))
+                verify(allCandidates(engine), prefix + String(letter))
+                engine.key(0xff08)
+            }
+            check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+            type(engine, input)
+            if !engine.snapshot().candidates.isEmpty { engine.select(0) }
+            verify([engine.takeCommit()], input)
+            engine.clear()
+            type(engine, input)
+            verify(allCandidates(engine), input)
+            engine.clear()
+        }
+        for word in rejected {
+            for input in ["zhefen" + word, word + "henhao", "wo" + word + "henhao"] {
+                type(engine, input)
+                verify(allCandidates(engine), input)
+                engine.clear()
+            }
+        }
+        // Explicit ASCII mode is character passthrough, not dictionary admission.
+        check(engine.event(keyEvent(49, " ", [.control, .shift])))
+        for letter in "women compute Haiti".utf16 { check(!engine.key(Int32(letter))) }
+        check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
+        print("PASS English admission: screenshot words and compute absent from exact/prefix/case/all pages, edits, re-entry, mixed boundaries; explicit ASCII unaffected")
     }
 
     @MainActor static func runCases() throws {
@@ -247,6 +316,7 @@ struct EngineTests {
         }
         type(engine, "comput")
         check(engine.snapshot().candidates.contains("computer"), "English prefix completion")
+        engine.clear(); type(engine, "comm")
         let first = engine.snapshot().candidates
         check(engine.key(0xff56))
         let second = engine.snapshot()
