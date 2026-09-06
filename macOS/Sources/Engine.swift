@@ -6,6 +6,7 @@ struct EngineSnapshot: Equatable {
     var candidates: [String] = []
     var page = 0
     var highlight = 0
+    var hasSelectedPrefix = false
 }
 
 /// librime and its shared schema configuration are accessed synchronously on the main actor.
@@ -13,9 +14,13 @@ struct EngineSnapshot: Equatable {
 final class IFEngine {
     private static let api = rime_get_api()!
     private static var ready = false
+    private static var contextRanker: IFContextRanker?
     private var session: RimeSessionId = 0
     private(set) var candidateCount = 5
     private var requestedCount = 5
+    private var precedingText = ""
+    private var orderedContent = EngineSnapshot()
+    private var candidateOrder: [Int] = []
 
     static var version: String { string(api.pointee.get_version()) }
 
@@ -27,6 +32,7 @@ final class IFEngine {
                               userInfo: [NSLocalizedDescriptionKey: "InkFlow 缺少内置拼音资源，请重新构建并安装。"])
             }
         }
+        contextRanker = try IFContextRanker(dictionary: (shared as NSString).appendingPathComponent("pinyin_simp.dict.yaml"))
         try FileManager.default.createDirectory(atPath: user, withIntermediateDirectories: true)
         var traits = RimeTraits()
         traits.data_size = Int32(MemoryLayout<RimeTraits>.size - MemoryLayout.size(ofValue: traits.data_size))
@@ -72,6 +78,7 @@ final class IFEngine {
 
     static func stop() {
         if ready { api.pointee.finalize(); ready = false }
+        contextRanker = nil
     }
 
     init?() {
@@ -92,12 +99,30 @@ final class IFEngine {
     @discardableResult
     func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
         applyCandidateCountIfIdle()
-        return Self.api.pointee.process_key(session, key, modifiers) != 0
+        let state = snapshot()
+        if modifiers == 0, (49...57).contains(key), Int(key - 49) < state.candidates.count {
+            select(Int(key - 49))
+            return true
+        }
+        if modifiers == 0, (key == 0xff52 || key == 0xff54), !state.candidates.isEmpty {
+            return moveHighlight(key == 0xff54 ? 1 : -1, key: key)
+        }
+        let handled = Self.api.pointee.process_key(session, key, modifiers) != 0
+        updateOrdering()
+        return handled
     }
 
     func setCandidateCount(_ count: Int) {
         requestedCount = (3...9).contains(count) ? count : 5
         applyCandidateCountIfIdle()
+    }
+
+    func setPrecedingText(_ text: String) {
+        let prefix = String(text.suffix(IFPrecedingText.limit))
+        guard prefix != precedingText else { return }
+        precedingText = prefix
+        guard !rawSnapshot().preedit.isEmpty else { return }
+        updateOrdering(force: true)
     }
 
     private func applyCandidateCountIfIdle() {
@@ -155,9 +180,64 @@ final class IFEngine {
         return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0)
     }
 
-    func select(_ index: Int) { _ = Self.api.pointee.select_candidate_on_current_page(session, index) }
-    func commit() { _ = Self.api.pointee.commit_composition(session) }
-    func clear() { Self.api.pointee.clear_composition(session) }
+    func select(_ index: Int) {
+        guard candidateOrder.indices.contains(index) else { return }
+        _ = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index])
+        updateOrdering()
+    }
+
+    func highlight(_ index: Int) {
+        guard candidateOrder.indices.contains(index) else { return }
+        _ = Self.api.pointee.highlight_candidate_on_current_page(session, candidateOrder[index])
+        // Highlighting a partial choice can change Rime's preedit and cursor.
+        // Record the new content without overriding explicit user navigation.
+        orderedContent = content(of: rawSnapshot())
+    }
+
+    func commit() {
+        _ = Self.api.pointee.commit_composition(session)
+        updateOrdering()
+    }
+
+    func clear() {
+        Self.api.pointee.clear_composition(session)
+        updateOrdering()
+    }
+
+    private func moveHighlight(_ delta: Int, key: Int32) -> Bool {
+        let before = snapshot()
+        let next = before.highlight + delta
+        if candidateOrder.indices.contains(next) { highlight(next); return true }
+        // Let Rime decide whether another page exists, starting at its native edge.
+        _ = Self.api.pointee.highlight_candidate_on_current_page(session, delta > 0 ? candidateOrder.count - 1 : 0)
+        let handled = Self.api.pointee.process_key(session, key, 0) != 0
+        updateOrdering()
+        if snapshot().page != before.page {
+            if delta < 0 { highlight(candidateOrder.count - 1) }
+        } else if !candidateOrder.isEmpty { highlight(before.highlight) }
+        return handled
+    }
+
+    private func content(of snapshot: EngineSnapshot) -> EngineSnapshot {
+        var result = snapshot
+        result.highlight = 0
+        return result
+    }
+
+    private func updateOrdering(force: Bool = false) {
+        let raw = rawSnapshot()
+        let content = content(of: raw)
+        guard force || content != orderedContent else { return }
+        // Once a segment is selected, the immediate prefix is inside the mark.
+        // Leave these remaining candidates to Rime instead of applying older document text.
+        candidateOrder = raw.hasSelectedPrefix ? Array(raw.candidates.indices) :
+            (Self.contextRanker?.order(raw.candidates, precedingText: precedingText) ?? Array(raw.candidates.indices))
+        if let first = candidateOrder.first {
+            _ = Self.api.pointee.highlight_candidate_on_current_page(session, first)
+        }
+        orderedContent = self.content(of: rawSnapshot())
+        if raw.preedit.isEmpty { precedingText = "" }
+    }
 
     func takeCommit() -> String {
         var commit = RimeCommit()
@@ -173,6 +253,14 @@ final class IFEngine {
     }
 
     func snapshot() -> EngineSnapshot {
+        var result = rawSnapshot()
+        guard candidateOrder.count == result.candidates.count else { return result }
+        result.candidates = candidateOrder.map { result.candidates[$0] }
+        result.highlight = candidateOrder.firstIndex(of: result.highlight) ?? 0
+        return result
+    }
+
+    private func rawSnapshot() -> EngineSnapshot {
         var context = Self.makeContext()
         guard Self.api.pointee.get_context(session, &context) != 0 else { return EngineSnapshot() }
         defer { _ = Self.api.pointee.free_context(&context) }
@@ -186,7 +274,8 @@ final class IFEngine {
         return EngineSnapshot(preedit: preedit,
                               cursor: Self.utf16Cursor(in: preedit, byteOffset: Int(context.composition.cursor_pos)),
                               candidates: candidates, page: Int(context.menu.page_no),
-                              highlight: Int(context.menu.highlighted_candidate_index))
+                              highlight: Int(context.menu.highlighted_candidate_index),
+                              hasSelectedPrefix: context.composition.sel_start > 0)
     }
 
     private static func makeContext() -> RimeContext {
