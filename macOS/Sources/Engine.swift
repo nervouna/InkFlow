@@ -22,7 +22,9 @@ final class IFEngine {
     static func start(shared: String, user: String) throws {
         if ready { return }
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
-                     "easy_en.schema.yaml", "easy_en.dict.yaml"] {
+                     "easy_en.schema.yaml", "easy_en.dict.yaml",
+                     "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua"] {
             guard FileManager.default.isReadableFile(atPath: (shared as NSString).appendingPathComponent(name)) else {
                 throw NSError(domain: "io.damao.inputmethod.inkflow", code: 2,
                               userInfo: [NSLocalizedDescriptionKey: "InkFlow 缺少内置词典资源，请重新构建并安装。"])

@@ -12,6 +12,8 @@ case "$mode" in
 esac
 [[ -x "$app/Contents/MacOS/InkFlow" ]] || { echo 'Run macOS/scripts/build.sh first.' >&2; exit 1; }
 # For Developer ID, the caller must verify the certificate OU before selecting it.
+[[ -s "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" ]] || { echo 'Missing Lua plugin; rebuild InkFlow first.' >&2; exit 1; }
+codesign --force "${signing[@]}" "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
 codesign --force "${signing[@]}" --entitlements "$entitlements" "$app"
 codesign --verify --deep --strict "$app"

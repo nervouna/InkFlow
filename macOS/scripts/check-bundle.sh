@@ -13,16 +13,25 @@ app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
 cmp build/deps/rime-easy-en-*/easy_en.dict.yaml "$app/Contents/Resources/Rime/easy_en.dict.yaml"
-for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt; do
+bash macOS/scripts/prepare-rime.sh build/expected-rime
+diff -qr build/expected-rime "$app/Contents/Resources/Rime"
+for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
 
-for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib"; do
+lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
+[[ -s "$lua_plugin" ]]
+for plugin in "$app/Contents/Frameworks/rime-plugins"/*; do
+  [[ "$plugin" == "$lua_plugin" ]] || { echo "Unexpected engine plugin: $plugin" >&2; exit 1; }
+done
+for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin"; do
   xcrun lipo "$binary" -verify_arch arm64
   otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
     case "$dependency" in
       /usr/lib/*|/System/Library/*) ;;
       @rpath/librime.1.dylib) test -f "$app/Contents/Frameworks/librime.1.dylib" ;;
+      # The plugin's first otool entry is its own LC_ID_DYLIB, not a dependency.
+      @rpath/librime-lua.dylib) [[ "$binary" == "$lua_plugin" ]] ;;
       *) echo "Unbundled dependency: $dependency" >&2; exit 1 ;;
     esac
   done
@@ -33,7 +42,7 @@ rime_library="$app/Contents/Frameworks/librime.1.dylib" rime_rpath="$app/Content
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
-echo 'PASS bundle: arm64, plist, system/bundled dylib closure, bundled dictionary transcript'
+echo 'PASS bundle: arm64, plist, system/bundled dylib and Lua plugin closure, bundled dictionary transcript'
 
 build_swift_test build/metadata-tests macOS/Tests/MetadataTests.swift
 build/metadata-tests "$app"

@@ -64,9 +64,10 @@ struct ControllerTests {
         client.mutations.removeAll()
         check(controller.handle(keyEvent(49, " "), client: client)); check(client.mutations == ["insert:你好"])
         controller.commitComposition(client); controller.deactivateServer(client); check(client.mutations == ["insert:你好"])
-        for input in ["hello", "comput"] {
+        for (input, expected) in [("hello", "hello"), ("comput", "computer"),
+                                  ("compute", "computer"), ("comm", "community"),
+                                  ("zhefenoffer", "这份offer"), ("wofaleemail", "我发了email")] {
             for letter in input { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
-            let expected = input == "hello" ? "hello" : "computer"
             let candidates = controller.candidates(nil) as! [String]
             guard let index = candidates.firstIndex(of: expected) else {
                 check(false, "English word missing from controller candidates"); return

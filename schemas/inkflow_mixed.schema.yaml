@@ -1,0 +1,11 @@
+# Compilation dependency for the supplemental mixed-sentence translator.
+schema:
+  schema_id: inkflow_mixed
+  name: Mixed dictionary
+  version: '1.0'
+translator:
+  dictionary: inkflow_mixed
+speller:
+  algebra:
+    - derive/^([nl])ue$/$1ve/
+    - derive/^([jqxy])u/$1v/

@@ -9,6 +9,7 @@ The application, settings interface, registration tool, and test scenarios are w
 - `Settings.swift` contains validated defaults, a SwiftUI `NavigationSplitView`/`Form`, the About view, and a small AppKit window/hosting shell. The existing defaults keys, values, and notification name remain unchanged.
 - `NativeCandidates.m` is the only Objective-C application source. It contains the optional private font setter and the guarded minimum-width adaptation using the SDK's protected `_private` reference. Swift cannot access that protected field. The native `IMKCandidates` interface remains in use; see `DEBUGGING.md` for its compatibility limits.
 - `Tools/RegisterInputSource.swift` retains the separate registration and read-only `--verify-enabled` modes. Build and test scripts do not install, register, enable, or select the application.
+- `scripts/prepare-rime.sh` copies pinned dictionaries and Lua modules and generates the supplemental mixed dictionary for every build and engine-test entry point. `schemas/lua` only supplies translations; Rime retains editing, selection, and paging. See `DEPENDENCIES.md` for weighting and lookup boundaries.
 
 ## Verification
 

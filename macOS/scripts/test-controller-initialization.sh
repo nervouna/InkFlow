@@ -3,10 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 # Requires a logged-in macOS GUI session; deliberately separate from headless logic tests.
 macOS/scripts/dependencies.sh
-mkdir -p build/test-shared
-cp schemas/*.yaml build/test-shared/
-cp build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml build/test-shared/
-cp build/deps/rime-easy-en-*/easy_en.dict.yaml build/test-shared/
+bash macOS/scripts/prepare-rime.sh build/test-shared
 source macOS/scripts/swift-common.sh
 build_swift_test build/controller-initialization-tests macOS/Tests/ControllerInitializationTests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-initialization-tests.XXXXXX")
