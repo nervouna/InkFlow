@@ -9,6 +9,7 @@ mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" 
 cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
 cp -R schemas/. "$fixture/schemas/"
 printf '中文\tzhong wen\t1000\n' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
+printf '微笑\t微笑 😊\n' > "$fixture/build/deps/emoji.txt"
 cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'DATA'
 ---
 name: easy_en
@@ -62,6 +63,8 @@ generate() {
   records "$fixture/output/easy_en.dict.yaml" > "$fixture/english.tsv"
   records "$fixture/output/inkflow_mixed.dict.yaml" > "$fixture/mixed.tsv"
   cmp "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml" "$fixture/output/pinyin_simp.dict.yaml"
+  cmp "$fixture/build/deps/emoji.txt" "$fixture/output/opencc/emoji.txt"
+  cmp "$fixture/schemas/opencc/inkflow_emoji.json" "$fixture/output/opencc/inkflow_emoji.json"
 }
 expect_failure() {
   cp "$fixture/output/easy_en.dict.yaml" "$fixture/before-english.yaml"

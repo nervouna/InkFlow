@@ -70,5 +70,7 @@ $1 == $2 && $1 ~ /^[A-Za-z]+$/ && length($1) >= 4 {
 mkdir -p "$destination/lua"
 cp schemas/*.yaml "$destination/"
 cp schemas/lua/*.lua "$destination/lua/"
+mkdir -p "$destination/opencc"
+cp schemas/opencc/inkflow_emoji.json build/deps/emoji.txt "$destination/opencc/"
 cp build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml "$destination/"
 mv "$staging/easy_en.dict.yaml" "$staging/inkflow_mixed.dict.yaml" "$destination/"

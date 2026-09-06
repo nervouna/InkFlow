@@ -72,7 +72,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     func applySettings() {
-        engine?.setCandidateCount(settings.candidateCount)
+        engine?.setConfiguration(candidateCount: settings.candidateCount, customPhrases: settings.customPhrases)
+        if settings.inputSettingsError != engine?.configurationError {
+            settings.inputSettingsError = engine?.configurationError
+        }
         let wasUpdating = updating
         updating = true
         defer { updating = wasUpdating }
@@ -101,6 +104,9 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             ownsMarkedText = false
             client?.insertText(commit, replacementRange: NSRange(location: NSNotFound, length: 0))
         }
+        if let engine, !engine.snapshot().preedit.isEmpty {
+            engine.setPrecedingText(IFPrecedingText.read(from: client, ownsMarkedText: ownsMarkedText))
+        } else { engine?.setPrecedingText("") }
         let state = engine?.snapshot() ?? EngineSnapshot()
         if !state.preedit.isEmpty {
             ownsMarkedText = true
@@ -129,6 +135,12 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
             guard let engine, let callbackEvent, callbackEvent.type == .keyDown else { return false }
+            // A selection/flush must use the order already shown, even if the client
+            // stops exposing its document or moves the selection before that event.
+            if engine.snapshot().preedit.isEmpty {
+                engine.setPrecedingText(IFPrecedingText.read(from: callbackClient as? IMKTextInput,
+                                                           ownsMarkedText: ownsMarkedText))
+            }
             let handled = engine.event(callbackEvent)
             if !handled && !engine.snapshot().preedit.isEmpty { engine.commit() }
             refresh(callbackClient as? IMKTextInput)
@@ -149,11 +161,21 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         }
     }
 
+    nonisolated override func candidateSelectionChanged(_ candidate: NSAttributedString!) {
+        let text = candidate?.string
+        MainActor.assumeIsolated {
+            guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            engine?.highlight(index)
+            refresh(client())
+        }
+    }
+
     nonisolated override func commitComposition(_ sender: Any!) {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
+            let activeClient = (callbackClient as? IMKTextInput) ?? client()
             engine?.commit()
-            refresh((callbackClient as? IMKTextInput) ?? client())
+            refresh(activeClient)
             panel?.hide()
         }
     }

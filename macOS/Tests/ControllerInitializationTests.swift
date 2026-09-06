@@ -29,8 +29,18 @@ struct ControllerInitializationTests {
             check(identifier == "com.apple.keylayout.US")
             check(panel!.selectionKeys() as? [Int] == [18, 19, 20, 21, 23])
             panel!.setSelectionKeys([18, 19, 20, 21, 23])
-            panel!.setCandidateData(["啊", "阿", "吖", "呵", "腌"])
+            let candidates = ["微笑", "😊", "❤️", "🇨🇳", "👨‍⚕️"]
+            panel!.setCandidateData(candidates)
+            for (index, candidate) in candidates.enumerated() {
+                check(panel!.candidateIdentifier(atLineNumber: index) == panel!.candidateStringIdentifier(candidate))
+            }
             panel!.hide()
+            let engine = controller!.engine!
+            type(engine, "nihao"); controller!.refresh(nil)
+            check((controller!.candidates(nil) as! [String]).contains("👋"))
+            controller!.candidateSelected(NSAttributedString(string: "👋"))
+            check(engine.snapshot().preedit.isEmpty && controller!.candidates(nil).isEmpty)
+            print("PASS native emoji: candidate identifiers preserve Unicode sequences, emoji selection callback clears composition")
             panel = nil; controller = nil
         }
         check(releasedController == nil)

@@ -14,7 +14,7 @@ cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
 bash macOS/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
-for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt; do
+for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
 
