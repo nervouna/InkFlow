@@ -64,6 +64,20 @@ struct ControllerTests {
         client.mutations.removeAll()
         check(controller.handle(keyEvent(49, " "), client: client)); check(client.mutations == ["insert:你好"])
         controller.commitComposition(client); controller.deactivateServer(client); check(client.mutations == ["insert:你好"])
+        for input in ["hello", "comput"] {
+            for letter in input { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+            let expected = input == "hello" ? "hello" : "computer"
+            let candidates = controller.candidates(nil) as! [String]
+            guard let index = candidates.firstIndex(of: expected) else {
+                check(false, "English word missing from controller candidates"); return
+            }
+            client.mutations.removeAll()
+            let digitCodes: [UInt16] = [18, 19, 20, 21, 23]
+            check(controller.handle(keyEvent(digitCodes[index], String(index + 1)), client: client))
+            check(client.mutations == ["insert:\(expected)"])
+            controller.commitComposition(client); controller.deactivateServer(client)
+            check(client.mutations == ["insert:\(expected)"], "Commit English exactly once")
+        }
         client.mutations.removeAll()
         for _ in 0..<4 { check(controller.handle(keyEvent(39, "\"", .shift), client: client)) }
         let quotes = ["insert:“", "insert:”", "insert:“", "insert:”"]

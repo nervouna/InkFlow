@@ -12,6 +12,7 @@ struct EngineTests {
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
+        englishCandidates()
         try runCases()
         IFEngine.stop()
         let schemaAfter = try Data(contentsOf: schemaURL)
@@ -62,6 +63,45 @@ struct EngineTests {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation()
+    }
+
+    @MainActor static func englishCandidates() {
+        let engine = IFEngine()!
+        for word in ["hello", "apple", "computer", "world", "email", "file", "code", "update", "Hello", "Apple"] {
+            type(engine, word)
+            let candidates = engine.snapshot().candidates
+            guard let index = candidates.firstIndex(of: word) else {
+                check(false, "Missing English candidate for \(word): \(candidates)"); return
+            }
+            engine.select(index)
+            check(engine.takeCommit() == word && engine.snapshot().preedit.isEmpty)
+        }
+        type(engine, "comput")
+        check(engine.snapshot().candidates.contains("computer"), "English prefix completion")
+        let first = engine.snapshot().candidates
+        check(engine.key(0xff56))
+        let second = engine.snapshot()
+        check(second.page == 1 && second.candidates != first, "Page through English completions")
+        check(engine.key(49))
+        check(engine.takeCommit() == second.candidates[0], "Digit selects on the current page")
+        type(engine, "hellp")
+        check(engine.key(0xff08)); type(engine, "o")
+        check(engine.snapshot().candidates.contains("hello"), "Backspace edits English composition")
+        check(engine.key(0xff1b))
+        check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+        engine.clear()
+        type(engine, "hello ")
+        check(engine.takeCommit() == "hello", "Space selects the complete English word")
+        for (input, expected) in [("nihao", "你好"), ("zhongguo", "中国"), ("shi", "是"), ("xi'an", "西安")] {
+            type(engine, input)
+            check(engine.snapshot().candidates.first == expected, "Preserve Pinyin priority for \(input): \(engine.snapshot().candidates)")
+            engine.clear()
+        }
+        let toggle = keyEvent(49, " ", [.control, .shift])
+        check(engine.event(toggle))
+        for letter in "hello".utf16 { check(!engine.key(Int32(letter))) }
+        check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
+        print("PASS English candidates: common words, case, prefix completion, paging/digit/space selection, edit/cancel, Chinese priority, ASCII passthrough")
     }
 
     @MainActor static func punctuation() {

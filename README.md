@@ -30,6 +30,7 @@ INKFLOW_SIGN_IDENTITY='<Developer ID 证书 SHA1>' macOS/scripts/install.sh --de
 ## 使用
 
 - 输入全拼，用空格或数字 1–9 选词，也可以点击候选。
+- 中文模式下也可输入英文单词，例如 `hello`、`apple`、`computer`，或输入 `comput` 选择补全词；英文与拼音共用候选窗口和选词按键。词典支持的大小写拼写按原样上屏。
 - 用 Page Up / Page Down 或 `[` / `]`、`-` / `=` 翻页。
 - 退格删除，Escape 取消组合；回车或切换输入源结束当前组合。
 - Control + Shift + Space 切换中文与英文，并先提交当前组合。

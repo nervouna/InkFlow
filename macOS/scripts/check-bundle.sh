@@ -12,6 +12,10 @@ app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
+cmp build/deps/rime-easy-en-*/easy_en.dict.yaml "$app/Contents/Resources/Rime/easy_en.dict.yaml"
+for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt; do
+  cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
+done
 
 for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib"; do
   xcrun lipo "$binary" -verify_arch arm64
