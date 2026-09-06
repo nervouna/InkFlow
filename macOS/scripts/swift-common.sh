@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sourced from scripts that have already changed to the repository root.
-swift_sources=(macOS/Sources/QualityRecords.swift macOS/Sources/QualityStore.swift macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
+swift_sources=(macOS/Sources/QualityRecords.swift macOS/Sources/QualityStore.swift macOS/Sources/QualityRecorder.swift macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
 
 build_swift() {
   local output="$1"

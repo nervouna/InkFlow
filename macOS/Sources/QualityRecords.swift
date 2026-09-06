@@ -38,6 +38,22 @@ struct QualityConfigRevision: Codable, Equatable, Sendable {
 /// Text kind is a descriptive output category, never translator provenance.
 enum QualityTextKind: String, Codable, Sendable {
     case chinese, english, emoji, mixed, symbol, number, other, unknown
+
+    static func classify(_ text: String) -> Self {
+        guard !text.isEmpty else { return .unknown }
+        let scalars = text.unicodeScalars
+        // Digits have the Unicode Emoji property; require an actual emoji sequence/presentation.
+        let emoji = scalars.contains { $0.properties.isEmojiPresentation || $0.value == 0xfe0f || $0.value == 0x20e3 }
+        let han = scalars.contains { (0x3400...0x9fff).contains($0.value) || (0x20000...0x323af).contains($0.value) }
+        let latin = scalars.contains { (65...90).contains($0.value) || (97...122).contains($0.value) }
+        if emoji && !han && !latin { return .emoji }
+        if (han && latin) || (emoji && (han || latin)) { return .mixed }
+        if han { return .chinese }
+        if latin { return .english }
+        if scalars.allSatisfy({ CharacterSet.decimalDigits.contains($0) }) { return .number }
+        if scalars.allSatisfy({ CharacterSet.punctuationCharacters.union(.symbols).union(.whitespaces).contains($0) }) { return .symbol }
+        return .other
+    }
 }
 
 struct QualityCandidate: Codable, Equatable, Sendable {
@@ -65,7 +81,32 @@ struct QualityPageSnapshot: Codable, Equatable, Sendable {
     var pageSize: Int
     var candidates: [QualityCandidate]
     var highlightedDisplayIndex: Int
+    var selectedPrefixValid = true
+    /// Engine observation alone does not establish that a client requested or showed candidates.
+    var presentation: QualityPresentation = .notShown
     var capturedAt = Date()
+}
+
+enum QualityPresentation: String, Codable, Sendable {
+    case notShown = "not_shown", candidatesRequested = "candidates_requested", panelShowIssued = "panel_show_issued"
+}
+
+/// Counters are separate facts: an arrow crossing a page increments moves and page turns.
+struct QualityOperations: Codable, Equatable, Sendable {
+    var keypresses = 0
+    var pageRequests = 0
+    var pageTurns = 0
+    var candidateMoves = 0
+    /// Actual Backspace/Delete/caret-edit operations that changed composition state, excluding typing and selection.
+    var preeditEdits = 0
+
+    mutating func add(_ other: Self) {
+        keypresses += other.keypresses
+        pageRequests += other.pageRequests
+        pageTurns += other.pageTurns
+        candidateMoves += other.candidateMoves
+        preeditEdits += other.preeditEdits
+    }
 }
 
 enum QualityCompositionOutcome: String, Codable, Sendable {
@@ -90,6 +131,8 @@ struct QualityComposition: Codable, Equatable, Sendable {
     var appBundleID: String? = nil
     var clientID: String? = nil
     var outcome: QualityCompositionOutcome
+    var outcomeReason: String? = nil
+    var operations = QualityOperations()
     var pageHistoryTruncated = false
     var droppedPageCount = 0
 }
@@ -104,6 +147,11 @@ struct QualityDecision: Codable, Equatable, Sendable {
     var selectedText: String? = nil
     var textKind: QualityTextKind = .unknown
     var commitID: String? = nil
+    var operations = QualityOperations()
+    var regularRankedSelection = false
+    var matchesCustomPhrase = false
+    var unknownRankReason: String? = nil
+    var pathReason: String? = nil
     /// Captured before mutation, with the exact order presented for this decision.
     var snapshot: QualityPageSnapshot
     /// Nil means unknown. Never replace with the top candidate of a later page.
@@ -153,7 +201,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
     private var fitsMemoryBudget: Bool {
         var budget = QualityMemoryBudget()
         budget.record(512)
-        budget.strings(composition.id, composition.appBundleID, composition.clientID)
+        budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason)
         for revision in revisions {
             if budget.exhausted { return false }
             budget.record(256)
@@ -163,7 +211,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
         for decision in decisions {
             if budget.exhausted { return false }
             budget.record(512)
-            budget.strings(decision.id, decision.selectedText, decision.commitID)
+            budget.strings(decision.id, decision.selectedText, decision.commitID, decision.unknownRankReason, decision.pathReason)
             budget.page(decision.snapshot)
             if let first = decision.firstPage { budget.page(first) }
             for page in decision.visitedPages {

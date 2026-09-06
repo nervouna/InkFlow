@@ -66,7 +66,11 @@ struct QualityStoreTests {
         let url = try makeURL("reopen")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = QualityStore(url: url, engineVersion: "test-engine", buildMetadata: metadata)
-        let record = fixture("reopen")
+        var record = fixture("reopen")
+        record.composition.operations = QualityOperations(keypresses: 8, pageRequests: 2, pageTurns: 2, candidateMoves: 1, preeditEdits: 1)
+        record.decisions[0].operations = record.composition.operations
+        record.decisions[0].regularRankedSelection = true
+        record.decisions[0].matchesCustomPhrase = true
         expect(store.submit(record) == .accepted, "submit accepts bounded envelope")
         await store.flush()
         expect(store.statistics().written == 1, "flush persists")
@@ -75,6 +79,12 @@ struct QualityStoreTests {
         expect(try reader.scalar("PRAGMA journal_mode") == "delete", "rollback journal")
         expect(try reader.scalar("PRAGMA user_version") == "1", "schema v1")
         expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "all foreign keys hold")
+        let savedOperations = try reader.scalar("SELECT operations_json FROM candidate_decisions")
+        expect(try QualityJSON.decoder().decode(QualityOperations.self, from: Data(savedOperations.utf8)) == record.decisions[0].operations,
+               "operation counters persist exactly")
+        expect(try reader.scalar("SELECT operations_json FROM compositions") == savedOperations, "composition counters persist")
+        expect(try reader.scalar("SELECT regular_ranked_selection || matches_custom_phrase FROM candidate_decisions") == "11",
+               "selection scope and phrase matching are separate stored flags")
         let saved = try reader.scalar("SELECT snapshot_json FROM candidate_decisions")
         let decoded = try QualityJSON.decoder().decode(QualityPageSnapshot.self, from: Data(saved.utf8))
         var expected = record.decisions[0].snapshot

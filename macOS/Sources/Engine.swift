@@ -16,6 +16,12 @@ final class IFEngine {
     private static var ready = false
     private static var userDirectory = ""
     private static var contextRanker: IFContextRanker?
+    private static var productionQualityStore: QualityStore?
+    private final class WeakQualityRecorder {
+        weak var value: QualityRecorder?
+        init(_ value: QualityRecorder) { self.value = value }
+    }
+    private static var qualityRecorders: [WeakQualityRecorder] = []
     private var session: RimeSessionId = 0
     private(set) var candidateCount = 5
     private var requestedCount = 5
@@ -27,10 +33,15 @@ final class IFEngine {
     private var precedingText = ""
     private var orderedContent = EngineSnapshot()
     private var candidateOrder: [Int] = []
+    let qualityRecorder: QualityRecorder?
+    private(set) var qualityRevision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))
+    private var qualityDepth = 0
+    private var qualityFontSize = 14
+    private var qualityVertical = false
 
     static var version: String { string(api.pointee.get_version()) }
 
-    static func start(shared: String, user: String) throws {
+    static func start(shared: String, user: String, qualityStore: QualityStore? = nil) throws {
         if ready { return }
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
@@ -87,14 +98,19 @@ final class IFEngine {
                           userInfo: [NSLocalizedDescriptionKey: "无法载入拼音方案，请重新构建并安装 InkFlow。"])
         }
         userDirectory = user
+        productionQualityStore = qualityStore
     }
 
     static func stop() {
+        for recorder in qualityRecorders { recorder.value?.interrupt(reason: "engine_stopped") }
+        qualityRecorders = []
         if ready { api.pointee.finalize(); ready = false }
         contextRanker = nil
+        productionQualityStore = nil
     }
 
-    init?() {
+    init?(qualityStore: QualityStore? = nil) {
+        qualityRecorder = (qualityStore ?? Self.productionQualityStore).map(QualityRecorder.init)
         guard Self.ready else { return nil }
         session = Self.api.pointee.create_session()
         guard session != 0 else { return nil }
@@ -103,15 +119,25 @@ final class IFEngine {
             session = 0
             return nil
         }
+        if let qualityRecorder {
+            Self.qualityRecorders.removeAll { $0.value == nil }
+            Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
+        }
     }
 
     isolated deinit {
+        qualityRecorder?.interrupt(reason: "engine_teardown")
         if Self.ready && session != 0 { _ = Self.api.pointee.destroy_session(session) }
     }
 
     @discardableResult
     func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
+        // Apply existing idle configuration before capturing the values this key actually uses.
         applyConfigurationIfIdle()
+        return qualityOperation(.key(key, modifiers)) { performKey(key, modifiers: modifiers) }
+    }
+
+    private func performKey(_ key: Int32, modifiers: Int32) -> Bool {
         let state = snapshot()
         if modifiers == 0, (49...57).contains(key), Int(key - 49) < state.candidates.count {
             select(Int(key - 49))
@@ -211,6 +237,7 @@ final class IFEngine {
         if loaded {
             candidateCount = requestedCount
             appliedPhrases = requestedPhrases
+            updateQualityConfiguration(asciiMode: ascii != 0)
         }
         let restoredCount = hadValue ? api.config_set_int(&config, "menu/page_size", previous)
                                     : api.config_clear(&config, "menu/page_size")
@@ -234,12 +261,15 @@ final class IFEngine {
     func event(_ event: NSEvent) -> Bool {
         let flags = event.modifierFlags
         if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
-            commit()
-            let ascii = Self.api.pointee.get_option(session, "ascii_mode")
-            Self.api.pointee.set_option(session, "ascii_mode", ascii == 0 ? 1 : 0)
-            return true
+            return qualityOperation(.toggle) {
+                commit()
+                let ascii = Self.api.pointee.get_option(session, "ascii_mode")
+                Self.api.pointee.set_option(session, "ascii_mode", ascii == 0 ? 1 : 0)
+                updateQualityConfiguration(asciiMode: ascii == 0)
+                return true
+            }
         }
-        guard flags.intersection([.command, .control, .option]).isEmpty else { return false }
+        guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0)) { false } }
         let key: Int32
         switch event.keyCode {
         case 36, 76: key = 0xff0d
@@ -263,13 +293,20 @@ final class IFEngine {
         return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0)
     }
 
-    func select(_ index: Int) {
-        guard candidateOrder.indices.contains(index) else { return }
-        _ = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index])
-        updateOrdering()
+    func select(_ index: Int, trigger: QualityTrigger = .other, ambiguousText: Bool = false) {
+        _ = qualityOperation(.select(index, trigger, ambiguousText)) {
+            guard candidateOrder.indices.contains(index) else { return false }
+            let handled = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index]) != 0
+            updateOrdering()
+            return handled
+        }
     }
 
     func highlight(_ index: Int) {
+        _ = qualityOperation(.highlight) { performHighlight(index); return true }
+    }
+
+    private func performHighlight(_ index: Int) {
         guard candidateOrder.indices.contains(index) else { return }
         _ = Self.api.pointee.highlight_candidate_on_current_page(session, candidateOrder[index])
         // Highlighting a partial choice can change Rime's preedit and cursor.
@@ -277,14 +314,20 @@ final class IFEngine {
         orderedContent = content(of: rawSnapshot())
     }
 
-    func commit() {
-        _ = Self.api.pointee.commit_composition(session)
-        updateOrdering()
+    func commit(trigger: QualityTrigger = .forceFlush) {
+        _ = qualityOperation(.flush(trigger)) {
+            let handled = Self.api.pointee.commit_composition(session) != 0
+            updateOrdering()
+            return handled
+        }
     }
 
     func clear() {
-        Self.api.pointee.clear_composition(session)
-        updateOrdering()
+        _ = qualityOperation(.clear) {
+            Self.api.pointee.clear_composition(session)
+            updateOrdering()
+            return true
+        }
     }
 
     private func moveHighlight(_ delta: Int, key: Int32) -> Bool {
@@ -326,9 +369,10 @@ final class IFEngine {
         if raw.preedit.isEmpty { precedingText = "" }
     }
 
-    func takeCommit() -> String {
+    func takeCommit(recordQuality: Bool = true) -> String {
         let text = bufferedCommit + readCommit()
         bufferedCommit = ""
+        if recordQuality { qualityRecorder?.commitDrained(text, insertionIssued: false, clientID: nil) }
         return text
     }
 
@@ -351,6 +395,61 @@ final class IFEngine {
         result.candidates = candidateOrder.map { result.candidates[$0] }
         result.highlight = candidateOrder.firstIndex(of: result.highlight) ?? 0
         return result
+    }
+
+    func setQualityPresentation(fontSize: Int, vertical: Bool) {
+        guard qualityFontSize != fontSize || qualityVertical != vertical else { return }
+        qualityFontSize = fontSize
+        qualityVertical = vertical
+        updateQualityConfiguration(asciiMode: Self.api.pointee.get_option(session, "ascii_mode") != 0)
+    }
+
+    private func updateQualityConfiguration(asciiMode: Bool) {
+        let configuration = QualityAppliedConfiguration(candidateCount: candidateCount,
+            customPhrases: appliedPhrases.map { QualityPhrase(id: $0.id.uuidString, code: $0.code, text: $0.text) },
+            asciiMode: asciiMode, fontSize: qualityFontSize, vertical: qualityVertical)
+        if configuration != qualityRevision.configuration {
+            qualityRevision = QualityConfigRevision(configuration: configuration)
+        }
+    }
+
+    private func qualityOperation(_ action: QualityAction, _ body: () -> Bool) -> Bool {
+        guard let qualityRecorder, qualityDepth == 0 else { return body() }
+        qualityDepth += 1
+        defer { qualityDepth -= 1 }
+        qualityRecorder.willMutate(qualitySnapshot(), revision: qualityRevision, action: action)
+        let handled = body()
+        qualityRecorder.didMutate(qualitySnapshot(), handled: handled)
+        return handled
+    }
+
+    /// Read-only C API observation; never reads commit buffers, updates order or changes highlight.
+    func qualitySnapshot() -> QualityPageSnapshot {
+        var context = Self.makeContext()
+        let available = Self.api.pointee.get_context(session, &context) != 0
+        defer { if available { _ = Self.api.pointee.free_context(&context) } }
+        let preedit = Self.string(context.composition.preedit)
+        let offset = Int(context.composition.sel_start)
+        let prefix = offset >= 0 && offset <= preedit.utf8.count ?
+            String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) : nil
+        let page = Int(context.menu.page_no)
+        let size = Int(context.menu.page_size)
+        let count = max(0, Int(context.menu.num_candidates))
+        let order = candidateOrder.count == count ? candidateOrder : Array(0..<count)
+        var candidates: [QualityCandidate] = []
+        if let buffer = context.menu.candidates {
+            candidates = order.enumerated().map { display, native in
+                QualityCandidate(text: Self.string(buffer[native].text), comment: Self.string(buffer[native].comment),
+                    displayIndex: display, displayRank: page * size + display + 1,
+                    nativeIndex: native, nativeRank: page * size + native + 1)
+            }
+        }
+        return QualityPageSnapshot(generation: 0, rawInput: Self.string(Self.api.pointee.get_input(session)),
+            caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix ?? "",
+            precedingContext: precedingText, configurationRevisionID: qualityRevision.id,
+            configuration: qualityRevision.configuration, page: page, pageSize: size, candidates: candidates,
+            highlightedDisplayIndex: order.firstIndex(of: Int(context.menu.highlighted_candidate_index)) ?? 0,
+            selectedPrefixValid: available && prefix != nil)
     }
 
     private func rawSnapshot() -> EngineSnapshot {

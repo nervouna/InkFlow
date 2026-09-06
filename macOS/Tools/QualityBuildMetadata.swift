@@ -11,7 +11,7 @@ struct QualityBuildMetadataTool {
             exit(1)
         }
     }
-    
+
     private static func run() throws {
         guard (3...4).contains(CommandLine.arguments.count) else {
             throw Failure("Usage: quality-build-metadata <repository> <app> [--verify]")

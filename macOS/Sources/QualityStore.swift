@@ -373,11 +373,12 @@ private final class QualityDatabase: @unchecked Sendable {
     private func insert(_ envelope: QualityEnvelope) throws {
         for revision in envelope.revisions { try insertRevision(revision) }
         let composition = envelope.composition
-        try execute("INSERT INTO compositions (id, run_id, started_at, ended_at, app_bundle_id, client_id, outcome, page_history_truncated, dropped_page_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        try execute("INSERT INTO compositions (id, run_id, started_at, ended_at, app_bundle_id, client_id, outcome, page_history_truncated, dropped_page_count, outcome_reason, operations_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [.text(composition.id), .text(runID), .text(QualityJSON.timestamp(composition.startedAt)),
                      .text(QualityJSON.timestamp(composition.endedAt)), .optional(composition.appBundleID),
                      .optional(composition.clientID), .text(composition.outcome.rawValue),
-                     .integer(composition.pageHistoryTruncated ? 1 : 0), .integer(composition.droppedPageCount)])
+                     .integer(composition.pageHistoryTruncated ? 1 : 0), .integer(composition.droppedPageCount),
+                     .optional(composition.outcomeReason), .text(try json(composition.operations))])
         try inject(.afterComposition)
         // Commit parents precede decision children; the composite FK prevents cross-composition links.
         for commit in envelope.commits {
@@ -393,13 +394,15 @@ private final class QualityDatabase: @unchecked Sendable {
                     throw QualityDatabaseError(code: SQLITE_CONSTRAINT)
                 }
             }
-            try execute("INSERT INTO candidate_decisions (id, composition_id, config_revision_id, commit_id, occurred_at, sequence, trigger, outcome, selected_display_index, selected_text, text_kind, snapshot_json, first_page_json, visited_pages_json, page_history_truncated, dropped_page_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            try execute("INSERT INTO candidate_decisions (id, composition_id, config_revision_id, commit_id, occurred_at, sequence, trigger, outcome, selected_display_index, selected_text, text_kind, snapshot_json, first_page_json, visited_pages_json, page_history_truncated, dropped_page_count, operations_json, regular_ranked_selection, matches_custom_phrase, unknown_rank_reason, path_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [.text(decision.id), .text(composition.id), .text(decision.snapshot.configurationRevisionID),
                          .optional(decision.commitID), .text(QualityJSON.timestamp(decision.occurredAt)), .integer(decision.sequence),
                          .text(decision.trigger.rawValue), .text(decision.outcome.rawValue), .optional(decision.selectedDisplayIndex),
                          .optional(decision.selectedText), .text(decision.textKind.rawValue), .text(try json(decision.snapshot)),
                          try decision.firstPage.map { .text(try json($0)) } ?? .null, .text(try json(decision.visitedPages)),
-                         .integer(decision.pageHistoryTruncated ? 1 : 0), .integer(decision.droppedPageCount)])
+                         .integer(decision.pageHistoryTruncated ? 1 : 0), .integer(decision.droppedPageCount),
+                         .text(try json(decision.operations)), .integer(decision.regularRankedSelection ? 1 : 0),
+                         .integer(decision.matchesCustomPhrase ? 1 : 0), .optional(decision.unknownRankReason), .optional(decision.pathReason)])
         }
     }
 
@@ -505,7 +508,8 @@ private final class QualityDatabase: @unchecked Sendable {
             id TEXT PRIMARY KEY NOT NULL, run_id TEXT NOT NULL REFERENCES recording_runs(id),
             started_at TEXT NOT NULL, ended_at TEXT NOT NULL, app_bundle_id TEXT, client_id TEXT,
             outcome TEXT NOT NULL, page_history_truncated INTEGER NOT NULL CHECK(page_history_truncated IN (0,1)),
-            dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0)
+            dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0),
+            outcome_reason TEXT, operations_json TEXT NOT NULL
         )
         """,
         "commits": """
@@ -525,6 +529,10 @@ private final class QualityDatabase: @unchecked Sendable {
             snapshot_json TEXT NOT NULL, first_page_json TEXT, visited_pages_json TEXT NOT NULL,
             page_history_truncated INTEGER NOT NULL CHECK(page_history_truncated IN (0,1)),
             dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0),
+            operations_json TEXT NOT NULL,
+            regular_ranked_selection INTEGER NOT NULL CHECK(regular_ranked_selection IN (0,1)),
+            matches_custom_phrase INTEGER NOT NULL CHECK(matches_custom_phrase IN (0,1)),
+            unknown_rank_reason TEXT, path_reason TEXT,
             UNIQUE(composition_id, sequence),
             FOREIGN KEY(commit_id, composition_id) REFERENCES commits(id, composition_id),
             CHECK(outcome != 'committed' OR commit_id IS NOT NULL)

@@ -5,7 +5,15 @@ let result: Int32 = autoreleasepool {
     let bundle = Bundle.main
     let shared = (bundle.resourcePath! as NSString).appendingPathComponent("Rime")
     let user = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/InkFlow")
-    do { try IFEngine.start(shared: shared, user: user) }
+    let qualityStore = QualityStore(url: URL(fileURLWithPath: user).appendingPathComponent("quality.sqlite3"),
+                                    engineVersion: IFEngine.version)
+    defer {
+        // The run loop has stopped; drain on the worker outside input-method callbacks.
+        let drained = DispatchSemaphore(value: 0)
+        Task.detached { await qualityStore.close(); drained.signal() }
+        drained.wait()
+    }
+    do { try IFEngine.start(shared: shared, user: user, qualityStore: qualityStore) }
     catch {
         NSLog("InkFlow initialization failed: %@", error.localizedDescription)
         return 1

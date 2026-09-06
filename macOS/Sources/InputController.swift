@@ -12,6 +12,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var strings: [String] = []
     private var updating = false
     private var ownsMarkedText = false
+    private var qualityInsertionDepth = 0
+    private var injectedQualityStore: QualityStore?
     private let settings: IFSettings
     private let settingsWindow: IFSettingsWindowController
 
@@ -24,7 +26,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
-          settings: IFSettings, settingsWindow: IFSettingsWindowController) {
+          settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil) {
+        injectedQualityStore = qualityStore
         self.settings = settings
         self.settingsWindow = settingsWindow
         super.init(server: server, delegate: delegate, client: inputClient)
@@ -32,7 +35,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     private func configure(server: IMKServer?) {
-        engine = IFEngine()
+        engine = IFEngine(qualityStore: injectedQualityStore)
         if let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
             let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
@@ -76,6 +79,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         if settings.inputSettingsError != engine?.configurationError {
             settings.inputSettingsError = engine?.configurationError
         }
+        engine?.setQualityPresentation(fontSize: settings.fontSize, vertical: settings.vertical)
         let wasUpdating = updating
         updating = true
         defer { updating = wasUpdating }
@@ -98,11 +102,20 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     func refresh(_ client: IMKTextInput?) {
-        let commit = engine?.takeCommit() ?? ""
+        associateQualityClient(client)
+        let commit = engine?.takeCommit(recordQuality: false) ?? ""
         if !commit.isEmpty {
             // Insertion consumes our mark; never replace the resulting selection with an empty mark.
             ownsMarkedText = false
+            qualityInsertionDepth += 1
+            defer { qualityInsertionDepth -= 1 }
             client?.insertText(commit, replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        // insertText can synchronously reenter IMK with an empty finish callback. Its empty
+        // drain cannot close the outer record, including raw paths with no expected candidate.
+        if !commit.isEmpty || qualityInsertionDepth == 0 {
+            engine?.qualityRecorder?.commitDrained(commit, insertionIssued: !commit.isEmpty && client != nil,
+                                                  clientID: client?.uniqueClientIdentifierString())
         }
         if let engine, !engine.snapshot().preedit.isEmpty {
             engine.setPrecedingText(IFPrecedingText.read(from: client, ownsMarkedText: ownsMarkedText))
@@ -127,6 +140,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             panel.show(kIMKLocateCandidatesBelowHint)
         } else { panel?.hide() }
         updating = false
+        if let engine {
+            engine.qualityRecorder?.presented(engine.qualitySnapshot(), revision: engine.qualityRevision,
+                                              panelShowIssued: panel != nil && !strings.isEmpty)
+        }
+    }
+
+    private func associateQualityClient(_ client: IMKTextInput?) {
+        engine?.qualityRecorder?.associateClient(client.map { $0 as AnyObject },
+            id: client?.uniqueClientIdentifierString(), app: client?.bundleIdentifier())
     }
 
     // InputMethodKit's legacy callbacks are synchronous and main-thread-bound but lack actor annotations.
@@ -135,6 +157,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
             guard let engine, let callbackEvent, callbackEvent.type == .keyDown else { return false }
+            associateQualityClient(callbackClient as? IMKTextInput)
             // A selection/flush must use the order already shown, even if the client
             // stops exposing its document or moves the selection before that event.
             if engine.snapshot().preedit.isEmpty {
@@ -156,7 +179,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         let text = candidate?.string
         MainActor.assumeIsolated {
             guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
-            engine?.select(index)
+            associateQualityClient(client())
+            engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1)
             refresh(client())
         }
     }
@@ -174,6 +198,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
             let activeClient = (callbackClient as? IMKTextInput) ?? client()
+            associateQualityClient(activeClient)
             engine?.commit()
             refresh(activeClient)
             panel?.hide()
