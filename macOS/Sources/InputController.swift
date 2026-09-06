@@ -72,7 +72,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     func applySettings() {
-        engine?.setCandidateCount(settings.candidateCount)
+        engine?.setConfiguration(candidateCount: settings.candidateCount, customPhrases: settings.customPhrases)
+        if settings.inputSettingsError != engine?.configurationError {
+            settings.inputSettingsError = engine?.configurationError
+        }
         let wasUpdating = updating
         updating = true
         defer { updating = wasUpdating }

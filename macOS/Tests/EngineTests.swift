@@ -13,10 +13,115 @@ struct EngineTests {
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
         try runCases()
+        try customPhrases(user: user)
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        try isolated.settings.saveCustomPhrase(code: "dz", text: "重启后的地址")
+        IFEngine.stop()
+        try IFEngine.start(shared: shared, user: user)
+        do {
+            let restored = IFSettings(defaults: isolated.defaults)
+            let engine = IFEngine()!
+            engine.setConfiguration(candidateCount: 5, customPhrases: restored.customPhrases)
+            type(engine, "dz")
+            check(engine.snapshot().candidates.first == "重启后的地址")
+        }
         IFEngine.stop()
         let schemaAfter = try Data(contentsOf: schemaURL)
         check(schemaAfter == schemaBefore)
         print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+    }
+
+    @MainActor static func customPhrases(user: String) throws {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        for phrase in ["地址甲", "地址乙", "地址丙", "地址丁", "地址戊", "地址己", "地址庚", "地址辛", "地址壬", "地址癸", "地址十一", "地址十二"] {
+            try settings.saveCustomPhrase(code: "dz", text: phrase)
+        }
+        try settings.saveCustomPhrase(code: "nihao", text: "您好朋友")
+        try settings.saveCustomPhrase(code: "nihao", text: "你好")
+        try settings.saveCustomPhrase(code: "bq", text: "#标签")
+        try settings.saveCustomPhrase(code: "zw", text: "# no comment")
+        let a = IFEngine()!, b = IFEngine()!
+        a.setConfiguration(candidateCount: 3, customPhrases: settings.customPhrases)
+        b.setConfiguration(candidateCount: 3, customPhrases: settings.customPhrases)
+        check(a.configurationError == nil)
+        for phrase in settings.customPhrases.suffix(2) {
+            type(a, phrase.code)
+            check(a.snapshot().candidates.first == phrase.text)
+            check(a.snapshot().candidates.filter { $0 == phrase.text }.count == 1)
+            a.clear()
+        }
+        type(a, "nihao")
+        check(a.snapshot().candidates.prefix(2) == ["您好朋友", "你好"], "Custom phrases precede ordinary candidates")
+        check(a.snapshot().candidates.filter { $0 == "你好" }.count == 1)
+        a.clear()
+        type(a, "d"); check(!a.snapshot().candidates.contains("地址甲")); a.clear()
+        type(a, "dza"); check(!a.snapshot().candidates.contains("地址甲")); a.clear()
+        type(a, "dz")
+        check(a.snapshot().candidates == ["地址甲", "地址乙", "地址丙"])
+        a.key(0xff56)
+        check(a.snapshot().page == 1 && a.snapshot().candidates == ["地址丁", "地址戊", "地址己"])
+        a.key(50); check(a.takeCommit() == "地址戊")
+        let shiPhrases = settings.customPhrases.prefix(12).map { CustomPhrase(id: $0.id, code: "shi", text: $0.text) }
+        a.setConfiguration(candidateCount: 3, customPhrases: shiPhrases)
+        type(b, "shi"); let ordinary = b.snapshot().candidates; b.clear()
+        type(a, "shi")
+        for _ in 0..<4 { a.key(0xff56) }
+        check(!ordinary.isEmpty && a.snapshot().candidates == ordinary, "Ordinary candidates must remain after all custom phrases")
+        a.clear()
+        a.setConfiguration(candidateCount: 3, customPhrases: settings.customPhrases)
+        type(a, "dz"); a.select(1); check(a.takeCommit() == "地址乙")
+        a.setConfiguration(candidateCount: 9, customPhrases: settings.customPhrases)
+        type(a, "dz"); check(a.snapshot().candidates.count == 9)
+        a.key(57); check(a.takeCommit() == "地址壬")
+        type(a, "dz"); let old = a.snapshot()
+        let changed = try settings.saveCustomPhrase(id: settings.customPhrases[0].id, code: "dz", text: "更新地址")
+        a.setConfiguration(candidateCount: 5, customPhrases: settings.customPhrases)
+        a.setConfiguration(candidateCount: 3, customPhrases: [changed])
+        check(a.snapshot() == old && a.takeCommit().isEmpty && a.candidateCount == 9)
+        a.key(32)
+        // Applying settings between a completed composition and draining its commit must not lose text.
+        a.setConfiguration(candidateCount: 3, customPhrases: [changed])
+        check(a.takeCommit() == "地址甲")
+        type(a, "dz"); check(a.snapshot().candidates.first == "更新地址" && a.candidateCount == 3)
+        a.clear(); type(b, "dz"); check(b.snapshot().candidates.first == "地址甲")
+        do {
+            let fresh = IFEngine()!
+            fresh.setConfiguration(candidateCount: 3, customPhrases: [changed])
+            type(fresh, "dz"); check(fresh.snapshot().candidates.first == "更新地址")
+        }
+        let toggle = keyEvent(49, " ", [.control, .shift])
+        check(a.event(toggle))
+        a.setConfiguration(candidateCount: 9, customPhrases: [])
+        check(!a.key(97), "Schema reload must preserve ASCII mode")
+        check(a.event(toggle))
+        type(a, "dz")
+        check(!a.snapshot().candidates.contains("更新地址") && !a.snapshot().candidates.contains("地址戊"))
+        a.clear()
+        a.setConfiguration(candidateCount: 9, customPhrases: settings.customPhrases)
+        type(a, "dz"); a.key(32); check(a.takeCommit() == "更新地址")
+        a.setConfiguration(candidateCount: 9, customPhrases: [])
+        type(a, "dz"); check(!a.snapshot().candidates.contains("更新地址"), "Deleted selected phrases must not be learned into Pinyin")
+        a.clear()
+        let invalid = CustomPhrase(id: UUID(), code: "x\ty", text: "invalid")
+        a.setConfiguration(candidateCount: 5, customPhrases: [invalid])
+        check(a.configurationError != nil)
+        a.setConfiguration(candidateCount: 5, customPhrases: [])
+        check(a.configurationError == nil)
+        let permissions = try FileManager.default.attributesOfItem(atPath: user)[.posixPermissions]!
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: user)
+        a.setConfiguration(candidateCount: 3, customPhrases: [changed])
+        let writeFailed = a.configurationError != nil && a.candidateCount == 5
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user)
+        check(writeFailed, "An unwritable dictionary directory must surface failure and retain the old configuration")
+        a.setConfiguration(candidateCount: 3, customPhrases: [changed])
+        check(a.configurationError == nil)
+        type(a, "dz"); check(a.snapshot().candidates.first == changed.text); a.clear()
+        let leftovers = try FileManager.default.contentsOfDirectory(atPath: user).filter { $0.hasPrefix("inkflow_phrases_") }
+        check(leftovers.isEmpty, "Temporary dictionaries must be removed after synchronous load")
+        print("PASS custom phrase engine: exact match, priority/coexistence, Unicode/hash text, dedup, native pagination/digits/click, coalesced idle reload, pending commits, ASCII, existing/fresh sessions, removal after selection, write failure/retry, TSV cleanup")
     }
 
     @MainActor static func runCases() throws {

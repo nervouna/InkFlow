@@ -13,9 +13,15 @@ struct EngineSnapshot: Equatable {
 final class IFEngine {
     private static let api = rime_get_api()!
     private static var ready = false
+    private static var userDirectory = ""
     private var session: RimeSessionId = 0
     private(set) var candidateCount = 5
     private var requestedCount = 5
+    private var requestedPhrases: [CustomPhrase] = []
+    private var appliedPhrases: [CustomPhrase] = []
+    private var bufferedCommit = ""
+    private var temporaryDictionary: URL?
+    private(set) var configurationError: String?
 
     static var version: String { string(api.pointee.get_version()) }
 
@@ -68,6 +74,7 @@ final class IFEngine {
             throw NSError(domain: "io.damao.inputmethod.inkflow", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: "无法载入拼音方案，请重新构建并安装 InkFlow。"])
         }
+        userDirectory = user
     }
 
     static func stop() {
@@ -91,35 +98,105 @@ final class IFEngine {
 
     @discardableResult
     func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
-        applyCandidateCountIfIdle()
+        applyConfigurationIfIdle()
         return Self.api.pointee.process_key(session, key, modifiers) != 0
     }
 
     func setCandidateCount(_ count: Int) {
-        requestedCount = (3...9).contains(count) ? count : 5
-        applyCandidateCountIfIdle()
+        setConfiguration(candidateCount: count, customPhrases: requestedPhrases)
     }
 
-    private func applyCandidateCountIfIdle() {
-        guard candidateCount != requestedCount, snapshot().preedit.isEmpty else { return }
-        // Temporarily patch the shared in-memory config while creating this session's schema.
-        // Restore it without writing/deploying or reloading a composing session.
+    func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase]) {
+        do { try CustomPhrase.validate(customPhrases) }
+        catch { reportConfigurationError(error.localizedDescription); return }
+        requestedCount = (3...9).contains(candidateCount) ? candidateCount : 5
+        requestedPhrases = customPhrases
+        applyConfigurationIfIdle()
+    }
+
+    private func applyConfigurationIfIdle() {
+        // Retain a failed cleanup for retry instead of silently leaving phrase text on disk.
+        guard removeTemporaryDictionary() else { return }
+        guard candidateCount != requestedCount || appliedPhrases != requestedPhrases else {
+            configurationError = nil
+            return
+        }
+        guard snapshot().preedit.isEmpty else { return }
+        // StableDb caches loaded data by name. A fresh name lets old composing sessions retain
+        // their snapshot while this idle session synchronously loads the new phrases.
+        let name = "inkflow_phrases_" + UUID().uuidString
+        let file = URL(fileURLWithPath: Self.userDirectory).appendingPathComponent(name + ".txt")
+        // librime's TSV parser otherwise treats phrases beginning with '#' as comments.
+        let tsv = "# no comment\n" + requestedPhrases.enumerated().map { index, phrase in
+            "\(phrase.text)\t\(phrase.code)\t\(requestedPhrases.count - index)\n"
+        }.joined()
+        temporaryDictionary = file
+        defer { _ = removeTemporaryDictionary() }
+        guard FileManager.default.createFile(atPath: file.path, contents: Data(tsv.utf8),
+                                              attributes: [.posixPermissions: 0o600]) else {
+            reportConfigurationError("无法载入自定义短语，请检查墨流数据目录的可用空间和写入权限。")
+            return
+        }
+        do {
+            try recreateSchema(dictionary: name)
+            configurationError = nil
+        }
+        catch { reportConfigurationError(error.localizedDescription) }
+    }
+
+    private func removeTemporaryDictionary() -> Bool {
+        guard let temporaryDictionary else { return true }
+        do {
+            try FileManager.default.removeItem(at: temporaryDictionary)
+            self.temporaryDictionary = nil
+            return true
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            self.temporaryDictionary = nil
+            return true
+        } catch {
+            reportConfigurationError("临时短语文件清理失败，请检查墨流数据目录的写入权限。")
+            return false
+        }
+    }
+
+    private func recreateSchema(dictionary: String) throws {
+        // Both values belong to one session snapshot. Patch and restore the shared in-memory
+        // config on the main actor; never save/deploy it or replace Rime's learned dictionary.
         let api = Self.api.pointee
         var config = RimeConfig()
         guard api.schema_open("inkflow_pinyin", &config) != 0 else {
-            NSLog("Cannot open candidate configuration")
-            return
+            throw CustomPhraseError("无法打开输入方案，设置尚未应用。")
         }
         var previous: Int32 = 5
         let hadValue = api.config_get_int(&config, "menu/page_size", &previous) != 0
+        let previousDictionary = api.config_get_cstring(&config, "custom_phrase/user_dict").map(String.init(cString:))
         let ascii = api.get_option(session, "ascii_mode")
         let changed = api.config_set_int(&config, "menu/page_size", Int32(requestedCount)) != 0
-        if changed && api.select_schema(session, "inkflow_pinyin") != 0 { candidateCount = requestedCount }
-        else { NSLog("Cannot apply candidate count") }
-        if hadValue { _ = api.config_set_int(&config, "menu/page_size", previous) }
-        else { _ = api.config_clear(&config, "menu/page_size") }
-        _ = api.config_close(&config)
+        let patched = dictionary.withCString { api.config_set_string(&config, "custom_phrase/user_dict", $0) != 0 }
+        // select_schema resets the commit buffer as well as the schema. Preserve completed text
+        // even if settings arrive before the controller has drained the previous key's commit.
+        bufferedCommit += readCommit()
+        let loaded = changed && patched && api.select_schema(session, "inkflow_pinyin") != 0
+        if loaded {
+            candidateCount = requestedCount
+            appliedPhrases = requestedPhrases
+        }
+        let restoredCount = hadValue ? api.config_set_int(&config, "menu/page_size", previous)
+                                    : api.config_clear(&config, "menu/page_size")
+        let restoredDictionary = previousDictionary.map { value in
+            value.withCString { api.config_set_string(&config, "custom_phrase/user_dict", $0) }
+        } ?? api.config_clear(&config, "custom_phrase/user_dict")
+        let closed = api.config_close(&config)
         api.set_option(session, "ascii_mode", ascii)
+        guard restoredCount != 0, restoredDictionary != 0, closed != 0 else {
+            throw CustomPhraseError("恢复临时输入方案配置失败，请重启墨流后重试。")
+        }
+        guard loaded else { throw CustomPhraseError("无法应用输入设置，请重启墨流后重试。") }
+    }
+
+    private func reportConfigurationError(_ message: String) {
+        if configurationError != message { NSLog("InkFlow input settings: %@", message) }
+        configurationError = message
     }
 
     @discardableResult
@@ -160,6 +237,12 @@ final class IFEngine {
     func clear() { Self.api.pointee.clear_composition(session) }
 
     func takeCommit() -> String {
+        let text = bufferedCommit + readCommit()
+        bufferedCommit = ""
+        return text
+    }
+
+    private func readCommit() -> String {
         var commit = RimeCommit()
         commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout.size(ofValue: commit.data_size))
         guard Self.api.pointee.get_commit(session, &commit) != 0 else { return "" }
