@@ -18,9 +18,9 @@ function M.func(input, segment, env)
     -- only Chinese entries and literal alphabetic English entries.
     if candidate.text:find("[A-Za-z]")
         and candidate.text:find("[\128-\255]") then
-      -- Prefer the decoder's mixed sentence to an auto-assembled Pinyin sentence
-      -- (quality 0), while normal Chinese dictionary phrases keep their priority.
-      candidate.quality = 0.5
+      -- Native Chinese wins when it covers the same input. A complete mixed
+      -- sentence can still lead a shorter Chinese translation via Rime's span order.
+      candidate.quality = -0.5
       yield(candidate)
     end
   end

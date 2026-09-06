@@ -8,20 +8,21 @@ cp schemas/lua/*.lua "$destination/lua/"
 cp build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml "$destination/"
 cp build/deps/rime-easy-en-*/easy_en.dict.yaml "$destination/"
 # Keep the upstream standalone lexicon intact. The derived mixed lexicon uses
-# literal words only: pronunciation aliases (Ni -> ni) must not replace Pinyin.
+# common literal words only: aliases and tiny/unknown words are poor evidence
+# for switching languages inside an unfinished Pinyin composition.
 LC_ALL=C awk '
 BEGIN {
   FS=OFS="\t"
   print "# Generated from rime-easy-en (LGPL-3.0); see bundled Licenses."
   print "# Original pinyin_simp remains an independent translator/user dictionary."
-  print "---\nname: inkflow_mixed\nversion: '\''1.0'\''\nsort: by_weight"
+  print "---\nname: inkflow_mixed\nversion: '\''1.1'\''\nsort: by_weight"
   print "use_preset_vocabulary: false\nimport_tables: [pinyin_simp]\n..."
 }
-$1 == $2 && $1 ~ /^[A-Za-z][A-Za-z]+$/ {
+$1 == $2 && $1 ~ /^[A-Za-z]+$/ && length($1) >= 4 {
+  if ($3 < 990000 && $1 !~ /^[Ee]mails?$/) next
   weight=int($3/100)
-  if (weight < 1) weight=1
   # Easy English assigns zero to this common word and its regular plural.
-  # Correct only mixed decoding; a blanket floor promotes rare words like fale.
+  # Correct only mixed admission/decoding; do not admit all zero-weight entries.
   if ($1 ~ /^[Ee]mails?$/) weight=9900
   print $1,$2,weight
 }' "$destination/easy_en.dict.yaml" > "$destination/inkflow_mixed.dict.yaml"

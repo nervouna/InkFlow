@@ -36,9 +36,9 @@ function M.func(input, segment, env)
   end
   for _, entry in ipairs(env.entries) do
     local candidate = Candidate("english", segment.start, segment._end, entry.text, "")
-    -- Preserve Chinese priority at equal input coverage. Ordering within this
-    -- translation is the source-weight order above, without an exact-match bonus.
-    candidate.quality = math.exp(entry.weight)
+    -- Native Chinese wins equal input coverage, including an unfinished final
+    -- syllable. This entire stream still keeps its source-frequency order.
+    candidate.quality = -1
     yield(candidate)
   end
 end

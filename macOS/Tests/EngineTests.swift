@@ -13,6 +13,7 @@ struct EngineTests {
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
+        conservativeChinesePrefixes()
         mixedEnglishCandidates()
         englishCandidates()
         try runCases()
@@ -24,6 +25,48 @@ struct EngineTests {
         check(!files.contains("inkflow_mixed.userdb") && !files.contains("easy_en.userdb"),
               "Supplemental translators must not create replacement user dictionaries")
         print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+    }
+
+    @MainActor static func conservativeChinesePrefixes() {
+        let engine = IFEngine()!
+        var failures = 0
+        var steps = 0
+        let start = Date()
+        func record(_ input: String, _ direction: String) {
+            let candidates = engine.snapshot().candidates
+            let first = candidates.first ?? ""
+            let containsASCII = first.unicodeScalars.contains {
+                (65...90).contains($0.value) || (97...122).contains($0.value)
+            }
+            let valid = !first.isEmpty && !containsASCII && (input != "d" || first == "的")
+            print("TRACE Chinese \(direction) \(input) => \(first)\(valid ? "" : " [FAIL]")")
+            if !valid { failures += 1 }
+            steps += 1
+        }
+        for input in ["d", "niyebuxiangnid", "womenshenzh", "niyebuxiangnidepengyoushangxin",
+                      "womenshenzhikeyizuodegenghao", "niruguoxiangyaozhefenwenjian",
+                      "woxiangyaoxuexizhongwen", "jintiantianqihenhao", "womenyihuiquchifan",
+                      "woxiangyaoyifenwancan", "xianzaiwoyaohuijiale",
+                      "niyebuxiangnidepengyouzhidaoba", "womenshenzhimeiyoukaishixingdong",
+                      "jintianwoyaohuijiashuijiao", "xianzaiwoyaofayifengyoujian",
+                      "wozhebianyougewenjian", "mingtiankeyima", "wozaibeijinggongzuo",
+                      "tamenkeyilaile", "ganshenme", "womanmanlai"] {
+            var prefix = ""
+            for letter in input {
+                prefix.append(letter)
+                type(engine, String(letter))
+                record(prefix, "type")
+            }
+            while !prefix.isEmpty {
+                engine.key(0xff08)
+                prefix.removeLast()
+                if !prefix.isEmpty { record(prefix, "backspace") }
+            }
+            check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+        }
+        print("TRACE Chinese prefix summary: \(steps) steps, \(failures) failures, \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+        check(failures == 0, "Chinese partial input must stay ahead of English")
+        print("PASS conservative Chinese: short keys, incomplete syllables, all prefixes and backspaces")
     }
 
     @MainActor static func missingEnglishResources(shared: String, user: String) throws {
@@ -46,7 +89,6 @@ struct EngineTests {
             ("niruguoxiangyaozhefenoffer", "你如果想要这份offer"),
             ("niruguoxiangyaozhefenofferkeyihuifuwo", "你如果想要这份offer可以回复我"),
             ("offerhenhao", "offer很好"),
-            ("wofaleemail", "我发了email"),
             ("wofaleemails", "我发了emails"),
             ("wofaleEmail", "我发了Email"),
             ("womenquoffice", "我们去office"),
@@ -58,6 +100,14 @@ struct EngineTests {
             engine.key(32)
             check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty)
         }
+        type(engine, "wofaleemail")
+        let mixedCollision = engine.snapshot().candidates
+        check(mixedCollision.first == "我发了额买了", "Complete Chinese coverage leads mixed English")
+        guard let emailIndex = mixedCollision.firstIndex(of: "我发了email") else {
+            check(false, "Keep colliding mixed email selectable: \(mixedCollision)"); return
+        }
+        engine.select(emailIndex)
+        check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
         for (input, expected) in [("compute", "computer"), ("comm", "community")] {
             type(engine, input)
             let candidates = engine.snapshot().candidates
@@ -87,9 +137,32 @@ struct EngineTests {
         check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         for input in ["Hello", "email"] {
             type(engine, input)
-            check(engine.snapshot().candidates.first == input, "Prefer an exact case match on equal source weights")
+            let english = engine.snapshot().candidates.filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+            check(english.first == input, "Prefer an exact case match among English with equal source weights")
             engine.clear()
         }
+        for input in ["can", "you", "man", "tame", "woman", "time", "name", "line", "email"] {
+            type(engine, input)
+            check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+                  "Chinese leads ambiguous English \(input)")
+            var selected = false
+            for _ in 0..<100 {
+                let snapshot = engine.snapshot()
+                if let index = snapshot.candidates.firstIndex(of: input) {
+                    engine.select(index)
+                    check(engine.takeCommit() == input && engine.snapshot().preedit.isEmpty)
+                    print("TRACE ambiguous English \(input) selected on page \(snapshot.page)")
+                    selected = true
+                    break
+                }
+                engine.key(0xff56)
+                if engine.snapshot().page == snapshot.page { break }
+            }
+            check(selected, "Keep ambiguous English reachable: \(input)")
+        }
+        type(engine, "D")
+        check(engine.snapshot().candidates.first == "D", "Keep intentional uppercase letter input")
+        engine.clear()
         print("PASS mixed English: initial/internal/final words, adjacent boundaries, source-frequency completion ranking, exact retention, deduplication, edit/select")
     }
 
@@ -140,6 +213,29 @@ struct EngineTests {
 
     @MainActor static func englishCandidates() {
         let engine = IFEngine()!
+        var missingLetters: [String] = []
+        for (input, expected) in [("a", "a"), ("i", "I")] {
+            type(engine, input)
+            var selected = false
+            for _ in 0..<100 {
+                let snapshot = engine.snapshot()
+                if let index = snapshot.candidates.firstIndex(of: expected) {
+                    engine.select(index)
+                    check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty)
+                    print("TRACE single-letter English \(input) -> \(expected) selected on page \(snapshot.page)")
+                    selected = true
+                    break
+                }
+                engine.key(0xff56)
+                if engine.snapshot().page == snapshot.page { break }
+            }
+            if !selected {
+                print("FAIL single-letter English \(input) -> \(expected) is missing")
+                missingLetters.append(input)
+            }
+            engine.clear()
+        }
+        check(missingLetters.isEmpty, "Keep single-letter English reachable: \(missingLetters)")
         for word in ["hello", "apple", "computer", "world", "email", "file", "code", "update", "Hello", "Apple"] {
             type(engine, word)
             let candidates = engine.snapshot().candidates

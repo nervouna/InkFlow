@@ -1,5 +1,15 @@
 # Debugging index
 
+## English steals unfinished Pinyin candidates
+
+**Symptoms:** `d` prefers the alias `D`; partial Chinese such as `niyebuxiangnid` or `womenshenzh` yields ASCII tails. Checking only fully typed sentences misses this regression.
+
+**Cause:** Easy English contains many unweighted abbreviations and aliases. Admitting all literal entries into the mixed dictionary lets them consume unfinished Pinyin. A fixed mixed quality boost then overrides better Chinese sentences. Standalone English completions can similarly outrank a Chinese sentence whose native quality is zero. Rime compares covered input length before quality, so a global quality reduction alone is insufficient.
+
+**Fix:** Keep automatic mixed admission narrower than the standalone dictionary and put both supplemental streams below native Chinese at equal input coverage. This includes Chinese candidates interpreting an unfinished final syllable. Thus `email` can follow `额买了`, while the English candidate remains selectable. Single-letter English remains available through exact lookup; ranking keeps `d` → 的 first without deleting `a` or `i` → `I`. The original Chinese translator and learned dictionary stay intact. See `DEPENDENCIES.md` for the reproducible admission threshold and coverage rule.
+
+**Regression:** `bash macOS/scripts/test.sh` prints every forward/backspace state for representative Chinese input, then verifies mixed composition and English selection/ranking. The baseline had 143 ASCII-first failures over the initial 415 states. Also run `bash macOS/scripts/check-bundle.sh` against a freshly built app to verify the same Lua modules and dictionaries are packaged. Actual user typing remains a separate acceptance step.
+
 ## Minimum width for the vertical candidate panel
 
 Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.
