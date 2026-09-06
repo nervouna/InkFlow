@@ -13,6 +13,7 @@ struct EngineTests {
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
+        spellingCorrection()
         try runCases()
         IFEngine.stop()
         let schemaAfter = try Data(contentsOf: schemaURL)
@@ -39,6 +40,56 @@ struct EngineTests {
             } catch { check((error as NSError).code == 2) }
             try files.createSymbolicLink(at: link, withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))
         }
+    }
+
+    @MainActor static func spellingCorrection() {
+        let cases = [("hzidao", "知道"), ("nnihao", "你好"), ("hcuqu", "出去"),
+                     ("hsuru", "输入"), ("ppinyin", "拼音"), ("nnihhao", "你好"),
+                     ("zhognguo", "中国"), ("beijign", "北京"), ("nihoa", "你好"),
+                     ("tainqi", "天气"), ("xaingxin", "相信"), ("xaiwu", "下午")]
+        for (input, expected) in cases {
+            let engine = IFEngine()!
+            type(engine, input)
+            let state = engine.snapshot()
+            check(state.candidates.first == expected, "\(input): \(state)")
+            check(engine.takeCommit().isEmpty, "Correction must stay in composition")
+            check(state.preedit.replacingOccurrences(of: " ", with: "") == input)
+            check(state.cursor == state.preedit.utf16.count)
+            check(engine.key(32))
+            check(engine.takeCommit() == expected)
+            check(engine.snapshot().preedit.isEmpty)
+        }
+        for (input, expected) in [("nihao", "你好"), ("zhidao", "知道"), ("shanghai", "上海"),
+                                  ("jinnian", "今年"), ("nannv", "男女"), ("tiananmen", "天安门"),
+                                  ("xi'an", "西安")] {
+            let engine = IFEngine()!
+            type(engine, input)
+            check(engine.snapshot().candidates.first == expected, "Normal spelling \(input): \(engine.snapshot())")
+            engine.clear()
+        }
+        let engine = IFEngine()!
+        type(engine, "nnihao")
+        check(engine.event(keyEvent(51, "")))
+        check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nniha")
+        type(engine, "o")
+        check(engine.snapshot().candidates.first == "你好")
+        check(engine.event(keyEvent(115, ""))) // Home, then remove the extra initial.
+        check(engine.snapshot().cursor == 0)
+        check(engine.event(keyEvent(117, "")))
+        check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nihao")
+        check(engine.snapshot().candidates.first == "你好")
+        check(engine.event(keyEvent(119, "")))
+        check(engine.snapshot().cursor == engine.snapshot().preedit.utf16.count)
+        check(engine.event(keyEvent(53, "")))
+        check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+        type(engine, "hzidao")
+        engine.select(0)
+        check(engine.takeCommit() == "知道" && engine.snapshot().preedit.isEmpty)
+        let toggle = keyEvent(49, " ", [.control, .shift])
+        check(engine.event(toggle))
+        for code in "nnihao".utf16 { check(!engine.key(Int32(code))) }
+        check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
+        print("PASS spelling correction: 12 typo phrases, normal spelling/boundaries, editable preedit, selection, cancel, ASCII passthrough")
     }
 
     @MainActor static func runCases() throws {

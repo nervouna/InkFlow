@@ -101,5 +101,18 @@ struct ControllerTests {
             check(selected, "Controller must expose \(emoji)")
         }
         print("PASS controller emoji: candidate bridge, paging, variation selector / flag / ZWJ sequences inserted once, composition cleared")
+
+        for (input, expected) in [("hzidao", "知道"), ("nnihao", "你好")] {
+            client.mutations.removeAll()
+            for letter in input { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+            check(client.mutations.allSatisfy { $0.hasPrefix("mark:") }, "Typing must only update marked text")
+            check((controller.candidates(nil) as? [String])?.first == expected)
+            client.mutations.removeAll()
+            check(controller.handle(keyEvent(18, "1"), client: client))
+            check(client.mutations == ["insert:\(expected)"])
+            controller.commitComposition(client)
+            check(client.mutations == ["insert:\(expected)"])
+        }
+        print("PASS controller spelling correction: preedit-only updates, corrected candidates, single digit-key commit")
     }
 }
