@@ -55,6 +55,24 @@ int main(int argc, const char **argv) { @autoreleasepool {
     CHECK([client.mutations isEqual:@[@"insert:你好"]]);
     [controller commitComposition:client]; [controller deactivateServer:client];
     CHECK([client.mutations isEqual:@[@"insert:你好"]]);
+
+    [client.mutations removeAllObjects];
+    for (NSUInteger i=0;i<4;i++) CHECK([controller handleEvent:key(39,@"\"",NSEventModifierFlagShift) client:client]);
+    NSArray *quotes=@[@"insert:“",@"insert:”",@"insert:“",@"insert:”"];
+    CHECK([client.mutations isEqual:quotes]);
+    [controller commitComposition:client]; [controller deactivateServer:client];
+    CHECK([client.mutations isEqual:quotes]);
+
+    NSArray *punctuation=@[@[@39,@"\"",@"“"],@[@33,@"{",@"「"],@[@30,@"}",@"」"],@[@22,@"^",@"……"],@[@27,@"_",@"——"]];
+    for (NSArray *entry in punctuation) {
+        for (NSString *letter in @[@"n",@"i",@"h",@"a",@"o"]) CHECK([controller handleEvent:key(0,letter,0) client:client]);
+        [client.mutations removeAllObjects];
+        CHECK([controller handleEvent:key([entry[0] unsignedShortValue],entry[1],NSEventModifierFlagShift) client:client]);
+        NSArray *expected=@[[NSString stringWithFormat:@"insert:你好%@",entry[2]]];
+        CHECK([client.mutations isEqual:expected]);
+        [controller commitComposition:client]; [controller deactivateServer:client];
+        CHECK([client.mutations isEqual:expected]);
+    }
     controller=nil; [IFEngine stop]; cleanupSettings();
-    puts("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement");
+    puts("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement, consecutive quotes and shifted punctuation");
 } return 0; }
