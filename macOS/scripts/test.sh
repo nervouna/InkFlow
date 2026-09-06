@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 macOS/scripts/dependencies.sh
 bash macOS/scripts/test-prepare-rime.sh
+bash macOS/scripts/test-dictionary-generator.sh
 bash macOS/scripts/prepare-rime.sh build/test-shared
 source macOS/scripts/swift-common.sh
 build_swift_test build/deployment-tests macOS/Tests/DeploymentTests.swift

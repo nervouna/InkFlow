@@ -1,0 +1,27 @@
+InkFlow Chinese dictionary sources and modifications
+
+Rime Frost (白霜拼音), gaboolic and contributors, GPL-3.0:
+https://github.com/gaboolic/rime-frost
+Files: cn_dicts/8105.dict.yaml, cn_dicts/base.dict.yaml,
+cn_dicts/ext.dict.yaml, cn_dicts_cell/idiom.dict.yaml.
+See rime-frost.txt for the license.
+
+Rime Ice (雾凇拼音), iDvel and contributors, GPL-3.0:
+https://github.com/iDvel/rime-ice
+Files: cn_dicts/base.dict.yaml, cn_dicts/ext.dict.yaml.
+See rime-ice.txt for the license.
+
+Rime pinyin_simp, Rime contributors; derived from Android PinyinIME,
+Apache-2.0: https://github.com/rime/rime-pinyin-simp
+See pinyin-simp.txt for the license.
+
+InkFlow modifications: normalize explicitly supplied Pinyin whitespace, case and
+ü/v; merge term/reading pairs in source priority; retain Frost weights; calibrate
+new Ice and legacy entries to positive-weight Frost overlaps; apply reviewed
+local corrections. No pronunciation generation or simplified/traditional conversion.
+
+The bundled dictionary-manifest.json records exact commits, files (by catalog
+identifier), source checksums, generation recipe and applied calibration. The
+pinned legacy compatibility input is included as legacy-pinyin-simp.dict.yaml.
+Source generation code is in macOS/Sources/DictionaryGenerator.swift and the
+pinned source catalog is in macOS/Sources/DictionaryModels.swift.

@@ -1,6 +1,7 @@
 #!/bin/bash
 # Sourced from scripts that have already changed to the repository root.
-swift_sources=(macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
+dictionary_sources=(macOS/Sources/DictionaryModels.swift macOS/Sources/DictionaryGenerator.swift)
+swift_sources=("${dictionary_sources[@]}" macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
 
 build_swift() {
   local output="$1"

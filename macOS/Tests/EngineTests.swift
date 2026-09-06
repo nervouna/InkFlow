@@ -14,6 +14,7 @@ struct EngineTests {
         try IFEngine.start(shared: shared, user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
+        chineseDictionaryCoverage()
         englishAdmission()
         conservativeChinesePrefixes()
         mixedEnglishCandidates()
@@ -44,6 +45,18 @@ struct EngineTests {
         check(!files.contains("inkflow_mixed.userdb") && !files.contains("easy_en.userdb"),
               "Supplemental translators must not create replacement user dictionaries")
         print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+    }
+
+    @MainActor static func chineseDictionaryCoverage() {
+        let engine = IFEngine()!
+        for (input, expected) in [("xiehouyu", "歇后语"), ("suranqijing", "肃然起敬"),
+                                  ("chuangqianmingyueguang", "床前明月光"), ("chunmianbujuexiao", "春眠不觉晓")] {
+            type(engine, input)
+            check(engine.snapshot().candidates.first == expected,
+                  "Default Chinese dictionary \(input): \(engine.snapshot().candidates)")
+            engine.key(0xff1b)
+        }
+        print("PASS expanded Chinese dictionary: default first candidates for common term, idiom and poems")
     }
 
     @MainActor static func conservativeChinesePrefixes() {
@@ -309,7 +322,7 @@ struct EngineTests {
     @MainActor static func spellingCorrection() {
         let cases = [("hzidao", "知道"), ("nnihao", "你好"), ("hcuqu", "出去"),
                      ("hsuru", "输入"), ("ppinyin", "拼音"), ("nnihhao", "你好"),
-                     ("zhognguo", "中国"), ("beijign", "北京"), ("nihoa", "你好"),
+                     ("zhognguo", "中国"), ("beijign", "背景"), ("nihoa", "你好"),
                      ("tainqi", "天气"), ("xaingxin", "相信"), ("xaiwu", "下午")]
         for (input, expected) in cases {
             let engine = IFEngine()!
@@ -323,12 +336,38 @@ struct EngineTests {
             check(engine.takeCommit() == expected)
             check(engine.snapshot().preedit.isEmpty)
         }
-        for (input, expected) in [("nihao", "你好"), ("zhidao", "知道"), ("shanghai", "上海"),
+        // Frost's measured homophone order prefers 背景 for both beijing and its
+        // tolerated transposition; 北京 remains directly selectable.
+        let normalCity = IFEngine()!
+        type(normalCity, "beijing")
+        let normalCandidates = normalCity.snapshot().candidates
+        check(normalCandidates.first == "背景", "Pinned Frost homophone ranking: \(normalCandidates)")
+        normalCity.clear()
+        let city = IFEngine()!
+        type(city, "beijign")
+        let typoCandidates = city.snapshot().candidates
+        check(typoCandidates.first == normalCandidates.first, "Typo alias preserves ordinary homophone ranking")
+        print("TRACE homophone correction: beijing=\(normalCandidates), beijign=\(typoCandidates)")
+        guard let cityIndex = typoCandidates.firstIndex(of: "北京") else {
+            check(false, "Keep 北京 reachable after final transposition"); return
+        }
+        city.select(cityIndex)
+        check(city.takeCommit() == "北京")
+        for (input, expected) in [("nihao", "你好"), ("zhidao", "知道"), ("shanghai", "伤害"),
                                   ("jinnian", "今年"), ("nannv", "男女"), ("tiananmen", "天安门"),
                                   ("xi'an", "西安")] {
             let engine = IFEngine()!
             type(engine, input)
             check(engine.snapshot().candidates.first == expected, "Normal spelling \(input): \(engine.snapshot())")
+            if input == "shanghai" {
+                let candidates = engine.snapshot().candidates
+                print("TRACE homophone shanghai: \(candidates)")
+                guard let index = candidates.firstIndex(of: "上海") else {
+                    check(false, "Keep 上海 reachable in ordinary homophone candidates"); return
+                }
+                engine.select(index)
+                check(engine.takeCommit() == "上海")
+            }
             engine.clear()
         }
         let engine = IFEngine()!
