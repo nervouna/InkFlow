@@ -22,12 +22,17 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
     private var suggestionPanel: AISuggestionPanel?
     private var smartSuggestions: AISuggestionCoordinator?
+    private let smartDiagnosticSession = UUID()
+    private var smartGateReason: AIDiagnosticReason?
 
     private func configureSmartSuggestions() {
         smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
+            diagnosticSession: smartDiagnosticSession,
             current: { [weak self] in self?.smartState() },
             context: { [weak self] anchor in
-                guard let client = self?.smartClient else { return nil }
+                guard let client = self?.smartClient else {
+                    AIDiagnostics.emit(.contextRejected, reason: .missingClient); return nil
+                }
                 return AISurroundingContext.read(client, anchor: anchor)
             }, present: { [weak self] text in self?.presentSuggestion(text) ?? false },
             visible: { [weak self] in self?.suggestionPanel?.isVisible ?? false },
@@ -84,7 +89,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     isolated deinit {
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
-        smartSuggestions?.invalidate()
+        smartSuggestions?.invalidate(reason: .teardown)
         suggestionPanel?.hide()
         panel = nil
         selectionLayout = nil
@@ -148,7 +153,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func engineChanged(_ notification: Notification) {
-        smartSuggestions?.invalidate()
+        smartSuggestions?.invalidate(reason: .engineChanged)
         if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore) }
         applySettings()
     }
@@ -260,7 +265,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
             guard !acceptingAI else { return }
-            smartSuggestions?.invalidate()
+            smartSuggestions?.invalidate(reason: .commit)
             let activeClient = (callbackClient as? IMKTextInput) ?? client()
             associateQualityClient(activeClient)
             engine?.commit()
@@ -270,47 +275,76 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
+        MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateEntered, session: smartDiagnosticSession) }
         commitComposition(sender)
+        MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateCommitted, session: smartDiagnosticSession) }
         super.deactivateServer(sender)
-        MainActor.assumeIsolated { smartSuggestions?.invalidate(); smartClient = nil }
+        MainActor.assumeIsolated {
+            AIDiagnostics.emit(.deactivateSuperReturned, session: smartDiagnosticSession)
+            smartSuggestions?.invalidate(reason: .deactivate); smartClient = nil
+            AIDiagnostics.emit(.deactivateFinished, session: smartDiagnosticSession)
+        }
     }
 
     nonisolated override func hidePalettes() {
-        MainActor.assumeIsolated { smartSuggestions?.invalidate(); panel?.hide() }
+        MainActor.assumeIsolated { smartSuggestions?.invalidate(reason: .hidePalettes); panel?.hide() }
         super.hidePalettes()
     }
 
-    @objc private func workspaceChanged(_ notification: Notification) { smartSuggestions?.invalidate() }
+    @objc private func workspaceChanged(_ notification: Notification) { smartSuggestions?.invalidate(reason: .workspaceChanged) }
 
     @objc private func smartSettingsChanged(_ notification: Notification) {
-        smartSuggestions?.invalidate()
+        smartSuggestions?.invalidate(reason: .settingsChanged)
         smartSuggestions?.synchronize()
     }
 
     private func smartState() -> AISuggestionState? {
-        guard !acceptingAI, !secureInput(), panel?.isVisible() == true, !strings.isEmpty,
-              let input = engine?.aiInputIdentity(),
-              let anchor = AIClientAnchor.read(smartClient, ownsMarkedText: ownsMarkedText, secureInput: false) else { return nil }
+        guard !acceptingAI else { recordSmartGate(.accepting); return nil }
+        guard !secureInput() else { recordSmartGate(.secureInput); return nil }
+        guard let panel else { recordSmartGate(.missingPanel); return nil }
+        guard panel.isVisible() else { recordSmartGate(.panelHidden); return nil }
+        guard !strings.isEmpty else { recordSmartGate(.emptyCandidates); return nil }
+        guard let engine else { recordSmartGate(.missingEngine); return nil }
+        guard let input = engine.aiInputIdentity() else { recordSmartGate(.inputUnavailable); return nil }
+        guard let anchor = AIClientAnchor.read(smartClient, ownsMarkedText: ownsMarkedText, secureInput: false,
+                                              rejected: recordSmartGate) else { return nil }
+        recordSmartGate(.ready)
         return AISuggestionState(input: input, anchor: anchor)
     }
 
+    private func recordSmartGate(_ reason: AIDiagnosticReason) {
+        guard smartGateReason != reason else { return }
+        smartGateReason = reason
+        AIDiagnostics.emit(.eligibility, reason: reason, session: smartDiagnosticSession)
+    }
+
     private func presentSuggestion(_ text: String) -> Bool {
-        guard let panel, panel.isVisible(), let frame = Self.candidateScreenFrame(panel) else { return false }
+        guard let panel else { AIDiagnostics.emit(.presentationFailed, reason: .missingPanel); return false }
+        guard panel.isVisible() else { AIDiagnostics.emit(.presentationFailed, reason: .panelHidden); return false }
+        guard let frame = Self.candidateScreenFrame(panel) else { return false }
         if suggestionPanel == nil { suggestionPanel = AISuggestionPanel() }
-        guard let suggestionPanel else { return false }
+        guard let suggestionPanel else { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden); return false }
         suggestionPanel.setSuggestion(text)
         suggestionPanel.show(relativeTo: frame)
-        return suggestionPanel.isVisible
+        let visible = suggestionPanel.isVisible
+        if !visible { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden) }
+        return visible
     }
 
     static func candidateScreenFrame(_ panel: IMKCandidates) -> NSRect? {
         let size = panel.candidateFrame().size
-        guard size.width > 0, size.height > 0 else { return nil }
+        guard size.width > 0, size.height > 0 else {
+            AIDiagnostics.emit(.presentationFailed, reason: .invalidCandidateFrame); return nil
+        }
         let matches = NSApp.windows.filter {
             $0.isVisible && !AISuggestionPanel.isSuggestionWindow($0) &&
                 abs($0.frame.width - size.width) < 1 && abs($0.frame.height - size.height) < 1
         }
-        return matches.count == 1 ? matches[0].frame : nil
+        guard matches.count == 1 else {
+            AIDiagnostics.emit(.presentationFailed, reason: matches.isEmpty ? .noCandidateWindow : .ambiguousCandidateWindow)
+            return nil
+        }
+        return matches[0].frame
     }
 
     private func acceptSuggestion(_ event: NSEvent, client: IMKTextInput?) -> Bool {

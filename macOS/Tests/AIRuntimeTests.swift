@@ -11,11 +11,16 @@ private final class RuntimeFixture {
     var reads = 0
     var shown: String?
     var readHook: (() -> Void)?
+    var contextAvailable = true
+    var presentationAvailable = true
     lazy var coordinator = AISuggestionCoordinator(settings: isolated.settings.smart, service: service,
         current: { [weak self] in self?.state }, context: { [weak self] anchor in
             guard let self, self.state?.anchor == anchor else { return nil }
-            self.reads += 1; self.readHook?(); return self.content
-        }, present: { [weak self] text in self?.shown = text; return true },
+            self.reads += 1; self.readHook?(); return self.contextAvailable ? self.content : nil
+        }, present: { [weak self] text in
+            guard let self, self.presentationAvailable else { return false }
+            self.shown = text; return true
+        },
         visible: { [weak self] in self?.shown != nil }, hide: { [weak self] in self?.shown = nil })
 
     init() throws {
@@ -39,10 +44,30 @@ struct AIRuntimeTests {
 
     @MainActor static func main() async throws {
         _ = NSApplication.shared
-        contextChecks()
-        try await debounceChecks()
-        try await invalidationChecks()
-        try await reentrantChecks()
+        let diagnostics = AIDiagnosticCapture()
+        try await AIDiagnostics.$observe.withValue({ diagnostics.append($0) }) {
+            contextChecks()
+            try await debounceChecks()
+            try await invalidationChecks()
+            try await reentrantChecks()
+        }
+        for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown, .accepted, .cancelled, .failed, .discarded, .invalidated] {
+            verify(diagnostics.contains(event), "Every request lifecycle outcome is observable")
+        }
+        for reason in [AIDiagnosticReason.secureInput, .unownedMark, .invalidMark, .selectionOutsideMark] {
+            verify(diagnostics.contains(.anchorRejected, reason: reason), "Anchor rejection includes its concrete reason")
+        }
+        verify(diagnostics.contains(.contextRejected, reason: .documentShorterThanMark))
+        verify(diagnostics.contains(.discarded, reason: .contextChanged) && diagnostics.contains(.discarded, reason: .staleState))
+        verify(diagnostics.contains(.discarded, reason: .contextUnavailable) && diagnostics.contains(.discarded, reason: .presentation))
+        let lifecycle = diagnostics.records.filter { [.scheduled, .dispatched, .shown, .accepted, .cancelled, .failed, .discarded, .invalidated].contains($0.event) }
+        verify(lifecycle.allSatisfy { $0.attempt != nil && $0.session != nil }, "Attempt and session survive async and acceptance paths")
+        let accepted = lifecycle.first { $0.event == .accepted }!.attempt
+        for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown] {
+            verify(lifecycle.contains { $0.attempt == accepted && $0.event == event }, "One logical request is correlated through acceptance")
+        }
+        verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Runtime records omit all content and configuration values")
+        print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI runtime: two-sided UTF-16 context, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
     }
 
@@ -67,6 +92,7 @@ struct AIRuntimeTests {
         verify(AIClientAnchor.read(client, ownsMarkedText: false, secureInput: false) == nil)
         verify(client.requests.count == count, "Secure and foreign marks never request document text")
         client.selection = NSRange(location: 0, length: 0); verify(read() == nil)
+        client.mark = NSRange(location: NSNotFound, length: 0); verify(read() == nil)
         client.mark = NSRange(location: Int.max - 1, length: 1)
         client.selection = NSRange(location: Int.max - 1, length: 0)
         client.reportedLength = NSNotFound
@@ -181,5 +207,16 @@ struct AIRuntimeTests {
         verify(acceptance.shown != nil)
         acceptance.readHook = { acceptance.coordinator.invalidate() }
         verify(acceptance.coordinator.takeSuggestion() == nil, "Reentrant context invalidation prevents acceptance")
+
+        let missingContext = try RuntimeFixture(); defer { missingContext.stop() }
+        missingContext.contextAvailable = false
+        missingContext.coordinator.synchronize(); await wait(0.55)
+        verify(await missingContext.service.count() == 0, "Unreadable anchor prevents dispatch with a terminal diagnostic")
+
+        let missingPanel = try RuntimeFixture(); defer { missingPanel.stop() }
+        missingPanel.presentationAvailable = false
+        missingPanel.coordinator.synchronize(); await wait(0.54)
+        await missingPanel.service.resolve(0); await wait(0.03)
+        verify(missingPanel.shown == nil, "Presentation failure remains a safe fallback with a diagnostic")
     }
 }

@@ -17,6 +17,9 @@ final class AISuggestionCoordinator {
     private let visible: () -> Bool
     private let hide: () -> Void
     private let delay: Duration
+    private let diagnosticSession: UUID
+    private var attemptID: UUID?
+    private var settingsGate: AIDiagnosticReason?
     private var state: AISuggestionState?
     private var configuration: AISuggestionConfiguration?
     private var revision: UInt64 = 0
@@ -27,17 +30,34 @@ final class AISuggestionCoordinator {
     private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(settings: IFSmartSettings, service: any AISuggestionServing,
-         delay: Duration = .milliseconds(500), current: @escaping () -> AISuggestionState?,
+         delay: Duration = .milliseconds(500), diagnosticSession: UUID = UUID(),
+         current: @escaping () -> AISuggestionState?,
          context: @escaping (AIClientAnchor) -> AISurroundingContext?,
          present: @escaping (String) -> Bool, visible: @escaping () -> Bool, hide: @escaping () -> Void) {
         self.settings = settings; self.service = service; self.delay = delay
+        self.diagnosticSession = diagnosticSession
         self.current = current; self.context = context
         self.present = present; self.visible = visible; self.hide = hide
     }
 
-    isolated deinit { request?.cancel(); tracker?.invalidate(); hide() }
+    isolated deinit {
+        if attemptID != nil { log(.invalidated, reason: .teardown) }
+        request?.cancel(); tracker?.invalidate(); hide()
+    }
 
-    func invalidate() {
+    private func log(_ event: AIDiagnosticEvent, reason: AIDiagnosticReason = .none) {
+        AIDiagnostics.emit(event, reason: reason, attempt: attemptID, session: diagnosticSession)
+    }
+
+    private func traced<T>(_ body: () -> T) -> T {
+        AIDiagnostics.$session.withValue(diagnosticSession) {
+            AIDiagnostics.$attempt.withValue(attemptID, operation: body)
+        }
+    }
+
+    func invalidate(reason: AIDiagnosticReason = .explicit) {
+        if attemptID != nil { log(.invalidated, reason: reason) }
+        attemptID = nil
         revision &+= 1
         request?.cancel(); request = nil
         state = nil; configuration = nil; preview = nil
@@ -50,15 +70,21 @@ final class AISuggestionCoordinator {
     func validate() {
         guard refreshDepth == 0 else { return }
         guard let state else { return }
-        guard settings.isEnabled, settings.configuration == configuration, current() == state else {
-            invalidate(); return
-        }
-        if let preview, !present(preview.text) { invalidate() }
+        guard settings.isEnabled else { invalidate(reason: .disabled); return }
+        guard settings.configuration == configuration else { invalidate(reason: .configurationChanged); return }
+        guard traced({ current() }) == state else { invalidate(reason: .stateChanged); return }
+        if let preview, !traced({ present(preview.text) }) { invalidate(reason: .presentation) }
     }
 
     func synchronize(ownedRefresh: Bool = false) {
         guard refreshDepth == 0 else { return }
-        guard settings.isEnabled, let next = current() else { invalidate(); return }
+        guard settings.isEnabled else {
+            let reason: AIDiagnosticReason = settings.isAvailable ? .disabled : .incompleteConfiguration
+            if settingsGate != reason { settingsGate = reason; log(.eligibility, reason: reason) }
+            invalidate(reason: reason); return
+        }
+        settingsGate = nil
+        guard let next = traced({ current() }) else { invalidate(reason: .stateChanged); return }
         let sameComposition = state.map {
             $0.input == next.input && $0.anchor.client == next.anchor.client &&
                 $0.anchor.mark.location == next.anchor.mark.location
@@ -67,11 +93,14 @@ final class AISuggestionCoordinator {
             // validate() ran before this controller-authored mark update. Rebind only
             // its display ranges, preserving the original input deadline and request.
             state = next
-            if let preview, !present(preview.text) { invalidate() }
+            if let preview, !traced({ present(preview.text) }) { invalidate(reason: .presentation) }
             return
         }
-        invalidate()
+        invalidate(reason: .inputChanged)
+        let attempt = UUID(), diagnosticSession = diagnosticSession
+        attemptID = attempt
         state = next; configuration = settings.configuration
+        log(.scheduled)
         let token = revision, configuration = settings.configuration
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.validate() }
@@ -79,6 +108,8 @@ final class AISuggestionCoordinator {
         tracker = timer; RunLoop.main.add(timer, forMode: .common)
         let service = service, delay = delay
         request = Task { [weak self] in
+          await AIDiagnostics.$session.withValue(diagnosticSession) {
+           await AIDiagnostics.$attempt.withValue(attempt) {
             do {
                 try await Task.sleep(for: delay)
                 await self?.waitForRefresh()
@@ -86,19 +117,38 @@ final class AISuggestionCoordinator {
                 let context = captured.context
                 let input = AISuggestionInput(precedingText: context.precedingText, followingText: context.followingText,
                                               pinyin: next.input.rawInput, selectedPrefix: next.input.selectedPrefix)
+                AIDiagnostics.emit(.dispatched)
                 let text = try await service.suggest(input: input, configuration: configuration)
                 await self.waitForRefresh()
-                guard let latest = self.capture(token, input: next.input, configuration: configuration),
-                      latest.context == context else { return }
+                guard let latest = self.capture(token, input: next.input, configuration: configuration) else { return }
+                guard latest.context == context else {
+                    AIDiagnostics.emit(.discarded, reason: .contextChanged); return
+                }
                 self.settings.setRequestError(nil)
-                guard self.matches(token, input: next.input, configuration: configuration), self.present(text),
-                      self.matches(token, input: next.input, configuration: configuration) else { self.invalidate(); return }
+                guard self.matches(token, input: next.input, configuration: configuration) else {
+                    AIDiagnostics.emit(.discarded, reason: .staleState)
+                    self.invalidate(reason: .stateChanged); return
+                }
+                guard self.present(text) else {
+                    AIDiagnostics.emit(.discarded, reason: .presentation)
+                    self.invalidate(reason: .presentation); return
+                }
+                guard self.matches(token, input: next.input, configuration: configuration) else {
+                    AIDiagnostics.emit(.discarded, reason: .staleState)
+                    self.invalidate(reason: .stateChanged); return
+                }
                 self.preview = (text, context)
+                AIDiagnostics.emit(.shown)
             } catch {
-                guard let self, self.matches(token, input: next.input, configuration: configuration),
-                      !(error is CancellationError) else { return }
+                guard !(error is CancellationError) else { AIDiagnostics.emit(.cancelled); return }
+                guard let self, self.matches(token, input: next.input, configuration: configuration) else {
+                    AIDiagnostics.emit(.discarded, reason: .staleState); return
+                }
+                AIDiagnostics.emit(.failed, reason: AIDiagnostics.reason(for: error))
                 self.settings.setRequestError(error as? AIServiceError ?? .network)
             }
+           }
+          }
         }
     }
 
@@ -106,7 +156,7 @@ final class AISuggestionCoordinator {
                          configuration: AISuggestionConfiguration) -> Bool {
         guard refreshDepth == 0, revision == token, let state, state.input == input, settings.isEnabled,
               settings.configuration == configuration else { return false }
-        let observed = current()
+        let observed = traced { current() }
         // Even range getters may synchronously reenter the controller.
         return revision == token && self.state == state && settings.isEnabled &&
             settings.configuration == configuration && observed == state
@@ -114,19 +164,26 @@ final class AISuggestionCoordinator {
 
     private func capture(_ token: UInt64, input: AIInputIdentity,
                          configuration: AISuggestionConfiguration) -> (state: AISuggestionState, context: AISurroundingContext)? {
-        guard matches(token, input: input, configuration: configuration), let state,
-              let context = context(state.anchor), self.state == state,
-              matches(token, input: input, configuration: configuration) else { return nil }
+        guard matches(token, input: input, configuration: configuration), let state else {
+            AIDiagnostics.emit(.discarded, reason: .staleState); return nil
+        }
+        guard let context = traced({ context(state.anchor) }) else {
+            AIDiagnostics.emit(.discarded, reason: .contextUnavailable); return nil
+        }
+        guard self.state == state, matches(token, input: input, configuration: configuration) else {
+            AIDiagnostics.emit(.discarded, reason: .staleState); return nil
+        }
         return (state, context)
     }
 
     func takeSuggestion() -> (text: String, anchor: AIClientAnchor)? {
         guard refreshDepth == 0 else { return nil }
         guard let state, let preview, let configuration, visible(),
-              let captured = capture(revision, input: state.input, configuration: configuration),
-              captured.context == preview.context, visible() else { invalidate(); return nil }
+              let captured = traced({ capture(revision, input: state.input, configuration: configuration) }),
+              captured.context == preview.context, visible() else { invalidate(reason: .acceptanceUnavailable); return nil }
         let accepted = (preview.text, captured.state.anchor)
-        invalidate()
+        log(.accepted)
+        invalidate(reason: .accepted)
         return accepted
     }
 

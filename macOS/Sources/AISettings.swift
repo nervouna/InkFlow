@@ -105,11 +105,15 @@ final class IFSmartSettings: ObservableObject {
         self.credentials = credentials
         var key = ""
         do { key = try credentials.read() }
-        catch { credentialError = "无法读取钥匙串中的 API Key。请解锁钥匙串后重新保存配置。" }
+        catch {
+            credentialError = "无法读取钥匙串中的 API Key。请解锁钥匙串后重新保存配置。"
+            AIDiagnostics.emit(.credentialFailed, reason: .credentialRead)
+        }
         let loaded = AISuggestionConfiguration(baseURL: defaults.string(forKey: "aiBaseURL") ?? "",
             apiKey: key, model: defaults.string(forKey: "aiModel") ?? "")
         configuration = loaded
         enabled = defaults.bool(forKey: "aiEnabled") && loaded.isComplete
+        logConfiguration(.settingsLoaded)
     }
 
     var isAvailable: Bool { configuration.isComplete }
@@ -120,6 +124,7 @@ final class IFSmartSettings: ObservableObject {
             guard enabled != value else { return }
             enabled = value
             defaults.set(value, forKey: "aiEnabled")
+            logConfiguration(.settingsToggled)
             changed()
         }
     }
@@ -128,7 +133,10 @@ final class IFSmartSettings: ObservableObject {
         let updated = AISuggestionConfiguration(baseURL: baseURL, apiKey: apiKey, model: model)
         // Keychain update is the only fallible step. Never publish partially saved fields.
         do { try credentials.write(updated.apiKey) }
-        catch { throw AICredentialError.unavailable }
+        catch {
+            AIDiagnostics.emit(.credentialFailed, reason: .credentialWrite)
+            throw AICredentialError.unavailable
+        }
         defaults.set(updated.baseURL, forKey: "aiBaseURL")
         defaults.set(updated.model, forKey: "aiModel")
         configuration = updated
@@ -138,7 +146,14 @@ final class IFSmartSettings: ObservableObject {
             enabled = false
             defaults.set(false, forKey: "aiEnabled")
         }
+        logConfiguration(.settingsSaved)
         changed()
+    }
+
+    private func logConfiguration(_ event: AIDiagnosticEvent) {
+        AIDiagnostics.write(AIDiagnosticRecord(event: event, reason: .none, attempt: nil,
+            enabled: isEnabled, baseURLPresent: !configuration.baseURL.isEmpty,
+            keyPresent: !configuration.apiKey.isEmpty, modelPresent: !configuration.model.isEmpty))
     }
 
     private func changed() {

@@ -14,11 +14,20 @@ struct AIClientAnchor: Equatable {
     let selection: NSRange
 
     @MainActor static func read(_ client: IMKTextInput?, ownsMarkedText: Bool,
-                                secureInput: Bool = IsSecureEventInputEnabled()) -> Self? {
-        guard !secureInput, ownsMarkedText, let client else { return nil }
+                                secureInput: Bool = IsSecureEventInputEnabled(),
+                                rejected: (AIDiagnosticReason) -> Void = {
+                                    AIDiagnostics.emit(.anchorRejected, reason: $0)
+                                }) -> Self? {
+        guard !secureInput else { rejected(.secureInput); return nil }
+        guard ownsMarkedText else { rejected(.unownedMark); return nil }
+        guard let client else { rejected(.missingClient); return nil }
         let mark = client.markedRange(), selection = client.selectedRange()
-        guard valid(mark), NSMaxRange(mark) != NSNotFound, mark.length > 0, valid(selection),
-              selection.location >= mark.location, NSMaxRange(selection) <= NSMaxRange(mark) else { return nil }
+        guard valid(mark), NSMaxRange(mark) != NSNotFound else { rejected(.invalidMark); return nil }
+        guard mark.length > 0 else { rejected(.emptyMark); return nil }
+        guard valid(selection) else { rejected(.invalidSelection); return nil }
+        guard selection.location >= mark.location, NSMaxRange(selection) <= NSMaxRange(mark) else {
+            rejected(.selectionOutsideMark); return nil
+        }
         return Self(client: ObjectIdentifier(client as AnyObject), mark: mark, selection: selection)
     }
 
@@ -38,18 +47,27 @@ struct AISurroundingContext: Equatable {
     static let limit = 256
 
     @MainActor static func read(_ client: IMKTextInput, anchor: AIClientAnchor) -> Self? {
-        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else { return nil }
+        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else {
+            AIDiagnostics.emit(.contextRejected, reason: .anchorChanged); return nil
+        }
         let start = anchor.mark.location, end = NSMaxRange(anchor.mark)
         // IMK documents length() as potentially expensive. Call only at request/response/acceptance,
         // and clip the suffix ourselves because some clients reject oversized substring requests.
         let length = client.length()
-        guard length == NSNotFound || (length >= 0 && length >= end) else { return nil }
+        guard length == NSNotFound || (length >= 0 && length >= end) else {
+            AIDiagnostics.emit(.contextRejected, reason: .documentShorterThanMark); return nil
+        }
         let knownLength = length != NSNotFound
         let prefixRange = NSRange(location: max(0, start - limit), length: min(start, limit))
         let suffixRange = NSRange(location: end, length: knownLength ? min(limit, length - end) : min(limit, Int.max - end))
         let before = readSide(client, requested: prefixRange, anchor: start, preceding: true)
         let after = readSide(client, requested: suffixRange, anchor: end, preceding: false)
-        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else { return nil }
+        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else {
+            AIDiagnostics.emit(.contextRejected, reason: .anchorChanged); return nil
+        }
+        AIDiagnostics.write(AIDiagnosticRecord(event: .contextCaptured, reason: .none,
+            attempt: AIDiagnostics.attempt, session: AIDiagnostics.session,
+            precedingAvailable: before != nil, followingAvailable: after != nil))
         return Self(precedingText: before ?? "", followingText: after ?? "",
                     precedingAvailable: before != nil, followingAvailable: after != nil)
     }

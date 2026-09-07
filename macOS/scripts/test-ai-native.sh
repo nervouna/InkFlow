@@ -17,7 +17,7 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 </dict></plist>
 PLIST
 source macOS/scripts/swift-common.sh
-build_swift_test "$app/Contents/MacOS/AINativeHarness" macOS/Tests/AIRuntimeTestSupport.swift macOS/Tests/AILiveConfiguration.swift macOS/Tests/AIControllerNativeTests.swift
+build_swift_test "$app/Contents/MacOS/AINativeHarness" macOS/Tests/AIDiagnosticTestSupport.swift macOS/Tests/AIRuntimeTestSupport.swift macOS/Tests/AILiveConfiguration.swift macOS/Tests/AIControllerNativeTests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-native.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 "$app/Contents/MacOS/AINativeHarness" "$PWD/build/test-shared" "$user_dir" "$@" | tee "$app/check.log"

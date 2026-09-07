@@ -25,6 +25,19 @@ enum AIServiceError: Error, Equatable, LocalizedError {
     }
 }
 
+extension AIDiagnostics {
+    static func reason(for error: any Error) -> AIDiagnosticReason {
+        switch error as? AIServiceError {
+        case .invalidConfiguration: .invalidConfiguration
+        case .invalidResponse: .invalidResponse
+        case .emptySuggestion: .emptySuggestion
+        case .incompleteSuggestion: .incompleteSuggestion
+        case .httpStatus: .httpStatus
+        case .network, nil: .network
+        }
+    }
+}
+
 final class AIRejectRedirects: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
@@ -87,27 +100,48 @@ struct AIChatCompletionsClient: AISuggestionServing {
     }
 
     func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String {
-        try Task.checkCancellation()
-        let request = try Self.makeRequest(input: input, configuration: configuration)
-        let data: Data
-        let response: URLResponse
-        do { (data, response) = try await session.data(for: request) }
-        catch {
-            if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
-            throw AIServiceError.network
+        try await AIDiagnostics.$attempt.withValue(AIDiagnostics.attempt ?? UUID()) {
+            let started = ContinuousClock.now
+            func elapsedMS() -> Int {
+                let duration = started.duration(to: .now).components
+                return Int(duration.seconds * 1000 + duration.attoseconds / 1_000_000_000_000_000)
+            }
+            var networkCode: Int?
+            var status: Int?
+            do {
+                try Task.checkCancellation()
+                let request = try Self.makeRequest(input: input, configuration: configuration)
+                AIDiagnostics.emit(.transportStarted)
+                let data: Data
+                let response: URLResponse
+                do { (data, response) = try await session.data(for: request) }
+                catch {
+                    networkCode = (error as? URLError)?.code.rawValue
+                    if Task.isCancelled || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+                    throw AIServiceError.network
+                }
+                try Task.checkCancellation()
+                guard let http = response as? HTTPURLResponse else { throw AIServiceError.invalidResponse }
+                status = http.statusCode
+                AIDiagnostics.emit(.httpResponse, status: http.statusCode, elapsedMS: elapsedMS())
+                guard (200..<300).contains(http.statusCode) else { throw AIServiceError.httpStatus(http.statusCode) }
+                guard data.count <= 128 * 1024,
+                      let decoded = try? JSONDecoder().decode(Completion.self, from: data) else { throw AIServiceError.invalidResponse }
+                guard let choice = decoded.choices.first else { throw AIServiceError.emptySuggestion }
+                if let finish = choice.finishReason, finish != "stop" { throw AIServiceError.incompleteSuggestion }
+                let text = (choice.message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { throw AIServiceError.emptySuggestion }
+                guard text.utf16.count <= 4096, text.hasPrefix(input.selectedPrefix),
+                      !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t" }) else { throw AIServiceError.invalidResponse }
+                AIDiagnostics.emit(.transportSucceeded, status: status, elapsedMS: elapsedMS())
+                return text
+            } catch {
+                AIDiagnostics.emit(error is CancellationError ? .transportCancelled : .transportFailed,
+                    reason: error is CancellationError ? .none : AIDiagnostics.reason(for: error),
+                    status: status, elapsedMS: elapsedMS(), networkCode: networkCode)
+                throw error
+            }
         }
-        try Task.checkCancellation()
-        guard let http = response as? HTTPURLResponse else { throw AIServiceError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw AIServiceError.httpStatus(http.statusCode) }
-        guard data.count <= 128 * 1024,
-              let decoded = try? JSONDecoder().decode(Completion.self, from: data) else { throw AIServiceError.invalidResponse }
-        guard let choice = decoded.choices.first else { throw AIServiceError.emptySuggestion }
-        if let finish = choice.finishReason, finish != "stop" { throw AIServiceError.incompleteSuggestion }
-        let text = (choice.message.content ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw AIServiceError.emptySuggestion }
-        guard text.utf16.count <= 4096, text.hasPrefix(input.selectedPrefix),
-              !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t" }) else { throw AIServiceError.invalidResponse }
-        return text
     }
 
     private struct Completion: Decodable {

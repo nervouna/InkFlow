@@ -1,5 +1,53 @@
 # Debugging index
 
+## AI suggestions do not appear
+
+Start with the installed process and its retained unified log, before restarting the
+input method or changing configuration. Match the process ID to the installed app;
+unit tests and native harnesses also use the same logging subsystem.
+
+```sh
+ps -Ao pid=,etime=,comm= | rg '/InkFlow.app/Contents/MacOS/InkFlow$'
+/usr/bin/log show --last 10m --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
+```
+
+To observe one reproduction in real time:
+
+```sh
+/usr/bin/log stream --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
+```
+
+The AI category records settings availability, controller eligibility gates,
+debounce scheduling, request dispatch, HTTP status and elapsed time, cancellation,
+stale results, presentation and acceptance. Follow the controller and attempt IDs
+across stages. Gate changes are deduplicated; an unchanged invalid state does not
+produce a new record on every validation tick. Important events use notice/error
+levels so they remain queryable after the process exits, subject to macOS log
+retention. This follows Apple's [unified logging guidance](https://developer.apple.com/documentation/os/generating-log-messages-from-your-code).
+
+- If there is no dispatch, inspect the gate or context failure reason: configuration,
+  secure input, candidate visibility, owned mark/selection or document length.
+- If dispatch occurs, inspect transport status/error and elapsed time. Cancellation
+  is distinct from service failure. Do not infer that a request was never sent merely
+  because no suggestion appeared.
+- If a result arrives, inspect stale-state/context and presentation failures before
+  attributing the problem to the provider. A successful result can be discarded when
+  the active input session changes.
+- Deactivation checkpoints help separate normal controller cleanup from interruption
+  by a crash. A missing completion checkpoint is a clue, not proof of the crash cause;
+  consult the matching macOS DiagnosticReports file.
+
+Logs contain fixed event/reason labels, random correlation IDs, status/timing and
+availability metadata. They never include input text, Pinyin, suggestions, API keys,
+URLs, model names, HTTP bodies or arbitrary provider/error descriptions. Keep this
+boundary when extending diagnostics; do not enable raw request/response dumps.
+
+The earlier build `1e88aa4` did not log the AI lifecycle. Its in-memory Settings
+request error cannot reconstruct a failed session after process exit. Missing records
+from that build do not establish which trigger or response guard failed.
+
 ## Settings window loses its fixed width and minimum height
 
 **Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default

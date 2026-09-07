@@ -3,9 +3,22 @@ import Foundation
 @main
 struct AISuggestionTests {
     @MainActor static func main() async throws {
-        try configuration()
-        try requests()
-        try await responses()
+        let diagnostics = AIDiagnosticCapture()
+        try await AIDiagnostics.$observe.withValue({ diagnostics.append($0) }) {
+            try configuration()
+            try requests()
+            try await responses(diagnostics)
+        }
+        for event in [AIDiagnosticEvent.settingsLoaded, .settingsSaved, .settingsToggled, .credentialFailed,
+                      .transportStarted, .httpResponse, .transportSucceeded, .transportFailed, .transportCancelled] {
+            expect(diagnostics.contains(event), "Configuration and transport outcomes leave diagnostic evidence")
+        }
+        expect(diagnostics.records.contains { $0.event == .transportFailed && $0.status == 401 && $0.elapsedMS != nil }, "HTTP failure includes status and duration")
+        expect(diagnostics.records.contains { $0.event == .transportFailed && $0.networkCode == URLError.timedOut.rawValue }, "Network failure includes only its numeric code")
+        let transport = diagnostics.records.filter { [.transportStarted, .httpResponse, .transportSucceeded, .transportFailed, .transportCancelled].contains($0.event) }
+        expect(transport.allSatisfy { $0.attempt != nil }, "Every transport outcome has an attempt ID")
+        expect(diagnostics.excludes(["fixture-key", "fixture-model", "compatible.example", "private", "朋友问：", "nihao", "你好吗"]), "Diagnostics never contain configuration, input, output or provider errors")
+        print("PASS AI diagnostics transport pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI configuration and transport: isolated persistence, atomic credentials, URL/body/auth, responses and cancellation")
     }
 
@@ -78,13 +91,21 @@ struct AISuggestionTests {
         }
     }
 
-    @MainActor static func responses() async throws {
+    @MainActor static func responses(_ diagnostics: AIDiagnosticCapture) async throws {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [AIStubURLProtocol.self]
         let client = AIChatCompletionsClient(session: URLSession(configuration: sessionConfig))
         AIStubURLProtocol.state.configure(status: 200, body: #"{"choices":[{"message":{"content":"  你好吗  "},"finish_reason":"stop"}]}"#)
-        let suggestion = try await client.suggest(input: fixture, configuration: config)
+        let parentAttempt = UUID(), parentSession = UUID()
+        let suggestion = try await AIDiagnostics.$attempt.withValue(parentAttempt) {
+            try await AIDiagnostics.$session.withValue(parentSession) {
+                try await client.suggest(input: fixture, configuration: config)
+            }
+        }
         expect(suggestion == "你好吗", "Allow contextual expansion beyond Pinyin")
+        for event in [AIDiagnosticEvent.transportStarted, .httpResponse, .transportSucceeded] {
+            expect(diagnostics.records.contains { $0.event == event && $0.attempt == parentAttempt && $0.session == parentSession }, "Transport preserves the caller's logical attempt and session IDs")
+        }
         for (status, body, expected) in [(401, "private server body fixture-key", AIServiceError.httpStatus(401)),
                                         (200, "malformed-private", .invalidResponse),
                                         (200, #"{"choices":[]}"#, .emptySuggestion),
@@ -112,6 +133,11 @@ struct AISuggestionTests {
         do { _ = try await pending.value; fatalError("Cancelled request cannot return a suggestion") }
         catch { expect(error is CancellationError, "Preserve cancellation as cancellation") }
         expect(AIStubURLProtocol.state.cancelled, "Cancellation must reach URLSession")
+        AIStubURLProtocol.state.configure(status: 200, body: "private body", networkError: .timedOut)
+        do {
+            _ = try await client.suggest(input: fixture, configuration: config)
+            fatalError("Synthetic network failure must fail")
+        } catch { expect(error as? AIServiceError == .network, "Network error remains sanitized") }
     }
 }
 
@@ -122,12 +148,13 @@ final class AIStubState: @unchecked Sendable {
     private var delayed = false
     private var didStart = false
     private var didCancel = false
+    private var networkError: URLError.Code?
     var started: Bool { lock.withLock { didStart } }
     var cancelled: Bool { lock.withLock { didCancel } }
-    func configure(status: Int, body: String, delayed: Bool = false) {
-        lock.withLock { self.status = status; self.body = body; self.delayed = delayed; didStart = false; didCancel = false }
+    func configure(status: Int, body: String, delayed: Bool = false, networkError: URLError.Code? = nil) {
+        lock.withLock { self.status = status; self.body = body; self.delayed = delayed; self.networkError = networkError; didStart = false; didCancel = false }
     }
-    func start() -> (Int, String, Bool) { lock.withLock { didStart = true; return (status, body, delayed) } }
+    func start() -> (Int, String, Bool, URLError.Code?) { lock.withLock { didStart = true; return (status, body, delayed, networkError) } }
     func cancel() { lock.withLock { didCancel = true } }
 }
 
@@ -136,8 +163,12 @@ final class AIStubURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let (status, body, delayed) = Self.state.start()
+        let (status, body, delayed, networkError) = Self.state.start()
         guard !delayed else { return }
+        if let networkError {
+            client?.urlProtocol(self, didFailWithError: URLError(networkError, userInfo: [NSLocalizedDescriptionKey: "private fixture-key network error"]))
+            return
+        }
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: Data(body.utf8))
         client?.urlProtocolDidFinishLoading(self)

@@ -38,7 +38,22 @@ struct AIControllerNativeTests {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.regular)
         Task { @MainActor in
-            do { try await runChecks(); fflush(stdout); exit(0) }
+            do {
+                let diagnostics = AIDiagnosticCapture()
+                try await AIDiagnostics.$observe.withValue({ diagnostics.append($0) }) { try await runChecks() }
+                let blocked = diagnostics.records.filter { $0.event == .eligibility && $0.reason == .secureInput }
+                check(!blocked.isEmpty && blocked.allSatisfy { $0.session != nil }, "Pre-request gates identify their controller session")
+                let firstSession = blocked[0].session
+                check(blocked.filter { $0.session == firstSession }.count == 1, "Unchanged secure gate is deduplicated across input refreshes")
+                check(!diagnostics.records.contains { $0.session == firstSession && $0.event == .scheduled }, "Secure-input reason is observable before any debounce is scheduled")
+                for event in [AIDiagnosticEvent.deactivateEntered, .deactivateCommitted, .deactivateSuperReturned, .deactivateFinished] {
+                    check(diagnostics.contains(event), "Legacy deactivation emits checkpoints without changing its path")
+                }
+                check(diagnostics.contains(.presentationFailed, reason: .ambiguousCandidateWindow))
+                check(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Native AI diagnostics omit input, output and config")
+                print("PASS AI diagnostics native pid=\(ProcessInfo.processInfo.processIdentifier)")
+                fflush(stdout); exit(0)
+            }
             catch { print("FAIL native harness: \((error as? AIServiceError)?.localizedDescription ?? "fixture setup failed")"); exit(1) }
         }
         NSApp.run()
@@ -114,6 +129,13 @@ struct AIControllerNativeTests {
             let window = suggestion!
             check(!window.canBecomeKey && !window.canBecomeMain && window.ignoresMouseEvents)
             let anchor = InkFlowInputController.candidateScreenFrame(controller.panel!)!
+            if action == "tab" {
+                let duplicate = NSWindow(contentRect: anchor, styleMask: .borderless, backing: .buffered, defer: false)
+                duplicate.isReleasedWhenClosed = false
+                duplicate.orderFront(nil)
+                check(InkFlowInputController.candidateScreenFrame(controller.panel!) == nil, "Ambiguous native windows have an explicit presentation failure")
+                duplicate.orderOut(nil)
+            }
             check(!window.frame.intersects(anchor), "Sidecar never covers native candidates")
             let requests = client.requests.count, lengths = client.lengthReads
             await wait(0.22)
