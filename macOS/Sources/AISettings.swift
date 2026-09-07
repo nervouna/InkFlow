@@ -98,6 +98,7 @@ final class IFSmartSettings: ObservableObject {
     @Published private(set) var configuration: AISuggestionConfiguration
     @Published private var enabled: Bool
     @Published private(set) var credentialError: String?
+    @Published private(set) var requestError: String?
 
     init(defaults: UserDefaults, credentials: any AICredentialStore) {
         self.defaults = defaults
@@ -132,6 +133,7 @@ final class IFSmartSettings: ObservableObject {
         defaults.set(updated.model, forKey: "aiModel")
         configuration = updated
         credentialError = nil
+        requestError = nil
         if !updated.isComplete {
             enabled = false
             defaults.set(false, forKey: "aiEnabled")
@@ -142,4 +144,6 @@ final class IFSmartSettings: ObservableObject {
     private func changed() {
         NotificationCenter.default.post(name: .smartSettingsDidChange, object: self)
     }
+
+    func setRequestError(_ error: AIServiceError?) { requestError = error?.localizedDescription }
 }

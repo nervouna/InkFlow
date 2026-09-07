@@ -530,6 +530,21 @@ final class IFEngine {
         return result
     }
 
+    /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
+    func aiInputIdentity() -> AIInputIdentity? {
+        guard available, !asciiMode else { return nil }
+        let input = Self.string(Self.api.pointee.get_input(session))
+        guard !input.isEmpty else { return nil }
+        var context = Self.makeContext()
+        guard Self.api.pointee.get_context(session, &context) != 0 else { return nil }
+        defer { _ = Self.api.pointee.free_context(&context) }
+        let preedit = Self.string(context.composition.preedit)
+        let offset = Int(context.composition.sel_start)
+        guard offset >= 0, offset <= preedit.utf8.count,
+              let prefix = String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) else { return nil }
+        return AIInputIdentity(rawInput: input, caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix)
+    }
+
     func setQualityPresentation(fontSize: Int, vertical: Bool) {
         guard qualityFontSize != fontSize || qualityVertical != vertical else { return }
         qualityFontSize = fontSize

@@ -36,7 +36,7 @@ struct SmartSettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("smart.notice")
-            if let error = saveError ?? smart.credentialError {
+            if let error = saveError ?? smart.credentialError ?? smart.requestError {
                 Text(error).font(.caption).foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("smart.error")

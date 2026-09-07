@@ -27,6 +27,16 @@ The TSV starts with `# no comment` so literal phrases beginning with `#` are sup
 
 ## Verification
 
+AI input suggestions are split between `AISettings.swift` / `AIChatCompletions.swift` (BYOK settings and compatible transport), `AIContext.swift` (bounded document access), `AISuggestionCoordinator.swift` (debounce and stale-result checks), and `AISuggestionPanel.swift` (passive AppKit presentation). `InputController.swift` owns client lifecycle and Tab delivery. Engine request identity includes raw input, caret and selected prefix, excluding candidate pages, highlights and display preedit. Controller-authored display range changes retain the input deadline; externally changed client ranges invalidate it. Full document context is captured only at dispatch, response validation and acceptance, never by the 100 ms position tracker.
+
+`bash macOS/scripts/test-ai-runtime.sh` tests real 0.5-second debounce timing, changed display ranges during navigation, late services that ignore cancellation, repeated compositions, context and configuration invalidation, secure/foreign marks, UTF-16 boundaries, and reentrant document reads. It uses in-memory credentials, synthetic context and an injected service. `test.sh` includes this suite and transport/settings tests.
+
+`bash macOS/scripts/test-ai-native.sh` requires a logged-in GUI session. Its separate app uses real Rime, IMK candidate windows and the production controller with a recording document client; the existing framework-initialization/client-lookup shim supplies the synthetic client because IMK normally requires its own cross-process proxy. It checks passive window geometry/focus, ordinary space/digit/click selection, partial composition prefixes, exact-once Tab, delivery leases under synchronous client reentry, and stale lifecycle events. It neither registers an input source nor changes production preferences or Keychain entries. The script requires a final acceptance marker as well as a successful exit code.
+
+For explicitly authorized paid verification, run `bash macOS/scripts/test-ai-live.sh /absolute/path/to/ignored/.env` for transport fixtures or `bash macOS/scripts/test-ai-native.sh --live /absolute/path/to/ignored/.env` for one complete production API-to-panel-to-Tab fixture. The file must be untracked and Git-ignored and contain `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`; the parser treats it as data and never executes shell contents. Live fixtures require official DeepSeek and `deepseek-v4-flash`, use synthetic text only, and never print credentials. No retries or benchmarks are implicit.
+
+Real typing acceptance remains separate: configure and enable smart prediction, pause with candidates visible, browse pages, accept with Tab, and compare ordinary space/digit/click behavior in the user's text editor and browser. Verify composition edits, moving the insertion point, input-source switching, service failure and disabling the feature while a request is pending. Build and native harness results do not establish this user-owned acceptance.
+
 Run the following scripts sequentially from the repository root. The GUI checks require a logged-in, unlocked macOS desktop session and the runner's existing Accessibility access; their bounded public accessibility initialization does not change system settings.
 
 ```sh

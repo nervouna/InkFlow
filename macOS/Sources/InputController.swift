@@ -16,6 +16,23 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var injectedQualityStore: QualityStore?
     private let settings: IFSettings
     private let settingsWindow: IFSettingsWindowController
+    private var smartClient: IMKTextInput?
+    private var acceptingAI = false
+    private var smartService: any AISuggestionServing = AIChatCompletionsClient()
+    private var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
+    private var suggestionPanel: AISuggestionPanel?
+    private var smartSuggestions: AISuggestionCoordinator?
+
+    private func configureSmartSuggestions() {
+        smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
+            current: { [weak self] in self?.smartState() },
+            context: { [weak self] anchor in
+                guard let client = self?.smartClient else { return nil }
+                return AISurroundingContext.read(client, anchor: anchor)
+            }, present: { [weak self] text in self?.presentSuggestion(text) ?? false },
+            visible: { [weak self] in self?.suggestionPanel?.isVisible ?? false },
+            hide: { [weak self] in self?.suggestionPanel?.hide() })
+    }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         settings = MainActor.assumeIsolated { .sharedSettings }
@@ -26,10 +43,14 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
-          settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil) {
+          settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil,
+          smartService: any AISuggestionServing = AIChatCompletionsClient(),
+          secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() }) {
         injectedQualityStore = qualityStore
         self.settings = settings
         self.settingsWindow = settingsWindow
+        self.smartService = smartService
+        self.secureInput = secureInput
         super.init(server: server, delegate: delegate, client: inputClient)
         configure(server: server)
     }
@@ -47,15 +68,24 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             }
             panel?.setDismissesAutomatically(false)
         }
+        configureSmartSuggestions()
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(engineChanged(_:)),
                                                name: .engineAvailabilityDidChange, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged(_:)),
                                                name: .settingsDidChange, object: settings)
+        NotificationCenter.default.addObserver(self, selector: #selector(smartSettingsChanged(_:)),
+                                               name: .smartSettingsDidChange, object: settings.smart)
+        for name in [NSWorkspace.didDeactivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(workspaceChanged(_:)), name: name, object: nil)
+        }
     }
 
     isolated deinit {
         NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        smartSuggestions?.invalidate()
+        suggestionPanel?.hide()
         panel = nil
         selectionLayout = nil
     }
@@ -116,11 +146,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func engineChanged(_ notification: Notification) {
+        smartSuggestions?.invalidate()
         if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore) }
         applySettings()
     }
 
     func refresh(_ client: IMKTextInput?) {
+        smartSuggestions?.beginRefresh()
+        defer { smartSuggestions?.endRefresh() }
+        smartClient = client
         let deliveringEngine = engine
         deliveringEngine?.beginDelivery()
         defer { deliveringEngine?.endDelivery() }
@@ -178,6 +212,9 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
+            guard !acceptingAI else { return false }
+            smartSuggestions?.validate()
+            if let callbackEvent, acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput) { return true }
             if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore); applySettings() }
             guard let engine, engine.available, let callbackEvent, callbackEvent.type == .keyDown else { return false }
             associateQualityClient(callbackClient as? IMKTextInput)
@@ -201,7 +238,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func candidateSelected(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
             associateQualityClient(client())
             engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1)
             refresh(client())
@@ -211,7 +248,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func candidateSelectionChanged(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
             engine?.highlight(index)
             refresh(client())
         }
@@ -220,6 +257,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func commitComposition(_ sender: Any!) {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
+            guard !acceptingAI else { return }
+            smartSuggestions?.invalidate()
             let activeClient = (callbackClient as? IMKTextInput) ?? client()
             associateQualityClient(activeClient)
             engine?.commit()
@@ -231,5 +270,62 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func deactivateServer(_ sender: Any!) {
         commitComposition(sender)
         super.deactivateServer(sender)
+        MainActor.assumeIsolated { smartSuggestions?.invalidate(); smartClient = nil }
+    }
+
+    nonisolated override func hidePalettes() {
+        MainActor.assumeIsolated { smartSuggestions?.invalidate(); panel?.hide() }
+        super.hidePalettes()
+    }
+
+    @objc private func workspaceChanged(_ notification: Notification) { smartSuggestions?.invalidate() }
+
+    @objc private func smartSettingsChanged(_ notification: Notification) {
+        smartSuggestions?.invalidate()
+        smartSuggestions?.synchronize()
+    }
+
+    private func smartState() -> AISuggestionState? {
+        guard !acceptingAI, !secureInput(), panel?.isVisible() == true, !strings.isEmpty,
+              let input = engine?.aiInputIdentity(),
+              let anchor = AIClientAnchor.read(smartClient, ownsMarkedText: ownsMarkedText, secureInput: false) else { return nil }
+        return AISuggestionState(input: input, anchor: anchor)
+    }
+
+    private func presentSuggestion(_ text: String) -> Bool {
+        guard let panel, panel.isVisible(), let frame = Self.candidateScreenFrame(panel) else { return false }
+        if suggestionPanel == nil { suggestionPanel = AISuggestionPanel() }
+        guard let suggestionPanel else { return false }
+        suggestionPanel.setSuggestion(text)
+        suggestionPanel.show(relativeTo: frame)
+        return suggestionPanel.isVisible
+    }
+
+    static func candidateScreenFrame(_ panel: IMKCandidates) -> NSRect? {
+        let size = panel.candidateFrame().size
+        guard size.width > 0, size.height > 0 else { return nil }
+        let matches = NSApp.windows.filter {
+            $0.isVisible && !AISuggestionPanel.isSuggestionWindow($0) &&
+                abs($0.frame.width - size.width) < 1 && abs($0.frame.height - size.height) < 1
+        }
+        return matches.count == 1 ? matches[0].frame : nil
+    }
+
+    private func acceptSuggestion(_ event: NSEvent, client: IMKTextInput?) -> Bool {
+        guard event.type == .keyDown, event.keyCode == 48,
+              event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
+              let client, ObjectIdentifier(client as AnyObject) == smartClient.map({ ObjectIdentifier($0 as AnyObject) }),
+              let engine, !engine.snapshot().preedit.isEmpty else { return false }
+        // A held Tab never accepts a suggestion that arrived after its initial keydown.
+        if event.isARepeat { return suggestionPanel?.isVisible ?? false }
+        guard let accepted = smartSuggestions?.takeSuggestion() else { return false }
+        acceptingAI = true
+        engine.beginDelivery()
+        qualityInsertionDepth += 1
+        defer { qualityInsertionDepth -= 1; engine.endDelivery(); acceptingAI = false }
+        engine.clear()
+        refresh(client)
+        client.insertText(accepted.text, replacementRange: NSRange(location: accepted.anchor.mark.location, length: 0))
+        return true
     }
 }

@@ -5,6 +5,7 @@ cd "$(dirname "$0")/../.."
 bash macOS/scripts/test-quality-store.sh
 bash macOS/scripts/test-quality-metadata.sh
 bash macOS/scripts/test-ai-suggestions.sh
+bash macOS/scripts/test-ai-runtime.sh
 macOS/scripts/dependencies.sh
 bash macOS/scripts/test-prepare-rime.sh
 bash macOS/scripts/test-dictionary-generator.sh
