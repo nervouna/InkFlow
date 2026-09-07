@@ -11,6 +11,12 @@ A request to execute this release workflow authorizes its version commit, tag, p
 
 Run commands from the repository root. Read `macOS/DEVELOPMENT.md` for the current verification list and use `$apple-signing-workflow` for certificate selection and artifact verification. Helpers live beside this file in `scripts/`.
 
+## Executor dispatch
+
+For an authorized release or recovery, the parent confirms the version decision and delegates once to `inkflow-release`, defined in `.codex/agents/inkflow-release.toml`. Pass only the checkout and skill paths, version decision, authorization limits and recovery references in a fresh context. Wait for the result or blocker without duplicating execution. The executor follows this skill itself and does not delegate again.
+
+If the tool cannot select a custom agent by name, use the TOML's model, reasoning effort and instructions explicitly. If that is also unsupported, report the limitation instead of silently using another model.
+
 ## Local configuration
 
 The helpers read `.release.local.plist` at the current checkout's repository root, independent of the caller's working directory. The legacy profile configuration uses `INKFLOW_SIGN_IDENTITY` (verified certificate SHA-1) and `INKFLOW_NOTARY_PROFILE` (existing notarytool Keychain profile name). For first-time setup, verify the local path is ignored and untracked, use the [profile template](assets/release.example.plist) or [API-key template](assets/release-api-key.example.plist), and replace placeholders with verified references; preserve unrelated existing configuration. Do not commit the local file or create new Apple credentials automatically. Each worktree needs its own ignored file, or an explicit `INKFLOW_RELEASE_CONFIG` path to an existing local configuration.

@@ -1,0 +1,8 @@
+name = "inkflow-release"
+description = "Execute an authorized InkFlow release using the repository release skill."
+model = "gpt-5.6-luna"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Read and execute .agents/skills/inkflow-release/SKILL.md in the supplied checkout. It is the sole release procedure.
+For failures not covered by its recovery rules, preserve state and return a concise blocker summary to the parent rather than modifying release scripts or bypassing checks.
+"""
