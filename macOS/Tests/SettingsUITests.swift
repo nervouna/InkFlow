@@ -50,9 +50,10 @@ struct SettingsUITests {
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
         waitForFocus(window)
+        checkMinimumSize(window)
         check(window.styleMask.contains([.resizable, .fullSizeContentView]))
         check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
-        check(window.contentViewController is NSHostingController<SettingsView>)
+        check(window.contentViewController is SettingsHostingController)
         initializeAccessibility()
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX \(element)") }
@@ -63,6 +64,7 @@ struct SettingsUITests {
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         waitForFocus(window)
         check(preferences.window === window)
+        checkMinimumSize(window)
         let panel = controller.panel!, engine = controller.engine!
         type(engine, "shi")
         let before = engine.snapshot()
@@ -119,11 +121,13 @@ struct SettingsUITests {
     @MainActor static func checkCustomPhrasesLayout(_ window: NSWindow, settings: IFSettings) {
         // In-process SwiftUI sidebar children are AX proxies without selectable NSAccessibility
         // rows. Choose the initial section for layout checks; exercise navigation in CUA.
-        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
+        checkMinimumSize(window)
         drainEvents()
         check(window.title == "个性化")
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 900, height: 560)] {
+        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
             window.setContentSize(size); drainEvents()
+            checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
             let identifiers = ["phrases.list", "phrases.add", "phrases.edit", "phrases.delete"]
             let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
@@ -140,18 +144,34 @@ struct SettingsUITests {
             }
             check(elements.contains { $0["id"] as? String == "phrases.empty" })
         }
-        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
+        checkMinimumSize(window)
         drainEvents()
         window.setContentSize(NSSize(width: 700, height: 450))
         print("PASS personalization layout: native table/buttons at minimum/enlarged sizes, empty state, edit/delete disabled without selection")
     }
 
+    @MainActor static func checkMinimumSize(_ window: NSWindow) {
+        let original = window.frame
+        for requested in [NSSize(width: 500, height: 200), NSSize(width: 900, height: 560)] {
+            window.setContentSize(requested)
+            drainEvents()
+            let expected = NSSize(width: 700, height: max(380, requested.height))
+            check(window.contentView!.frame.size == expected,
+                  "Requested \(requested), expected \(expected), actual \(window.contentView!.frame.size)")
+        }
+        window.setFrame(original, display: true)
+        drainEvents()
+    }
+
     @MainActor static func checkLayout(_ window: NSWindow) {
         let initialFrame = window.frame
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 900, height: 560)] {
+        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
             window.setContentSize(size)
             drainEvents()
             window.contentView?.layoutSubtreeIfNeeded()
+            checkMinimumSize(window)
+            check(window.contentView!.frame.size == size, "Settings must resize vertically to \(size)")
             let elements = IFAccessibilityTree(window)
             let controls = elements.filter { ["settings.direction", "settings.count", "settings.fontSize"].contains($0["id"] as? String ?? "") }
             check(controls.count == 3, "All SwiftUI pickers must be accessible")

@@ -129,6 +129,7 @@ struct SettingsView: View {
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }
+            .frame(minHeight: 0, maxHeight: .infinity)
             .navigationTitle((section ?? .appearance).rawValue)
         }
         .navigationSplitViewStyle(.balanced)
@@ -175,6 +176,21 @@ struct SettingsView: View {
 }
 
 @MainActor
+final class SettingsHostingController: NSHostingController<SettingsView> {
+    override init(rootView: SettingsView) {
+        super.init(rootView: rootView)
+        // Explicit AppKit constraints own sizing instead of each SwiftUI page.
+        sizingOptions = []
+        NSLayoutConstraint.activate([
+            view.widthAnchor.constraint(equalToConstant: 700),
+            view.heightAnchor.constraint(greaterThanOrEqualToConstant: 380),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("Settings hosts are created programmatically") }
+}
+
+@MainActor
 final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
     var dictionaries: IFDictionaryCoordinator?
@@ -196,10 +212,10 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         window.title = "墨流拼音设置"
         window.titleVisibility = .visible
         window.toolbarStyle = .unified
-        window.contentMinSize = NSSize(width: 700, height: 380)
         window.collectionBehavior = [.fullScreenNone, .fullScreenDisallowsTiling]
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings, dictionaries: dictionaries))
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, dictionaries: dictionaries))
+        window.setContentSize(NSSize(width: 700, height: 450))
         self.window = window
         window.delegate = self
         window.center()

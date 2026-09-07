@@ -222,9 +222,10 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
     }
 
     static func show(_ section: SettingsSection, window: NSWindow, settings: IFSettings, service: IFDictionaryCoordinator?) async {
-        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings, dictionaries: service, initialSection: section))
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, dictionaries: service, initialSection: section))
         try? await Task.sleep(for: .milliseconds(200))
         drainEvents()
+        SettingsUITests.checkMinimumSize(window)
     }
 
     static func element(_ identifier: String, in window: NSWindow) -> [String: Any]? {
@@ -284,8 +285,9 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
         check(expanded == !wasExpanded!, "Native disclosure \(label) must toggle its expanded state")
     }
     static func fit(_ window: NSWindow, required: [String], disclosures: [String] = []) async {
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 1000, height: 700)] {
+        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 700)] {
             window.setContentSize(size); try? await Task.sleep(for: .milliseconds(50)); drainEvents()
+            SettingsUITests.checkMinimumSize(window)
             let frame = window.convertToScreen(window.contentLayoutRect)
             let targets = required.map { ($0, element($0, in: window)) } +
                 disclosures.map { ("disclosure \($0)", disclosure($0, in: window)) }
@@ -293,6 +295,7 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
                 guard let control = (item?["frame"] as? NSValue)?.rectValue else {
                     check(false, "Missing accessible \(identifier)"); return
                 }
+                if !frame.contains(control) { dumpAccessibility(window) }
                 check(control.width > 0 && control.height > 0 && frame.contains(control), "\(identifier) must fit at \(size): \(control), content \(frame)")
             }
         }

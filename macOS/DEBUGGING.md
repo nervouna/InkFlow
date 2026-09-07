@@ -1,5 +1,34 @@
 # Debugging index
 
+## Settings window loses its fixed width and minimum height
+
+**Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default
+`NSHostingController` sizing options generated minimum-size constraints from the
+current page. After layout, the appearance page replaced the intended 700 × 380
+minimum with 248 × 112 on macOS 26. The required width is fixed at 700;
+the height may grow from 380.
+
+**Fix:** `SettingsHostingController` disables automatic sizing constraints and adds
+explicit AppKit constraints for width 700 and height >=380 to its view. It remains
+the top-level content controller to preserve native title-bar/sidebar integration.
+No window property overrides or layout callback resets are needed. This follows Apple's
+[SwiftUI/AppKit layout guidance](https://developer.apple.com/videos/play/wwdc2022/10075/).
+The 380-point bound applies to the full-size content view, including the title-bar
+region, rather than 380 points below the title bar.
+The detail group declares a flexible minimum height of zero so the native split
+view does not retain a taller page's minimum during dictionary state changes.
+
+**Regression:** `bash macOS/scripts/test-settings-ui.sh` requests 500 × 200 and
+900 × 560 and checks actual content-view sizes of 700 × 380 and 700 × 560 after
+presentation, page replacement and close/reopen. Existing layout checks run at the
+minimum and increased heights. `contentMinSize` alone does not report the effective
+minimum enforced by Auto Layout.
+
+**Discarded experiments:** Window-property overrides and layout callback resets
+are not needed. A separate AppKit container changed native sidebar/title integration.
+A SwiftUI root minimum of 380 instead produced a 432-point window minimum because
+hosting added the title-bar inset. No fixed title-bar subtraction is used.
+
 ## English steals unfinished Pinyin candidates
 
 **Symptoms:** `d` prefers the alias `D`; partial Chinese such as `niyebuxiangnid` or `womenshenzh` yields ASCII tails. Checking only fully typed sentences misses this regression.
