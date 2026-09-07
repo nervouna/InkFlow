@@ -1,0 +1,3 @@
+# Exact Chinese corrections applied after the calibrated union.
+# Format: text<TAB>normalized reading<TAB>replacement integer weight<TAB>reason
+# No corrections are necessary for the initial pinned dictionary sources.

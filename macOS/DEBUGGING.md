@@ -110,3 +110,34 @@ macOS/scripts/register.sh "$HOME/Library/Input Methods/InkFlow.app" --verify-ena
 ```
 
 Select InkFlow to confirm it works as a system input source. If Settings shows a blank entry, use the preceding case.
+
+## Dictionary activation waits or recovers a previous version
+
+Dictionary preparation leaves the current engine running. The final switch waits for every live session, including inactive clients, to have no composition or pending commit. A controller owns a delivery lease until its `insertText` and marked-text callbacks return, so a nested client run loop cannot activate halfway through delivery. Complete or cancel the composition in each client to release this wait.
+
+The coordinator records a pending transaction before waiting. After an interrupted process it discards that pending choice, validates the confirmed cache, and rebuilds incompatible caches from inert dictionary data with the current app's resources. If recovery fails it tries the previous confirmed version and then the immutable bundled dictionary. Settings always reports the version and activation date of the engine that actually started. A failed rollback leaves the engine unavailable; the input menu and Settings remain reachable for retry.
+
+Closing Settings clears its displayed diagnostic, while the process continues the task. Reopening shows current progress and does not replay earlier failures. Operational diagnostics remain in the macOS unified log:
+
+```sh
+/usr/bin/log show --last 1d --style compact --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "dictionary"'
+```
+
+The coordinator logs failures at error level. Large diagnostics use UTF-8-safe chunks of at most 700 payload bytes, sharing an event ID and numbered `part=i/n` fields; collect every part of that event for complete details. Details include stage, source/file identity, HTTP or helper exit status, and bounded worker diagnostics. They exclude document input/context, custom phrases and learned database contents; error payloads are never saved in the dictionary journal, manifest or preferences.
+
+Run `bash macOS/scripts/build.sh`, then `bash macOS/scripts/test-dictionary-activation.sh` for isolated multi-session, commit-delivery, semantic-learning, failure/rollback, task-lifetime and restart-recovery checks. The tests use synthetic temporary user roots. They do not replace real-client typing acceptance.
+
+## Settings GUI tests have no accessible content or cannot become active
+
+Run the native Settings harness in a logged-in, unlocked desktop session. A locked
+desktop can prevent keyboard focus even when a window reports itself visible.
+Separately, SwiftUI initializes accessibility lazily when an assistive client connects;
+an in-process walk can lack SwiftUI controls even in an active, unlocked window.
+
+The harness starts a short-lived child process that reads only its own application's
+windows through the public accessibility API. This initializes the real accessibility
+tree, with a two-second messaging timeout and a five-second parent wait. The runner
+needs existing Accessibility access; the test never prompts or changes global settings.
+Run `bash macOS/scripts/test-settings-ui.sh` after resolving the reported prerequisite.
+Keep genuine control and layout assertions enabled. Headless engine/coordinator tests
+remain separate evidence and cannot substitute for native window-lifecycle acceptance.

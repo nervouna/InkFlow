@@ -66,3 +66,37 @@ NSArray<NSDictionary<NSString *, id> *> *IFAccessibilityTree(id root) {
     collectAccessibility(root,result,[NSHashTable hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality]);
     return result;
 }
+
+static id findAccessibility(id object, NSString *identifier, NSHashTable *visited) {
+    if ([visited containsObject:object]) return nil;
+    [visited addObject:object];
+    id<NSAccessibility> element=object;
+    if ([object respondsToSelector:@selector(accessibilityIdentifier)] &&
+        [element.accessibilityIdentifier isEqualToString:identifier]) return object;
+    if ([object respondsToSelector:@selector(accessibilityChildren)]) {
+        for (id child in element.accessibilityChildren) {
+            id found=findAccessibility(child,identifier,visited);
+            if (found) return found;
+        }
+    }
+    return nil;
+}
+
+static BOOL pressAccessibility(id object, BOOL root) {
+    BOOL disclosure=[object respondsToSelector:@selector(accessibilityRole)] &&
+        [[(id<NSAccessibility>)object accessibilityRole] isEqualToString:NSAccessibilityDisclosureTriangleRole];
+    // A disclosure's identifier may be on its container. Never press an unrelated descendant link.
+    if ((root || disclosure) && [object respondsToSelector:@selector(accessibilityPerformPress)] &&
+        [(id<NSAccessibility>)object accessibilityPerformPress]) return YES;
+    if ([object respondsToSelector:@selector(accessibilityChildren)]) {
+        for (id child in [(id<NSAccessibility>)object accessibilityChildren]) {
+            if (pressAccessibility(child, NO)) return YES;
+        }
+    }
+    return NO;
+}
+
+BOOL IFPressAccessibility(id root, NSString *identifier) {
+    id element=findAccessibility(root,identifier,[NSHashTable hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality]);
+    return element && pressAccessibility(element, YES);
+}

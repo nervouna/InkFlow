@@ -44,7 +44,7 @@ enum IFPrecedingText {
 }
 
 /// Exact dictionary phrases crossing the prefix/candidate boundary, not a language model.
-struct IFContextRanker {
+struct IFContextRanker: Sendable {
     private let frequencies: [String: Int]
     private let longestPhrase: Int
 

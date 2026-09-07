@@ -28,7 +28,7 @@ ditto "$source_app" "$app"
 # Debug symbols remain in the original build, outside the distributed bundle.
 find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
 signing=(--force --options runtime --timestamp --sign "$identity")
-for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib"; do
+for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
   codesign "${signing[@]}" "$binary"
 done
 codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$app"

@@ -7,6 +7,15 @@ trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \
   "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
 cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
+# Isolate English policy fixtures from the independently tested Chinese generator.
+# This stub exists only inside this test's temporary repository.
+cat > "$fixture/macOS/scripts/prepare-chinese.sh" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+mkdir -p "$1"
+cp build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml "$1/"
+STUB
 cp -R schemas/. "$fixture/schemas/"
 printf '中文\tzhong wen\t1000\n' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '微笑\t微笑 😊\n' > "$fixture/build/deps/emoji.txt"

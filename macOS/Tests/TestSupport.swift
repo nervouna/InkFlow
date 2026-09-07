@@ -48,6 +48,7 @@ func drainEvents(seconds: TimeInterval = 0.15) {
 final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     var mutations: [String] = []
     var insertionCallback: (() -> Void)?
+    var onMutation: (() -> Void)?
     var testBundleID: String? = "inkflow.recording-client"
     var testClientID: String? = "inkflow.recording-client"
     var document: String?
@@ -74,6 +75,7 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     func insertText(_ string: Any!, replacementRange: NSRange) {
         check(replacementRange == NSRange(location: NSNotFound, length: 0))
         mutations.append("insert:\(string as! String)")
+        onMutation?()
         replace(string as! String, marked: false)
         insertionCallback?()
     }
@@ -82,6 +84,7 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         let text = string as! String
         check(selectionRange.location <= text.utf16.count)
         mutations.append("mark:\(text)")
+        onMutation?()
         replace(text, marked: true, cursor: selectionRange)
     }
     func selectedRange() -> NSRange { selection }

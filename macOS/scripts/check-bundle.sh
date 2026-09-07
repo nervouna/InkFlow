@@ -15,7 +15,7 @@ cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
 bash macOS/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
-for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt; do
+for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt chinese-dictionaries-NOTICE.txt pinyin-simp.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
 
@@ -24,7 +24,7 @@ lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 for plugin in "$app/Contents/Frameworks/rime-plugins"/*; do
   [[ "$plugin" == "$lua_plugin" ]] || { echo "Unexpected engine plugin: $plugin" >&2; exit 1; }
 done
-for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin"; do
+for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/MacOS/InkFlowDictionaryWorker" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin"; do
   xcrun lipo "$binary" -verify_arch arm64
   otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
     case "$dependency" in

@@ -3,28 +3,33 @@ import InputMethodKit
 let result: Int32 = autoreleasepool {
     _ = NSApplication.shared
     let bundle = Bundle.main
-    let shared = (bundle.resourcePath! as NSString).appendingPathComponent("Rime")
-    let user = (NSHomeDirectory() as NSString).appendingPathComponent("Library/Application Support/InkFlow")
-    let qualityStore = QualityStore(url: URL(fileURLWithPath: user).appendingPathComponent("quality.sqlite3"),
-                                    engineVersion: IFEngine.version)
+    let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
+    let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
+    let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version)
+    IFEngine.configureQualityRecording(qualityStore)
     defer {
-        // The run loop has stopped; drain on the worker outside input-method callbacks.
         let drained = DispatchSemaphore(value: 0)
         Task.detached { await qualityStore.close(); drained.signal() }
         drained.wait()
+        IFEngine.configureQualityRecording(nil)
     }
-    do { try IFEngine.start(shared: shared, user: user, qualityStore: qualityStore) }
-    catch {
-        NSLog("InkFlow initialization failed: %@", error.localizedDescription)
-        return 1
-    }
+    // Only the production entry point supplies a real root. Factory failure is retryable from Settings.
+    let dictionaries = IFDictionaryCoordinator(backendFactory: {
+        let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
+        let runtime = IFDictionaryRuntime.bundled(helper: helper)
+        let worker = IFDictionaryWorkerRunner(runtime: runtime, protectedUserRoot: user, candidatesRoot: store.root.appendingPathComponent("candidates"))
+        return .init(store: store, runtime: runtime, user: user, services: .init(client: .init(), worker: worker))
+    }, logger: IFDictionaryCoordinator.persistentLogger)
+    dictionaries.bootstrap()
+    IFSettingsWindowController.sharedController.dictionaries = dictionaries
     defer { IFEngine.stop() }
+    // Even failed recovery must leave the server/menu/Settings reachable for diagnostics and retry.
     guard let server = IMKServer(name: bundle.object(forInfoDictionaryKey: "InputMethodConnectionName") as? String,
                                  bundleIdentifier: bundle.bundleIdentifier) else {
         NSLog("InkFlow could not create its input method server.")
         return 1
     }
-    withExtendedLifetime(server) { NSApp.run() }
+    withExtendedLifetime((server, dictionaries)) { NSApp.run() }
     return 0
 }
 exit(result)

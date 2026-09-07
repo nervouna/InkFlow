@@ -1,17 +1,42 @@
 import InputMethodKit
 import SwiftUI
+import ApplicationServices
 
 @main
 struct SettingsUITests {
     @MainActor static func main() throws {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--initialize-accessibility" {
+            let application = AXUIElementCreateApplication(Int32(CommandLine.arguments[2])!)
+            AXUIElementSetMessagingTimeout(application, 2)
+            var windows: CFTypeRef?
+            check(AXUIElementCopyAttributeValue(application, kAXWindowsAttribute as CFString, &windows) == .success,
+                  "Native UI tests require the test runner's existing Accessibility access")
+            return
+        }
         check(CommandLine.arguments.count >= 3)
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "个性化", "词库", "关于"],
+              "Dictionary category must be between personalization and about")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings)
         IFEngine.stop()
+        // Keep existing GUI cases intact; drive asynchronous service scenarios with AppKit's event loop.
+        var testError: Error?
+        Task { @MainActor in
+            do {
+                try await DictionarySettingsUITests.run(settings: isolated.settings,
+                    shared: URL(fileURLWithPath: CommandLine.arguments[1]),
+                    root: URL(fileURLWithPath: CommandLine.arguments[2]).appendingPathComponent("dictionary-ui"))
+            } catch { testError = error }
+            NSApp.stop(nil)
+            NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
+                timestamp: 0, windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: false)
+        }
+        NSApp.run()
+        if let testError { throw testError }
     }
 
     @MainActor static func runCases(settings: IFSettings) {
@@ -25,10 +50,12 @@ struct SettingsUITests {
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
         drainEvents(seconds: 1)
-        check(window.isVisible && window.isKeyWindow && NSApp.isActive)
+        check(window.isVisible && window.isKeyWindow && NSApp.isActive,
+              "Settings visible=\(window.isVisible) key=\(window.isKeyWindow) active=\(NSApp.isActive)")
         check(window.styleMask.contains([.resizable, .fullSizeContentView]))
         check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
         check(window.contentViewController is NSHostingController<SettingsView>)
+        initializeAccessibility()
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX \(element)") }
         }
@@ -147,6 +174,20 @@ struct SettingsUITests {
         }
         window.setFrame(initialFrame, display: true)
         print("PASS settings layout: full-height SwiftUI sidebar behind traffic lights, three native pickers/defaults accessible, controls within content layout at minimum/enlarged sizes")
+    }
+
+    @MainActor static func initializeAccessibility() {
+        // SwiftUI initializes its accessibility tree lazily when an assistive client connects.
+        // Use a bounded public read from a child process; never change system accessibility settings.
+        let reader = Process()
+        reader.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        reader.arguments = ["--initialize-accessibility", String(ProcessInfo.processInfo.processIdentifier)]
+        try! reader.run()
+        let deadline = Date().addingTimeInterval(5)
+        while reader.isRunning && Date() < deadline { drainEvents(seconds: 0.02) }
+        if reader.isRunning { reader.terminate(); check(false, "Accessibility reader timed out") }
+        check(reader.terminationStatus == 0, "Accessibility reader failed")
+        drainEvents()
     }
 
     @MainActor static func checkFont(_ panel: IMKCandidates, engine: IFEngine, composition: EngineSnapshot,

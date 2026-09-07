@@ -88,12 +88,14 @@ final class IFSettings: ObservableObject {
 enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
     case personalization = "个性化"
+    case dictionaries = "词库"
     case about = "关于"
     var id: Self { self }
     var symbol: String {
         switch self {
         case .appearance: "paintbrush"
         case .personalization: "person.crop.circle"
+        case .dictionaries: "books.vertical"
         case .about: "info.circle"
         }
     }
@@ -101,10 +103,12 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
 struct SettingsView: View {
     @ObservedObject var settings: IFSettings
+    var dictionaries: IFDictionaryCoordinator?
     @State private var section: SettingsSection?
 
-    init(settings: IFSettings, initialSection: SettingsSection = .appearance) {
+    init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil, initialSection: SettingsSection = .appearance) {
         self.settings = settings
+        self.dictionaries = dictionaries
         _section = State(initialValue: initialSection)
     }
 
@@ -122,6 +126,7 @@ struct SettingsView: View {
             Group {
                 if section == .about { about }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
+                else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }
             .navigationTitle((section ?? .appearance).rawValue)
@@ -170,8 +175,11 @@ struct SettingsView: View {
 }
 
 @MainActor
-final class IFSettingsWindowController: NSWindowController {
+final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
+    var dictionaries: IFDictionaryCoordinator?
+
+    func windowWillClose(_ notification: Notification) { dictionaries?.presentationClosed() }
     private let settings: IFSettings
 
     init(settings: IFSettings) {
@@ -191,12 +199,14 @@ final class IFSettingsWindowController: NSWindowController {
         window.contentMinSize = NSSize(width: 700, height: 380)
         window.collectionBehavior = [.fullScreenNone, .fullScreenDisallowsTiling]
         window.isReleasedWhenClosed = false
-        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings))
+        window.contentViewController = NSHostingController(rootView: SettingsView(settings: settings, dictionaries: dictionaries))
         self.window = window
+        window.delegate = self
         window.center()
     }
 
     func present() {
+        dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
         NSApp.setActivationPolicy(.accessory)
         showWindow(nil)
