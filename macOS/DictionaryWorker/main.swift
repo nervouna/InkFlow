@@ -77,7 +77,7 @@ do {
     operation = "clean-smoke"
     let status = IFDictionaryProbe(shared.path, probe.path, cache.path)
     guard status == 0 else { throw IFDictionaryUpdateError(.verify, "smoke-probe", detail: "probe=\(status)") }
-    let required = ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"]
+    let required = ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles
     for name in required where !FileManager.default.fileExists(atPath: cache.appendingPathComponent(name).path) {
         throw IFDictionaryUpdateError(.verify, "compiled-file-missing", file: name)
     }

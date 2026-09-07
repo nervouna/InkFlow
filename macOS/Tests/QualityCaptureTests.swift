@@ -52,6 +52,11 @@ struct QualityCaptureTests {
         classification()
         pureSnapshots()
         try await engineAndController(store, db, isolated.settings)
+        let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
+        if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
+        let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: .unknown)
+        await pagingSettings(pagingStore, pagingDB)
+        await pagingStore.close()
         let syntheticDB = CaptureDatabase(url: output.appendingPathComponent("recorder-synthetic.sqlite3"))
         if files.fileExists(atPath: syntheticDB.url.path) { try files.removeItem(at: syntheticDB.url) }
         let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: .unknown)
@@ -224,7 +229,13 @@ struct QualityCaptureTests {
             case "return": check(control.handle(keyEvent(36, "\r"), client: client))
             case "punctuation": check(control.handle(keyEvent(43, ","), client: client))
             case "forced": check(!control.handle(keyEvent(0, "a", .command), client: client))
-            default: check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+            default:
+                let before = control.engine!.snapshot()
+                check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+                check(control.engine!.snapshot() == before && !control.engine!.asciiMode && control.engine!.requestedASCIIMode)
+                check(!client.mutations.contains { $0.hasPrefix("insert:") }, "Deferred toggle must not insert text")
+                await store.flush()
+                check(db.decisions().count == count, "Deferred toggle must not publish a selection decision")
             }
             control.commitComposition(client); control.deactivateServer(client)
             await store.flush()
@@ -237,8 +248,34 @@ struct QualityCaptureTests {
             if action == "return" {
                 check(rows[0]["selected_display_index"] == nil && rows[0]["unknown_rank_reason"] == "not_a_candidate_selection")
                 check(client.document == "nihao")
+            } else if action == "toggle" {
+                check(rows[0]["trigger"] == "force_flush" && rows[0]["outcome"] == "committed")
+                check(db.rows("SELECT * FROM commits WHERE id='\(rows[0]["commit_id"]!)'")[0]["kind"] == "forced_flush",
+                      "Actual flush owns the commit origin after a deferred toggle")
             }
         }
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            input("nihao", control, client)
+            let before = control.engine!.snapshot(), count = db.decisions().count
+            check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+            check(control.engine!.snapshot() == before && !client.mutations.contains { $0.hasPrefix("insert:") })
+            await store.flush()
+            check(db.decisions().count == count)
+            let selected = before.candidates[before.highlight]
+            control.candidateSelected(NSAttributedString(string: selected))
+            control.commitComposition(client); control.deactivateServer(client)
+            await store.flush()
+            let rows = Array(db.decisions().dropFirst(count))
+            check(rows.count == 1 && rows[0]["trigger"] == "panel" && rows[0]["outcome"] == "committed")
+            check(rows[0]["regular_ranked_selection"] == "1")
+            check(client.mutations.filter { $0.hasPrefix("insert:") } == ["insert:" + selected])
+            let composition = db.rows("SELECT * FROM compositions WHERE id='\(rows[0]["composition_id"]!)'")[0]
+            check(db.ops(composition).keypresses == 6, "Five letters plus deferred toggle; panel selection adds no key")
+            check(db.rows("SELECT * FROM commits WHERE id='\(rows[0]["commit_id"]!)'")[0]["kind"] == "candidate")
+        }
+        print("PASS deferred mode recording: no premature decision/insert, one actual flush or panel decision, correct origin and six keys")
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -309,8 +346,8 @@ struct QualityCaptureTests {
             input("ni", control, client)
             check(control.handle(keyEvent(39, "'"), client: client))
             input("hao", control, client)
-            check(control.handle(keyEvent(24, "="), client: client))
-            check(control.handle(keyEvent(27, "-"), client: client))
+            check(control.handle(keyEvent(30, "]"), client: client))
+            check(control.handle(keyEvent(33, "["), client: client))
             check(control.handle(keyEvent(30, "]"), client: client))
             check(control.handle(keyEvent(33, "["), client: client))
             check(control.handle(keyEvent(51, ""), client: client))
@@ -413,6 +450,47 @@ struct QualityCaptureTests {
             check(db.rows("SELECT * FROM commits ORDER BY rowid DESC LIMIT 1")[0]["insertion_issued"] == "0")
         }
         print("PASS deferred applied settings, configuration revisions, controller/client isolation and no-client insertion evidence")
+    }
+
+    @MainActor static func pagingSettings(_ store: QualityStore, _ db: CaptureDatabase) async {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        for keys in IFSettings.PagingKeys.allCases {
+            settings.pagingKeys = keys
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            input("shi", control, client)
+            let before = control.engine!.qualitySnapshot()
+            settings.pagingKeys = keys == .brackets ? .minusEqual : .brackets
+            for event in keys == .brackets ? [keyEvent(30, "]"), keyEvent(33, "[")] : [keyEvent(24, "="), keyEvent(27, "-")] {
+                check(control.handle(event, client: client))
+            }
+            _ = control.handle(keys == .brackets ? keyEvent(24, "=") : keyEvent(30, "]"), client: client)
+            control.commitComposition(client)
+            await store.flush()
+            let original = db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]
+            check(db.ops(original).pageRequests == 2 && db.ops(original).pageTurns == 2,
+                  "Unselected symbols are not page requests; a pending choice does not change applied paging")
+            check(db.page(db.decisions().last!).configuration.inputOptions == before.configuration.inputOptions)
+
+            input("shi", control, client)
+            let updated = control.engine!.qualitySnapshot()
+            check(updated.configuration.inputOptions == settings.inputPreferences.recordedValues)
+            for event in [keyEvent(121, ""), keyEvent(116, "")] +
+                (keys == .brackets ? [keyEvent(24, "="), keyEvent(27, "-")] : [keyEvent(30, "]"), keyEvent(33, "[")]) {
+                check(control.handle(event, client: client))
+            }
+            _ = control.handle(keys == .brackets ? keyEvent(30, "]") : keyEvent(24, "="), client: client)
+            control.commitComposition(client)
+            await store.flush()
+            let next = db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]
+            check(db.ops(next).pageRequests == 4 && db.ops(next).pageTurns == 4,
+                  "Next composition counts the new selected pair and native Page Up/Down only")
+            check(db.page(db.decisions().last!).configuration.inputOptions == updated.configuration.inputOptions)
+        }
+        check(db.rows("SELECT * FROM compositions").count == 4 && store.statistics().errors == 0)
+        print("PASS paging recording: unselected symbols excluded, deferred and next-composition applied options, native Page Up/Down retained")
     }
 
     @MainActor static func synthetic(_ store: QualityStore, _ db: CaptureDatabase) async {

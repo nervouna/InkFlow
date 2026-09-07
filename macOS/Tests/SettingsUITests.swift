@@ -5,6 +5,25 @@ import ApplicationServices
 @main
 struct SettingsUITests {
     @MainActor static func main() throws {
+        if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--press-accessibility" {
+            let application = AXUIElementCreateApplication(Int32(CommandLine.arguments[2])!)
+            AXUIElementSetMessagingTimeout(application, 2)
+            func find(_ element: AXUIElement) -> AXUIElement? {
+                var identifier: CFTypeRef?
+                AXUIElementCopyAttributeValue(element, kAXIdentifierAttribute as CFString, &identifier)
+                if identifier as? String == CommandLine.arguments[3] { return element }
+                var children: CFTypeRef?
+                AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+                for child in children as? [AXUIElement] ?? [] {
+                    if let found = find(child) { return found }
+                }
+                return nil
+            }
+            guard let element = find(application) else { check(false, "Native AX action target missing"); return }
+            check(AXUIElementPerformAction(element, kAXPressAction as CFString) == .success,
+                  "System Accessibility press: \(CommandLine.arguments[3])")
+            return
+        }
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--initialize-accessibility" {
             let application = AXUIElementCreateApplication(Int32(CommandLine.arguments[2])!)
             AXUIElementSetMessagingTimeout(application, 2)
@@ -18,11 +37,12 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "个性化", "词库", "关于"],
-              "Dictionary category must be between personalization and about")
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "词库", "关于"],
+              "Input category follows appearance while existing categories retain their order")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings)
         IFEngine.stop()
+        if CommandLine.arguments.contains("--input-only") { return }
         // Keep existing GUI cases intact; drive asynchronous service scenarios with AppKit's event loop.
         var testError: Error?
         Task { @MainActor in
@@ -45,7 +65,7 @@ struct SettingsUITests {
         let preferences = IFSettingsWindowController(settings: settings)
         let controller = InkFlowInputController(server: server, delegate: nil, client: nil,
                                                 settings: settings, settingsWindow: preferences)!
-        let item = controller.menu()!.items.first!
+        let item = controller.menu()!.items.first { $0.action == #selector(InkFlowInputController.showPreferences(_:)) }!
         check(item.action == #selector(InkFlowInputController.showPreferences(_:)))
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
@@ -55,11 +75,17 @@ struct SettingsUITests {
         check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
         check(window.contentViewController is SettingsHostingController)
         initializeAccessibility()
+        if CommandLine.arguments.contains("--input-only") {
+            checkInputLayout(window, settings: settings)
+            window.close()
+            return
+        }
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX \(element)") }
         }
         checkLayout(window)
         checkCustomPhrasesLayout(window, settings: settings)
+        checkInputLayout(window, settings: settings)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         waitForFocus(window)
@@ -116,6 +142,138 @@ struct SettingsUITests {
             while window.isVisible { drainEvents(seconds: 0.25) }
         }
         window.close()
+    }
+
+    @MainActor static func checkInputLayout(_ window: NSWindow, settings: IFSettings) {
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .input))
+        checkMinimumSize(window)
+        window.setContentSize(NSSize(width: 700, height: 560))
+        drainEvents()
+        if CommandLine.arguments.contains("--dump-accessibility") {
+            for element in IFAccessibilityTree(window) { print("AX input initial \(element)") }
+        }
+
+        func control(_ identifier: String) -> [String: Any] {
+            let elements = IFAccessibilityTree(window)
+            let matches = elements.filter { $0["id"] as? String == identifier }
+            if matches.count != 1 { for element in elements { print("AX input \(element)") } }
+            check(matches.count == 1, "One native Input control: \(identifier)")
+            return matches[0]
+        }
+        func press(_ identifier: String) {
+            // SwiftUI checkbox proxies do not implement the in-process press selector.
+            // A child sends the system AX action while this process services its event loop.
+            let action = Process()
+            action.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+            action.arguments = ["--press-accessibility", String(ProcessInfo.processInfo.processIdentifier), identifier]
+            try! action.run()
+            let deadline = Date().addingTimeInterval(5)
+            while action.isRunning && Date() < deadline { drainEvents(seconds: 0.02) }
+            if action.isRunning { action.terminate(); check(false, "Native Input action timed out: \(identifier)") }
+            check(action.terminationStatus == 0, "Native Input action: \(identifier)")
+            drainEvents()
+        }
+        func checkTitle(_ title: String, beside control: [String: Any]) {
+            // Native grouped Forms expose control labels as adjacent static text.
+            let labels = IFAccessibilityTree(window).filter {
+                $0["role"] as? String == "AXStaticText" && ($0["value"] as? String == title || $0["label"] as? String == title)
+            }
+            check(labels.count == 1, "One exact compact Input label: \(title)")
+            let labelFrame = (labels[0]["frame"] as! NSValue).rectValue
+            let controlFrame = (control["frame"] as! NSValue).rectValue
+            check(abs(labelFrame.midY - controlFrame.midY) < 3 && labelFrame.maxX <= controlFrame.minX,
+                  "Meaningful label accompanies its native control: \(title)")
+        }
+        let toggles = ["abbreviation": "简拼", "typoTolerance": "自动纠错", "fuzzy": "模糊音",
+                       "emoji": "显示 Emoji 候选", "englishPunctuation": "英文标点", "traditional": "繁体输入"]
+        for (key, title) in toggles {
+            let element = control("settings.input.\(key)")
+            check(element["role"] as? String == "AXCheckBox")
+            checkTitle(title, beside: element)
+        }
+        let elements = IFAccessibilityTree(window)
+        check(elements.filter { $0["role"] as? String == "AXCheckBox" }.count == toggles.count,
+              "Only six Input toggles, including one unified fuzzy switch")
+        let removed = ["拼音输入", "候选与按键", "标点符号", "简拼与全简混输", "常见拼写容错",
+                       "例如 hzidao", "仅影响中文", "自定义短语保留原文"]
+        for element in elements {
+            let text = [element["label"], element["value"]].compactMap { $0 as? String }.joined()
+            check(!removed.contains { text.contains($0) }, "Input has no small headings or explanatory copy: \(text)")
+        }
+        check(!settings.fuzzyEnabled)
+        press("settings.input.fuzzy")
+        check([InputOption.fuzzyZ, .fuzzyC, .fuzzyS].allSatisfy { settings.inputPreferences[$0] })
+        press("settings.input.fuzzy")
+        check(!settings.fuzzyEnabled)
+
+        func checkPaging(_ selection: IFSettings.PagingKeys) {
+            let radios = IFAccessibilityTree(window).filter { $0["role"] as? String == "AXRadioButton" }
+            check(radios.count == 2, "Exactly two mutually exclusive paging radios")
+            for keys in IFSettings.PagingKeys.allCases {
+                let key = keys == .brackets ? "brackets" : "minusEqual"
+                let radio = control("settings.input.paging.\(key)")
+                check(radio["label"] as? String == keys.rawValue && radio["value"] as? Int == (keys == selection ? 1 : 0),
+                      "Exact paging title and mutual exclusion: \(keys.rawValue)")
+            }
+            let frames = radios.map { ($0["frame"] as! NSValue).rectValue }.sorted { $0.minX < $1.minX }
+            check(abs(frames[0].midY - frames[1].midY) < 2 && frames[0].maxX <= frames[1].minX,
+                  "Native paging radio choices are horizontal")
+            let toggleFrame = (control("settings.input.emoji")["frame"] as! NSValue).rectValue
+            check(abs(frames[1].maxX - toggleFrame.maxX) < 3,
+                  "Paging radio choices align with the right-side controls")
+            checkTitle("翻页", beside: control("settings.input.paging.brackets"))
+            check(settings.pagingKeys == selection)
+        }
+        checkPaging(.brackets)
+        press("settings.input.paging.minusEqual"); checkPaging(.minusEqual)
+        press("settings.input.paging.brackets"); checkPaging(.brackets)
+
+        let mappings: [(InputOption, String, String)] = [(.cornerQuotes, "{}", "「」"), (.middleDot, "`", "·"),
+                                                        (.fullwidthPipe, "|", "｜"), (.ideographicComma, "\\", "、")]
+        for (option, key, mapped) in mappings {
+            let identifier = "settings.input.\(option.rawValue)"
+            let popup = control(identifier)
+            check(popup["role"] as? String == "AXPopUpButton")
+            checkTitle("按下 \(key) 时输入", beside: popup)
+            check(popup["value"] as? String == "输入 \(mapped)")
+            // Drive the real popup's menu with native key events, including both available choices.
+            for enabled in [false, true, false] {
+                let timer = Timer(timeInterval: 0.2, repeats: false) { _ in
+                    MainActor.assumeIsolated {
+                        NSApp.postEvent(keyEvent(enabled ? 125 : 126, enabled ? "\u{f701}" : "\u{f700}"), atStart: false)
+                        NSApp.postEvent(keyEvent(36, "\r"), atStart: false)
+                    }
+                }
+                RunLoop.main.add(timer, forMode: .common)
+                press(identifier)
+                drainEvents(seconds: 0.3)
+                check(settings.inputPreferences[option] == enabled, "Popup selection persists: \(option) = \(enabled)")
+                check(control(identifier)["value"] as? String == (enabled ? "输入 \(mapped)" : "原样输入"))
+            }
+        }
+        for english in [true, false] {
+            press("settings.input.englishPunctuation")
+            check(settings.inputPreferences[.englishPunctuation] == english)
+            for (option, _, _) in mappings {
+                let popup = control("settings.input.\(option.rawValue)")
+                check(popup["enabled"] as? Bool == !english && popup["value"] as? String == "原样输入")
+                check(!settings.inputPreferences[option], "Disabled dropdown preserves its selection")
+            }
+        }
+        settings.inputSettingsError = "输入设置测试错误"
+        drainEvents()
+        check(IFAccessibilityTree(window).contains { $0["value"] as? String == "输入设置测试错误" || $0["label"] as? String == "输入设置测试错误" },
+              "Actual input errors remain visible")
+        settings.inputSettingsError = nil
+        for (option, _, _) in mappings { settings.setInputOption(option, enabled: true) }
+        drainEvents()
+        check(window.title == "输入")
+        if CommandLine.arguments.contains("--dump-accessibility") {
+            for element in IFAccessibilityTree(window) { print("AX input final \(element)") }
+        }
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
+        drainEvents()
+        print("PASS input settings layout: exact compact labels, no headings/copy, unified fuzzy action, horizontal exclusive radios, native popup choices/actions, preserved disabled mappings and actual error")
     }
 
     @MainActor static func checkCustomPhrasesLayout(_ window: NSWindow, settings: IFSettings) {

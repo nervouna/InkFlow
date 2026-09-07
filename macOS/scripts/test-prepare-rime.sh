@@ -6,7 +6,7 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \
   "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
-cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
+cp macOS/scripts/prepare-rime.sh macOS/scripts/prepare-spelling.sh "$fixture/macOS/scripts/"
 : > "$fixture/macOS/Data/english-technology.tsv"
 # Isolate English policy fixtures from the independently tested Chinese generator.
 # This stub exists only inside this test's temporary repository.

@@ -65,6 +65,16 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) var result: NSMenu?
         MainActor.assumeIsolated {
             let menu = NSMenu(title: "InkFlow")
+            let ascii = engine?.requestedASCIIMode ?? false
+            menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
+                         action: #selector(toggleInputMode(_:)), keyEquivalent: "").target = self
+            let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: "")
+            punctuation.target = self
+            punctuation.state = settings.inputPreferences[.englishPunctuation] ? .on : .off
+            let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: "")
+            traditional.target = self
+            traditional.state = settings.inputPreferences[.traditional] ? .on : .off
+            menu.addItem(.separator())
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
             result = menu
         }
@@ -76,8 +86,25 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         MainActor.assumeIsolated { settingsWindow.present() }
     }
 
+    @objc nonisolated func toggleInputMode(_ sender: Any?) {
+        MainActor.assumeIsolated { engine?.asciiMode = !(engine?.requestedASCIIMode ?? false) }
+    }
+
+    @objc nonisolated func toggleEnglishPunctuation(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            settings.setInputOption(.englishPunctuation, enabled: !settings.inputPreferences[.englishPunctuation])
+        }
+    }
+
+    @objc nonisolated func toggleTraditional(_ sender: Any?) {
+        MainActor.assumeIsolated {
+            settings.setInputOption(.traditional, enabled: !settings.inputPreferences[.traditional])
+        }
+    }
+
     func applySettings() {
-        engine?.setConfiguration(candidateCount: settings.candidateCount, customPhrases: settings.customPhrases)
+        engine?.setConfiguration(candidateCount: settings.candidateCount, customPhrases: settings.customPhrases,
+                                 inputPreferences: settings.inputPreferences)
         if settings.inputSettingsError != engine?.configurationError {
             settings.inputSettingsError = engine?.configurationError
         }

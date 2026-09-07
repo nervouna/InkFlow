@@ -116,7 +116,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: false)
         try dictionary.write(to: shared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
         try manifest.encoded().write(to: shared.appendingPathComponent(IFDictionaryManifest.filename))
-        for name in ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] {
+        for name in ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles {
             try Data("compiled fixture".utf8).write(to: cache.appendingPathComponent(name))
         }
         var hashes = [String: String]()
