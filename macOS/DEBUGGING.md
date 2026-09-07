@@ -141,3 +141,27 @@ needs existing Accessibility access; the test never prompts or changes global se
 Run `bash macOS/scripts/test-settings-ui.sh` after resolving the reported prerequisite.
 Keep genuine control and layout assertions enabled. Headless engine/coordinator tests
 remain separate evidence and cannot substitute for native window-lifecycle acceptance.
+
+The harness waits up to five seconds for a visible, key window and an active app,
+then fails with the foreground application's bundle ID/PID and the public console/login
+session flags. An activation request is asynchronous; a timeout alone does not identify
+whether the desktop was locked or another application held focus.
+
+## Dictionary disclosure contents have missing accessibility identifiers
+
+**Symptom:** Source names, full commits and URLs are present after expanding “词库来源”,
+but a lookup such as `dictionaries.source.frost-8105` fails even after additional waiting.
+
+**Cause:** Applying `accessibilityIdentifier` to a SwiftUI `DisclosureGroup` overrides
+the identifiers on its descendants on the observed macOS 26 runtime. The same pattern
+affects the “错误详情” disclosure and its diagnostic text.
+
+**Fix:** Keep identifiers on individual content elements. The native GUI test locates
+each disclosure by its `AXDisclosureTriangle` role and label, presses that exact control,
+and requires its expanded state to toggle. It retains independent content and layout
+assertions; missing or duplicate content identifiers print the accessibility tree.
+
+**Regression:** Run `bash macOS/scripts/test-settings-ui.sh` after building. The suite
+checks all seven sources and complete diagnostics across error stages, with disclosures
+expanded and collapsed and windows at minimum/enlarged sizes. It does not replace
+installed-input-method typing acceptance.

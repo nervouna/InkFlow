@@ -49,9 +49,7 @@ struct SettingsUITests {
         check(item.action == #selector(InkFlowInputController.showPreferences(_:)))
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
-        drainEvents(seconds: 1)
-        check(window.isVisible && window.isKeyWindow && NSApp.isActive,
-              "Settings visible=\(window.isVisible) key=\(window.isKeyWindow) active=\(NSApp.isActive)")
+        waitForFocus(window)
         check(window.styleMask.contains([.resizable, .fullSizeContentView]))
         check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
         check(window.contentViewController is NSHostingController<SettingsView>)
@@ -63,8 +61,8 @@ struct SettingsUITests {
         checkCustomPhrasesLayout(window, settings: settings)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
-        drainEvents()
-        check(preferences.window === window && window.isVisible && window.isKeyWindow && NSApp.isActive)
+        waitForFocus(window)
+        check(preferences.window === window)
         let panel = controller.panel!, engine = controller.engine!
         type(engine, "shi")
         let before = engine.snapshot()
@@ -174,6 +172,22 @@ struct SettingsUITests {
         }
         window.setFrame(initialFrame, display: true)
         print("PASS settings layout: full-height SwiftUI sidebar behind traffic lights, three native pickers/defaults accessible, controls within content layout at minimum/enlarged sizes")
+    }
+
+    @MainActor static func waitForFocus(_ window: NSWindow) {
+        // Activation is asynchronous. Keep the focus requirement and bound the wait.
+        let deadline = Date().addingTimeInterval(5)
+        while !(window.isVisible && window.isKeyWindow && NSApp.isActive), Date() < deadline {
+            drainEvents(seconds: 0.05)
+        }
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        check(window.isVisible && window.isKeyWindow && NSApp.isActive,
+              "Settings focus timed out after 5s: visible=\(window.isVisible) key=\(window.isKeyWindow) active=\(NSApp.isActive) " +
+              "frontmost=\(frontmost?.bundleIdentifier ?? "unknown") pid=\(frontmost?.processIdentifier ?? -1) " +
+              "onConsole=\(session?[kCGSessionOnConsoleKey as String] ?? "unknown") " +
+              "loginComplete=\(session?[kCGSessionLoginDoneKey as String] ?? "unknown"). " +
+              "Native UI checks require an unlocked desktop that can give the harness focus.")
     }
 
     @MainActor static func initializeAccessibility() {

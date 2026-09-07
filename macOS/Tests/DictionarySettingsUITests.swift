@@ -81,12 +81,12 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
         check(text("dictionaries.version", in: window).contains(manifest.contentVersion), "Full version is accessible")
         check(text("dictionaries.count", in: window).contains(manifest.entryCount.formatted()))
         let activationLabel = text("dictionaries.activatedAt", in: window)
-        await fit(window, required: ["dictionaries.check", "dictionaries.sources", "dictionaries.version"])
-        await press("dictionaries.sources", in: window)
+        await fit(window, required: ["dictionaries.check", "dictionaries.version"], disclosures: ["词库来源"])
+        await pressDisclosure("词库来源", in: window)
         for spec in IFDictionaryCatalog.sources {
-            check(text("dictionaries.source.\(spec.id)", in: window).contains(spec.name))
-            check(text("dictionaries.commit.\(spec.id)", in: window).contains(spec.pinnedCommit))
-            check(text("dictionaries.url.\(spec.id)", in: window).contains(spec.sourceURL(commit: spec.pinnedCommit).absoluteString))
+            checkText("dictionaries.source.\(spec.id)", contains: spec.name, in: window)
+            checkText("dictionaries.commit.\(spec.id)", contains: spec.pinnedCommit, in: window)
+            checkText("dictionaries.url.\(spec.id)", contains: spec.sourceURL(commit: spec.pinnedCommit).absoluteString, in: window)
         }
         await fit(window, required: ["dictionaries.check"])
         print("PASS dictionary UI metadata: actual content/count/activation, seven trusted immutable sources, full versions/URLs, minimum/enlarged layout")
@@ -213,12 +213,12 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
         check(text("dictionaries.failure", in: window).contains(stage.failureSummary))
         check(text("dictionaries.failureStage", in: window).contains(stage.displayName))
         check(element("dictionaries.retry", in: window) != nil)
-        await press("dictionaries.details", in: window)
+        await pressDisclosure("错误详情", in: window)
         let detail = text("dictionaries.errorDetails", in: window)
         check(detail.contains(service.failure!.technicalDetails), "Full diagnostic must be accessible/selectable")
-        await fit(window, required: ["dictionaries.check", "dictionaries.retry", "dictionaries.failure", "dictionaries.details"])
+        await fit(window, required: ["dictionaries.check", "dictionaries.retry", "dictionaries.failure"], disclosures: ["错误详情"])
         check(element("dictionaries.errorDetails", in: window) != nil)
-        await press("dictionaries.details", in: window)
+        await pressDisclosure("错误详情", in: window)
     }
 
     static func show(_ section: SettingsSection, window: NSWindow, settings: IFSettings, service: IFDictionaryCoordinator?) async {
@@ -229,25 +229,67 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
 
     static func element(_ identifier: String, in window: NSWindow) -> [String: Any]? {
         window.contentView?.layoutSubtreeIfNeeded()
-        return IFAccessibilityTree(window).first { $0["id"] as? String == identifier }
+        let matches = IFAccessibilityTree(window).filter { $0["id"] as? String == identifier }
+        if matches.count > 1 { dumpAccessibility(window) }
+        check(matches.count <= 1, "Duplicate accessibility identifier \(identifier): \(matches.count) matches")
+        return matches.first
+    }
+    static func disclosure(_ label: String, in window: NSWindow) -> [String: Any]? {
+        window.contentView?.layoutSubtreeIfNeeded()
+        let matches = IFAccessibilityTree(window).filter {
+            $0["role"] as? String == "AXDisclosureTriangle" && $0["label"] as? String == label
+        }
+        if matches.count != 1 { dumpAccessibility(window) }
+        check(matches.count == 1, "Expected one native disclosure \(label), found \(matches.count)")
+        return matches.first
+    }
+    static func dumpAccessibility(_ window: NSWindow) {
+        for item in IFAccessibilityTree(window) { print("AX dictionary \(item)") }
     }
     static func text(_ identifier: String, in window: NSWindow) -> String {
         drainEvents(seconds: 0.02)
-        guard let element = element(identifier, in: window) else { return "" }
+        guard let element = element(identifier, in: window) else {
+            dumpAccessibility(window)
+            check(false, "Missing accessible text \(identifier)")
+            return ""
+        }
         return "\(element["label"] ?? "") \(element["value"] ?? "")"
+    }
+    static func checkText(_ identifier: String, contains expected: String, in window: NSWindow) {
+        let actual = text(identifier, in: window)
+        if !actual.contains(expected) { dumpAccessibility(window) }
+        check(actual.contains(expected), "\(identifier): expected \(expected), got \(actual)")
     }
     static func press(_ identifier: String, in window: NSWindow) async {
         drainEvents(seconds: 0.02)
-        check(IFPressAccessibility(window, identifier), "Native AX press \(identifier)")
+        let pressed = element(identifier, in: window) != nil && IFPressAccessibility(window, identifier)
+        if !pressed { dumpAccessibility(window) }
+        check(pressed, "Native AX press \(identifier)")
         try? await Task.sleep(for: .milliseconds(50))
         drainEvents(seconds: 0.02)
     }
-    static func fit(_ window: NSWindow, required: [String]) async {
+    static func pressDisclosure(_ label: String, in window: NSWindow) async {
+        let wasExpanded = (disclosure(label, in: window)?["value"] as? NSNumber)?.boolValue
+        check(wasExpanded != nil, "Native disclosure \(label) must expose its expanded state")
+        let pressed = IFPressAccessibilityDisclosure(window, label)
+        if !pressed { dumpAccessibility(window) }
+        check(pressed, "Native AX disclosure press \(label)")
+        let deadline = Date().addingTimeInterval(2)
+        while (disclosure(label, in: window)?["value"] as? NSNumber)?.boolValue == wasExpanded, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+            drainEvents(seconds: 0.02)
+        }
+        let expanded = (disclosure(label, in: window)?["value"] as? NSNumber)?.boolValue
+        if expanded != !wasExpanded! { dumpAccessibility(window) }
+        check(expanded == !wasExpanded!, "Native disclosure \(label) must toggle its expanded state")
+    }
+    static func fit(_ window: NSWindow, required: [String], disclosures: [String] = []) async {
         for size in [NSSize(width: 700, height: 380), NSSize(width: 1000, height: 700)] {
             window.setContentSize(size); try? await Task.sleep(for: .milliseconds(50)); drainEvents()
             let frame = window.convertToScreen(window.contentLayoutRect)
-            for identifier in required {
-                let item = element(identifier, in: window)
+            let targets = required.map { ($0, element($0, in: window)) } +
+                disclosures.map { ("disclosure \($0)", disclosure($0, in: window)) }
+            for (identifier, item) in targets {
                 guard let control = (item?["frame"] as? NSValue)?.rectValue else {
                     check(false, "Missing accessible \(identifier)"); return
                 }

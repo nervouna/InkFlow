@@ -12,10 +12,10 @@ struct DictionarySettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if coordinator?.engineAvailable == true, let active = coordinator?.active {
                         activeDictionary(active)
+                        // Keep IDs on content leaves; a DisclosureGroup ID overrides descendant IDs.
                         DisclosureGroup("词库来源", isExpanded: $sourcesExpanded) {
                             sources(active.manifest)
                         }
-                        .accessibilityIdentifier("dictionaries.sources")
                     } else {
                         Text(coordinator == nil ? "词库服务尚未就绪" : "输入引擎暂不可用")
                             .font(.headline)
@@ -55,7 +55,6 @@ struct DictionarySettingsView: View {
                         .frame(height: 100)
                         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
                     }
-                    .accessibilityIdentifier("dictionaries.details")
                 }
             } else {
                 HStack(spacing: 8) {
