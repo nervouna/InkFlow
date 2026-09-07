@@ -3,14 +3,22 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 evidence="$PWD/build/gui-verification"
 fail() { echo "$*" >&2; exit 1; }
+snapshot() (
+  temporary_index=$(mktemp "${TMPDIR:-/tmp}/inkflow-gui-index.XXXXXX")
+  trap 'rm -f "$temporary_index"' EXIT
+  rm "$temporary_index"
+  export GIT_INDEX_FILE="$temporary_index"
+  git read-tree HEAD
+  git add -A -- .
+  git write-tree
+)
 case "${1:-}" in
   record)
-    [[ -z "$(git status --porcelain)" ]] || fail 'Record GUI evidence from a clean committed checkout.'
     mkdir -p "$evidence"
     mkdir "$evidence/running" 2>/dev/null || fail 'GUI recording already running; inspect before retrying.'
     trap 'rmdir "$evidence/running"' EXIT
-    rm -f "$evidence/passed.sha"
-    tested=$(git rev-parse HEAD)
+    rm -f "$evidence/passed.tree"
+    tested=$(snapshot)
     # A fresh bundle avoids stale files; keep the previous build for diagnosis.
     if [[ -e build/InkFlow.app ]]; then
       backup=$(mktemp -d "$PWD/build/gui-previous.XXXXXX")
@@ -21,21 +29,20 @@ case "${1:-}" in
         fail "GUI evidence not recorded: $script failed. See $evidence/$script.log"
       fi
     done
-    [[ "$(git rev-parse HEAD)" == "$tested" && -z "$(git status --porcelain)" ]] || fail 'Source changed during GUI verification.'
-    printf '%s\n' "$tested" > "$evidence/passed.sha"
+    [[ "$(snapshot)" == "$tested" ]] || fail 'Source changed during GUI verification.'
+    printf '%s\n' "$tested" > "$evidence/passed.tree"
     echo "PASS: GUI verification recorded for $tested"
     ;;
   check)
     [[ ! -d "$evidence/running" ]] || fail 'GUI verification is still running.'
-    [[ -f "$evidence/passed.sha" ]] || fail 'No passing GUI record. Run gui-verification.sh record on an unlocked desktop.'
+    [[ -f "$evidence/passed.tree" ]] || fail 'No passing GUI record. Run gui-verification.sh record on an unlocked desktop.'
     for script in build test-controller-initialization test-settings-ui; do
       [[ -f "$evidence/$script.log" ]] || fail 'GUI verification log is missing.'
     done
-    tested=$(cat "$evidence/passed.sha")
-    [[ "$tested" =~ ^[0-9a-f]{40}$ ]] || fail 'Invalid GUI verification commit.'
-    git cat-file -e "$tested^{commit}" 2>/dev/null || fail 'GUI verification commit is unavailable.'
-    [[ -z "$(git ls-files --others --exclude-standard)" ]] || fail 'Untracked source invalidates GUI evidence.'
-    git diff --quiet "$tested" -- . ':(exclude)macOS/Info.plist' || fail 'Source differs from the GUI-tested commit.'
+    tested=$(cat "$evidence/passed.tree")
+    [[ "$tested" =~ ^[0-9a-f]{40}$ && "$(git cat-file -t "$tested" 2>/dev/null)" == tree ]] || fail 'GUI verification tree is unavailable.'
+    current=$(snapshot)
+    git diff --quiet "$tested" "$current" -- . ':(exclude)macOS/Info.plist' || fail 'Source differs from the GUI-tested tree.'
     scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-gui-evidence.XXXXXX")
     trap 'rm -rf "$scratch"' EXIT
     git show "$tested:macOS/Info.plist" > "$scratch/tested.plist"

@@ -75,6 +75,52 @@ if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts
 [[ ! -e "$output/stage" ]]
 echo 'PASS: version updates, configuration loading/overrides, invalid-input rejection and package overwrite protection'
 
+# Exercise notary argument routing with dummy keys and a stub, never Apple services.
+mkdir "$fixture/bin"
+cat > "$fixture/bin/xcrun" <<'STUB'
+#!/bin/bash
+if read -r input; then echo 'Unexpected interactive stdin' >&2; exit 98; fi
+printf '%s\n' "$@"
+exit "${NOTARY_TEST_EXIT:-0}"
+STUB
+chmod +x "$fixture/bin/xcrun"
+touch "$fixture/key with spaces.p8"
+chmod 600 "$fixture/key with spaces.p8"
+(
+  export PATH="$fixture/bin:$PATH" INKFLOW_NOTARY_AUTH=api-key
+  export INKFLOW_NOTARY_KEY_FILE="$fixture/key with spaces.p8" INKFLOW_NOTARY_KEY_ID=FIXTUREKEY
+  export INKFLOW_NOTARY_KEY_TYPE=team INKFLOW_NOTARY_ISSUER=fixture-issuer
+  unset INKFLOW_SIGN_IDENTITY
+  notary="$root/.agents/skills/inkflow-release/scripts/notary.sh"
+  bash "$notary" history --output-format plist > "$fixture/args"
+  printf '%s\n' notarytool history --output-format plist --key "$INKFLOW_NOTARY_KEY_FILE" --key-id FIXTUREKEY --issuer fixture-issuer > "$fixture/expected"
+  cmp "$fixture/args" "$fixture/expected"
+  reject_notary() {
+    if bash "$notary" "$@" > "$fixture/args" 2> "$fixture/notary-error"; then exit 1; fi
+    [[ ! -s "$fixture/args" ]]
+  }
+  reject_notary history --keychain-profile alternate
+  unset INKFLOW_NOTARY_ISSUER
+  reject_notary history
+  export INKFLOW_NOTARY_KEY_TYPE=individual
+  bash "$notary" info fixture-id > "$fixture/args"
+  printf '%s\n' notarytool info fixture-id --key "$INKFLOW_NOTARY_KEY_FILE" --key-id FIXTUREKEY > "$fixture/expected"
+  cmp "$fixture/args" "$fixture/expected"
+  export INKFLOW_NOTARY_ISSUER=forbidden
+  reject_notary history
+  unset INKFLOW_NOTARY_ISSUER
+  chmod 644 "$INKFLOW_NOTARY_KEY_FILE"
+  reject_notary history
+  chmod 600 "$INKFLOW_NOTARY_KEY_FILE"
+  NOTARY_TEST_EXIT=7 bash "$notary" history > "$fixture/args" && exit 1
+  [[ $? == 7 ]]
+  export INKFLOW_NOTARY_AUTH=keychain INKFLOW_NOTARY_PROFILE=fixture-profile
+  bash "$notary" history > "$fixture/args"
+  printf '%s\n' notarytool history --keychain-profile fixture-profile > "$fixture/expected"
+  cmp "$fixture/args" "$fixture/expected"
+)
+echo 'PASS: team/individual API key routing, closed stdin, permissions, failure propagation and legacy profile mode'
+
 # Synthetic GUI receipts in a disposable clone test reuse, not real GUI behavior.
 git clone --quiet --shared --no-hardlinks "$root" "$fixture/gui-repo"
 gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
@@ -88,7 +134,7 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   }
   expect_rejected
   mkdir -p "$evidence"
-  git rev-parse HEAD > "$evidence/passed.sha"
+  git rev-parse 'HEAD^{tree}' > "$evidence/passed.tree"
   for script in build test-controller-initialization test-settings-ui; do
     echo 'Synthetic successful fixture' > "$evidence/$script.log"
   done
@@ -104,7 +150,8 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   cp "$fixture/gui-original.plist" macOS/Info.plist
   git add macOS/Info.plist
   # A changed commit identity with identical files is still reusable.
-  printf 'Synthetic commit identity\n' | git -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree 'HEAD^{tree}' -p HEAD > "$evidence/passed.sha"
+  other=$(printf 'Synthetic commit identity\n' | git -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree 'HEAD^{tree}' -p HEAD)
+  git rev-parse "$other^{tree}" > "$evidence/passed.tree"
   bash "$gui" check
   printf '\n// Changed test input\n' >> macOS/Sources/Engine.swift
   expect_rejected
@@ -125,11 +172,13 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
     printf '#!/bin/bash\nexit "${GUI_FIXTURE_EXIT:-0}"\n' > "macOS/scripts/$script.sh"
     git add "macOS/scripts/$script.sh"
   done
-  git -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'test: install isolated GUI command fixtures'
+  echo 'uncommitted test input' > gui-fixture-input
+  index_before=$(git write-tree)
   GUI_FIXTURE_EXIT=0 bash "$gui" record
+  [[ "$(git write-tree)" == "$index_before" ]]
   bash "$gui" check
   if GUI_FIXTURE_EXIT=1 bash "$gui" record > "$fixture/gui-error.log" 2>&1; then exit 1; fi
-  [[ ! -e "$evidence/passed.sha" && ! -e "$evidence/running" ]]
+  [[ ! -e "$evidence/passed.tree" && ! -e "$evidence/running" ]]
   expect_rejected
 )
 echo 'PASS: GUI evidence permits only version/build changes and requires complete local passing records'

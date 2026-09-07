@@ -26,8 +26,8 @@ for cert in "$scratch"/cert-*.pem; do
   fi
 done
 [[ "$matched" == true ]] || { echo 'Could not verify the selected public certificate.' >&2; exit 1; }
-if ! xcrun notarytool history --keychain-profile "$INKFLOW_NOTARY_PROFILE" --output-format plist >/dev/null 2> "$scratch/notary-error"; then
-  echo 'Notarization authentication failed. Check the configured Keychain profile, network and execution permissions.' >&2
+if ! bash "$(dirname "$0")/notary.sh" history --output-format plist >/dev/null 2> "$scratch/notary-error"; then
+  echo 'Notarization authentication failed. Check the configured authentication source, network and execution permissions.' >&2
   exit 1
 fi
 echo 'PASS: Developer ID identity, certificate OU and notarization authentication'
