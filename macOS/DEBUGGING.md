@@ -176,6 +176,42 @@ then fails with the foreground application's bundle ID/PID and the public consol
 session flags. An activation request is asynchronous; a timeout alone does not identify
 whether the desktop was locked or another application held focus.
 
+## Settings fields ignore Command-V and other editing shortcuts
+
+Observed on macOS 26.6.2 (25G83), 2026-09-08.
+
+**Cause:** The accessory application's programmatic settings window had no main Edit
+menu. Normal typing reached the native field editor, but AppKit had no menu key
+equivalents for Command-A or Command-V, including in SwiftUI `SecureField`.
+
+**Fix:** Settings presentation installs one standard Edit menu, preserving other main
+menu items. Its nil-target editing actions use AppKit's responder chain. Native text
+and secure field editors retain their own validation and editing behavior.
+
+**Regression:** `bash macOS/scripts/test-settings-ui.sh --smart-only` sends mouse and
+keyboard events through `NSApplication`, pastes synthetic values into all three LLM
+fields, presses Save through accessibility, and checks isolated configuration and
+defaults. The test preserves all clipboard items and data types without printing
+their contents. It also checks repeated presentation does not duplicate the menu.
+
+## Disabled prediction menu item still appears clickable in the input-source menu
+
+Observed on macOS 26.6.2 (25G83), 2026-09-08.
+
+**Cause:** IMK's menu serialization enables entries with a nonempty action, overriding
+the local `NSMenuItem.isEnabled` value. Checking only the returned menu object misses
+the state sent to the system's menu host; ordinary menu validation does not fix it.
+
+**Fix:** An unavailable prediction item has both `isEnabled = false` and a nil action.
+The action is restored when all three configuration fields are nonempty. The action
+handler separately guards incomplete configuration, including stale menu dispatch.
+
+**Regression:** The Settings GUI harness checks IMK's actual serialized enabled state
+and action for empty, complete, and each individually missing field. A test-only
+private inspection method fails explicitly if unavailable on a future OS. Production
+uses only public menu APIs. System menu rendering remains a separate installed-app
+acceptance check.
+
 ## Dictionary disclosure contents have missing accessibility identifiers
 
 **Symptom:** Source names, full commits and URLs are present after expanding “词库来源”,

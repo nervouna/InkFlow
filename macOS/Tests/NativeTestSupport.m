@@ -1,6 +1,17 @@
 #import "NativeTestSupport.h"
 #import <objc/runtime.h>
 
+// Test-only inspection of the actual dictionary sent to the input-source menu host.
+// This private diagnostic must fail explicitly if a future OS removes it.
+@interface IMKServer (MenuSerializationInspection)
+- (NSDictionary *)menusDictionary_CommonWithController:(IMKInputController *)controller;
+@end
+
+NSDictionary *IFSerializedInputSourceMenu(IMKServer *server, IMKInputController *controller) {
+    if (![server respondsToSelector:@selector(menusDictionary_CommonWithController:)]) return nil;
+    return [server menusDictionary_CommonWithController:controller];
+}
+
 // Intercept only framework initialization/teardown and the supplied test client lookup. The Swift subclass's real initializer
 // still initializes every stored property. Never class_createInstance a Swift class.
 static char testClientKey;

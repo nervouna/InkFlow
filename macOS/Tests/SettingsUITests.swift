@@ -21,15 +21,21 @@ struct SettingsUITests {
         check(SettingsSection.allCases.map(\.rawValue) == ["外观", "个性化", "智能", "词库", "关于"],
               "Settings must include the Smart category")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
-        runCases(settings: isolated.settings)
+        runCases(settings: isolated.settings, defaults: isolated.defaults)
         IFEngine.stop()
+        if CommandLine.arguments.contains("--smart-only") {
+            print("PASS settings UI suite: complete")
+            return
+        }
         // Keep existing GUI cases intact; drive asynchronous service scenarios with AppKit's event loop.
         var testError: Error?
+        var dictionaryCompleted = false
         Task { @MainActor in
             do {
                 try await DictionarySettingsUITests.run(settings: isolated.settings,
                     shared: URL(fileURLWithPath: CommandLine.arguments[1]),
                     root: URL(fileURLWithPath: CommandLine.arguments[2]).appendingPathComponent("dictionary-ui"))
+                dictionaryCompleted = true
             } catch { testError = error }
             NSApp.stop(nil)
             NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
@@ -37,9 +43,16 @@ struct SettingsUITests {
         }
         NSApp.run()
         if let testError { throw testError }
+        check(dictionaryCompleted, "Dictionary UI cases must finish before the harness exits")
+        print("PASS settings UI suite: complete")
     }
 
-    @MainActor static func runCases(settings: IFSettings) {
+    @MainActor static func runCases(settings: IFSettings, defaults: UserDefaults) {
+        let previousMainMenu = NSApp.mainMenu
+        defer { NSApp.mainMenu = previousMainMenu }
+        let existingMainMenu = NSMenu()
+        let existingItem = existingMainMenu.addItem(withTitle: "Harness", action: nil, keyEquivalent: "")
+        NSApp.mainMenu = existingMainMenu
         let name = "inkflow.settings-ui.\(UUID().uuidString)"
         let server = IMKServer(name: name, bundleIdentifier: name)!
         let preferences = IFSettingsWindowController(settings: settings)
@@ -50,6 +63,13 @@ struct SettingsUITests {
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
         waitForFocus(window)
+        check(NSApp.mainMenu === existingMainMenu && existingMainMenu.items.contains { $0 === existingItem },
+              "Settings presentation must preserve the existing main menu and items")
+        let menuItems = existingMainMenu.items
+        preferences.present()
+        waitForFocus(window)
+        check(existingMainMenu.items.elementsEqual(menuItems, by: { $0 === $1 }),
+              "Repeated settings presentation must not duplicate editing commands")
         checkMinimumSize(window)
         check(window.styleMask.contains([.resizable, .fullSizeContentView]))
         check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
@@ -58,9 +78,14 @@ struct SettingsUITests {
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX \(element)") }
         }
+        if CommandLine.arguments.contains("--smart-only") {
+            checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
+            window.close()
+            return
+        }
         checkLayout(window)
         checkCustomPhrasesLayout(window, settings: settings)
-        checkSmartSettings(window, controller: controller, settings: settings)
+        checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         waitForFocus(window)
@@ -152,10 +177,12 @@ struct SettingsUITests {
         print("PASS personalization layout: native table/buttons at minimum/enlarged sizes, empty state, edit/delete disabled without selection")
     }
 
-    @MainActor static func checkSmartSettings(_ window: NSWindow, controller: InkFlowInputController, settings: IFSettings) {
+    @MainActor static func checkSmartSettings(_ window: NSWindow, server: IMKServer, controller: InkFlowInputController,
+                                            settings: IFSettings, defaults: UserDefaults) {
         var item = controller.menu()!.items[1]
         check(item.title == "智能预测" && !item.isEnabled && item.state == .off)
-        controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
+        checkSerializedSmartMenu(server, controller: controller, enabled: false)
+        controller.doCommand(by: #selector(InkFlowInputController.toggleSmartPrediction(_:)), command: [kIMKCommandMenuItemName: item])
         check(!settings.smart.isEnabled, "Incomplete configuration must reject direct menu dispatch")
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .smart))
         for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
@@ -172,18 +199,122 @@ struct SettingsUITests {
             }
             check(controls.first { $0["id"] as? String == "smart.enabled" }?["enabled"] as? Bool == false)
         }
-        try! settings.smart.save(baseURL: "any nonempty base", apiKey: "synthetic-ui-key", model: "synthetic-model")
+        let editingFailures = smartEditingFailures(window, settings: settings, defaults: defaults)
+        check(editingFailures.isEmpty, editingFailures.joined(separator: "; "))
         item = controller.menu()!.items[1]
         check(item.isEnabled && item.state == .off, "Menu validity is exactly three nonempty values")
+        checkSerializedSmartMenu(server, controller: controller, enabled: true)
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         check(settings.smart.isEnabled && controller.menu()!.items[1].state == .on)
         settings.smart.isEnabled = false
         check(controller.menu()!.items[1].state == .off, "Settings toggle must synchronize menu state")
+        let configuration = settings.smart.configuration
+        for missing in [AISuggestionConfiguration(baseURL: "", apiKey: configuration.apiKey, model: configuration.model),
+                        AISuggestionConfiguration(baseURL: configuration.baseURL, apiKey: "", model: configuration.model),
+                        AISuggestionConfiguration(baseURL: configuration.baseURL, apiKey: configuration.apiKey, model: "")] {
+            try! settings.smart.save(baseURL: missing.baseURL, apiKey: missing.apiKey, model: missing.model)
+            check(!controller.menu()!.items[1].isEnabled)
+            checkSerializedSmartMenu(server, controller: controller, enabled: false)
+            controller.doCommand(by: #selector(InkFlowInputController.toggleSmartPrediction(_:)), command: [kIMKCommandMenuItemName: item])
+            check(!settings.smart.isEnabled, "Each missing field must reject stale/direct menu actions")
+            try! settings.smart.save(baseURL: configuration.baseURL, apiKey: configuration.apiKey, model: configuration.model)
+            checkSerializedSmartMenu(server, controller: controller, enabled: true)
+        }
         try! settings.smart.save(baseURL: "", apiKey: "", model: "")
-        check(!controller.menu()!.items[1].isEnabled)
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         window.setContentSize(NSSize(width: 700, height: 450)); drainEvents()
         print("PASS Smart settings UI: secure configuration fields, minimum/enlarged layouts, three-value menu gating and synchronized toggle")
+    }
+
+    @MainActor static func checkSerializedSmartMenu(_ server: IMKServer, controller: InkFlowInputController, enabled: Bool) {
+        controller.menu()!.update()
+        guard let serialized = IFSerializedInputSourceMenu(server, controller),
+              let items = serialized["InputMethodMenuRefKey"] as? [[String: Any]],
+              let actions = serialized["InputMethodMenuActionsKey"] as? [String],
+              let index = items.firstIndex(where: { $0["name"] as? String == "智能预测" }),
+              actions.indices.contains(index) else {
+            check(false, "Native IMK menu serialization diagnostic unavailable or changed on this OS")
+            return
+        }
+        check(items[index]["enabled"] as? Bool == enabled, "Actual IMK input-source menu must serialize enabled=\(enabled)")
+        check(actions[index] == (enabled ? NSStringFromSelector(#selector(InkFlowInputController.toggleSmartPrediction(_:))) : ""),
+              "Unavailable prediction must not export a clickable IMK menu action")
+    }
+
+    @MainActor static func smartEditingFailures(_ window: NSWindow, settings: IFSettings, defaults: UserDefaults) -> [String] {
+        let pasteboard = NSPasteboard.general
+        var savedItems: [NSPasteboardItem] = []
+        for original in pasteboard.pasteboardItems ?? [] {
+            let saved = NSPasteboardItem()
+            for type in original.types {
+                guard let data = original.data(forType: type) else {
+                    return ["Clipboard backup could not preserve every existing type"]
+                }
+                saved.setData(data, forType: type)
+            }
+            savedItems.append(saved)
+        }
+        func restoreClipboard() -> Bool {
+            pasteboard.clearContents()
+            if !savedItems.isEmpty && !pasteboard.writeObjects(savedItems) { return false }
+            let restored = pasteboard.pasteboardItems ?? []
+            return restored.count == savedItems.count && zip(restored, savedItems).allSatisfy { actual, saved in
+                Set(actual.types) == Set(saved.types) && saved.types.allSatisfy { actual.data(forType: $0) == saved.data(forType: $0) }
+            }
+        }
+        // Keep all assertions nonterminating while the synthetic clipboard is installed.
+        var clipboardRestored = false
+        defer { if !clipboardRestored { _ = restoreClipboard() } }
+        var failures: [String] = []
+        func expect(_ passed: Bool, _ message: String) {
+            if !passed { failures.append(message) }
+        }
+        func sendKey(_ code: UInt16, _ text: String, flags: NSEvent.ModifierFlags = []) {
+            let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, characters: text, charactersIgnoringModifiers: text,
+                isARepeat: false, keyCode: code)!
+            NSApp.sendEvent(event)
+            drainEvents(seconds: 0.03)
+        }
+        for (identifier, value) in [("smart.baseURL", "https://example.invalid/v1"),
+                                    ("smart.model", "synthetic-model"),
+                                    ("smart.apiKey", "synthetic-ui-key")] {
+            guard let control = IFAccessibilityTree(window).first(where: { $0["id"] as? String == identifier }),
+                  let frame = (control["frame"] as? NSValue)?.rectValue else {
+                failures.append("Missing editing control \(identifier)"); continue
+            }
+            let location = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                NSApp.postEvent(NSEvent.mouseEvent(with: type, location: location, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!, atStart: false)
+            }
+            drainEvents(seconds: 0.03)
+            guard let editor = window.firstResponder as? NSTextView, editor.isFieldEditor else {
+                failures.append("Native click must focus the field editor for \(identifier)"); continue
+            }
+            sendKey(7, "x")
+            expect(editor.string == "x", "Ordinary typing must reach \(identifier)")
+            sendKey(0, "a", flags: .command)
+            expect(editor.selectedRange() == NSRange(location: 0, length: 1), "Command-A must select \(identifier)")
+            pasteboard.clearContents()
+            expect(pasteboard.setString(value, forType: .string), "Synthetic clipboard write must succeed")
+            sendKey(9, "v", flags: .command)
+            expect(editor.string == value, "Command-V must paste into \(identifier) through NSApplication")
+        }
+        expect(IFPressAccessibility(window, "smart.save"), "Save must dispatch through the native UI button")
+        drainEvents()
+        expect(settings.smart.configuration == AISuggestionConfiguration(baseURL: "https://example.invalid/v1",
+            apiKey: "synthetic-ui-key", model: "synthetic-model"), "Pasted values must reach the isolated configuration")
+        expect(defaults.string(forKey: "aiBaseURL") == "https://example.invalid/v1" && defaults.string(forKey: "aiModel") == "synthetic-model",
+               "UI save must persist the pasted Base URL and model in isolated defaults")
+        clipboardRestored = restoreClipboard()
+        expect(clipboardRestored, "Existing clipboard items and every data type must be restored")
+        if failures.isEmpty {
+            print("PASS Smart native editing: ordinary typing, Command-A/V in Base URL/model/SecureField, UI save/persistence and clipboard restoration")
+        }
+        return failures
     }
 
     @MainActor static func checkMinimumSize(_ window: NSWindow) {

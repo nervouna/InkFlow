@@ -97,9 +97,11 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             let menu = NSMenu(title: "InkFlow")
             menu.autoenablesItems = false
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
-            let smart = menu.addItem(withTitle: "智能预测", action: #selector(toggleSmartPrediction(_:)), keyEquivalent: "")
+            let available = settings.smart.isAvailable
+            // IMK enables exported entries with an action, even when NSMenuItem is disabled.
+            let smart = menu.addItem(withTitle: "智能预测", action: available ? #selector(toggleSmartPrediction(_:)) : nil, keyEquivalent: "")
             smart.target = self
-            smart.isEnabled = settings.smart.isAvailable
+            smart.isEnabled = available
             smart.state = settings.smart.isEnabled ? .on : .off
             result = menu
         }

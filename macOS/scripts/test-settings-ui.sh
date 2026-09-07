@@ -17,4 +17,8 @@ source macOS/scripts/swift-common.sh
 build_swift_test "$app/Contents/MacOS/SettingsHarness" macOS/Tests/SettingsUITests.swift macOS/Tests/DictionarySettingsUITests.swift
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-settings-ui.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
-"$app/Contents/MacOS/SettingsHarness" "$PWD/build/InkFlow.app/Contents/Resources/Rime" "$user_dir" "$@"
+"$app/Contents/MacOS/SettingsHarness" "$PWD/build/InkFlow.app/Contents/Resources/Rime" "$user_dir" "$@" | tee "$user_dir/output.log"
+if ! rg -q '^PASS settings UI suite: complete$' "$user_dir/output.log"; then
+  echo "FAIL settings UI harness exited without completing all requested cases" >&2
+  exit 1
+fi

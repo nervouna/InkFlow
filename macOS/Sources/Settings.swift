@@ -204,6 +204,20 @@ final class SettingsHostingController: NSHostingController<SettingsView> {
 @MainActor
 final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
+    private static let editingMenuItem: NSMenuItem = {
+        let menu = NSMenu(title: "编辑")
+        menu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        menu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
+            .keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        menu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        menu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        menu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let item = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+        item.submenu = menu
+        return item
+    }()
     var dictionaries: IFDictionaryCoordinator?
 
     func windowWillClose(_ notification: Notification) { dictionaries?.presentationClosed() }
@@ -235,6 +249,14 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     func present() {
         dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
+        // The accessory app has no storyboard menu. Standard nil-target actions let
+        // AppKit route editing shortcuts to the focused native or secure field editor.
+        let mainMenu = NSApp.mainMenu ?? NSMenu()
+        if !mainMenu.items.contains(where: { $0 === Self.editingMenuItem }) {
+            Self.editingMenuItem.menu?.removeItem(Self.editingMenuItem)
+            mainMenu.addItem(Self.editingMenuItem)
+        }
+        NSApp.mainMenu = mainMenu
         NSApp.setActivationPolicy(.accessory)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)

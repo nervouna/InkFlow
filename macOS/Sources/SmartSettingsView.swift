@@ -20,11 +20,11 @@ struct SmartSettingsView: View {
             Toggle("智能预测", isOn: $smart.isEnabled)
                 .disabled(!smart.isAvailable)
                 .accessibilityIdentifier("smart.enabled")
-            TextField("Base URL", text: $baseURL, prompt: Text("https://api.deepseek.com"))
+            TextField("Base URL", text: $baseURL, prompt: Text("服务的 API 基础地址"))
                 .accessibilityIdentifier("smart.baseURL")
-            SecureField("API Key", text: $apiKey, prompt: Text("输入 API Key"))
+            SecureField("API Key", text: $apiKey, prompt: Text("粘贴 API Key"))
                 .accessibilityIdentifier("smart.apiKey")
-            TextField("模型名称", text: $model, prompt: Text("deepseek-v4-flash"))
+            TextField("模型名称", text: $model, prompt: Text("服务中的模型名称"))
                 .accessibilityIdentifier("smart.model")
             HStack {
                 if saved { Text("已保存").font(.caption).foregroundStyle(.secondary) }
