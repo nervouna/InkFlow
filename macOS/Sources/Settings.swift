@@ -7,16 +7,24 @@ extension Notification.Name {
 
 @MainActor
 final class IFSettings: ObservableObject {
-    static let sharedSettings = IFSettings(defaults: .standard)
+    static let sharedSettings: IFSettings = {
+        // Only a process-local argument-domain flag isolates the exact-initializer harness.
+        // Persisted preferences can never select this credential store.
+        let isolated = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["IFIsolatedAICredentials"] as? Bool == true
+        let credentials: any AICredentialStore = isolated ? MemoryAICredentialStore() : KeychainAICredentialStore()
+        return IFSettings(defaults: .standard, aiCredentials: credentials)
+    }()
     static let candidateCounts = Array(3...9)
     static let fontSizes = [14, 16, 18, 24, 36]
     private let defaults: UserDefaults
+    let smart: IFSmartSettings
     private(set) var customPhrases: [CustomPhrase] = []
     private(set) var customPhrasesLoadError: String?
     @Published var inputSettingsError: String?
 
-    init(defaults: UserDefaults) {
+    init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore()) {
         self.defaults = defaults
+        smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
         guard let stored = defaults.object(forKey: "customPhrases") else { return }
         do {
             guard let data = stored as? Data else { throw CustomPhraseError("数据格式无效。") }
@@ -88,6 +96,7 @@ final class IFSettings: ObservableObject {
 enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
     case personalization = "个性化"
+    case smart = "智能"
     case dictionaries = "词库"
     case about = "关于"
     var id: Self { self }
@@ -95,6 +104,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .appearance: "paintbrush"
         case .personalization: "person.crop.circle"
+        case .smart: "sparkles"
         case .dictionaries: "books.vertical"
         case .about: "info.circle"
         }
@@ -126,6 +136,7 @@ struct SettingsView: View {
             Group {
                 if section == .about { about }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
+                else if section == .smart { SmartSettingsView(smart: settings.smart) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }

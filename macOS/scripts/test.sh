@@ -4,6 +4,7 @@ cd "$(dirname "$0")/../.."
 [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
 bash macOS/scripts/test-quality-store.sh
 bash macOS/scripts/test-quality-metadata.sh
+bash macOS/scripts/test-ai-suggestions.sh
 macOS/scripts/dependencies.sh
 bash macOS/scripts/test-prepare-rime.sh
 bash macOS/scripts/test-dictionary-generator.sh

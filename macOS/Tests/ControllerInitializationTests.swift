@@ -7,7 +7,8 @@ struct ControllerInitializationTests {
         check(CommandLine.arguments.count == 3)
         // The exact production initializer uses the shared settings object. Override only
         // this process's argument domain, never the user's persisted defaults.
-        UserDefaults.standard.setVolatileDomain(["candidateCount": 5, "fontSize": 14, "vertical": false], forName: UserDefaults.argumentDomain)
+        UserDefaults.standard.setVolatileDomain(["candidateCount": 5, "fontSize": 14, "vertical": false,
+            "IFIsolatedAICredentials": true, "aiEnabled": false, "aiBaseURL": "", "aiModel": ""], forName: UserDefaults.argumentDomain)
         _ = NSApplication.shared
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         let info = try PropertyListSerialization.propertyList(from: Data(contentsOf: URL(fileURLWithPath: "macOS/Info.plist")), format: nil) as! [String: Any]

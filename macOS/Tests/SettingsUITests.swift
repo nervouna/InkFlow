@@ -18,8 +18,8 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "个性化", "词库", "关于"],
-              "Dictionary category must be between personalization and about")
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "个性化", "智能", "词库", "关于"],
+              "Settings must include the Smart category")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings)
         IFEngine.stop()
@@ -60,6 +60,7 @@ struct SettingsUITests {
         }
         checkLayout(window)
         checkCustomPhrasesLayout(window, settings: settings)
+        checkSmartSettings(window, controller: controller, settings: settings)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         waitForFocus(window)
@@ -149,6 +150,40 @@ struct SettingsUITests {
         drainEvents()
         window.setContentSize(NSSize(width: 700, height: 450))
         print("PASS personalization layout: native table/buttons at minimum/enlarged sizes, empty state, edit/delete disabled without selection")
+    }
+
+    @MainActor static func checkSmartSettings(_ window: NSWindow, controller: InkFlowInputController, settings: IFSettings) {
+        var item = controller.menu()!.items[1]
+        check(item.title == "智能预测" && !item.isEnabled && item.state == .off)
+        controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
+        check(!settings.smart.isEnabled, "Incomplete configuration must reject direct menu dispatch")
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .smart))
+        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
+            window.setContentSize(size); drainEvents()
+            checkMinimumSize(window)
+            let elements = IFAccessibilityTree(window)
+            let identifiers = ["smart.enabled", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save"]
+            let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
+            check(controls.count == identifiers.count, "Smart settings must expose toggle, three fields and save button")
+            for control in controls {
+                let frame = (control["frame"] as! NSValue).rectValue
+                check(frame.width > 0 && frame.height > 0 && window.convertToScreen(window.contentLayoutRect).contains(frame),
+                      "Smart setting control must fit the minimum window")
+            }
+            check(controls.first { $0["id"] as? String == "smart.enabled" }?["enabled"] as? Bool == false)
+        }
+        try! settings.smart.save(baseURL: "any nonempty base", apiKey: "synthetic-ui-key", model: "synthetic-model")
+        item = controller.menu()!.items[1]
+        check(item.isEnabled && item.state == .off, "Menu validity is exactly three nonempty values")
+        controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
+        check(settings.smart.isEnabled && controller.menu()!.items[1].state == .on)
+        settings.smart.isEnabled = false
+        check(controller.menu()!.items[1].state == .off, "Settings toggle must synchronize menu state")
+        try! settings.smart.save(baseURL: "", apiKey: "", model: "")
+        check(!controller.menu()!.items[1].isEnabled)
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
+        window.setContentSize(NSSize(width: 700, height: 450)); drainEvents()
+        print("PASS Smart settings UI: secure configuration fields, minimum/enlarged layouts, three-value menu gating and synchronized toggle")
     }
 
     @MainActor static func checkMinimumSize(_ window: NSWindow) {

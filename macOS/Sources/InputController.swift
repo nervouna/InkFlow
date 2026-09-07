@@ -65,7 +65,12 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) var result: NSMenu?
         MainActor.assumeIsolated {
             let menu = NSMenu(title: "InkFlow")
+            menu.autoenablesItems = false
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
+            let smart = menu.addItem(withTitle: "智能预测", action: #selector(toggleSmartPrediction(_:)), keyEquivalent: "")
+            smart.target = self
+            smart.isEnabled = settings.smart.isAvailable
+            smart.state = settings.smart.isEnabled ? .on : .off
             result = menu
         }
         return result
@@ -74,6 +79,13 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func showPreferences(_ sender: Any!) {
         // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }
+    }
+
+    @objc nonisolated func toggleSmartPrediction(_ sender: Any!) {
+        MainActor.assumeIsolated {
+            guard settings.smart.isAvailable else { return }
+            settings.smart.isEnabled.toggle()
+        }
     }
 
     func applySettings() {
