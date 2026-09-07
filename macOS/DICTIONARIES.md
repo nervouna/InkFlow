@@ -125,3 +125,76 @@ fake-network failures, transaction boundaries, fingerprint/cache integrity,
 subprocess isolation and full generated-dictionary helper preparation. The helper
 is included in build, bundle dependency checks and inner-before-outer signing;
 these checks do not install the input method or imply real-client acceptance.
+
+## Live activation and Settings
+
+`main.swift` retains one `IFDictionaryCoordinator` for the process and injects it
+into the native Settings window. The Dictionary pane only observes that service.
+Checking is manual and never downloads; a changed source offers a separate
+download/update action. There is no scheduled check. One operation runs at a
+time, including the wait for input to become idle. Closing Settings leaves work
+running and reopening resumes its current progress.
+
+The pane reports the running manifest's full selectable content version,
+term/reading count and successful local activation time. Checking, downloading,
+validation failure, failed activation and content-identical source changes do
+not advance that time. Expand Sources for catalog-owned names, full commits and
+immutable GitHub file links. These describe Chinese dictionary inputs, excluding
+English, custom phrases and learning. Long source lists scroll independently of
+the operation controls. Errors have a Chinese summary and stage, the engine's
+current availability/version, retry, and selectable scrollable technical detail.
+
+Every live native session must be free of composition, native/buffered commits
+and client-delivery callbacks before replacement. The coordinator prepares the
+context index off the main actor; existing input continues on the old engine.
+The final main-actor transaction restarts the engine, restores all sessions and
+their options, then confirms the journal. Failure restores the last working
+engine; failure of that rollback explicitly leaves the engine unavailable.
+Retry remains available even after a displayed diagnostic has been dismissed.
+
+Closing the actual Settings window clears displayed errors, including when
+another pane is selected. Reopening never replays an earlier error or a failure
+that completed while closed. Switching panes or bringing an already visible
+window forward preserves the current error. Starting the next operation clears
+the old error. Sanitized diagnostics remain in the unified log independently;
+see [DEBUGGING.md](DEBUGGING.md#dictionary-activation-waits-or-recovers-a-previous-version)
+for the `log show` filter. No error is restored from logs or saved in preferences,
+manifests or the recovery journal.
+
+Startup discards interrupted pending work, validates the last confirmed cache,
+and rebuilds incompatible caches using current application resources. Recovery
+tries the previous version and finally the bundled dictionary. Learning keeps
+the existing `pinyin_simp.userdb` identity and location across these switches.
+
+## Manual acceptance
+
+The isolated automated suites verify the native engine, worker, controller and
+Settings window; they do not establish acceptance in actual text clients. After
+an explicitly authorized installation, use the following checks in a text
+editor and another client such as ChatGPT or WeChat:
+
+1. Select InkFlow. Enter `xiehouyu` and `suranqijing`; confirm first candidates
+   歇后语 and 肃然起敬 and commit each. Edit/backspace an unfinished composition.
+2. Enter mixed Chinese/English, a saved custom phrase and an emoji-bearing code;
+   verify candidate selection and committed text in both clients.
+3. Select and commit an alternate Chinese candidate repeatedly, restart the
+   input method, and verify the learned preference remains. With clean learning,
+   the pinned Frost weights rank `beijing`/`beijign` as 背景 and `shanghai` as 伤害.
+   北京 and 上海 remain selectable; these source-frequency outcomes are deliberate.
+4. In Settings → 词库, inspect version/count/date and expand source links. Check
+   updates, then choose 下载并更新 only if offered. Leave a composition active in
+   either client while preparing; confirm input continues and activation waits
+   until both clients have finished. Confirm the newly active version and date.
+5. Close/reopen Settings during an operation and confirm progress continues. On
+   a check failure, inspect/copy the expanded details, bring the window forward
+   and switch panes, then close/reopen it. The error should clear only at window
+   closure or the next operation, and retry should remain possible.
+
+Broad coverage includes poems and carries a real resource cost. One measured
+prepared version occupied about 137 MiB, including 30 MiB shared resources,
+61 MiB compiled cache and 46 MiB retained raw data. An isolated context-index
+initialization sample for the pinned union took 3.53 seconds with a process
+peak RSS near 181 MiB; this is neither steady input-method memory nor an engine
+startup benchmark. Old and new indexes can coexist during background preparation.
+Costs vary with corpus and machine; the store keeps bounded current/previous
+versions and cleans unreferenced artifacts.
