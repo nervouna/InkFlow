@@ -12,6 +12,7 @@ struct IFDictionarySourceSpec: Codable, Equatable, Sendable {
     let pinnedBlobSHA: String
     let pinnedSHA256: String
     let pinnedByteCount: Int
+    var defaultWeight: Int? = nil
     var isUpdatable: Bool { group != "legacy" }
     var pinnedReceipt: IFDictionarySourceReceipt {
         IFDictionarySourceReceipt(id: id, commit: pinnedCommit, blobSHA: pinnedBlobSHA,
@@ -123,12 +124,12 @@ enum IFDictionaryHash {
 }
 
 enum IFDictionaryCatalog {
-    static let recipeVersion = 1
+    static let recipeVersion = 2
     static let dictionaryFilename = "pinyin_simp.dict.yaml"
     static let legacyFilename = "legacy-pinyin-simp.dict.yaml"
     static let correctionsFilename = "chinese-overrides.tsv"
     static let maximumSourceBytes = 128 * 1024 * 1024
-    static let initialEntryCount = 963_978
+    static let initialEntryCount = 969_894
     static let sources: [IFDictionarySourceSpec] = [
         .init(id: "frost-8105", group: "frost", name: "白霜 · 字表", repository: "gaboolic/rime-frost", branch: "master", path: "cn_dicts/8105.dict.yaml", pinnedCommit: "19167adfe67fcba2f65c336117557639ff254ddb", pinnedBlobSHA: "9cbfe2acf59bb3124993d4b8b3b271f8e246b72d", pinnedSHA256: "5a6bb545d07140406208728aeed70706e84279daeee132f10b069cd6387a042a", pinnedByteCount: 99_367),
         .init(id: "frost-base", group: "frost", name: "白霜 · 基础", repository: "gaboolic/rime-frost", branch: "master", path: "cn_dicts/base.dict.yaml", pinnedCommit: "19167adfe67fcba2f65c336117557639ff254ddb", pinnedBlobSHA: "973beb1203cfd3340b4829d984f193feaf72e3cf", pinnedSHA256: "9067f23b4505e57f5e380b154e22fb2fbbf2111ab0611f8bc6e8b82efa90b891", pinnedByteCount: 9_937_947),
@@ -136,6 +137,9 @@ enum IFDictionaryCatalog {
         .init(id: "frost-idiom", group: "frost", name: "白霜 · 成语与诗句", repository: "gaboolic/rime-frost", branch: "master", path: "cn_dicts_cell/idiom.dict.yaml", pinnedCommit: "19167adfe67fcba2f65c336117557639ff254ddb", pinnedBlobSHA: "c9bf62a4de8b10efa6aec1dca56fe3e423bf240e", pinnedSHA256: "341d777d4fd077ddb534e47f8ba27a8dd80d085fd0b847548a97a6666d644113", pinnedByteCount: 1_665_339),
         .init(id: "ice-base", group: "ice", name: "雾凇 · 基础", repository: "iDvel/rime-ice", branch: "main", path: "cn_dicts/base.dict.yaml", pinnedCommit: "fbb516b2786e4d5444383706d13c31c2e4d10c08", pinnedBlobSHA: "af59fe3a2259ed91ae642aab09422599a0557017", pinnedSHA256: "6c594bbd03425600aa36894b713f3d268bd2a11099833a312160249e0a3f0082", pinnedByteCount: 16_620_279),
         .init(id: "ice-ext", group: "ice", name: "雾凇 · 扩展", repository: "iDvel/rime-ice", branch: "main", path: "cn_dicts/ext.dict.yaml", pinnedCommit: "fbb516b2786e4d5444383706d13c31c2e4d10c08", pinnedBlobSHA: "0a3d5aa7e1bb1dc73f8d73448a1986031ae6819e", pinnedSHA256: "5435dd8b75d6eb688787a25b6e302867152ef401bec7b263136ab1e2a2ecf4ae", pinnedByteCount: 11_923_397),
+        .init(id: "frost-computer", group: "specialty", name: "白霜 · 计算机", repository: "gaboolic/rime-frost", branch: "master", path: "cn_dicts_cell/computer.dict.yaml", pinnedCommit: "19167adfe67fcba2f65c336117557639ff254ddb", pinnedBlobSHA: "0a9592d65d3bfd15116b3b48a45268a81b2716fa", pinnedSHA256: "a92fe61d48b53d1d20f1e66be4ca83ac2e8be0caa1fa3f383c5c15de6cb7d5ea", pinnedByteCount: 1_030),
+        .init(id: "frost-exthot", group: "specialty", name: "白霜 · 网络热词", repository: "gaboolic/rime-frost", branch: "master", path: "cn_dicts_cell/exthot.dict.yaml", pinnedCommit: "19167adfe67fcba2f65c336117557639ff254ddb", pinnedBlobSHA: "caa7b822e2e994262ec660d3416ba174b151cc74", pinnedSHA256: "d5f8bda70bb621f82ed85e4e8dbe8386c81effb856ff82ebb5c708d18ae993c1", pinnedByteCount: 50_277),
+        .init(id: "selected-computer", group: "specialty", name: "搜狗 · 计算机词汇（Rime 转换）", repository: "alswl/rime-selected", branch: "master", path: "selected.jisuanjicihuidaquan.dict.yaml", pinnedCommit: "30d61877615dbee98c3b5b4322d50bdc90226816", pinnedBlobSHA: "c61a17b7878a15e418569266b0e58f086789a4c4", pinnedSHA256: "804f55821591e112d10df1e78445f945e70f7204c2a9521d2a72c048003fc3e0", pinnedByteCount: 309_467, defaultWeight: 1),
         .init(id: "legacy", group: "legacy", name: "旧版拼音 · 兼容增量", repository: "rime/rime-pinyin-simp", branch: "master", path: "pinyin_simp.dict.yaml", pinnedCommit: "0c6861ef7420ee780270ca6d993d18d4101049d0", pinnedBlobSHA: "6f2e996d2792416cb7f41bb49967a1dec7060c92", pinnedSHA256: "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b", pinnedByteCount: 1_266_216)
     ]
 }

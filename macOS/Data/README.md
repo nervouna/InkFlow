@@ -3,8 +3,9 @@
 `english-wordfreq.tsv` records the observed wordfreq 3.1.1 `en/large` Zipf values
 for existing rime-easy-en display text. It contains 406,195 mappings from 719,041
 unique source spellings. The other 312,846 spellings have no observed key and
-are omitted, not assigned measured zero. All spellings/codes still come from
-rime-easy-en; this file cannot add words.
+are omitted, not assigned measured zero. This snapshot cannot add words. Spelling
+and code inputs come from rime-easy-en plus the separate, bounded
+[technical vocabulary source](TECHNOLOGY.md).
 
 The regeneration script uses `preprocess_text(text, "en")` and direct frequency
 key lookup. It does not use the multi-token estimator in `zipf_frequency` or

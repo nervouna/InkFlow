@@ -7,6 +7,7 @@ trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \
   "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
 cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
+: > "$fixture/macOS/Data/english-technology.tsv"
 # Isolate English policy fixtures from the independently tested Chinese generator.
 # This stub exists only inside this test's temporary repository.
 cat > "$fixture/macOS/scripts/prepare-chinese.sh" <<'STUB'
@@ -160,11 +161,11 @@ diff -u "$fixture/high.tsv" "$fixture/english.tsv"
 configure 0 250000 100
 generate
 awk -F '\t' '$1 == "email" || $1 == "unknown" || $1 == "ghost" { exit 1 }' "$fixture/english.tsv"
-# Duplicate dictionary rows and aliases get the same observed weight.
+# Duplicate dictionary rows collapse; distinct aliases get the same observed weight.
 printf 'computer\tcomputer\t999000\ncomputer\tComputer\t1\n' >> "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml"
 configure 4.0 250000 100
 generate
-printf 'computer\tcomputer\t1242500\ncomputer\tComputer\t1242500\n' >> "$fixture/expected-overrides.tsv"
+printf 'computer\tComputer\t1242500\n' >> "$fixture/expected-overrides.tsv"
 diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
 configure 9 250000 100
 generate
@@ -193,6 +194,49 @@ printf 'email\t5\n' >> "$fixture/macOS/Data/english-wordfreq.tsv"
 expect_failure 'duplicate snapshot word' 'english-wordfreq.tsv'
 printf 'email\tinvalid\n' > "$fixture/macOS/Data/english-wordfreq.tsv"
 expect_failure 'malformed snapshot' 'english-wordfreq.tsv'
+
+# Curated technical spellings are explicit source data, still subject to the same gate.
+printf 'computer\t4.97\n' > "$fixture/macOS/Data/english-wordfreq.tsv"
+printf 'TechUI\t4\tExplicit technology policy, not an observation\nC++\t4\tExplicit technology policy\n' > "$fixture/macOS/config/english-overrides.tsv"
+cat > "$fixture/macOS/Data/english-technology.tsv" <<'DATA'
+TechUI	techui	inkflow-maintained
+TechUI	techuialias	inkflow-maintained
+C++	cpp	rime-ice-en-ext
+computer	computer	inkflow-maintained
+computer	laptop	inkflow-maintained
+Unknown	unknown	inkflow-maintained
+DATA
+generate
+cat > "$fixture/expected-technology.tsv" <<'DATA'
+computer	computer	1242500
+computer	Computer	1242500
+TechUI	techui	1000000
+TechUI	techuialias	1000000
+C++	cpp	1000000
+computer	laptop	1242500
+DATA
+diff -u "$fixture/expected-technology.tsv" "$fixture/english.tsv"
+printf 'computer\tcomputer\t12425\n' > "$fixture/expected-technology-mixed.tsv"
+diff -u "$fixture/expected-technology-mixed.tsv" "$fixture/mixed.tsv"
+configure 4.1 250000 100
+generate
+awk -F '\t' '$1 != "computer" {exit 1} END {if(NR != 3) exit 1}' "$fixture/english.tsv"
+configure 0 250000 100
+printf 'TechUI\t0\tExclude every alias of this exact display form\n' > "$fixture/macOS/config/english-overrides.tsv"
+generate
+awk -F '\t' '$1 == "TechUI" || $1 == "C++" || $1 == "Unknown" {exit 1}' "$fixture/english.tsv"
+cp "$fixture/macOS/Data/english-technology.tsv" "$fixture/good-technology.tsv"
+for invalid in $'Bad\tBad\tinkflow-maintained' $'Bad\tbad\tunknown-source' $'Bad\tbad' $' Bad\tbad\tinkflow-maintained'; do
+  printf '%s\n' "$invalid" > "$fixture/macOS/Data/english-technology.tsv"
+  expect_failure 'malformed technology source' 'english-technology.tsv'
+done
+cat "$fixture/good-technology.tsv" "$fixture/good-technology.tsv" > "$fixture/macOS/Data/english-technology.tsv"
+expect_failure 'duplicate technology pair' 'english-technology.tsv'
+rm "$fixture/macOS/Data/english-technology.tsv"
+expect_failure 'missing technology source' 'english-technology.tsv'
+: > "$fixture/macOS/Data/english-technology.tsv"
+: > "$fixture/macOS/config/english-overrides.tsv"
+configure 4 250000 100
 # Empty data is valid and cannot fall back to old source weights.
 : > "$fixture/macOS/Data/english-wordfreq.tsv"
 generate
@@ -201,4 +245,4 @@ test ! -s "$fixture/mixed.tsv"
 rm "$fixture/macOS/Data/english-wordfreq.tsv"
 expect_failure 'missing snapshot' 'english-wordfreq.tsv'
 
-echo 'PASS Rime policy: observed/missing Zipf, shared inclusive admission, exact-case aliases, overrides/exclusion, scaling isolation, empty data/rules, malformed/duplicate data, Chinese preservation, failure without fallback'
+echo 'PASS Rime policy: observed/missing Zipf, shared inclusive admission, curated technology/aliases/deduplication, exact-case overrides/exclusion, scaling isolation, empty data/rules, malformed/duplicate data, Chinese preservation, failure without fallback'

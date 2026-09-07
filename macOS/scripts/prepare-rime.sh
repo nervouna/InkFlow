@@ -17,6 +17,16 @@ function fail(message) {
 function zipf(value) {
   return value ~ /^[0-9]+([.][0-9]+)?$/ && value+0 >= 0 && value+0 <= 9
 }
+function emit(word, code, effective, pair) {
+  pair=word SUBSEP code
+  if (pair in emitted) return
+  if (word in overrides) effective=overrides[word]
+  else if (word in observed) effective=observed[word]
+  else return
+  if (effective <= 0 || effective < min_zipf) return
+  emitted[pair]=1
+  printf "%s\t%s\t%d\n", word,code,int(effective*weight_scale+0.5)
+}
 BEGIN {
   FS=OFS="\t"
   if (!zipf(min_zipf)) fail("ENGLISH_MIN_ZIPF must be between 0 and 9")
@@ -24,9 +34,10 @@ BEGIN {
     fail("ENGLISH_WEIGHT_SCALE must be a positive integer <= 238609294")
   if (weight_divisor !~ /^[0-9]+([.][0-9]+)?$/ || weight_divisor+0 <= 0)
     fail("MIXED_ENGLISH_WEIGHT_DIVISOR must be positive")
-  print "# Generated from rime-easy-en (LGPL-3.0), reweighted with wordfreq (CC BY-SA 4.0)."
+  print "# Generated from rime-easy-en (LGPL-3.0), curated rime-ice (GPL-3.0) and InkFlow technology entries."
+  print "# Reweighted with wordfreq (CC BY-SA 4.0) and explicit InkFlow admission policy."
   print "# See bundled Licenses for source attribution and modification details."
-  print "---\nname: easy_en\nversion: '\''0.4-inkflow'\''\nsort: by_weight"
+  print "---\nname: easy_en\nversion: '\''0.5-inkflow'\''\nsort: by_weight"
   print "use_preset_vocabulary: false\n..."
 }
 FILENAME == ARGV[1] {
@@ -45,21 +56,27 @@ FILENAME == ARGV[2] {
   overrides[$1]=$2+0
   next
 }
+FILENAME == ARGV[4] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  if (NF != 3 || $1 !~ /[^[:space:]]/ || $1 ~ /[^ -~]/ || $1 ~ /^ | $/ ||
+      $2 !~ /^[a-z]+$/ || ($3 != "rime-ice-en-ext" && $3 != "inkflow-maintained"))
+    fail("invalid english-technology.tsv record at line " FNR ": expected display text, lowercase ASCII code, and source")
+  pair=$1 SUBSEP $2
+  if (pair in supplemental) fail("duplicate english-technology.tsv pair at line " FNR)
+  supplemental[pair]=1
+  emit($1,$2)
+  next
+}
 $0 == "..." { entries=1; next }
 entries && $0 !~ /^[[:space:]]*(#|$)/ && NF >= 2 {
-  if ($1 in overrides) effective=overrides[$1]
-  else if ($1 in observed) effective=observed[$1]
-  else next
-  # Zero means explicit exclusion, even when the configured gate is zero.
-  if (effective <= 0 || effective < min_zipf) next
-  printf "%s\t%s\t%d\n", $1,$2,int(effective*weight_scale+0.5)
+  emit($1,$2)
 }' macOS/Data/english-wordfreq.tsv macOS/config/english-overrides.tsv \
-  build/deps/rime-easy-en-*/easy_en.dict.yaml > "$staging/easy_en.dict.yaml"
+  build/deps/rime-easy-en-*/easy_en.dict.yaml macOS/Data/english-technology.tsv > "$staging/easy_en.dict.yaml"
 # Mixed composition adds only its existing structural restrictions and scaling.
 LC_ALL=C awk -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
 BEGIN {
   FS=OFS="\t"
-  print "# Generated from rime-easy-en (LGPL-3.0), reweighted with wordfreq (CC BY-SA 4.0)."
+  print "# Derived from the shared admitted English dictionary; see easy_en.dict.yaml for source attribution."
   print "# See bundled Licenses; original pinyin_simp remains an independent translator/user dictionary."
   print "---\nname: inkflow_mixed\nversion: '\''1.2'\''\nsort: by_weight"
   print "use_preset_vocabulary: false\nimport_tables: [pinyin_simp]\n..."

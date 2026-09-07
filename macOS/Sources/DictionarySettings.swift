@@ -12,6 +12,16 @@ struct DictionarySettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if coordinator?.engineAvailable == true, let active = coordinator?.active {
                         activeDictionary(active)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text("默认启用：科技与软件、网络热词、科技英文与缩写。")
+                                .accessibilityIdentifier("dictionaries.coverage")
+                            Text("检查更新涵盖中文上游词库；搜狗计算机词汇跟随 Rime 转换仓库更新。")
+                                .accessibilityIdentifier("dictionaries.updateScope")
+                            Text("精选科技中文与英文词条随应用更新。")
+                                .accessibilityIdentifier("dictionaries.appUpdates")
+                        }
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                         // Keep IDs on content leaves; a DisclosureGroup ID overrides descendant IDs.
                         DisclosureGroup("词库来源", isExpanded: $sourcesExpanded) {
                             sources(active.manifest)
@@ -98,7 +108,7 @@ struct DictionarySettingsView: View {
                 .accessibilityLabel("当前词库版本")
                 .accessibilityValue(active.manifest.contentVersion)
                 .accessibilityIdentifier("dictionaries.version")
-            Text("词条数：\(active.manifest.entryCount.formatted())（词语与读音组合）")
+            Text("中文词条数：\(active.manifest.entryCount.formatted())（词语与读音组合）")
                 .accessibilityIdentifier("dictionaries.count")
             Text("启用时间：\(active.activatedAt.formatted(date: .numeric, time: .shortened))")
                 .accessibilityIdentifier("dictionaries.activatedAt")
@@ -110,6 +120,7 @@ struct DictionarySettingsView: View {
 
     private func sources(_ manifest: IFDictionaryManifest) -> some View {
         VStack(alignment: .leading, spacing: 12) {
+            Text("中文来源").font(.subheadline)
             ForEach(manifest.sources, id: \.id) { receipt in
                 // The catalog owns names and destinations; downloaded metadata cannot introduce links.
                 if let spec = IFDictionaryCatalog.sources.first(where: { $0.id == receipt.id }),
@@ -129,6 +140,12 @@ struct DictionarySettingsView: View {
                     }
                 }
             }
+            Text("应用内精选补充：科技中文、搜狗专业词与热词；科技英文来自雾凇英文扩展和墨流维护词表。")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("dictionaries.curatedSources")
+            Link("雾凇 · 科技英文选词来源", destination: URL(string: "https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/en_dicts/en_ext.dict.yaml")!)
+                .accessibilityIdentifier("dictionaries.englishSource")
         }
         .padding(.top, 8)
     }

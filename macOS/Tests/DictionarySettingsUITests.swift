@@ -80,6 +80,10 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
         await show(.dictionaries, window: window, settings: settings, service: service)
         check(text("dictionaries.version", in: window).contains(manifest.contentVersion), "Full version is accessible")
         check(text("dictionaries.count", in: window).contains(manifest.entryCount.formatted()))
+        checkText("dictionaries.count", contains: "中文词条数", in: window)
+        checkText("dictionaries.coverage", contains: "默认启用", in: window)
+        checkText("dictionaries.updateScope", contains: "Rime 转换仓库", in: window)
+        checkText("dictionaries.appUpdates", contains: "随应用更新", in: window)
         let activationLabel = text("dictionaries.activatedAt", in: window)
         await fit(window, required: ["dictionaries.check", "dictionaries.version"], disclosures: ["词库来源"])
         await pressDisclosure("词库来源", in: window)
@@ -89,7 +93,9 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
             checkText("dictionaries.url.\(spec.id)", contains: spec.sourceURL(commit: spec.pinnedCommit).absoluteString, in: window)
         }
         await fit(window, required: ["dictionaries.check"])
-        print("PASS dictionary UI metadata: actual content/count/activation, seven trusted immutable sources, full versions/URLs, minimum/enlarged layout")
+        checkText("dictionaries.curatedSources", contains: "科技英文", in: window)
+        check(element("dictionaries.englishSource", in: window) != nil)
+        print("PASS dictionary UI metadata: Chinese content/count/activation, default domain coverage and update scope, trusted immutable sources, full versions/URLs, minimum/enlarged layout")
 
         delay.value = true
         await press("dictionaries.check", in: window)

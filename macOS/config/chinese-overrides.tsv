@@ -1,3 +1,30 @@
 # Exact Chinese corrections applied after the calibrated union.
 # Format: text<TAB>normalized reading<TAB>replacement integer weight<TAB>reason
-# No corrections are necessary for the initial pinned dictionary sources.
+# Curated technology/software and Internet terms; app-owned additions use explicit readings.
+上下文工程	shang xia wen gong cheng	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+世界模型	shi jie mo xing	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+具身智能	ju shen zhi neng	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+内容分发网络	nei rong fen fa wang luo	1	Curated Sogou 133021 term; explicit reading reviewed for InkFlow.
+命令行用户交互	ming ling hang yong hu jiao hu	1	Curated Sogou 133021 term; command-line reading retained from the source.
+响应超时	xiang ying chao shi	1	Curated Sogou 133021 term; explicit reading reviewed for InkFlow.
+多模态世界模型	duo mo tai shi jie mo xing	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+多模态理解	duo mo tai li jie	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+多模态生成	duo mo tai sheng cheng	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+提示词工程师	ti shi ci gong cheng shi	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+搞抽象	gao chou xiang	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+智能体开发平台	zhi neng ti kai fa ping tai	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+电子布洛芬	dian zi bu luo fen	1	Curated Sogou 4 term; explicit reading reviewed for InkFlow.
+短整型	duan zheng xing	1	Curated Sogou 133021 term; explicit reading reviewed for InkFlow.
+大语言模型	da yu yan mo xing	10	Modern AI terminology; explicit InkFlow reading.
+提示工程	ti shi gong cheng	10	Modern AI terminology; explicit InkFlow reading.
+检索增强生成	jian suo zeng qiang sheng cheng	10	Modern AI terminology; explicit InkFlow reading.
+向量数据库	xiang liang shu ju ku	10	Software terminology; explicit InkFlow reading.
+可观测性	ke guan ce xing	10	Software terminology; explicit InkFlow reading.
+模型上下文协议	mo xing shang xia wen xie yi	10	MCP Chinese name; explicit InkFlow reading.
+提示词工程	ti shi ci gong cheng	10	Modern AI terminology; explicit InkFlow reading.
+上下文窗口	shang xia wen chuang kou	10	Modern AI terminology; explicit InkFlow reading.
+思维链	si wei lian	10	Modern AI terminology; explicit InkFlow reading.
+多模态大模型	duo mo tai da mo xing	10	Modern AI terminology; explicit InkFlow reading.
+基础设施即代码	ji chu she shi ji dai ma	10	Software terminology; explicit InkFlow reading.
+端侧大模型	duan ce da mo xing	10	Modern AI terminology; explicit InkFlow reading.
+智能体工作流	zhi neng ti gong zuo liu	10	Modern AI terminology; explicit InkFlow reading.

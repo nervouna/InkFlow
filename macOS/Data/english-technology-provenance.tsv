@@ -1,0 +1,121 @@
+# displayed text	spelling source	upstream lines	upstream codes	exact observed Zipf or empty	admission policy
+AI	inkflow-maintained			4.23	preserve-observation
+API	rime-ice-en-ext	1712	API	3.68	product-policy-4.0
+CLI	rime-ice-en-ext	1822	CLI	2.84	product-policy-4.0
+SDK	rime-ice-en-ext	1001	SDK	2.85	product-policy-4.0
+IDE	rime-ice-en-ext	2431	IDE	3.14	product-policy-4.0
+GUI	rime-ice-en-ext	1340	GUI	3.29	product-policy-4.0
+CPU	rime-ice-en-ext	332	CPU	3.72	product-policy-4.0
+GPU	rime-ice-en-ext	335	GPU	3.22	product-policy-4.0
+RAM	rime-ice-en-ext	1474	RAM	4.19	preserve-observation
+SSD	rime-ice-en-ext	329	SSD	3.21	product-policy-4.0
+USB	rime-ice-en-ext	1039	USB	3.98	product-policy-4.0
+HTTP	rime-ice-en-ext	1075	HTTP	4.81	preserve-observation
+HTTPS	rime-ice-en-ext	1078	HTTPS	4.42	preserve-observation
+TCP	rime-ice-en-ext	1971	TCP	3.12	product-policy-4.0
+UDP	rime-ice-en-ext	1969	UDP	2.75	product-policy-4.0
+DNS	rime-ice-en-ext	758	DNS	3.24	product-policy-4.0
+SSH	rime-ice-en-ext	292	SSH	3.12	product-policy-4.0
+SSL	rime-ice-en-ext	1014	SSL	2.93	product-policy-4.0
+TLS	rime-ice-en-ext	1967	TLS	2.85	product-policy-4.0
+URL	rime-ice-en-ext	1070	URL	3.86	product-policy-4.0
+URI	rime-ice-en-ext	1073	URI	3.26	product-policy-4.0
+RESTful	rime-ice-en-ext	1165	RESTful		product-policy-4.0
+gRPC	rime-ice-en-ext	706	gRPC		product-policy-4.0
+GraphQL	rime-ice-en-ext	1228	GraphQL		product-policy-4.0
+WebSocket	rime-ice-en-ext	2307	WebSocket		product-policy-4.0
+WebRTC	rime-ice-en-ext	1854	WebRTC		product-policy-4.0
+WebDAV	rime-ice-en-ext	1855	WebDAV		product-policy-4.0
+JSON	rime-ice-en-ext	568	JSON	2.75	product-policy-4.0
+YAML	rime-ice-en-ext	523	YAML		product-policy-4.0
+XML	rime-ice-en-ext	1239	XML	3.29	product-policy-4.0
+HTML	rime-ice-en-ext	885	HTML	3.65	product-policy-4.0
+CSS	rime-ice-en-ext	466	CSS	3.42	product-policy-4.0
+SQL	rime-ice-en-ext	598	SQL	3.38	product-policy-4.0
+SQLite	rime-ice-en-ext	601	SQLite		product-policy-4.0
+PostgreSQL	rime-ice-en-ext	1986	pgSQL		product-policy-4.0
+MySQL	rime-ice-en-ext	581	MySQL		product-policy-4.0
+MariaDB	rime-ice-en-ext	578	MariaDB		product-policy-4.0
+MongoDB	rime-ice-en-ext	580	MongoDB		product-policy-4.0
+Redis	rime-ice-en-ext	593	Redis		product-policy-4.0
+Elasticsearch	rime-ice-en-ext	2189	Elasticsearch		product-policy-4.0
+Swift	inkflow-maintained			4.15	preserve-observation
+SwiftUI	rime-ice-en-ext	1856	SwiftUI		product-policy-4.0
+AppKit	inkflow-maintained				product-policy-4.0
+UIKit	inkflow-maintained				product-policy-4.0
+SwiftData	inkflow-maintained				product-policy-4.0
+Xcode	rime-ice-en-ext	740	Xcode		product-policy-4.0
+TestFlight	rime-ice-en-ext	1020	TestFlight		product-policy-4.0
+Homebrew	rime-ice-en-ext	504	Homebrew	2.66	product-policy-4.0
+CocoaPods	rime-ice-en-ext	1210	CocoaPods		product-policy-4.0
+Git	inkflow-maintained			3.36	product-policy-4.0
+GitHub	rime-ice-en-ext	879	GitHub		product-policy-4.0
+GitLab	rime-ice-en-ext	1598	GitLab		product-policy-4.0
+Bitbucket	rime-ice-en-ext	458	Bitbucket		product-policy-4.0
+GitHub Actions	rime-ice-en-ext	2004	GitHubActions		product-policy-4.0
+GitHub Copilot	rime-ice-en-ext	1250	GitHubCopilot		product-policy-4.0
+Docker	inkflow-maintained			2.98	product-policy-4.0
+Docker Compose	inkflow-maintained				product-policy-4.0
+Docker Hub	rime-ice-en-ext	1188	DockerHub		product-policy-4.0
+Kubernetes	rime-ice-en-ext	2141,2142	K8s|Kubernetes		product-policy-4.0
+Terraform	rime-ice-en-ext	2372	Terraform	1.99	product-policy-4.0
+Ansible	rime-ice-en-ext	714	Ansible	2.12	product-policy-4.0
+CI	rime-ice-en-ext	2575	CI	3.53	product-policy-4.0
+CD	rime-ice-en-ext	1702	CD	4.36	preserve-observation
+DevOps	rime-ice-en-ext	2321	DevOps		product-policy-4.0
+Linux	rime-ice-en-ext	1739	Linux	3.99	product-policy-4.0
+Ubuntu	rime-ice-en-ext	1740	Ubuntu	3.27	product-policy-4.0
+Debian	rime-ice-en-ext	363	Debian	2.88	product-policy-4.0
+CentOS	rime-ice-en-ext	362	CentOS		product-policy-4.0
+macOS	rime-ice-en-ext	154	macOS		product-policy-4.0
+iOS	rime-ice-en-ext	1738	iOS		product-policy-4.0
+Android	rime-ice-en-ext	1735	Android	4.42	preserve-observation
+Windows	rime-ice-en-ext	166	Windows	4.72	preserve-observation
+Python	inkflow-maintained			3.78	product-policy-4.0
+TypeScript	rime-ice-en-ext	1277	TypeScript		product-policy-4.0
+JavaScript	rime-ice-en-ext	747,748	JS|JavaScript		product-policy-4.0
+Rust	inkflow-maintained			3.74	product-policy-4.0
+Go	rime-ice-en-ext	563	Go	6.03	preserve-observation
+Java	inkflow-maintained			4.00	preserve-observation
+Kotlin	rime-ice-en-ext	1558	Kotlin		product-policy-4.0
+Dart	inkflow-maintained			3.52	product-policy-4.0
+Flutter	inkflow-maintained			3.06	product-policy-4.0
+React	inkflow-maintained			4.16	preserve-observation
+React Native	rime-ice-en-ext	700	ReactNative		product-policy-4.0
+Next.js	rime-ice-en-ext	616	Next.js		product-policy-4.0
+Node.js	rime-ice-en-ext	584	Node.js		product-policy-4.0
+Vue	rime-ice-en-ext	608	Vue	2.87	product-policy-4.0
+Angular	rime-ice-en-ext	1631	Angular	3.51	product-policy-4.0
+Django	rime-ice-en-ext	558	Django	3.10	product-policy-4.0
+FastAPI	rime-ice-en-ext	646	FastAPI		product-policy-4.0
+Spring Boot	rime-ice-en-ext	2356	SpringBoot		product-policy-4.0
+.NET	rime-ice-en-ext	132,133	net|dotnet		product-policy-4.0
+C++	rime-ice-en-ext	1725,1726	C++|Cpp		product-policy-4.0
+C#	rime-ice-en-ext	2201	C#		product-policy-4.0
+Objective-C	rime-ice-en-ext	1294,1295	OC|Objective-C		product-policy-4.0
+VS Code	rime-ice-en-ext	607	VSCode		product-policy-4.0
+Visual Studio Code	rime-ice-en-ext	1389,1390	VisualStudioCode|VSCode		product-policy-4.0
+IntelliJ IDEA	rime-ice-en-ext	475	IntelliJIDEA		product-policy-4.0
+PyCharm	rime-ice-en-ext	591	PyCharm		product-policy-4.0
+WebStorm	rime-ice-en-ext	739	WebStorm		product-policy-4.0
+OpenAI	rime-ice-en-ext	1664	OpenAI		product-policy-4.0
+ChatGPT	rime-ice-en-ext	1663	ChatGPT		product-policy-4.0
+Claude	rime-ice-en-ext	2009	Claude	3.76	product-policy-4.0
+Claude Code	rime-ice-en-ext	2501	ClaudeCode		product-policy-4.0
+Codex	rime-ice-en-ext	2499	Codex	3.18	product-policy-4.0
+Codex CLI	rime-ice-en-ext	2500	CodexCLI		product-policy-4.0
+DeepSeek	rime-ice-en-ext	2436	DeepSeek		product-policy-4.0
+Gemini	inkflow-maintained			3.38	product-policy-4.0
+Qwen	rime-ice-en-ext	2486	Qwen		product-policy-4.0
+Ollama	rime-ice-en-ext	2473	Ollama		product-policy-4.0
+PyTorch	rime-ice-en-ext	2435	PyTorch		product-policy-4.0
+TensorFlow	rime-ice-en-ext	2434	TensorFlow		product-policy-4.0
+CUDA	rime-ice-en-ext	737	CUDA		product-policy-4.0
+LLM	rime-ice-en-ext	727	LLM	2.29	product-policy-4.0
+GPT	rime-ice-en-ext	1885	GPT	2.39	product-policy-4.0
+MCP	rime-ice-en-ext	2502	MCP	2.58	product-policy-4.0
+RAG	inkflow-maintained			3.55	product-policy-4.0
+NLP	rime-ice-en-ext	730	NLP	2.59	product-policy-4.0
+OCR	rime-ice-en-ext	1176	OCR	2.79	product-policy-4.0
+AIGC	rime-ice-en-ext	2110	AIGC		product-policy-4.0
+AGI	rime-ice-en-ext	1997	AGI	2.73	product-policy-4.0

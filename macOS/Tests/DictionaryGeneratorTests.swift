@@ -19,7 +19,7 @@ struct DictionaryGeneratorTests {
             inputs.append(IFDictionaryInput(receipt: receipt, data: data))
             catalog.append(IFDictionarySourceSpec(id: spec.id, group: spec.group, name: spec.name, repository: spec.repository,
                 branch: spec.branch, path: spec.path, pinnedCommit: receipt.commit, pinnedBlobSHA: receipt.blobSHA,
-                pinnedSHA256: receipt.sha256, pinnedByteCount: receipt.byteCount))
+                pinnedSHA256: receipt.sha256, pinnedByteCount: receipt.byteCount, defaultWeight: spec.defaultWeight))
         }
         return (inputs, catalog)
     }
@@ -45,6 +45,21 @@ struct DictionaryGeneratorTests {
             expect(output.contains(row), "Missing union rule: \(row)")
         }
         expect(union.manifest.entryCount == 9, "Deduplicate by term + normalized reading")
+        let specialty = try generate([
+            "frost-computer": "甲\tjia\t9000\n新增\txin zeng\t9000\n专业词\tzhuan ye ci\t3",
+            "frost-exthot": "专业词\tzhuan ye ci\t9000\n网络新词\twang luo xin ci\t2\n",
+            "selected-computer": "新增\txin zeng\n旧词\tjiu ci\n二列词\ter lie ci\n串行打印机\tchuan hang da yin ji\n",
+            "ice-base": "甲\tjia\t10\n新增\txin zeng\t2\n",
+            "legacy": "甲\tjia\t200\n旧词\tjiu ci\t4\n"
+        ])
+        for row in ["甲\tjia\t100\n", "新增\txin zeng\t20\n", "旧词\tjiu ci\t2\n", "专业词\tzhuan ye ci\t3\n",
+                    "网络新词\twang luo xin ci\t2\n", "二列词\ter lie ci\t1\n", "串行打印机\tchuan xing da yin ji\t1\n"] {
+            expect(text(specialty).contains(row), "Specialty fill-only/source weight/correction: \(row)")
+        }
+        expect(!text(specialty).contains("串行打印机\tchuan hang"), "Do not retain known wrong reading")
+        expect(specialty.manifest.calibrations.map(\.pairCount) == [1, 1], "Specialty overlaps cannot affect calibration")
+        reject("source-format") { _ = try generate(["frost-computer": "专业词\tzhuan ye ci\n"]) }
+        reject("source-format") { _ = try generate(["selected-computer": "专业词\tzhuan ye ci\t\n"]) }
         expect(!output.contains("import_tables"), "Ignore remote imports")
         let roundtrip = try JSONDecoder().decode(IFDictionaryManifest.self, from: union.manifest.encoded())
         expect(roundtrip == union.manifest, "Stable Codable metadata")
@@ -78,7 +93,8 @@ struct DictionaryGeneratorTests {
             reject("source-format") { _ = try generate(["frost-8105": bad]) }
         }
         reject("invalid-reading") { _ = try generate(["frost-8105": "甲\tjiǎ\t1\n"]) }
-        reject("source-format") { _ = try generate(["frost-8105": "甲\tjia\t1"]) }
+        let verifiedNoNewline = try generate(["frost-8105": "甲\tjia\t1"])
+        expect(text(verifiedNoNewline).contains("甲\tjia\t1\n"), "Verified complete bytes need no final newline")
         reject("correction-duplicate") { _ = try generate(corrections: "甲\tjia\t1\tone\n甲\tJIA\t2\ttwo\n") }
         reject("correction-format") { _ = try generate(corrections: "甲\tjia\t1\t\n") }
         let (inputs, catalog) = fixture()
@@ -112,6 +128,9 @@ struct DictionaryGeneratorTests {
         }
         let corrections = try Data(contentsOf: destination.appendingPathComponent(IFDictionaryCatalog.correctionsFilename))
         let result = try IFDictionaryGenerator.generate(inputs: inputs, corrections: corrections)
+        expect(text(result).contains("命令行用户交互\tming ling hang yong hu jiao hu\t1\n"),
+               "Command-line uses hang, independently of the curated input table")
+        expect(!text(result).contains("命令行用户交互\tming ling xing"), "Do not confuse command-line with serial execution")
         expect(result.manifest.entryCount == IFDictionaryCatalog.initialEntryCount, "Initial pinned source coverage")
         expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename)) == result.dictionary,
                "Build CLI and shared runtime module generate identical bytes")

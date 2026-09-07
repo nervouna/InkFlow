@@ -5,15 +5,21 @@ Git blob IDs and SHA-256 values. `prepare-chinese.sh` downloads only these expli
 text files into ignored `build/dictionary-sources`. It runs the same
 `IFDictionaryGenerator.generate` used by the dictionary preparation worker.
 
-The source order is Frost `8105`, `base`, `ext`, `idiom`, then Ice `base`, `ext`,
-then the fixed legacy `pinyin_simp` source. Entries are identified by displayed
+The baseline merge order is Frost `8105`, `base`, `ext`, `idiom`, then Ice `base`,
+`ext`, then the fixed legacy `pinyin_simp` source. Specialty sources then fill
+missing pairs: Frost `computer`, `exthot`, and rime-selected's Sogou computer
+conversion. The catalog keeps legacy last for the existing worker protocol;
+merge groups, rather than catalog position, enforce baseline-before-specialty
+precedence. Entries are identified by displayed
 text plus explicitly supplied Pinyin, after whitespace/case normalization and
 ü-to-v conversion. No pronunciation is guessed, and no script conversion occurs.
 Duplicate pairs retain the first source's weight; alternate readings remain.
-The pinned baseline contains 963,978 unique pairs. English, custom phrases and
+The pinned domain dictionary contains 969,894 unique pairs, including 5,916
+additions to the original 963,978-pair baseline. Original pair weights remain
+unchanged. English, custom phrases and
 learned entries are not part of that count.
 
-Frost weights remain unchanged. For each supplemental source group, positive
+Baseline Frost weights remain unchanged. For the Ice and legacy groups, positive
 weights on overlapping pairs are compared to Frost using
 `exp(median(log(frostWeight / sourceWeight)))`. Syllable buckets are 1, 2, 3, 4,
 and 5 or more. A bucket with fewer than 100 overlapping pairs uses that source's
@@ -21,13 +27,23 @@ overall multiplier; a source without positive overlaps fails generation. New
 positive weights are rounded, bounded to `1...Int32.max`, and original zero
 weights remain zero. `macOS/config/chinese-overrides.tsv` applies explicit
 term/reading replacement weights last and requires a reason for every row.
-Its default contains no active corrections.
+It also supplies a small curated technology and Internet supplement with explicit
+readings and conservative weights. Specialty pairs use their own numeric weight;
+rime-selected explicitly declares default weight 1 for its two-column source.
+They do not participate in baseline calibration. One exact rime-selected error,
+`串行打印机 / chuan hang da yin ji`, is patched to `chuan xing da yin ji` before
+merging; other readings are preserved. The curated Sogou `命令行用户交互` entry
+retains the source's `hang` reading for command-line.
 
 The parser reads only the tab-separated body following the Rime `---`/`...`
 header. Imports and all other upstream YAML fields are ignored. It requires
-valid UTF-8, a final newline, nonempty explicit readings, nonnegative integer
+valid UTF-8, nonempty explicit readings, nonnegative integer
 weights, bounded files/lines/record counts, and rejects partial or malformed
 sources. All sources must pass Git blob and SHA-256 verification before merging.
+Once complete byte count and both digests are verified, a missing final newline
+is accepted (the pinned Frost computer file has none). Missing numeric weights
+are accepted only for a catalog source that explicitly declares its default;
+empty weight fields, extra columns and malformed final rows remain errors.
 
 Canonical rows are sorted by UTF-8 text, then reading. The content version is
 SHA-256 over the recipe version and canonical weighted rows. The generated
@@ -50,7 +66,13 @@ incremental Chinese, mixed English, context, custom phrases and emoji. These
 isolated probes do not replace real-client typing acceptance.
 
 Licenses and source notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt`,
-`rime-frost.txt`, `rime-ice.txt`, and `pinyin-simp.txt` and ship in the app bundle.
+`rime-frost.txt`, `rime-ice.txt`, `rime-selected.txt`, and `pinyin-simp.txt` and ship
+in the app bundle. The rime-selected repository declares MIT, but original Sogou
+third-party redistribution permission was not verified. The notice preserves
+this evidence limit; repository licensing does not establish upstream clearance.
+The selected computer source's 10,300 term/reading pairs exactly match Sogou
+dictionary 15117. Four individually verified terms from Sogou 133021 and ten
+from Sogou hotwords 4 are curated locally; no full hotword conversion is claimed.
 
 THUOCL is an optional coverage audit, never a pronunciation or weight source.
 For the pinned corpus below, all 8,519 distinct listed words are present. To
@@ -72,7 +94,7 @@ awk -F '\t' '
 
 ## Verified update preparation
 
-`IFDictionarySourceClient` checks only the fixed Frost and Ice repositories. A
+`IFDictionarySourceClient` checks only the fixed Frost, Ice and rime-selected repositories. A
 branch check resolves a commit and its complete Git tree; only allowlisted regular
 file paths, Git blob identifiers and sizes are accepted. Unrelated upstream
 commits do not offer an update. Downloads bind the checked immutable commit,
@@ -114,6 +136,16 @@ so changed correction policy can regenerate offline. A flat-only artifact whose
 correction policy changed must fall back to the current bundled dictionary.
 Proven same-content source receipts are stored separately, bound to that active
 content version; merely checking or downloading never suppresses a future retry.
+Recipe 2's expanded source set rejects recipe-1 downloaded manifests through
+normal recovery and enables the new bundled complete dictionary. Known historical
+journal identities remain readable, so this is not classified as malformed state.
+An observation bound to the old content version is already ignored; `observed.json`
+is retained. Chinese learning keeps its existing database throughout the upgrade.
+Existing bounded housekeeping removes unreferenced compiled artifacts from known
+recipe generations, including recipe 1 after a successful bundled upgrade. It
+retains current, previous and pending artifacts and ignores unknown or malformed
+directory names and symlinks; learning, custom phrases and observations are outside
+its removal scope. Later housekeeping passes reclaim any remaining excess artifacts.
 
 Diagnostic errors carry a Chinese stage summary and bounded technical fields and
 can be logged through an injected sink. The journal, manifest and observations
@@ -135,6 +167,9 @@ download/update action. There is no scheduled check. One operation runs at a
 time, including the wait for input to become idle. Closing Settings leaves work
 running and reopening resumes its current progress.
 
+The pane shows all domain coverage as enabled by default, with no switches. Chinese
+check/download includes the rime-selected conversion repository, not Sogou's live
+service. Curated Chinese and [technical English](Data/TECHNOLOGY.md) update with the app.
 The pane reports the running manifest's full selectable content version,
 term/reading count and successful local activation time. Checking, downloading,
 validation failure, failed activation and content-identical source changes do

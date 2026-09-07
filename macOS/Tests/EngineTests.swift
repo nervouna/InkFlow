@@ -15,6 +15,7 @@ struct EngineTests {
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
         chineseDictionaryCoverage()
+        try domainVocabulary()
         englishAdmission()
         conservativeChinesePrefixes()
         mixedEnglishCandidates()
@@ -57,6 +58,67 @@ struct EngineTests {
             engine.key(0xff1b)
         }
         print("PASS expanded Chinese dictionary: default first candidates for common term, idiom and poems")
+    }
+
+    @MainActor static func selectCandidate(_ expected: String, input: String, engine: IFEngine) {
+        type(engine, input)
+        for _ in 0..<1000 {
+            let snapshot = engine.snapshot()
+            if let index = snapshot.candidates.firstIndex(of: expected) {
+                engine.select(index)
+                check(engine.takeCommit() == expected, "Exact domain spelling/selection: \(input) -> \(expected)")
+                check(engine.snapshot().preedit.isEmpty, "Domain candidate covers complete input")
+                return
+            }
+            engine.key(0xff56)
+            if engine.snapshot().page == snapshot.page { break }
+        }
+        check(false, "Missing domain candidate \(input) -> \(expected)")
+    }
+
+    @MainActor static func domainVocabulary() throws {
+        let engine = IFEngine()!
+        let chinese = try String(contentsOfFile: "macOS/config/chinese-overrides.tsv", encoding: .utf8)
+        selectCandidate("命令行用户交互", input: "minglinghangyonghujiaohu", engine: engine)
+        for line in chinese.split(separator: "\n") where !line.hasPrefix("#") {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+            check(fields.count == 4)
+            selectCandidate(String(fields[0]), input: fields[1].replacingOccurrences(of: " ", with: ""), engine: engine)
+        }
+        selectCandidate("串行打印机", input: "chuanxingdayinji", engine: engine)
+        selectCandidate("深度求索", input: "shenduqiusuo", engine: engine)
+        selectCandidate("阿米诺斯", input: "aminuosi", engine: engine)
+        selectCandidate("并发信息系统", input: "bingfaxinxixitong", engine: engine)
+        let english = try String(contentsOfFile: "macOS/Data/english-technology.tsv", encoding: .utf8)
+        var count = 0
+        for line in english.split(separator: "\n") where !line.hasPrefix("#") {
+            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
+            check(fields.count == 3)
+            selectCandidate(String(fields[0]), input: String(fields[1]), engine: engine)
+            count += 1
+        }
+        check(count == 120, "Every selected technical English spelling is exercised")
+        selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
+        type(engine, "swiftui")
+        for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
+            let candidates = allCandidates(engine)
+            check(candidates.contains("SwiftUI") == (prefix.count >= 3), "Technology completion/backspace boundary: \(prefix)")
+            engine.key(0xff08)
+        }
+        engine.clear()
+        for input in ["woapi", "apihenhao", "wocpp", "claudecodehenhao"] {
+            type(engine, input)
+            check(!allCandidates(engine).contains { $0.contains("API") || $0.contains("C++") || $0.contains("Claude Code") },
+                  "Short/punctuated/spaced technical aliases do not bypass mixed structural restrictions")
+            engine.clear()
+        }
+        engine.setConfiguration(candidateCount: 5, customPhrases: [CustomPhrase(id: UUID(), code: "api", text: "我的接口")])
+        engine.setPrecedingText("调用")
+        type(engine, "api")
+        check(engine.snapshot().candidates.first == "我的接口" && allCandidates(engine).contains("API"),
+              "Explicit custom phrases keep priority while technical English remains reachable")
+        engine.clear()
+        print("PASS domain vocabulary: all curated Chinese and 120 technical English spellings selectable; exact case/punctuation/space commits, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
     }
 
     @MainActor static func conservativeChinesePrefixes() {

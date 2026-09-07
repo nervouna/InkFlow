@@ -2,4 +2,114 @@
 # Replaces observed or missing evidence before the shared admission gate.
 # Zero explicitly excludes; other values still need to pass ENGLISH_MIN_ZIPF.
 # Applies to all existing code aliases of this exact case/spelling; creates no words.
-# Empty by default. Future correction policy is deliberately left open.
+# Curated technology admissions are product policy, not measured frequency.
+# Exact displayed text	policy replacement Zipf	reason
+API	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CLI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SDK	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+IDE	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GUI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CPU	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GPU	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SSD	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+USB	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+TCP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+UDP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+DNS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SSH	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SSL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+TLS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+URL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+URI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+RESTful	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+gRPC	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GraphQL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WebSocket	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WebRTC	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WebDAV	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+JSON	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+YAML	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+XML	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+HTML	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CSS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SQL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SQLite	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+PostgreSQL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+MySQL	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+MariaDB	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+MongoDB	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Redis	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Elasticsearch	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SwiftUI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+AppKit	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+UIKit	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+SwiftData	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Xcode	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+TestFlight	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Homebrew	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CocoaPods	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Git	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GitHub	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GitLab	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Bitbucket	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GitHub Actions	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GitHub Copilot	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Docker	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Docker Compose	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Docker Hub	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Kubernetes	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Terraform	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Ansible	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+DevOps	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Linux	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Ubuntu	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Debian	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CentOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+macOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+iOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Python	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+TypeScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+JavaScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Rust	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Kotlin	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Dart	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Flutter	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+React Native	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Next.js	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Node.js	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Vue	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Angular	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Django	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+FastAPI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Spring Boot	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+.NET	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+C++	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+C#	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Objective-C	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+VS Code	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Visual Studio Code	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+IntelliJ IDEA	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+PyCharm	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WebStorm	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+OpenAI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+ChatGPT	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Claude	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Claude Code	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Codex	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Codex CLI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+DeepSeek	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Gemini	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Qwen	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Ollama	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+PyTorch	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+TensorFlow	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+CUDA	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+LLM	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+GPT	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+MCP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+RAG	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+NLP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+OCR	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+AIGC	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+AGI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.

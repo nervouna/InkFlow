@@ -31,7 +31,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
             data = try JSONSerialization.data(withJSONObject: ["sha": mutation == "badcommit" ? "../head" : fakeCommit,
                 "commit": ["tree": ["sha": fakeTree]]])
         } else if url.path.contains("/git/trees/") {
-            let repository = url.path.contains("gaboolic") ? "gaboolic/rime-frost" : "iDvel/rime-ice"
+            let repository = IFDictionaryCatalog.sources.first { url.path.hasPrefix("/repos/\($0.repository)/") }!.repository
             let specs = IFDictionaryCatalog.sources.filter { $0.repository == repository }
             var entries = specs.map { spec -> [String: Any] in
                 ["path": spec.path, "mode": mutation == "symlink" ? "120000" : "100644", "type": "blob",
@@ -54,6 +54,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         let fingerprint = try runtime.fingerprint()
         try await networkTests(repository)
         try storeTests(root: root, runtime: runtime, fingerprint: fingerprint)
+        try cleanupTests(root: root, fingerprint: fingerprint)
         try await runnerFailures(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
         try workerSuccess(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
         try workerNativeFailures(root: root, runtime: runtime)
@@ -70,7 +71,8 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         }
         do { _ = try await network("malformed").check(observed: baseline); fatalError("Expected malformed response") }
         catch let error as IFDictionaryUpdateError {
-            check(error.code == "response-json" && error.source == "gaboolic/rime-frost" && error.file == "commit", "Malformed JSON retains endpoint/source context")
+            let firstRepository = IFDictionaryCatalog.sources.filter(\.isUpdatable).map(\.repository).sorted().first!
+            check(error.code == "response-json" && error.source == firstRepository && error.file == "commit", "Malformed JSON retains endpoint/source context")
         }
         let specs = IFDictionaryCatalog.sources.filter(\.isUpdatable)
         let bytes = try Dictionary(uniqueKeysWithValues: specs.map { spec in
@@ -84,7 +86,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
             return .init(url: request.url!, status: 200, data: data, expectedLength: Int64(data.count))
         })
         let downloaded = try await good.download(checked)
-        check(downloaded.count == 6 && downloaded[0].receipt.sha256 == specs[0].pinnedSHA256, "Verified downloads")
+        check(downloaded.count == specs.count && downloaded[0].receipt.sha256 == specs[0].pinnedSHA256, "Verified downloads")
         for corruption in ["truncate", "hash", "length", "oversize"] {
             let bad = IFDictionarySourceClient(transport: { request, _ in
                 var data = bytes[specs[0].id]!
@@ -106,7 +108,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         let candidate = try store.candidate()
         let dictionary = Data("---\nname: pinyin_simp\n...\n你好\tni hao\t1\n".utf8)
         let original = try store.bundled(runtime.resources).manifest
-        let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: 1, contentVersion: "r1-" + String(repeating: versionCharacter, count: 64),
+        let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: IFDictionaryCatalog.recipeVersion, contentVersion: "r\(IFDictionaryCatalog.recipeVersion)-" + String(repeating: versionCharacter, count: 64),
             entryCount: 1, contentSHA256: IFDictionaryHash.sha256(dictionary), dictionarySHA256: IFDictionaryHash.sha256(dictionary),
             correctionsSHA256: original.correctionsSHA256, sources: original.sources, calibrations: [])
         let shared = candidate.appendingPathComponent("shared"), cache = candidate.appendingPathComponent("cache")
@@ -176,6 +178,90 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         check(replacement.directory != second.directory, "Fresh artifact cannot collide with corrupt same-content cache")
         _ = try store.resolve(replacement, fingerprint: fingerprint)
         print("PASS store: begin/confirm/failure/interruption/fallback, same-content observations, safe paths, cache/fingerprint integrity, diagnostic-free atomic state")
+    }
+    static func cleanupTests(root: URL, fingerprint: String) throws {
+        let user = root.appendingPathComponent("cleanup-user")
+        let store = try IFDictionaryStore(root: user.appendingPathComponent("updates"))
+        let manager = FileManager.default
+        let sentinel = Data("preserve owned data and outside targets".utf8)
+        func directory(_ relative: String) throws -> URL {
+            let url = store.root.appendingPathComponent(relative)
+            try manager.createDirectory(at: url, withIntermediateDirectories: true)
+            try sentinel.write(to: url.appendingPathComponent("sentinel"))
+            return url
+        }
+        func version(_ recipe: Int, _ character: String) -> IFDictionaryVersion {
+            .init(contentVersion: "r\(recipe)-" + String(repeating: character, count: 64),
+                  runtimeFingerprint: fingerprint, preparedAt: .distantPast)
+        }
+
+        // All three historical journal references remain protected even though their manifests are obsolete.
+        let retained = [version(1, "1"), version(1, "2"), version(1, "3")]
+        for item in retained { _ = try directory(item.directory) }
+        let journal = try IFDictionaryFiles.encode(IFDictionaryState(current: retained[0], previous: retained[1],
+                                                                     pending: retained[2], transaction: .apply))
+        let journalURL = store.root.appendingPathComponent("state.json")
+        try journal.write(to: journalURL)
+        check(try store.state().pending == retained[2], "Historical references remain readable for cleanup")
+
+        let abandoned = [version(1, "4"), version(1, "5"), version(IFDictionaryCatalog.recipeVersion, "6"),
+                         version(IFDictionaryCatalog.recipeVersion, "7"), version(IFDictionaryCatalog.recipeVersion, "8")]
+        var removable = try abandoned.map { try directory($0.directory) }
+        for _ in 0..<3 { removable.append(try directory("candidates/" + UUID().uuidString.lowercased())) }
+
+        let hash = String(repeating: "a", count: 64), uuid = UUID().uuidString.lowercased()
+        let unsupported = ["r0", "r01", "r\(IFDictionaryCatalog.recipeVersion + 1)", "r9999999999999999999999999", "rx"]
+        for prefix in unsupported {
+            fails("invalid-version") {
+                try IFDictionaryVersion(contentVersion: "\(prefix)-\(hash)", runtimeFingerprint: fingerprint,
+                                        preparedAt: .distantPast).validate()
+            }
+        }
+        var protected = try unsupported.map { try directory("versions/\($0)-\(hash)-\(fingerprint)-\(uuid)") }
+        for name in ["r1--\(hash)-\(fingerprint)-\(uuid)", "r1-\(hash)--\(fingerprint)-\(uuid)",
+                     "r1-\(hash)-\(fingerprint)-not-a-uuid", "r1-xyz-\(fingerprint)-\(uuid)",
+                     "r\(IFDictionaryCatalog.recipeVersion)-\(hash)-xyz-\(uuid)", "user-notes"] {
+            protected.append(try directory("versions/\(name)"))
+        }
+        protected.append(try directory("candidates/not-a-uuid"))
+        protected += retained.map { store.root.appendingPathComponent($0.directory) }
+        // A regular file with an otherwise owned identity must not be recursively removed either.
+        let regularFile = store.root.appendingPathComponent(version(1, "9").directory)
+        try sentinel.write(to: regularFile)
+
+        let outside = root.appendingPathComponent("cleanup-outside")
+        try manager.createDirectory(at: outside, withIntermediateDirectories: true)
+        let outsideSentinel = outside.appendingPathComponent("sentinel")
+        try sentinel.write(to: outsideSentinel)
+        let symlinkNames = ["candidates/" + UUID().uuidString.lowercased(), version(1, "b").directory,
+                            version(IFDictionaryCatalog.recipeVersion, "c").directory]
+        let symlinks = symlinkNames.map { store.root.appendingPathComponent($0) }
+        for link in symlinks { try manager.createSymbolicLink(at: link, withDestinationURL: outside) }
+
+        let userdb = user.appendingPathComponent("pinyin_simp.userdb")
+        try manager.createDirectory(at: userdb, withIntermediateDirectories: false)
+        let dataFiles = [userdb.appendingPathComponent("learning"), user.appendingPathComponent("custom_phrase.txt"),
+                         store.root.appendingPathComponent("observed.json")]
+        for file in dataFiles { try sentinel.write(to: file) }
+
+        check(try store.cleanup(limit: 0) == 0, "Zero cleanup budget leaves every artifact untouched")
+        check(removable.allSatisfy { manager.fileExists(atPath: $0.path) }, "Zero budget does not delete artifacts")
+        var total = 0
+        for pass in 0..<4 {
+            let removed = try store.cleanup(limit: 2)
+            check(removed == 2, "Bounded cleanup pass \(pass) removes exactly two obsolete artifacts")
+            total += removed
+            check(removable.filter { manager.fileExists(atPath: $0.path) }.count == removable.count - total,
+                  "Only the counted unreferenced artifacts disappear")
+        }
+        check(try total == removable.count && store.cleanup(limit: 2) == 0, "Repeated cleanup converges without accumulating historical artifacts")
+        for folder in protected { check(try Data(contentsOf: folder.appendingPathComponent("sentinel")) == sentinel, "Retained or unknown directory preserved: \(folder.lastPathComponent)") }
+        for link in symlinks {
+            check(try link.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true, "Valid-looking symlink is preserved")
+        }
+        for file in dataFiles + [outsideSentinel, regularFile] { check(try Data(contentsOf: file) == sentinel, "Cleanup preserves data outside removable owned directories") }
+        check(try Data(contentsOf: journalURL) == journal, "Cleanup never rewrites retained journal references")
+        print("PASS cleanup: retained r1 current/previous/pending, obsolete r1/current artifacts and candidates, unknown/malformed identities, symlinks/outside/user data, zero budget and bounded convergence")
     }
     static func runnerFailures(root: URL, runtime: IFDictionaryRuntime, repository: URL, fingerprint: String) async throws {
         let user = root.appendingPathComponent("protected")
@@ -254,7 +340,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         bad[0] = .init(receipt: .init(id: specs[0].id, commit: fakeCommit, blobSHA: IFDictionaryHash.gitBlob(badBytes), sha256: IFDictionaryHash.sha256(badBytes), byteCount: badBytes.count, recordCount: 0), data: badBytes)
         fails("source-format") { _ = try runner.prepareBlocking(candidate: malformed, inputs: bad) }
         try store.removeCandidate(malformed)
-        print("PASS real helper: full generated 963978-entry compile, clean first-choice/mixed/English/emoji smoke, same-content no-activation, malformed source rejection")
+        print("PASS real helper: full generated dictionary compile, clean first-choice/mixed/English/emoji smoke, same-content no-activation, malformed source rejection")
     }
     static func workerNativeFailures(root: URL, runtime: IFDictionaryRuntime) throws {
         let user = root.appendingPathComponent("native-failures")
@@ -275,7 +361,7 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         try FileManager.default.createDirectory(at: thinShared, withIntermediateDirectories: false)
         let data = Data("---\nname: pinyin_simp\nversion: 'fixture'\nsort: by_weight\nuse_preset_vocabulary: false\n...\n你好\tni hao\t100\n".utf8)
         let original = try store.bundled(runtime.resources).manifest
-        let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: 1, contentVersion: "r1-" + String(repeating: "3", count: 64),
+        let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: IFDictionaryCatalog.recipeVersion, contentVersion: "r\(IFDictionaryCatalog.recipeVersion)-" + String(repeating: "3", count: 64),
             entryCount: 1, contentSHA256: IFDictionaryHash.sha256(data), dictionarySHA256: IFDictionaryHash.sha256(data),
             correctionsSHA256: original.correctionsSHA256, sources: original.sources, calibrations: [])
         try data.write(to: thinShared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))

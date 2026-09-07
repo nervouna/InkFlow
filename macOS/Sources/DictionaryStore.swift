@@ -94,9 +94,18 @@ init(contentVersion: String, runtimeFingerprint: String, preparedAt: Date, activ
         self.activatedAt = activatedAt; self.artifactID = artifactID
     }
     var directory: String { "versions/\(contentVersion)-\(runtimeFingerprint)-\(artifactID)" }
+    /// Recipes advance consecutively from 1; accept only canonical generations this app knows.
+    static func recognizesRecipe(_ prefix: String) -> Bool {
+        guard prefix.first == "r", let recipe = Int(prefix.dropFirst()),
+              recipe >= 1, recipe <= IFDictionaryCatalog.recipeVersion else { return false }
+        return prefix == "r\(recipe)"
+    }
     func validate() throws {
-        let prefix = "r\(IFDictionaryCatalog.recipeVersion)-"
-        guard contentVersion.hasPrefix(prefix), IFDictionaryHash.isHex(String(contentVersion.dropFirst(prefix.count)), length: 64),
+        // Keep historical journal identities readable so startup can reject incompatible
+        // manifests and confirm the new bundled dictionary through normal recovery.
+        let parts = contentVersion.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2, Self.recognizesRecipe(String(parts[0])),
+              IFDictionaryHash.isHex(String(parts[1]), length: 64),
               IFDictionaryHash.isHex(runtimeFingerprint, length: 64), UUID(uuidString: artifactID) != nil else { throw IFDictionaryUpdateError(.recovery, "invalid-version") }
     }
 }
@@ -282,8 +291,8 @@ struct IFDictionaryStore: Sendable {
                 if name == "candidates" { valid = UUID(uuidString: entry.lastPathComponent) != nil }
                 else {
                     // version directory = rN-contentSHA-runtimeSHA-UUID, all generated locally.
-                    let parts = entry.lastPathComponent.split(separator: "-", maxSplits: 3).map(String.init)
-                    valid = parts.count == 4 && parts[0] == "r\(IFDictionaryCatalog.recipeVersion)" &&
+                    let parts = entry.lastPathComponent.split(separator: "-", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
+                    valid = parts.count == 4 && IFDictionaryVersion.recognizesRecipe(parts[0]) &&
                         IFDictionaryHash.isHex(parts[1], length: 64) && IFDictionaryHash.isHex(parts[2], length: 64) &&
                         UUID(uuidString: parts[3]) != nil
                 }
@@ -298,6 +307,7 @@ struct IFDictionaryStore: Sendable {
     static func validateMetadata(_ manifest: IFDictionaryManifest) throws {
         try IFDictionaryVersion(contentVersion: manifest.contentVersion, runtimeFingerprint: String(repeating: "0", count: 64), preparedAt: .distantPast).validate()
         guard manifest.formatVersion == 1, manifest.recipeVersion == IFDictionaryCatalog.recipeVersion, manifest.entryCount > 0,
+              manifest.contentVersion.hasPrefix("r\(manifest.recipeVersion)-"),
               IFDictionaryHash.isHex(manifest.contentSHA256, length: 64), IFDictionaryHash.isHex(manifest.dictionarySHA256, length: 64),
               IFDictionaryHash.isHex(manifest.correctionsSHA256, length: 64),
               manifest.sources.map(\.id) == IFDictionaryCatalog.sources.map(\.id) else { throw IFDictionaryUpdateError(.verify, "manifest-metadata") }

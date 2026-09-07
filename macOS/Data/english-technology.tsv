@@ -1,0 +1,121 @@
+# displayed text	ASCII lookup code	spelling source
+AI	ai	inkflow-maintained
+API	api	rime-ice-en-ext
+CLI	cli	rime-ice-en-ext
+SDK	sdk	rime-ice-en-ext
+IDE	ide	rime-ice-en-ext
+GUI	gui	rime-ice-en-ext
+CPU	cpu	rime-ice-en-ext
+GPU	gpu	rime-ice-en-ext
+RAM	ram	rime-ice-en-ext
+SSD	ssd	rime-ice-en-ext
+USB	usb	rime-ice-en-ext
+HTTP	http	rime-ice-en-ext
+HTTPS	https	rime-ice-en-ext
+TCP	tcp	rime-ice-en-ext
+UDP	udp	rime-ice-en-ext
+DNS	dns	rime-ice-en-ext
+SSH	ssh	rime-ice-en-ext
+SSL	ssl	rime-ice-en-ext
+TLS	tls	rime-ice-en-ext
+URL	url	rime-ice-en-ext
+URI	uri	rime-ice-en-ext
+RESTful	restful	rime-ice-en-ext
+gRPC	grpc	rime-ice-en-ext
+GraphQL	graphql	rime-ice-en-ext
+WebSocket	websocket	rime-ice-en-ext
+WebRTC	webrtc	rime-ice-en-ext
+WebDAV	webdav	rime-ice-en-ext
+JSON	json	rime-ice-en-ext
+YAML	yaml	rime-ice-en-ext
+XML	xml	rime-ice-en-ext
+HTML	html	rime-ice-en-ext
+CSS	css	rime-ice-en-ext
+SQL	sql	rime-ice-en-ext
+SQLite	sqlite	rime-ice-en-ext
+PostgreSQL	postgresql	rime-ice-en-ext
+MySQL	mysql	rime-ice-en-ext
+MariaDB	mariadb	rime-ice-en-ext
+MongoDB	mongodb	rime-ice-en-ext
+Redis	redis	rime-ice-en-ext
+Elasticsearch	elasticsearch	rime-ice-en-ext
+Swift	swift	inkflow-maintained
+SwiftUI	swiftui	rime-ice-en-ext
+AppKit	appkit	inkflow-maintained
+UIKit	uikit	inkflow-maintained
+SwiftData	swiftdata	inkflow-maintained
+Xcode	xcode	rime-ice-en-ext
+TestFlight	testflight	rime-ice-en-ext
+Homebrew	homebrew	rime-ice-en-ext
+CocoaPods	cocoapods	rime-ice-en-ext
+Git	git	inkflow-maintained
+GitHub	github	rime-ice-en-ext
+GitLab	gitlab	rime-ice-en-ext
+Bitbucket	bitbucket	rime-ice-en-ext
+GitHub Actions	githubactions	rime-ice-en-ext
+GitHub Copilot	githubcopilot	rime-ice-en-ext
+Docker	docker	inkflow-maintained
+Docker Compose	dockercompose	inkflow-maintained
+Docker Hub	dockerhub	rime-ice-en-ext
+Kubernetes	kubernetes	rime-ice-en-ext
+Terraform	terraform	rime-ice-en-ext
+Ansible	ansible	rime-ice-en-ext
+CI	ci	rime-ice-en-ext
+CD	cd	rime-ice-en-ext
+DevOps	devops	rime-ice-en-ext
+Linux	linux	rime-ice-en-ext
+Ubuntu	ubuntu	rime-ice-en-ext
+Debian	debian	rime-ice-en-ext
+CentOS	centos	rime-ice-en-ext
+macOS	macos	rime-ice-en-ext
+iOS	ios	rime-ice-en-ext
+Android	android	rime-ice-en-ext
+Windows	windows	rime-ice-en-ext
+Python	python	inkflow-maintained
+TypeScript	typescript	rime-ice-en-ext
+JavaScript	javascript	rime-ice-en-ext
+Rust	rust	inkflow-maintained
+Go	go	rime-ice-en-ext
+Java	java	inkflow-maintained
+Kotlin	kotlin	rime-ice-en-ext
+Dart	dart	inkflow-maintained
+Flutter	flutter	inkflow-maintained
+React	react	inkflow-maintained
+React Native	reactnative	rime-ice-en-ext
+Next.js	nextjs	rime-ice-en-ext
+Node.js	nodejs	rime-ice-en-ext
+Vue	vue	rime-ice-en-ext
+Angular	angular	rime-ice-en-ext
+Django	django	rime-ice-en-ext
+FastAPI	fastapi	rime-ice-en-ext
+Spring Boot	springboot	rime-ice-en-ext
+.NET	dotnet	rime-ice-en-ext
+C++	cpp	rime-ice-en-ext
+C#	csharp	rime-ice-en-ext
+Objective-C	objectivec	rime-ice-en-ext
+VS Code	vscode	rime-ice-en-ext
+Visual Studio Code	visualstudiocode	rime-ice-en-ext
+IntelliJ IDEA	intellijidea	rime-ice-en-ext
+PyCharm	pycharm	rime-ice-en-ext
+WebStorm	webstorm	rime-ice-en-ext
+OpenAI	openai	rime-ice-en-ext
+ChatGPT	chatgpt	rime-ice-en-ext
+Claude	claude	rime-ice-en-ext
+Claude Code	claudecode	rime-ice-en-ext
+Codex	codex	rime-ice-en-ext
+Codex CLI	codexcli	rime-ice-en-ext
+DeepSeek	deepseek	rime-ice-en-ext
+Gemini	gemini	inkflow-maintained
+Qwen	qwen	rime-ice-en-ext
+Ollama	ollama	rime-ice-en-ext
+PyTorch	pytorch	rime-ice-en-ext
+TensorFlow	tensorflow	rime-ice-en-ext
+CUDA	cuda	rime-ice-en-ext
+LLM	llm	rime-ice-en-ext
+GPT	gpt	rime-ice-en-ext
+MCP	mcp	rime-ice-en-ext
+RAG	rag	inkflow-maintained
+NLP	nlp	rime-ice-en-ext
+OCR	ocr	rime-ice-en-ext
+AIGC	aigc	rime-ice-en-ext
+AGI	agi	rime-ice-en-ext

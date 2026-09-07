@@ -25,3 +25,32 @@ identifier), source checksums, generation recipe and applied calibration. The
 pinned legacy compatibility input is included as legacy-pinyin-simp.dict.yaml.
 Source generation code is in macOS/Sources/DictionaryGenerator.swift and the
 pinned source catalog is in macOS/Sources/DictionaryModels.swift.
+
+Default-enabled domain additions:
+- Rime Frost cn_dicts_cell/computer.dict.yaml and exthot.dict.yaml at the same
+  Frost commit. Original numeric weights are retained only for missing pairs.
+- alswl/rime-selected, selected.jisuanjicihuidaquan.dict.yaml, commit
+  30d61877615dbee98c3b5b4322d50bdc90226816:
+  https://github.com/alswl/rime-selected/blob/30d61877615dbee98c3b5b4322d50bdc90226816/selected.jisuanjicihuidaquan.dict.yaml
+  Original data: Sogou 计算机词汇大全 (dictionary 15117), version 4, 2010-01-15:
+  https://pinyin.sogou.com/dict/detail/index/15117
+  The repository declares MIT, Copyright (c) 2025 Jingchao; see rime-selected.txt.
+  That notice is the conversion repository's declaration. No explicit original
+  Sogou third-party redistribution grant was verified. This attribution does not
+  establish independent clearance of the upstream data's licensing chain.
+  The 10,300 two-column rows match the official SCEL's term/reading pairs.
+  InkFlow assigns the source-declared absent weight 1, fills missing pairs after
+  the original union, and corrects the exact reading of 串行打印机 from
+  chuan hang da yin ji to chuan xing da yin ji.
+- A small app-owned Chinese supplement selects 14 verified terms from Sogou
+  https://pinyin.sogou.com/dict/detail/index/133021 and
+  https://pinyin.sogou.com/dict/detail/index/4 . The former has four selected terms;
+  the latter has ten. The curated 命令行用户交互 entry retains the source's hang
+  reading for command-line. Original redistribution authorization was not verified for these
+  sources either. No claim of complete hotword conversion or current freshness
+  is made. Additional modern technical terms use explicit InkFlow readings.
+
+Chinese update checks follow the pinned paths in the Frost, Ice and rime-selected
+repositories, including the conversion repository rather than Sogou's service.
+The small curated Chinese/English vocabulary is updated with the application.
+This implementation was prepared for local personal use; publication is separate.
