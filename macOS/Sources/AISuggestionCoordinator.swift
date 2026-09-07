@@ -12,6 +12,7 @@ final class AISuggestionCoordinator {
     private let settings: IFSmartSettings
     private let service: any AISuggestionServing
     private let current: () -> AISuggestionState?
+    private let candidatesVisible: () -> Bool
     private let context: (AIClientAnchor) -> AISurroundingContext?
     private let present: (String) -> Bool
     private let visible: () -> Bool
@@ -26,17 +27,19 @@ final class AISuggestionCoordinator {
     private var request: Task<Void, Never>?
     private var tracker: Timer?
     private var preview: (text: String, context: AISurroundingContext)?
+    private var requiresVisibleCandidates = false
     private var refreshDepth = 0
     private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(settings: IFSmartSettings, service: any AISuggestionServing,
          delay: Duration = .milliseconds(500), diagnosticSession: UUID = UUID(),
          current: @escaping () -> AISuggestionState?,
+         candidatesVisible: @escaping () -> Bool = { true },
          context: @escaping (AIClientAnchor) -> AISurroundingContext?,
          present: @escaping (String) -> Bool, visible: @escaping () -> Bool, hide: @escaping () -> Void) {
         self.settings = settings; self.service = service; self.delay = delay
         self.diagnosticSession = diagnosticSession
-        self.current = current; self.context = context
+        self.current = current; self.candidatesVisible = candidatesVisible; self.context = context
         self.present = present; self.visible = visible; self.hide = hide
     }
 
@@ -61,6 +64,7 @@ final class AISuggestionCoordinator {
         revision &+= 1
         request?.cancel(); request = nil
         state = nil; configuration = nil; preview = nil
+        requiresVisibleCandidates = false
         tracker?.invalidate(); tracker = nil
         hide()
     }
@@ -73,6 +77,7 @@ final class AISuggestionCoordinator {
         guard settings.isEnabled else { invalidate(reason: .disabled); return }
         guard settings.configuration == configuration else { invalidate(reason: .configurationChanged); return }
         guard traced({ current() }) == state else { invalidate(reason: .stateChanged); return }
+        guard !requiresVisibleCandidates || candidatesVisible() else { invalidate(reason: .panelHidden); return }
         if let preview, !traced({ present(preview.text) }) { invalidate(reason: .presentation) }
     }
 
@@ -102,8 +107,11 @@ final class AISuggestionCoordinator {
         state = next; configuration = settings.configuration
         log(.scheduled)
         let token = revision, configuration = settings.configuration
+        let observer = AIDiagnostics.observe
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.validate() }
+            AIDiagnostics.$observe.withValue(observer) {
+                MainActor.assumeIsolated { self?.validate() }
+            }
         }
         tracker = timer; RunLoop.main.add(timer, forMode: .common)
         let service = service, delay = delay
@@ -113,6 +121,18 @@ final class AISuggestionCoordinator {
             do {
                 try await Task.sleep(for: delay)
                 await self?.waitForRefresh()
+                // show() is asynchronous for some native clients. Keep the original
+                // input deadline and wait without capturing document text. A weak
+                // reference across each wait permits untouched sessions to deallocate.
+                while true {
+                    guard self?.matches(token, input: next.input, configuration: configuration) == true else {
+                        AIDiagnostics.emit(.discarded, reason: .staleState); return
+                    }
+                    if self?.candidatesVisible() == true { break }
+                    try await Task.sleep(for: .milliseconds(100))
+                    await self?.waitForRefresh()
+                }
+                self?.requiresVisibleCandidates = true
                 guard let self, let captured = self.capture(token, input: next.input, configuration: configuration) else { return }
                 let context = captured.context
                 let input = AISuggestionInput(precedingText: context.precedingText, followingText: context.followingText,
@@ -155,10 +175,12 @@ final class AISuggestionCoordinator {
     private func matches(_ token: UInt64, input: AIInputIdentity,
                          configuration: AISuggestionConfiguration) -> Bool {
         guard refreshDepth == 0, revision == token, let state, state.input == input, settings.isEnabled,
+              !requiresVisibleCandidates || candidatesVisible(),
               settings.configuration == configuration else { return false }
         let observed = traced { current() }
         // Even range getters may synchronously reenter the controller.
         return revision == token && self.state == state && settings.isEnabled &&
+            (!requiresVisibleCandidates || candidatesVisible()) &&
             settings.configuration == configuration && observed == state
     }
 

@@ -48,6 +48,58 @@ The earlier build `1e88aa4` did not log the AI lifecycle. Its in-memory Settings
 request error cannot reconstruct a failed session after process exit. Missing records
 from that build do not establish which trigger or response guard failed.
 
+### Candidate visibility becomes ready after the final input refresh
+
+**Reproduced failure:** If the candidate window was still hidden when the final
+controller refresh returned, the previous eligibility check discarded the composition
+and its tracker. Becoming visible later did not schedule another check. A per-key
+`nihao` regression with a window endpoint delayed by 160 ms reached
+`visible=true requests=0 suggestion=false`, without filling candidate data or forcing
+a request. This establishes a trigger defect; it cannot retrospectively identify the
+cause of an earlier user session whose logs are missing.
+
+**Fix:** Keep stable composition identity separate from candidate visibility. The
+0.5-second deadline starts at the last actual input change. After that deadline,
+wait for visible candidates while the composition, client and configuration remain
+valid. This wait reads no surrounding document text and makes no network request.
+Paging and highlighting preserve the deadline. Once visibility permits capture,
+hiding the candidates invalidates an in-flight request or displayed suggestion;
+secure input, changed state and lifecycle callbacks also cancel the attempt. The
+same injected secure-input source checks eligibility and both context anchors;
+production still reads the actual system secure-input state each time.
+
+**Automated regression:** Prepare the isolated Rime resources with
+`bash macOS/scripts/test.sh`, then run:
+
+```sh
+bash macOS/scripts/test-ai-headless.sh
+bash macOS/scripts/test-ai-headless.sh --delayed-visibility
+# Optional paid acceptance; the parser requires an ignored, untracked configuration.
+bash macOS/scripts/test-ai-headless.sh --live /absolute/path/to/ignored/.env
+```
+
+The stub suite covers delayed visibility before and after the debounce deadline,
+hidden-context isolation, pending and in-flight cancellation, partial selected
+prefixes, ordinary candidate keys, client range/length profiles and exact-once Tab
+adoption. The delayed-show regression now reaches
+`visible=true requests=1 suggestion=true`. Live mode performs the four short, long,
+mixed-language and long-typo fixtures through the same pipeline with DeepSeek V4
+Flash. It verifies complete original Pinyin (including `zhegn`), both surrounding
+texts, required meaning-bearing phrases, one request, correlated diagnostic stages
+and exact insertion preserving the surrounding document. It never falls back to a
+stub response. All four live fixtures passed on 2026-09-08.
+
+**Evidence boundary:** These tests deliver timed `NSEvent` sequences with actual
+physical key codes and modifiers through the production controller, Rime engine,
+normal candidate refresh, marked-text/context handling, coordinator and Tab adoption.
+Live mode also uses the production HTTP client. Window rendering and visibility are
+simulated endpoints; `RecordingClient` simulates an editor's document, and the
+existing test shim substitutes IMK framework initialization, client lookup and
+deactivation. No key window, app activation or global secure-input change is needed,
+so screen locking does not invalidate this automation. These checks do not establish
+native panel geometry or an external editor's cross-process IMK behavior; use the
+native harness and installed-process logs for those separate boundaries.
+
 ## Settings window loses its fixed width and minimum height
 
 **Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default

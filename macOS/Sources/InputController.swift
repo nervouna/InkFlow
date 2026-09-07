@@ -20,7 +20,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var acceptingAI = false
     private var smartService: any AISuggestionServing = AIChatCompletionsClient()
     private var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
-    private var suggestionPanel: AISuggestionPanel?
+    private var presentation: (any AIInputPresentation)?
     private var smartSuggestions: AISuggestionCoordinator?
     private let smartDiagnosticSession = UUID()
     private var smartGateReason: AIDiagnosticReason?
@@ -29,14 +29,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
             diagnosticSession: smartDiagnosticSession,
             current: { [weak self] in self?.smartState() },
+            candidatesVisible: { [weak self] in self?.presentation?.candidatesVisible ?? false },
             context: { [weak self] anchor in
-                guard let client = self?.smartClient else {
+                guard let self, let client = self.smartClient else {
                     AIDiagnostics.emit(.contextRejected, reason: .missingClient); return nil
                 }
-                return AISurroundingContext.read(client, anchor: anchor)
-            }, present: { [weak self] text in self?.presentSuggestion(text) ?? false },
-            visible: { [weak self] in self?.suggestionPanel?.isVisible ?? false },
-            hide: { [weak self] in self?.suggestionPanel?.hide() })
+                return AISurroundingContext.read(client, anchor: anchor, secureInput: self.secureInput)
+            }, present: { [weak self] text in self?.presentation?.presentSuggestion(text) ?? false },
+            visible: { [weak self] in self?.presentation?.suggestionVisible ?? false },
+            hide: { [weak self] in self?.presentation?.hideSuggestion() })
     }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
@@ -50,19 +51,21 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
           settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil,
           smartService: any AISuggestionServing = AIChatCompletionsClient(),
-          secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() }) {
+          secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
+          presentation: (any AIInputPresentation)? = nil) {
         injectedQualityStore = qualityStore
         self.settings = settings
         self.settingsWindow = settingsWindow
         self.smartService = smartService
         self.secureInput = secureInput
+        self.presentation = presentation
         super.init(server: server, delegate: delegate, client: inputClient)
         configure(server: server)
     }
 
     private func configure(server: IMKServer?) {
         engine = IFEngine(qualityStore: injectedQualityStore)
-        if let server {
+        if presentation == nil, let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
             let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
             if let layouts = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource],
@@ -72,6 +75,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
                 panel?.setSelectionKeysKeylayout(layout)
             }
             panel?.setDismissesAutomatically(false)
+            if let panel { presentation = NativeAIInputPresentation(panel: panel) }
         }
         configureSmartSuggestions()
         applySettings()
@@ -90,7 +94,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         smartSuggestions?.invalidate(reason: .teardown)
-        suggestionPanel?.hide()
+        presentation?.hideSuggestion()
+        presentation = nil
         panel = nil
         selectionLayout = nil
     }
@@ -196,16 +201,11 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         strings = state.candidates
         updating = true
         applySettings()
-        panel?.update()
-        if !strings.isEmpty, let panel {
-            let index = min(max(0, state.highlight), strings.count - 1)
-            panel.selectCandidate(withIdentifier: panel.candidateStringIdentifier(strings[index]))
-            panel.show(kIMKLocateCandidatesBelowHint)
-        } else { panel?.hide() }
+        presentation?.refreshCandidates(strings, highlight: state.highlight)
         updating = false
         if let engine {
             engine.qualityRecorder?.presented(engine.qualitySnapshot(), revision: engine.qualityRevision,
-                                              panelShowIssued: panel != nil && !strings.isEmpty)
+                                              panelShowIssued: presentation != nil && !strings.isEmpty)
         }
     }
 
@@ -270,7 +270,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             associateQualityClient(activeClient)
             engine?.commit()
             refresh(activeClient)
-            panel?.hide()
+            presentation?.hideCandidates()
         }
     }
 
@@ -287,7 +287,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func hidePalettes() {
-        MainActor.assumeIsolated { smartSuggestions?.invalidate(reason: .hidePalettes); panel?.hide() }
+        MainActor.assumeIsolated { smartSuggestions?.invalidate(reason: .hidePalettes); presentation?.hideCandidates() }
         super.hidePalettes()
     }
 
@@ -301,14 +301,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private func smartState() -> AISuggestionState? {
         guard !acceptingAI else { recordSmartGate(.accepting); return nil }
         guard !secureInput() else { recordSmartGate(.secureInput); return nil }
-        guard let panel else { recordSmartGate(.missingPanel); return nil }
-        guard panel.isVisible() else { recordSmartGate(.panelHidden); return nil }
+        guard let presentation else { recordSmartGate(.missingPanel); return nil }
         guard !strings.isEmpty else { recordSmartGate(.emptyCandidates); return nil }
         guard let engine else { recordSmartGate(.missingEngine); return nil }
         guard let input = engine.aiInputIdentity() else { recordSmartGate(.inputUnavailable); return nil }
         guard let anchor = AIClientAnchor.read(smartClient, ownsMarkedText: ownsMarkedText, secureInput: false,
                                               rejected: recordSmartGate) else { return nil }
-        recordSmartGate(.ready)
+        // Native show() can complete on a later run-loop turn. Composition identity
+        // remains valid while the coordinator waits for actual window visibility.
+        recordSmartGate(presentation.candidatesVisible ? .ready : .panelHidden)
         return AISuggestionState(input: input, anchor: anchor)
     }
 
@@ -316,19 +317,6 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         guard smartGateReason != reason else { return }
         smartGateReason = reason
         AIDiagnostics.emit(.eligibility, reason: reason, session: smartDiagnosticSession)
-    }
-
-    private func presentSuggestion(_ text: String) -> Bool {
-        guard let panel else { AIDiagnostics.emit(.presentationFailed, reason: .missingPanel); return false }
-        guard panel.isVisible() else { AIDiagnostics.emit(.presentationFailed, reason: .panelHidden); return false }
-        guard let frame = Self.candidateScreenFrame(panel) else { return false }
-        if suggestionPanel == nil { suggestionPanel = AISuggestionPanel() }
-        guard let suggestionPanel else { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden); return false }
-        suggestionPanel.setSuggestion(text)
-        suggestionPanel.show(relativeTo: frame)
-        let visible = suggestionPanel.isVisible
-        if !visible { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden) }
-        return visible
     }
 
     static func candidateScreenFrame(_ panel: IMKCandidates) -> NSRect? {
@@ -353,7 +341,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
               let client, ObjectIdentifier(client as AnyObject) == smartClient.map({ ObjectIdentifier($0 as AnyObject) }),
               let engine, !engine.snapshot().preedit.isEmpty else { return false }
         // A held Tab never accepts a suggestion that arrived after its initial keydown.
-        if event.isARepeat { return suggestionPanel?.isVisible ?? false }
+        if event.isARepeat { return presentation?.suggestionVisible ?? false }
         guard let accepted = smartSuggestions?.takeSuggestion() else { return false }
         acceptingAI = true
         engine.beginDelivery()

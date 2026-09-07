@@ -46,8 +46,9 @@ struct AISurroundingContext: Equatable {
 
     static let limit = 256
 
-    @MainActor static func read(_ client: IMKTextInput, anchor: AIClientAnchor) -> Self? {
-        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else {
+    @MainActor static func read(_ client: IMKTextInput, anchor: AIClientAnchor,
+                                secureInput: () -> Bool = { IsSecureEventInputEnabled() }) -> Self? {
+        guard AIClientAnchor.read(client, ownsMarkedText: true, secureInput: secureInput()) == anchor else {
             AIDiagnostics.emit(.contextRejected, reason: .anchorChanged); return nil
         }
         let start = anchor.mark.location, end = NSMaxRange(anchor.mark)
@@ -62,7 +63,7 @@ struct AISurroundingContext: Equatable {
         let suffixRange = NSRange(location: end, length: knownLength ? min(limit, length - end) : min(limit, Int.max - end))
         let before = readSide(client, requested: prefixRange, anchor: start, preceding: true)
         let after = readSide(client, requested: suffixRange, anchor: end, preceding: false)
-        guard AIClientAnchor.read(client, ownsMarkedText: true) == anchor else {
+        guard AIClientAnchor.read(client, ownsMarkedText: true, secureInput: secureInput()) == anchor else {
             AIDiagnostics.emit(.contextRejected, reason: .anchorChanged); return nil
         }
         AIDiagnostics.write(AIDiagnosticRecord(event: .contextCaptured, reason: .none,
