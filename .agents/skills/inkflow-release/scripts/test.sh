@@ -74,3 +74,62 @@ plutil -replace CFBundleVersion -string 999 "$fixture/repo/build/InkFlow.app/Con
 if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts/package.sh" > "$fixture/error.log" 2>&1; then exit 1; fi
 [[ ! -e "$output/stage" ]]
 echo 'PASS: version updates, configuration loading/overrides, invalid-input rejection and package overwrite protection'
+
+# Synthetic GUI receipts in a disposable clone test reuse, not real GUI behavior.
+git clone --quiet --shared --no-hardlinks "$root" "$fixture/gui-repo"
+gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
+(
+  cd "$fixture/gui-repo"
+  evidence=build/gui-verification
+  expect_rejected() {
+    if bash "$gui" check > "$fixture/gui-error.log" 2>&1; then
+      echo 'Unexpected GUI evidence acceptance.' >&2; exit 1
+    fi
+  }
+  expect_rejected
+  mkdir -p "$evidence"
+  git rev-parse HEAD > "$evidence/passed.sha"
+  for script in build test-controller-initialization test-settings-ui; do
+    echo 'Synthetic successful fixture' > "$evidence/$script.log"
+  done
+  bash "$gui" check
+  cp macOS/Info.plist "$fixture/gui-original.plist"
+  plutil -replace CFBundleShortVersionString -string 2.3.4 macOS/Info.plist
+  plutil -replace CFBundleVersion -string 999 macOS/Info.plist
+  bash "$gui" check
+  git add macOS/Info.plist
+  bash "$gui" check
+  plutil -replace LSMinimumSystemVersion -string 99.0 macOS/Info.plist
+  expect_rejected
+  cp "$fixture/gui-original.plist" macOS/Info.plist
+  git add macOS/Info.plist
+  # A changed commit identity with identical files is still reusable.
+  printf 'Synthetic commit identity\n' | git -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree 'HEAD^{tree}' -p HEAD > "$evidence/passed.sha"
+  bash "$gui" check
+  printf '\n// Changed test input\n' >> macOS/Sources/Engine.swift
+  expect_rejected
+  git show HEAD:macOS/Sources/Engine.swift > macOS/Sources/Engine.swift
+  echo input > unexpected-input
+  expect_rejected
+  rm unexpected-input
+  plutil -replace CFBundleVersion -string invalid macOS/Info.plist
+  expect_rejected
+  cp "$fixture/gui-original.plist" macOS/Info.plist
+  mkdir "$evidence/running"
+  expect_rejected
+  rmdir "$evidence/running"
+  rm "$evidence/test-settings-ui.log"
+  expect_rejected
+  # Stub commands exercise receipt lifecycle without a desktop or app build.
+  for script in build test-controller-initialization test-settings-ui; do
+    printf '#!/bin/bash\nexit "${GUI_FIXTURE_EXIT:-0}"\n' > "macOS/scripts/$script.sh"
+    git add "macOS/scripts/$script.sh"
+  done
+  git -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'test: install isolated GUI command fixtures'
+  GUI_FIXTURE_EXIT=0 bash "$gui" record
+  bash "$gui" check
+  if GUI_FIXTURE_EXIT=1 bash "$gui" record > "$fixture/gui-error.log" 2>&1; then exit 1; fi
+  [[ ! -e "$evidence/passed.sha" && ! -e "$evidence/running" ]]
+  expect_rejected
+)
+echo 'PASS: GUI evidence permits only version/build changes and requires complete local passing records'

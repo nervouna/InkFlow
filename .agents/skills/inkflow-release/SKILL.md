@@ -30,6 +30,10 @@ Use elevated execution for Keychain/signing/network checks if the agent sandbox 
 
 ## 2. Verify the release contents
 
+Reuse only GUI evidence. Before a release, on the same Mac with an unlocked desktop, run `bash .agents/skills/inkflow-release/scripts/gui-verification.sh record` from a clean committed checkout. It builds a fresh app and runs both GUI suites; only complete success writes `build/gui-verification/passed.sha` alongside the logs. A failed rerun invalidates the previous record. Existing ad-hoc logs are not automatically promoted to passing evidence.
+
+For release, run `bash .agents/skills/inkflow-release/scripts/gui-verification.sh check`. It compares the recorded commit with the current files, including staged changes, permits only `CFBundleShortVersionString` and `CFBundleVersion` differences, and rejects other source/plist changes or untracked inputs. The commit SHA itself need not match. Missing or invalid evidence blocks release: run `record` while the desktop is available, never silently skip GUI tests. Keep records local to this checkout; rerun after OS/toolchain/dependency environment changes or when their continuity is uncertain. This is a same-machine, nearby-release reuse rule, not a portable test cache.
+
 Move any existing `build/InkFlow.app` to a unique backup under `build/` before building to prevent stale bundle contents. Preserve dependency caches. Run these sequentially, retaining exit status and logs under `build/`:
 
 Before testing, stage only `macOS/Info.plist`, record `git write-tree` in the local recovery record, and require `git diff --exit-code` to pass. This fixes the source snapshot the package must represent.
@@ -38,12 +42,11 @@ Before testing, stage only `macOS/Info.plist`, record `git write-tree` in the lo
 bash macOS/scripts/build.sh
 bash macOS/scripts/test.sh
 bash macOS/scripts/check-bundle.sh
-bash macOS/scripts/test-controller-initialization.sh
-bash macOS/scripts/test-settings-ui.sh
+bash .agents/skills/inkflow-release/scripts/gui-verification.sh check
 bash .agents/skills/inkflow-release/scripts/test.sh
 ```
 
-Also run any checks subsequently added to `macOS/DEVELOPMENT.md`. GUI tests require a logged-in desktop; an unavailable GUI check is blocked, not passed. Do not proceed to publication with skipped/failed required checks. Any source change invalidates the affected evidence and requires a new build/package. Automated checks do not establish real installed-IME typing acceptance; that remains user-owned and is reported separately.
+Also run any checks subsequently added to `macOS/DEVELOPMENT.md`; only the two GUI suites above may reuse evidence. Rebuild and rerun all other checks, including version/build and regenerated quality metadata validation. Confirm the version/build match the user's selected bump; the GUI checker validates their format, not the selected increment. Signing, notarization and final artifact/download checks always run on this release's new bytes. Do not proceed with skipped/failed required checks. Automated checks do not establish real installed-IME typing acceptance; that remains user-owned and is reported separately.
 
 ## 3. Sign, package and notarize
 
