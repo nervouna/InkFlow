@@ -33,10 +33,10 @@ final class IFEngine {
         get { available ? Self.api.pointee.get_option(session, "ascii_mode") != 0 : savedASCII }
         set {
             savedASCII = newValue
-            if available { Self.api.pointee.set_option(session, "ascii_mode", newValue ? 1 : 0) }
-            updateQualityConfiguration(asciiMode: newValue)
+            applyConfigurationIfIdle()
         }
     }
+    var requestedASCIIMode: Bool { savedASCII }
     /// Keep the lease until every native client callback returns, including nested run loops.
     func beginDelivery() { deliveryDepth += 1 }
     func endDelivery() { deliveryDepth = max(0, deliveryDepth - 1); Self.signalIdle() }
@@ -56,6 +56,7 @@ final class IFEngine {
         }
     }
     private static var userDirectory = ""
+    private static var compiledDirectory = URL(fileURLWithPath: "/")
     private static var contextRanker: IFContextRanker?
     private static var productionQualityStore: QualityStore?
     private final class WeakQualityRecorder {
@@ -68,6 +69,8 @@ final class IFEngine {
     private var requestedCount = 5
     private var requestedPhrases: [CustomPhrase] = []
     private var appliedPhrases: [CustomPhrase] = []
+    private var requestedInput = InputPreferences()
+    private(set) var inputPreferences: InputPreferences?
     private var bufferedCommit = ""
     private var temporaryDictionary: URL?
     private(set) var configurationError: String?
@@ -106,7 +109,9 @@ final class IFEngine {
         let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
+                    (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
                 throw IFDictionaryUpdateError(.apply, "missing-runtime-resource", file: name)
             }
@@ -139,6 +144,13 @@ final class IFEngine {
         // Prepared caches were compiled/probed by the isolated worker. Never deploy on a live switch.
         if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
         do {
+            let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
+            for file in InputPreferences.compiledSpellingFiles {
+                guard FileManager.default.isReadableFile(atPath: compiled.appendingPathComponent(file).path) else {
+                    throw IFDictionaryUpdateError(.apply, "compiled-file-missing", file: file)
+                }
+            }
+            compiledDirectory = compiled
             try fault(.probe)
             let probe = api.pointee.create_session()
             defer {
@@ -222,7 +234,7 @@ final class IFEngine {
             Self.qualityRecorders.removeAll { $0.value == nil }
             Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
         }
-        candidateCount = 5; appliedPhrases = []; configurationError = nil
+        candidateCount = 5; appliedPhrases = []; inputPreferences = nil; configurationError = nil
         candidateOrder = []; orderedContent = EngineSnapshot(); precedingText = ""
         applyConfigurationIfIdle()
         if let configurationError { throw IFDictionaryUpdateError(.apply, "session-settings", detail: configurationError) }
@@ -233,7 +245,6 @@ final class IFEngine {
     private func detachSession() {
         if available {
             // A partially initialized session still has native defaults. Keep the captured mode for rollback.
-            if sessionRestored { savedASCII = asciiMode }
             _ = Self.api.pointee.destroy_session(session)
         }
         session = 0; sessionGeneration = 0; sessionRestored = false
@@ -271,7 +282,7 @@ final class IFEngine {
     }
 
     func setCandidateCount(_ count: Int) {
-        setConfiguration(candidateCount: count, customPhrases: requestedPhrases)
+        setConfiguration(candidateCount: count, customPhrases: requestedPhrases, inputPreferences: requestedInput)
     }
 
     func setPrecedingText(_ text: String) {
@@ -282,11 +293,12 @@ final class IFEngine {
         updateOrdering(force: true)
     }
 
-    func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase]) {
+    func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase], inputPreferences: InputPreferences? = nil) {
         do { try CustomPhrase.validate(customPhrases) }
         catch { reportConfigurationError(error.localizedDescription); return }
         requestedCount = (3...9).contains(candidateCount) ? candidateCount : 5
         requestedPhrases = customPhrases
+        if let inputPreferences { requestedInput = inputPreferences }
         applyConfigurationIfIdle()
     }
 
@@ -294,8 +306,9 @@ final class IFEngine {
         guard available else { return }
         // Retain a failed cleanup for retry instead of silently leaving phrase text on disk.
         guard removeTemporaryDictionary() else { return }
-        guard candidateCount != requestedCount || appliedPhrases != requestedPhrases else {
+        guard candidateCount != requestedCount || appliedPhrases != requestedPhrases || inputPreferences != requestedInput else {
             configurationError = nil
+            if snapshot().preedit.isEmpty { applyRuntimeOptions() }
             return
         }
         guard snapshot().preedit.isEmpty else { return }
@@ -337,39 +350,80 @@ final class IFEngine {
     }
 
     private func recreateSchema(dictionary: String) throws {
-        // Both values belong to one session snapshot. Patch and restore the shared in-memory
-        // config on the main actor; never save/deploy it or replace Rime's learned dictionary.
+        // Replace whole nodes and restore them synchronously. Existing sessions retain their
+        // component configuration, while this idle session loads one coherent snapshot.
         let api = Self.api.pointee
+        guard FileManager.default.isReadableFile(atPath: Self.compiledDirectory
+            .appendingPathComponent(requestedInput.spellingProfile + ".prism.bin").path) else {
+            throw CustomPhraseError("缺少已编译的拼音规则，设置尚未应用。请重启墨流后重试。")
+        }
         var config = RimeConfig()
         guard api.schema_open("inkflow_pinyin", &config) != 0 else {
             throw CustomPhraseError("无法打开输入方案，设置尚未应用。")
         }
-        var previous: Int32 = 5
-        let hadValue = api.config_get_int(&config, "menu/page_size", &previous) != 0
-        let previousDictionary = api.config_get_cstring(&config, "custom_phrase/user_dict").map(String.init(cString:))
-        let ascii = api.get_option(session, "ascii_mode")
-        let changed = api.config_set_int(&config, "menu/page_size", Int32(requestedCount)) != 0
-        let patched = dictionary.withCString { api.config_set_string(&config, "custom_phrase/user_dict", $0) != 0 }
+        defer { _ = api.config_close(&config) }
+        var patch = RimeConfig()
+        let yaml = requestedInput.schemaPatch + """
+
+        menu:
+          page_size: \(requestedCount)
+        translator:
+          dictionary: pinyin_simp
+          prism: \(requestedInput.spellingProfile)
+          preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']
+        custom_phrase:
+          dictionary: ""
+          user_dict: \(dictionary)
+          db_class: stabledb
+          enable_completion: false
+          enable_sentence: false
+          initial_quality: 100
+        """
+        guard api.config_init(&patch) != 0 else { throw CustomPhraseError("无法创建输入设置。") }
+        defer { _ = api.config_close(&patch) }
+        guard yaml.withCString({ api.config_load_string(&patch, $0) }) != 0 else {
+            throw CustomPhraseError("无法载入输入设置。")
+        }
+        var originals: [(String, RimeConfig)] = []
+        var patched = true
+        for path in ["menu", "translator", "custom_phrase", "key_binder", "punctuator"] {
+            var original = RimeConfig(), replacement = RimeConfig()
+            guard api.config_get_item(&config, path, &original) != 0 else { patched = false; break }
+            originals.append((path, original))
+            guard api.config_get_item(&patch, path, &replacement) != 0 else { patched = false; break }
+            let changed = api.config_set_item(&config, path, &replacement) != 0
+            _ = api.config_close(&replacement)
+            if !changed { patched = false; break }
+        }
         // select_schema resets the commit buffer as well as the schema. Preserve completed text
         // even if settings arrive before the controller has drained the previous key's commit.
         bufferedCommit += readCommit()
-        let loaded = changed && patched && api.select_schema(session, "inkflow_pinyin") != 0
+        let loaded = patched && api.select_schema(session, "inkflow_pinyin") != 0
         if loaded {
             candidateCount = requestedCount
             appliedPhrases = requestedPhrases
-            updateQualityConfiguration(asciiMode: ascii != 0)
+            inputPreferences = requestedInput
         }
-        let restoredCount = hadValue ? api.config_set_int(&config, "menu/page_size", previous)
-                                    : api.config_clear(&config, "menu/page_size")
-        let restoredDictionary = previousDictionary.map { value in
-            value.withCString { api.config_set_string(&config, "custom_phrase/user_dict", $0) }
-        } ?? api.config_clear(&config, "custom_phrase/user_dict")
-        let closed = api.config_close(&config)
-        api.set_option(session, "ascii_mode", ascii)
-        guard restoredCount != 0, restoredDictionary != 0, closed != 0 else {
+        var restored = true
+        for (path, var original) in originals.reversed() {
+            if api.config_set_item(&config, path, &original) == 0 { restored = false }
+            _ = api.config_close(&original)
+        }
+        applyRuntimeOptions()
+        guard restored else {
             throw CustomPhraseError("恢复临时输入方案配置失败，请重启墨流后重试。")
         }
         guard loaded else { throw CustomPhraseError("无法应用输入设置，请重启墨流后重试。") }
+    }
+
+    private func applyRuntimeOptions() {
+        guard available, let inputPreferences else { return }
+        let api = Self.api.pointee
+        api.set_option(session, "ascii_mode", savedASCII ? 1 : 0)
+        api.set_option(session, "ascii_punct", savedASCII || inputPreferences[.englishPunctuation] ? 1 : 0)
+        api.set_option(session, "emoji_suggestion", inputPreferences[.emoji] ? 1 : 0)
+        api.set_option(session, "traditional", inputPreferences[.traditional] ? 1 : 0)
+        updateQualityConfiguration(asciiMode: savedASCII)
     }
 
     private func reportConfigurationError(_ message: String) {
@@ -384,10 +438,7 @@ final class IFEngine {
         let flags = event.modifierFlags
         if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
             return qualityOperation(.toggle) {
-                commit()
-                let ascii = Self.api.pointee.get_option(session, "ascii_mode")
-                Self.api.pointee.set_option(session, "ascii_mode", ascii == 0 ? 1 : 0)
-                updateQualityConfiguration(asciiMode: ascii == 0)
+                asciiMode = !savedASCII
                 return true
             }
         }
@@ -540,7 +591,8 @@ final class IFEngine {
     private func updateQualityConfiguration(asciiMode: Bool) {
         let configuration = QualityAppliedConfiguration(candidateCount: candidateCount,
             customPhrases: appliedPhrases.map { QualityPhrase(id: $0.id.uuidString, code: $0.code, text: $0.text) },
-            asciiMode: asciiMode, fontSize: qualityFontSize, vertical: qualityVertical)
+            asciiMode: asciiMode, fontSize: qualityFontSize, vertical: qualityVertical,
+            inputOptions: inputPreferences?.recordedValues)
         if configuration != qualityRevision.configuration {
             qualityRevision = QualityConfigRevision(configuration: configuration)
         }

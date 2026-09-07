@@ -26,6 +26,8 @@ struct QualityAppliedConfiguration: Codable, Equatable, Sendable {
     var asciiMode = false
     var fontSize = 14
     var vertical = false
+    /// Nil for records captured before input preferences were available.
+    var inputOptions: [String: Bool]? = nil
 }
 
 struct QualityConfigRevision: Codable, Equatable, Sendable {

@@ -3,8 +3,14 @@ import AppKit
 @main
 struct EngineTests {
     @MainActor static func main() throws {
-        check(CommandLine.arguments.count == 3)
+        check(CommandLine.arguments.count == 3 || CommandLine.arguments.last == "--input-settings-only")
         let shared = CommandLine.arguments[1], user = CommandLine.arguments[2]
+        if CommandLine.arguments.last == "--input-settings-only" {
+            try IFEngine.start(shared: shared, user: user)
+            try inputSettings(user: user)
+            IFEngine.stop()
+            return
+        }
         do {
             try IFEngine.start(shared: "/nonexistent/inkflow", user: user)
             check(false, "Missing resources must fail")
@@ -12,6 +18,7 @@ struct EngineTests {
         try missingEnglishResources(shared: shared, user: user)
         try missingEmojiResources(shared: shared, user: user)
         try IFEngine.start(shared: shared, user: user)
+        try inputSettings(user: user)
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
         chineseDictionaryCoverage()
@@ -46,6 +53,201 @@ struct EngineTests {
         check(!files.contains("inkflow_mixed.userdb") && !files.contains("easy_en.userdb"),
               "Supplemental translators must not create replacement user dictionaries")
         print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+    }
+
+    @MainActor static func inputSettings(user: String) throws {
+        func configure(_ engine: IFEngine, _ preferences: InputPreferences) {
+            engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: preferences)
+            check(engine.configurationError == nil)
+        }
+        func contains(_ engine: IFEngine, _ input: String, _ expected: String, limit: Int = 100) -> Bool {
+            engine.clear(); type(engine, input)
+            for _ in 0..<limit {
+                let before = engine.snapshot()
+                if before.candidates.contains(expected) { return true }
+                engine.key(0xff56)
+                if before.page == engine.snapshot().page { break }
+            }
+            return false
+        }
+        let engine = IFEngine()!, defaults = InputPreferences()
+        let spelling: [InputOption] = [.abbreviation, .typoTolerance, .fuzzyZ, .fuzzyC, .fuzzyS]
+        for mask in 0..<32 {
+            engine.clear()
+            let profile = InputPreferences(Dictionary(uniqueKeysWithValues: spelling.enumerated().map {
+                ($0.element, mask & (1 << $0.offset) != 0)
+            }))
+            configure(engine, profile)
+            check(contains(engine, "nihao", "你好"), "Every compiled spelling profile decodes: \(mask)")
+        }
+        engine.clear()
+        configure(engine, defaults)
+        for input in ["hlw", "hulw", "hlianw", "hulianwang"] {
+            check(contains(engine, input, "互联网"), "Abbreviation recall: \(input)")
+        }
+        check(contains(engine, "bs", "不是"), "Initial abbreviation recall")
+        check(contains(engine, "zhguo", "中国"), "Two-letter initial abbreviation")
+        engine.clear()
+        let exact = defaults.setting(.abbreviation, to: false).setting(.typoTolerance, to: false)
+        configure(engine, exact)
+        check(!contains(engine, "hlw", "互联网"), "Abbreviation OFF")
+        for (option, input, output, reverse, reverseOutput) in [
+            (InputOption.fuzzyZ, "zongguo", "中国", "zhiran", "自然"),
+            (.fuzzyC, "canpin", "产品", "changuan", "参观"),
+            (.fuzzyS, "sanghai", "上海", "shenlin", "森林")
+        ] {
+            engine.clear(); configure(engine, exact)
+            check(!contains(engine, input, output), "Fuzzy OFF: \(input)")
+            engine.clear(); configure(engine, exact.setting(option, to: true))
+            check(contains(engine, input, output), "Fuzzy ON: \(input)")
+            check(contains(engine, reverse, reverseOutput), "Fuzzy reverse: \(reverse)")
+            for (other, spelling, text) in [(InputOption.fuzzyZ, "zongguo", "中国"), (.fuzzyC, "canpin", "产品"), (.fuzzyS, "sanghai", "上海")] where other != option {
+                check(!contains(engine, spelling, text), "Fuzzy pairs remain independent")
+            }
+        }
+        engine.clear(); configure(engine, exact)
+        check(!contains(engine, "nnihao", "你好"), "Typo OFF")
+        engine.clear(); configure(engine, exact.setting(.typoTolerance, to: true))
+        check(contains(engine, "nnihao", "你好") && contains(engine, "hzidao", "知道"), "Typo examples are independent of fuzzy pairs")
+        engine.clear(); configure(engine, defaults)
+        type(engine, "hulianwang")
+        let before = engine.snapshot(), revision = engine.qualityRevision.id
+        let traditional = defaults.setting(.traditional, to: true).setting(.emoji, to: false)
+        engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: traditional)
+        check(engine.snapshot() == before && engine.qualityRevision.id == revision && engine.takeCommit().isEmpty,
+              "Pending options must preserve the composing snapshot and quality revision")
+        engine.key(32)
+        engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: traditional)
+        check(engine.takeCommit() == "互联网", "Settings reload must preserve a pending simplified commit")
+        check(engine.qualityRevision.id != revision && engine.qualityRevision.configuration.inputOptions?["traditional"] == true)
+        check(contains(engine, "hulianwang", "互聯網"), "Traditional next composition")
+        engine.clear()
+        let phrase = CustomPhrase(id: UUID(), code: "dz", text: "互联网发型😀")
+        engine.setConfiguration(candidateCount: 9, customPhrases: [phrase], inputPreferences: traditional)
+        type(engine, "dz"); engine.setPrecedingText("准备午")
+        check(engine.snapshot().candidates.first == phrase.text, "Custom phrase remains verbatim under traditional/context")
+        engine.select(0); check(engine.takeCommit() == phrase.text)
+        engine.clear(); configure(engine, defaults.setting(.traditional, to: true))
+        check(contains(engine, "weixiao", "😊"), "Traditional retains Emoji from simplified source")
+        engine.clear(); configure(engine, traditional)
+        check(!contains(engine, "weixiao", "😊"), "Emoji OFF")
+
+        for (option, inputs, outputs) in [(InputOption.cornerQuotes, "{}", "「」"), (.middleDot, "`", "·"),
+                                          (.fullwidthPipe, "|", "｜"), (.ideographicComma, "\\", "、")] {
+            for enabled in [false, true] {
+                engine.clear(); configure(engine, defaults.setting(option, to: enabled))
+                for (input, output) in zip(inputs, enabled ? outputs : inputs) {
+                    let handled = engine.key(Int32(input.asciiValue!))
+                    let commit = engine.takeCommit()
+                    check((handled ? commit : String(input)) == String(output), "Mapping \(option) = \(enabled)")
+                }
+            }
+        }
+        engine.clear(); configure(engine, defaults.setting(.englishPunctuation, to: true))
+        for input in "{},.`|\\" {
+            let handled = engine.key(Int32(input.asciiValue!)), output = engine.takeCommit()
+            check((handled ? output : String(input)) == String(input), "English punctuation \(input)")
+        }
+        for (option, previous, next) in [(InputOption.bracketPaging, Int32(91), Int32(93)), (.minusEqualPaging, 45, 61)] {
+            for enabled in [false, true] {
+                engine.clear(); configure(engine, defaults.setting(option, to: enabled))
+                type(engine, "shi"); engine.key(next)
+                check(engine.snapshot().page == (enabled ? 1 : 0), "Independent paging \(option) = \(enabled)")
+                if enabled { engine.key(previous); check(engine.snapshot().page == 0) }
+                _ = engine.takeCommit()
+            }
+        }
+        engine.clear(); configure(engine, defaults)
+        type(engine, "nihao")
+        let composing = engine.snapshot()
+        engine.event(keyEvent(49, " ", [.control, .shift]))
+        check(engine.requestedASCIIMode && !engine.asciiMode && engine.snapshot() == composing && engine.takeCommit().isEmpty)
+        engine.key(32); check(engine.takeCommit() == "你好")
+        check(!engine.key(97) && engine.asciiMode, "ASCII starts only after the old composition finishes")
+        for input in "{},.`|\\" { check(!engine.key(Int32(input.asciiValue!))) }
+        check(engine.inputPreferences?[.englishPunctuation] == false)
+        engine.asciiMode = false
+        check(engine.key(44)); check(engine.takeCommit() == "，")
+
+        let retained = IFEngine()!
+        type(retained, "hlw"); let retainedState = retained.snapshot()
+        configure(retained, exact)
+        configure(engine, exact)
+        check(retained.snapshot() == retainedState, "Other live session keeps its composing prism/config")
+        check(retained.inputPreferences == defaults && engine.inputPreferences == exact,
+              "The same preference update applies independently at each session's boundary")
+        retained.clear()
+        check(!contains(retained, "hlw", "互联网"), "Deferred abbreviation OFF applies after cancellation")
+        retained.clear()
+        engine.clear(); configure(engine, defaults)
+        let prism = URL(fileURLWithPath: user).appendingPathComponent("build/\(exact.spellingProfile).prism.bin")
+        let hidden = prism.appendingPathExtension("test-backup")
+        try FileManager.default.moveItem(at: prism, to: hidden)
+        engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: exact)
+        let failed = engine.configurationError != nil && engine.inputPreferences == defaults
+        try FileManager.default.moveItem(at: hidden, to: prism)
+        check(failed, "Missing prism must not mark settings applied")
+        configure(engine, exact)
+        check(engine.inputPreferences == exact)
+
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        settings.setInputOption(.abbreviation, enabled: false)
+        settings.setInputOption(.typoTolerance, enabled: false)
+        engine.clear(); configure(engine, settings.inputPreferences)
+        type(engine, "shi")
+        let groupedBefore = engine.snapshot(), groupedRevision = engine.qualityRevision.id
+        let groupedOriginal = settings.inputPreferences
+        settings.fuzzyEnabled = true
+        settings.pagingKeys = .minusEqual
+        let groupedUpdated = settings.inputPreferences
+        configure(engine, groupedUpdated)
+        retained.clear(); configure(retained, groupedUpdated)
+        check(engine.snapshot() == groupedBefore && engine.inputPreferences == groupedOriginal &&
+              engine.qualityRevision.id == groupedRevision && engine.takeCommit().isEmpty,
+              "Grouped changes retain composing candidates, keys and recorded options")
+        check(retained.inputPreferences == groupedUpdated &&
+              retained.qualityRevision.configuration.inputOptions == groupedUpdated.recordedValues,
+              "An idle session applies and records the complete grouped snapshot")
+        engine.key(93); check(engine.snapshot().page == 1, "Composing session retains its previous bracket paging")
+        engine.key(91); engine.key(32)
+        check(engine.takeCommit() == groupedBefore.candidates[0], "Grouped changes preserve the selected displayed candidate")
+        type(engine, "shi")
+        check(engine.inputPreferences == groupedUpdated &&
+              engine.qualityRevision.configuration.inputOptions == groupedUpdated.recordedValues,
+              "Grouped options and recording apply at the next composition")
+        engine.clear()
+        for enabled in [true, false] {
+            settings.fuzzyEnabled = enabled
+            configure(engine, settings.inputPreferences)
+            for (spelling, word) in [("zongguo", "中国"), ("canpin", "产品"), ("sanghai", "上海")] {
+                check(contains(engine, spelling, word) == enabled, "Unified fuzzy setting: \(spelling) = \(enabled)")
+            }
+            engine.clear()
+        }
+        for keys in IFSettings.PagingKeys.allCases {
+            settings.pagingKeys = keys
+            configure(engine, settings.inputPreferences)
+            let previous: Int32 = keys == .brackets ? 91 : 45
+            let next: Int32 = keys == .brackets ? 93 : 61
+            let inactive: Int32 = keys == .brackets ? 61 : 93
+            type(engine, "shi"); engine.key(next)
+            check(engine.snapshot().page == 1, "Selected paging pair: \(keys.rawValue)")
+            engine.key(previous); check(engine.snapshot().page == 0)
+            engine.key(inactive)
+            check(engine.snapshot().page == 0 && !engine.takeCommit().isEmpty, "Other paging pair retains punctuation behavior")
+            engine.clear()
+        }
+        type(engine, "shi")
+        settings.fuzzyEnabled = true; settings.pagingKeys = .brackets
+        configure(engine, settings.inputPreferences)
+        engine.clear(); type(engine, "zongguo")
+        check(engine.inputPreferences == settings.inputPreferences &&
+              engine.qualityRevision.configuration.inputOptions == settings.inputPreferences.recordedValues,
+              "Cancellation also applies and records complete grouped settings")
+        print("PASS grouped input settings: three fuzzy pairs, exclusive paging, selected commit/cancel boundaries, session isolation and effective recorded values")
+        print("PASS input settings: spelling recall/toggles, traditional/custom/Emoji, literal mappings, paging, deferred revisions/ASCII, session isolation and missing-prism recovery")
     }
 
     @MainActor static func chineseDictionaryCoverage() {
@@ -188,25 +390,31 @@ struct EngineTests {
             ("womenquoffice", "我们去office"),
             ("zhefenoffer", "这份offer")
         ] {
+            // Abbreviation can add a full-coverage Chinese interpretation before this
+            // mixed candidate. Preserve native coverage priority and exact selection.
             type(engine, input)
-            check(engine.snapshot().candidates.first == expected,
-                  "Mixed composition \(input): \(engine.snapshot().candidates)")
-            engine.key(32)
-            check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty)
+            print("TRACE mixed recall \(input) => \(engine.snapshot().candidates)")
+            engine.clear()
+            selectCandidate(expected, input: input, engine: engine)
         }
         type(engine, "wofaleemail")
         let mixedCollision = engine.snapshot().candidates
-        check(mixedCollision.first == "我发了额买了", "Complete Chinese coverage leads mixed English")
-        guard let emailIndex = mixedCollision.firstIndex(of: "我发了email") else {
-            check(false, "Keep colliding mixed email selectable: \(mixedCollision)"); return
+        check(mixedCollision.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+              "Complete Chinese coverage leads mixed English: \(mixedCollision)")
+        print("TRACE mixed collision wofaleemail => \(mixedCollision)")
+        engine.select(0)
+        check(engine.takeCommit() == mixedCollision.first && engine.snapshot().preedit.isEmpty,
+              "The leading Chinese candidate must consume the complete mixed input")
+        type(engine, "wofaleemail")
+        guard let emailIndex = engine.snapshot().candidates.firstIndex(of: "我发了email") else {
+            check(false, "Keep colliding mixed email selectable: \(engine.snapshot().candidates)"); return
         }
         engine.select(emailIndex)
         check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
         for (input, expected) in [("compute", "computer"), ("comm", "community"), ("actual", "actually")] {
             type(engine, input)
-            let candidates = engine.snapshot().candidates
-            check(candidates.first == expected, "Frequency before exactness/length for \(input): \(candidates)")
             let english = allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+            check(english.first == expected, "English frequency before exactness/length for \(input): \(english)")
             check(!english.contains("compute"), "Excluded exact words cannot bypass admission")
             if input == "actual" {
                 check(english.contains("actual"), "Retain an admitted lower-frequency exact English word")
@@ -216,12 +424,13 @@ struct EngineTests {
         }
         type(engine, "zhefenoffes")
         engine.key(0xff08); type(engine, "r")
-        check(engine.snapshot().candidates.first == "这份offer", "Edit mixed composition")
-        engine.select(0)
+        let edited = engine.snapshot().candidates
+        check(edited.contains("这份offer"), "Edit mixed composition: \(edited)")
+        engine.select(edited.firstIndex(of: "这份offer")!)
         check(engine.takeCommit() == "这份offer")
         type(engine, "zhefenoffer")
         engine.key(0xff51); type(engine, "x"); engine.key(0xff08); engine.key(0xff57)
-        check(engine.snapshot().candidates.first == "这份offer", "Move the cursor and edit inside mixed composition")
+        check(engine.snapshot().candidates.contains("这份offer"), "Move the cursor and edit inside mixed composition")
         engine.key(0xff1b)
         check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         for input in ["Hello", "email"] {
@@ -265,7 +474,10 @@ struct EngineTests {
         for (input, expected) in [("actual", "actually"), ("zhefenoffer", "这份offer")] {
             engine.setPrecedingText("准备午")
             type(engine, input)
-            check(engine.snapshot().candidates.first == expected, "Context preserves English/mixed candidates")
+            let candidates = engine.snapshot().candidates
+            let supplemental = candidates.filter { $0.unicodeScalars.contains { $0.value < 128 } }
+            check(supplemental.first == expected, "Context preserves order within English/mixed candidates")
+            engine.highlight(candidates.firstIndex(of: expected)!)
             engine.key(32)
             check(engine.takeCommit() == expected)
         }
@@ -693,13 +905,12 @@ struct EngineTests {
                 check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty)
             }
         }
-        for action in ["commit", "space", "comma", "toggle", "return"] {
+        for action in ["commit", "space", "comma", "return"] {
             let engine = prepared()
             switch action {
             case "commit": engine.commit()
             case "space": check(engine.key(32))
             case "comma": check(engine.key(44))
-            case "toggle": check(engine.event(keyEvent(49, " ", [.control, .shift])))
             default: check(engine.key(0xff0d))
             }
             check(engine.takeCommit() == (action == "comma" ? "餐，" : action == "return" ? "can" : "餐"))

@@ -8,6 +8,24 @@ struct SettingsTests {
         let defaults = isolated.defaults
         let settings = isolated.settings
         check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14)
+        check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],
+              "Only square brackets page by default")
+        groupedInputPreferences()
+        for option in InputOption.allCases where ![.fuzzyZ, .fuzzyC, .fuzzyS, .bracketPaging, .minusEqualPaging].contains(option) {
+            check(settings.inputPreferences[option] == option.defaultValue)
+            settings.setInputOption(option, enabled: !option.defaultValue)
+            check(IFSettings(defaults: defaults).inputPreferences[option] == !option.defaultValue)
+            for bad: Any in [2, "true", 0.5, [Int]()] {
+                defaults.set(bad, forKey: "input.\(option.rawValue)")
+                check(settings.inputPreferences[option] == option.defaultValue)
+            }
+            defaults.removeObject(forKey: "input.\(option.rawValue)")
+        }
+        settings.setInputOption(.cornerQuotes, enabled: false)
+        settings.setInputOption(.englishPunctuation, enabled: true)
+        settings.setInputOption(.englishPunctuation, enabled: false)
+        check(!settings.inputPreferences[.cornerQuotes], "English punctuation preserves every mapping choice")
+        settings.setInputOption(.cornerQuotes, enabled: true)
         for bad: Any in [2, 10, 3.5, "9", [Int](), true] {
             defaults.set(bad, forKey: "candidateCount")
             check(settings.candidateCount == 5)
@@ -27,6 +45,76 @@ struct SettingsTests {
         check(settings.candidateCount == 5 && settings.fontSize == 14)
         try customPhrases(defaults: defaults, settings: settings)
         print("PASS settings: defaults, malformed values, bounds, persistence")
+    }
+
+    @MainActor static func groupedInputPreferences() {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let defaults = isolated.defaults, settings = isolated.settings
+        let fuzzy: [InputOption] = [.fuzzyZ, .fuzzyC, .fuzzyS]
+        for mask in 0..<8 {
+            for (index, option) in fuzzy.enumerated() {
+                defaults.set(mask & (1 << index) != 0, forKey: "input.\(option.rawValue)")
+            }
+            let snapshot = IFSettings(defaults: defaults).inputPreferences
+            check(fuzzy.allSatisfy { snapshot[$0] == (mask != 0) }, "Any legacy fuzzy pair enables all three: \(mask)")
+        }
+        for mask in 0..<4 {
+            defaults.set(mask & 1 != 0, forKey: "input.bracketPaging")
+            defaults.set(mask & 2 != 0, forKey: "input.minusEqualPaging")
+            let snapshot = IFSettings(defaults: defaults).inputPreferences
+            check(snapshot[.minusEqualPaging] == (mask == 2) && snapshot[.bracketPaging] == (mask != 2),
+                  "Only legacy exclusive minus/equal is preserved: \(mask)")
+        }
+        for option in InputOption.allCases { defaults.removeObject(forKey: "input.\(option.rawValue)") }
+        for bad: Any in [2, "true", 0.5, [Int]()] {
+            for option in fuzzy + [.bracketPaging, .minusEqualPaging] {
+                defaults.set(bad, forKey: "input.\(option.rawValue)")
+            }
+            check(!settings.fuzzyEnabled && settings.pagingKeys == .brackets, "Malformed grouped values use product defaults")
+        }
+        for option in InputOption.allCases { defaults.removeObject(forKey: "input.\(option.rawValue)") }
+        var notifications: [InputPreferences] = []
+        let observer = NotificationCenter.default.addObserver(forName: .settingsDidChange, object: nil, queue: nil) { note in
+            guard note.object as? IFSettings === settings else { return }
+            MainActor.assumeIsolated {
+                let defaults = isolated.defaults
+                let snapshot = settings.inputPreferences
+                for option in fuzzy + [.bracketPaging, .minusEqualPaging] {
+                    if defaults.object(forKey: "input.\(option.rawValue)") != nil {
+                        check(defaults.bool(forKey: "input.\(option.rawValue)") == snapshot[option],
+                              "Notification exposes only fully persisted grouped choices")
+                    }
+                }
+                notifications.append(snapshot)
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        settings.fuzzyEnabled = true
+        check(notifications.count == 1 && fuzzy.allSatisfy { notifications[0][$0] })
+        settings.fuzzyEnabled = true
+        check(notifications.count == 1, "An unchanged canonical group does not notify")
+        settings.pagingKeys = .minusEqual
+        check(notifications.count == 2 && !notifications[1][.bracketPaging] && notifications[1][.minusEqualPaging])
+        settings.pagingKeys = .brackets
+        check(notifications.count == 3 && notifications[2][.bracketPaging] && !notifications[2][.minusEqualPaging])
+        for option in fuzzy { settings.setInputOption(option, enabled: false) }
+        check(notifications.count == 4 && fuzzy.allSatisfy { !notifications[3][$0] })
+        settings.setInputOption(.fuzzyC, enabled: true)
+        check(fuzzy.allSatisfy { settings.inputPreferences[$0] }, "Individual setter cannot split the fuzzy group")
+        check(notifications.count == 5)
+        settings.setInputOption(.bracketPaging, enabled: false)
+        check(settings.pagingKeys == .minusEqual && notifications.count == 6)
+        settings.setInputOption(.minusEqualPaging, enabled: false)
+        check(settings.pagingKeys == .brackets && notifications.count == 7)
+        let restored = IFSettings(defaults: defaults)
+        check(restored.fuzzyEnabled && restored.pagingKeys == .brackets)
+        check(restored.inputPreferences.recordedValues == notifications.last?.recordedValues)
+        defaults.set(false, forKey: "input.fuzzyZ")
+        settings.fuzzyEnabled = true
+        check(notifications.count == 8 && fuzzy.allSatisfy { defaults.bool(forKey: "input.\($0.rawValue)") },
+              "Writing an already-effective legacy fuzzy value still completes all stored bits")
+        print("PASS grouped input preferences: 8 fuzzy/4 paging legacy states, malformed defaults, atomic notifications, canonical setters and recorded values")
     }
 
     @MainActor static func customPhrases(defaults: UserDefaults, settings: IFSettings) throws {

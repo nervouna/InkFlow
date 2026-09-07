@@ -10,12 +10,53 @@ struct ControllerTests {
         IFStubHeadlessControllerFramework()
         contextReading()
         runCases(settings: isolated.settings)
+        inputSettings(settings: isolated.settings)
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
         try deliveryAndRecovery(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         IFEngine.stop()
         print("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement, consecutive quotes and shifted punctuation")
+    }
+
+    @MainActor static func inputSettings(settings: IFSettings) {
+        let client = RecordingClient()
+        let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        let other = InkFlowInputController(server: nil, delegate: nil, client: RecordingClient(),
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        let engine = controller.engine!
+        for letter in "hulianwang" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        let before = engine.snapshot()
+        client.mutations.removeAll()
+        controller.toggleTraditional(nil)
+        controller.toggleEnglishPunctuation(nil)
+        controller.toggleInputMode(nil)
+        check(engine.snapshot() == before && !engine.asciiMode && engine.requestedASCIIMode)
+        check(!client.mutations.contains { $0.hasPrefix("insert:") }, "Menu changes must not commit live composition")
+        check(other.engine!.inputPreferences?[.traditional] == true && !other.engine!.asciiMode,
+              "Traditional and punctuation are global; ASCII remains per session")
+        let menu = controller.menu()!
+        check(menu.items.contains { $0.title == "切换到中文输入" })
+        check(menu.items.first { $0.title == "英文标点" }?.state == .on)
+        check(menu.items.first { $0.title == "繁体输入" }?.state == .on)
+        client.mutations.removeAll()
+        check(controller.handle(keyEvent(49, " "), client: client))
+        check(client.mutations == ["insert:互联网"] && engine.asciiMode)
+        check(!controller.handle(keyEvent(33, "{", .shift), client: client))
+        controller.toggleInputMode(nil)
+        for letter in "hulianwang" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        check(engine.snapshot().candidates.first == "互聯網")
+        client.mutations.removeAll()
+        check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+        check(client.mutations.allSatisfy { !$0.hasPrefix("insert:") } && !engine.asciiMode)
+        check(controller.handle(keyEvent(53, ""), client: client))
+        check(engine.asciiMode)
+        controller.toggleInputMode(nil)
+        settings.setInputOption(.traditional, enabled: false)
+        settings.setInputOption(.englishPunctuation, enabled: false)
+        check(controller.menu()!.items.first { $0.title == "繁体输入" }?.state == .off)
+        print("PASS controller input preferences: menu/UI global synchronization, session ASCII scope, deferred menu and shortcut, one old commit and cancellation")
     }
 
     @MainActor static func deliveryAndRecovery(settings: IFSettings, shared: String, user: String) throws {
@@ -211,7 +252,13 @@ struct ControllerTests {
             case "comma": check(controller.handle(keyEvent(43, ","), client: client)); expected = "餐，"
             case "return": check(controller.handle(keyEvent(36, "\r"), client: client)); expected = "can"
             case "shortcut": check(!controller.handle(keyEvent(0, "a", .command), client: client))
-            case "toggle": check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+            case "toggle":
+                let before = controller.engine!.snapshot()
+                check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+                check(controller.engine!.snapshot() == before && controller.candidates(nil) as! [String] == candidates)
+                check(client.document == "准备午can" && !client.mutations.contains { $0.hasPrefix("insert:") },
+                      "A deferred mode toggle preserves the context-ranked composition")
+                check(controller.handle(keyEvent(49, " "), client: client))
             case "commit": controller.commitComposition(client)
             default: controller.deactivateServer(client)
             }

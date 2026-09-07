@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sourced from scripts that have already changed to the repository root.
-dictionary_sources=(macOS/Sources/DictionaryModels.swift macOS/Sources/DictionaryGenerator.swift)
+dictionary_sources=(macOS/Sources/InputPreferences.swift macOS/Sources/DictionaryModels.swift macOS/Sources/DictionaryGenerator.swift)
 dictionary_update_sources=(macOS/Sources/DictionaryUpdateModels.swift macOS/Sources/DictionarySourceClient.swift macOS/Sources/DictionaryStore.swift macOS/Sources/DictionaryWorkerProtocol.swift macOS/Sources/DictionaryWorkerRunner.swift)
 swift_sources=(macOS/Sources/QualityRecords.swift macOS/Sources/QualityStore.swift macOS/Sources/QualityRecorder.swift "${dictionary_sources[@]}" "${dictionary_update_sources[@]}" macOS/Sources/DictionaryCoordinator.swift macOS/Sources/Context.swift macOS/Sources/Engine.swift macOS/Sources/Settings.swift macOS/Sources/DictionarySettings.swift macOS/Sources/CustomPhrases.swift macOS/Sources/InputController.swift)
 
