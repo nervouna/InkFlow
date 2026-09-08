@@ -35,6 +35,7 @@ Use elevated execution for Keychain/signing/network checks if the agent sandbox 
 - Verify `origin` identifies the intended GitHub repository using `git remote get-url origin` and `gh repo view`. Set `repo` to that verified `OWNER/REPO` and use `--repo "$repo"` on all release commands. Check `gh auth status`, then `git fetch origin --tags`. Stop on divergent history or conflicting tags. Fast-forward a behind-only `main`; local commits ahead of origin are part of the release and must be reviewed.
 - Run `bash .agents/skills/inkflow-release/scripts/check-credentials.sh` before the version bump/build. It validates the configured Developer ID Application identity, the exact certificate's subject OU `T7976FL2LP`, and Apple authentication through the configured Keychain profile. Packaging repeats this check before creating output. Missing/invalid credentials block packaging, not inspection.
 - Read `CFBundleShortVersionString` and `CFBundleVersion` from `macOS/Info.plist`. Show the current values and proposed major/minor/patch results; ask the user to choose 大版本升级 / 新增功能 / Bugfix. Reuse an explicit choice in this release request. Major resets minor and patch; minor resets patch; patch increments alone. Build increments once, independently. Do not infer a 1.0 graduation from a 0.x version.
+- Identify and record the previous published stable release tag for release-note generation. Verify it is an ancestor of the proposed release commit.
 - Check the proposed tag and Release do not already exist locally or remotely before changing files. Existing release state routes to recovery below, not another version bump.
 - Run `bash .agents/skills/inkflow-release/scripts/bump-version.sh TYPE`, where TYPE is the confirmed `major`, `minor` or `patch`. Review the diff. Set `version`, `build`, and `tag="v$version"` from the updated plist, and record the starting commit in `build/release-notes.md` with the selected version/build and subsequent verification results. This ignored local record is for recovery, not a second version source.
 
@@ -100,7 +101,15 @@ Before tagging, require a clean worktree and the recorded tree match. Record the
 
 ## 5. Publish the checked bytes
 
-Write short Chinese user-facing release notes to a local file, covering actual changes, version/build, Apple Silicon/macOS 26 requirements and DMG installation instructions. Keep the internal recovery record separate. Do not expose local paths, credentials or notarization logs in the notes.
+Create short Chinese user-facing release notes from [the template](assets/release-notes-template.md). Generate an internal candidate list from the release's first-parent history:
+
+```sh
+bash .agents/skills/inkflow-release/scripts/release-note-candidates.sh "$previous_tag" "$tag"
+```
+
+Treat this output as evidence to review, not text to publish. Inspect both sections and the release diff so a mislabeled commit cannot hide a user-visible change. Consolidate duplicate or related commits and rewrite them in user-facing Chinese; never copy raw commit subjects mechanically. Publish three to five bullets when the scope supports them, include only observable changes, and omit empty sections. Exclude internal release, test, documentation, dependency, skill and repository-maintenance work unless it materially changes the shipped product.
+
+The GitHub title already supplies the version. Keep stable installation and update steps in the README and link to them instead of repeating them. Add `运行要求` or an `升级提示` section only when platform requirements, installation, compatibility, migration or user-data behavior changed. Do not routinely mention signing, notarization or checksum commands in the notes; the verified assets and `SHA256SUMS` carry that evidence. End with the README link and `https://github.com/$repo/compare/$previous_tag...$tag`. Keep the internal recovery record separate. Do not expose local paths, credentials or notarization logs in the notes.
 
 ```sh
 git push --atomic origin main "refs/tags/$tag"

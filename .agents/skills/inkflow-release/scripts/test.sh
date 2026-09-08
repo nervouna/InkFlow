@@ -33,6 +33,27 @@ cmp "$plist" "$fixture/before.plist"
 if bash "$bump" feature "$plist" > "$fixture/error.log" 2>&1; then exit 1; fi
 cmp "$plist" "$fixture/before.plist"
 
+# Release-note resources use a stable public template; candidates use first-parent history,
+# surface product changes and retain excluded commits for review.
+template="$root/.agents/skills/inkflow-release/assets/release-notes-template.md"
+[[ -s "$template" ]]
+grep -Fq 'https://github.com/nervouna/InkFlow#安装与启用' "$template"
+grep -Fq '[完整变更]({{比较链接}})' "$template"
+notes="$root/.agents/skills/inkflow-release/scripts/release-note-candidates.sh"
+bash "$notes" v0.1.0 v0.2.0 > "$fixture/release-note-candidates.md"
+suggested=$(sed -n '/^## Suggested user-facing candidates$/,/^## Excluded from the draft/p' "$fixture/release-note-candidates.md")
+excluded=$(sed -n '/^## Excluded from the draft/,$p' "$fixture/release-note-candidates.md")
+[[ "$suggested" == *'feat: merge configurable input preferences'* ]]
+[[ "$suggested" == *'feat: expand technology and internet dictionaries'* ]]
+[[ "$suggested" == *'fix: restore settings window sizing constraints'* ]]
+[[ "$suggested" != *'chore(release):'* ]]
+[[ "$excluded" == *'chore(release): v0.2.0 (build 3)'* ]]
+[[ "$excluded" == *'chore: standardize worktree locations'* ]]
+if bash "$notes" v0.2.0 v0.1.0 > "$fixture/error.log" 2>&1; then exit 1; fi
+if bash "$notes" missing-ref v0.2.0 > "$fixture/error.log" 2>&1; then exit 1; fi
+if bash "$notes" v0.1.0 missing-ref > "$fixture/error.log" 2>&1; then exit 1; fi
+echo 'PASS: release-note template, first-parent candidate filtering and invalid ranges'
+
 # Configuration loading never evaluates file contents or consults real credentials.
 config="$fixture/release.plist"
 plutil -create xml1 "$config"
