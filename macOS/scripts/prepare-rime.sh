@@ -74,15 +74,27 @@ entries && $0 !~ /^[[:space:]]*(#|$)/ && NF >= 2 {
   build/deps/rime-easy-en-*/easy_en.dict.yaml macOS/Data/english-technology.tsv > "$staging/easy_en.dict.yaml"
 # Mixed composition adds only its existing structural restrictions and scaling.
 LC_ALL=C awk -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
+function emit(word, code, weight, pair) {
+  pair=word SUBSEP code
+  if (pair in emitted) return
+  emitted[pair]=1
+  printf "%s\t%s\t%d\n", word,code,int(weight/weight_divisor)
+}
 BEGIN {
   FS=OFS="\t"
   print "# Derived from the shared admitted English dictionary; see easy_en.dict.yaml for source attribution."
   print "# See bundled Licenses; original pinyin_simp remains an independent translator/user dictionary."
-  print "---\nname: inkflow_mixed\nversion: '\''1.2'\''\nsort: by_weight"
+  print "---\nname: inkflow_mixed\nversion: '\''1.3'\''\nsort: by_weight"
   print "use_preset_vocabulary: false\nimport_tables: [pinyin_simp]\n..."
 }
-$1 == $2 && $1 ~ /^[A-Za-z]+$/ && length($1) >= 4 {
-  printf "%s\t%s\t%d\n", $1,$2,int($3/weight_divisor)
+$1 ~ /^[A-Za-z]+$/ && $2 ~ /^[A-Za-z]+$/ {
+  # Preserve the conservative lowercase path. Retain admitted uppercase source
+  # boundaries; the runtime filter validates the complete emitted ASCII run.
+  if ($1 == $2 && length($1) >= 4) emit($1,$2,$3)
+  if ($2 ~ /[A-Z]/) emit($1,$2,$3)
+  # Some admitted display forms (API, SwiftUI) have only lowercase/title-case
+  # source aliases. Their exact case is still source data, not synthesized text.
+  if ($1 ~ /[A-Z]/) emit($1,$1,$3)
 }' "$staging/easy_en.dict.yaml" > "$staging/inkflow_mixed.dict.yaml"
 mkdir -p "$destination/lua"
 cp schemas/*.yaml "$destination/"

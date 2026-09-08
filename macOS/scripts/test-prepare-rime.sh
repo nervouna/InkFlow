@@ -40,6 +40,9 @@ boundary	boundary	1
 above	above	1
 below	below	999999
 api	api	999999
+API	api	999999
+API	Api	999999
+D	D	999999
 Alias	alias	999999
 foo-bar	foo-bar	999999
 unknown	unknown	999999
@@ -58,6 +61,8 @@ boundary	4.00
 above	4.01
 below	3.99
 api	4.50
+API	4.50
+D	4.50
 Alias	4.50
 foo-bar	4.50
 DATA
@@ -101,6 +106,9 @@ computer	computer	1242500
 boundary	boundary	1000000
 above	above	1002500
 api	api	1125000
+API	api	1125000
+API	Api	1125000
+D	D	1125000
 Alias	alias	1125000
 foo-bar	foo-bar	1125000
 DATA
@@ -112,6 +120,10 @@ emails	emails	10600
 computer	computer	12425
 boundary	boundary	10000
 above	above	10025
+API	API	11250
+API	Api	11250
+D	D	11250
+Alias	Alias	11250
 DATA
 diff -u "$fixture/expected-mixed.tsv" "$fixture/mixed.tsv"
 
@@ -141,6 +153,9 @@ novel	novel	1025000
 boundary	boundary	1000000
 above	above	1002500
 api	api	1125000
+API	api	1125000
+API	Api	1125000
+D	D	1125000
 Alias	alias	1125000
 foo-bar	foo-bar	1125000
 unrated	unrated	1000250
@@ -216,7 +231,11 @@ C++	cpp	1000000
 computer	laptop	1242500
 DATA
 diff -u "$fixture/expected-technology.tsv" "$fixture/english.tsv"
-printf 'computer\tcomputer\t12425\n' > "$fixture/expected-technology-mixed.tsv"
+cat > "$fixture/expected-technology-mixed.tsv" <<'DATA'
+computer	computer	12425
+computer	Computer	12425
+TechUI	TechUI	10000
+DATA
 diff -u "$fixture/expected-technology-mixed.tsv" "$fixture/mixed.tsv"
 configure 4.1 250000 100
 generate

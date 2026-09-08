@@ -387,6 +387,9 @@ struct EngineTests {
             ("offerhenhao", "offer很好"),
             ("wofaleemails", "我发了emails"),
             ("wofaleEmail", "我发了Email"),
+            ("woyongAPIkeyihuifuwo", "我用API可以回复我"),
+            ("woyongSwiftUIhenhao", "我用SwiftUI很好"),
+            ("banbenDkeyi", "版本D可以"),
             ("womenquoffice", "我们去office"),
             ("zhefenoffer", "这份offer")
         ] {
@@ -397,6 +400,24 @@ struct EngineTests {
             engine.clear()
             selectCandidate(expected, input: input, engine: engine)
         }
+        type(engine, "woyong")
+        for (keyCode, letter) in [(UInt16(0), "A"), (UInt16(35), "P"), (UInt16(34), "I")] {
+            check(engine.event(keyEvent(keyCode, letter, .shift)))
+        }
+        type(engine, "keyihuifuwo")
+        check(engine.snapshot().candidates.contains("我用API可以回复我"),
+              "Real Shift events must preserve uppercase mixed input and following Pinyin")
+        for (suffix, complete) in [("keyihuifuw", false), ("keyihuifu", true), ("keyihuif", false),
+                                   ("keyihui", true), ("keyihu", true), ("keyih", false), ("keyi", true)] {
+            engine.key(0xff08)
+            check(engine.qualitySnapshot().rawInput.hasSuffix(suffix),
+                  "Uppercase mixed backspace boundary: \(engine.snapshot())")
+            if complete {
+                check(engine.snapshot().candidates.contains { $0.contains("API") },
+                      "Uppercase mixed candidate survives complete-Pinyin backspace: \(engine.snapshot())")
+            }
+        }
+        engine.clear()
         type(engine, "wofaleemail")
         let mixedCollision = engine.snapshot().candidates
         check(mixedCollision.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,

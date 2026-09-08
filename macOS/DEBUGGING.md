@@ -1,5 +1,34 @@
 # Debugging index
 
+## Uppercase English drops itself and following Pinyin from mixed candidates
+
+**Symptoms:** An admitted word works in standalone English, but mixed input such as
+`woyongAPIkeyihuifuwo` or `woyongSwiftUIhenhao` keeps only the Chinese prefix in
+the candidate list. `Email` can appear to work because its existing literal code
+already satisfies the older four-character mixed rule.
+
+**Cause:** The generated mixed dictionary previously retained only records whose
+display text exactly equaled their code and had at least four letters. Admitted
+forms such as `API` (`api` / `Api`), `SwiftUI` (`swiftui`), and the one-letter `D`
+therefore had no matching mixed code. Broadly admitting short uppercase records is
+also unsafe: native sentence composition can join admitted fragments such as
+`WOMEN` + `S` and reconstruct an explicitly excluded `WOMENS`.
+
+**Fix:** Keep the conservative lowercase literal rule. For already admitted
+ASCII-letter records, retain sourced uppercase codes and add the exact displayed
+spelling as a code when it contains uppercase letters. The mixed Lua filter then
+requires each contiguous ASCII output run to be an exact admitted mixed-dictionary
+entry. Do not clear the Shift modifier, append unknown raw tails, or add a global
+uppercase Pinyin algebra rule; those approaches do not repair the missing-code
+contract and can broaden unrelated decoding.
+
+**Regression:** `bash macOS/scripts/test.sh` covers dictionary aliases for `D`,
+`API`, and `SwiftUI`, actual Shift-modified key events, following Pinyin, backspaces
+at complete Pinyin boundaries, rejected case variants, and ordinary Chinese input.
+After building, `bash macOS/scripts/check-bundle.sh` verifies the generated
+dictionary and Lua filter are packaged. Real-client typing remains a separate
+acceptance step.
+
 ## Settings window loses its fixed width and minimum height
 
 **Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default
