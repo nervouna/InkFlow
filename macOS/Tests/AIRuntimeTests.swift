@@ -11,10 +11,11 @@ private final class RuntimeFixture {
     var reads = 0
     var shown: String?
     var readHook: (() -> Void)?
+    var stateHook: (() -> Void)?
     var contextAvailable = true
     var presentationAvailable = true
     lazy var coordinator = AISuggestionCoordinator(settings: isolated.settings.smart, service: service,
-        current: { [weak self] in self?.state }, context: { [weak self] anchor in
+        current: { [weak self] in self?.stateHook?(); return self?.state }, context: { [weak self] anchor in
             guard let self, self.state?.anchor == anchor else { return nil }
             self.reads += 1; self.readHook?(); return self.contextAvailable ? self.content : nil
         }, present: { [weak self] text in
@@ -57,8 +58,8 @@ struct AIRuntimeTests {
         for reason in [AIDiagnosticReason.secureInput, .unownedMark, .invalidMark, .selectionOutsideMark] {
             verify(diagnostics.contains(.anchorRejected, reason: reason), "Anchor rejection includes its concrete reason")
         }
-        verify(diagnostics.contains(.contextRejected, reason: .documentShorterThanMark))
-        verify(diagnostics.contains(.discarded, reason: .contextChanged) && diagnostics.contains(.discarded, reason: .staleState))
+        verify(diagnostics.contains(.contextCaptured, reason: .documentShorterThanMark))
+        verify(diagnostics.contains(.discarded, reason: .staleState))
         verify(diagnostics.contains(.discarded, reason: .contextUnavailable) && diagnostics.contains(.discarded, reason: .presentation))
         let lifecycle = diagnostics.records.filter { [.scheduled, .dispatched, .shown, .accepted, .cancelled, .failed, .discarded, .invalidated].contains($0.event) }
         verify(lifecycle.allSatisfy { $0.attempt != nil && $0.session != nil }, "Attempt and session survive async and acceptance paths")
@@ -68,7 +69,7 @@ struct AIRuntimeTests {
         }
         verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Runtime records omit all content and configuration values")
         print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
-        print("PASS AI runtime: two-sided UTF-16 context, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
+        print("PASS AI runtime: bounded Unicode context captured once, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
     }
 
     @MainActor static func contextChecks() {
@@ -98,8 +99,12 @@ struct AIRuntimeTests {
         client.reportedLength = NSNotFound
         verify(read() == nil, "Untrusted extreme ranges must suppress without overflow")
         client.mark = NSRange(location: 3, length: 5); client.selection = NSRange(location: 8, length: 0)
-        client.reportedLength = 4
-        verify(read() == nil, "A known document length shorter than the owned mark suppresses requests and acceptance")
+        for length in [0, 4, -1] {
+            client.reportedLength = length
+            let result = read()
+            verify(result?.precedingText == "前😀" && result?.followingAvailable == false,
+                   "Short or negative advisory length keeps available text and permits an empty suffix")
+        }
         client.reportedLength = NSNotFound
         verify(read()?.precedingText == "前😀", "Unknown length still permits bounded available text")
 
@@ -108,17 +113,19 @@ struct AIRuntimeTests {
         let anchor = AIClientAnchor.read(bounded, ownsMarkedText: true, secureInput: false)!
         let result = AISurroundingContext.read(bounded, anchor: anchor)!
         verify(result.precedingText.count == 256 && result.followingText.count == 256)
+        let character = "👨‍👩‍👧‍👦"
         bounded.substringResponse = { request in
-            if request.location < 270 { return ("😀" + String(repeating: "前", count: 255), NSRange(location: 13, length: 257)) }
-            return (String(repeating: "后", count: 255) + "😀", NSRange(location: 275, length: 257))
+            if request.location < 270 { return ("省略" + String(repeating: character, count: 256), request) }
+            return (String(repeating: character, count: 256) + "省略", request)
         }
         let expanded = AISurroundingContext.read(bounded, anchor: anchor)!
-        verify(expanded.precedingText.hasPrefix("😀") && expanded.followingText.hasSuffix("😀"), "Surrogate-safe adjusted bounds")
-        bounded.substringResponse = { _ in ("😀", NSRange(location: 269, length: 2)) }
-        verify(AISurroundingContext.read(bounded, anchor: anchor)?.precedingAvailable == false, "Reject a caret splitting a surrogate")
-        bounded.substringResponse = { _ in ("bad", NSRange(location: Int.max - 1, length: 3)) }
-        verify(AISurroundingContext.read(bounded, anchor: anchor)?.followingAvailable == false)
-        print("PASS AI context: both sides/end bounds, missing/secure/foreign/moved clients, 256-unit limits and surrogate/range validation")
+        verify(expanded.precedingText == String(repeating: character, count: 256) &&
+               expanded.followingText == String(repeating: character, count: 256),
+               "Longer Unicode client text stays bounded without splitting extended graphemes")
+        bounded.substringResponse = { request in ("😀", request) }
+        let shorter = AISurroundingContext.read(bounded, anchor: anchor)!
+        verify(shorter.precedingText == "😀" && shorter.followingText == "😀", "Shorter returned Unicode text remains useful context")
+        print("PASS AI context: both sides/end bounds, advisory length fallback, missing/secure/foreign/moved clients and character-safe limits")
     }
 
     @MainActor static func debounceChecks() async throws {
@@ -142,6 +149,7 @@ struct AIRuntimeTests {
         verify(await fixture.service.count() == 1 && fixture.shown != nil, "Paging a visible suggestion never repeats inference")
         verify(fixture.coordinator.takeSuggestion()?.anchor.mark.length == 5)
         verify(fixture.coordinator.takeSuggestion() == nil, "Acceptance consumes eligibility exactly once")
+        verify(fixture.reads == 1, "Response, navigation and Tab do not recapture request context")
 
         fixture.setInput("ni"); fixture.coordinator.synchronize(); await wait(0.30)
         fixture.setInput("nihao"); fixture.coordinator.synchronize(); await wait(0.26)
@@ -167,7 +175,7 @@ struct AIRuntimeTests {
     }
 
     @MainActor static func invalidationChecks() async throws {
-        for action in ["input", "client", "selection", "context", "configuration", "off", "lifecycle", "hidden", "secure"] {
+        for action in ["input", "client", "selection", "configuration", "off", "lifecycle", "hidden", "secure"] {
             let fixture = try RuntimeFixture(); defer { fixture.stop() }
             fixture.coordinator.synchronize(); await wait(0.54)
             verify(await fixture.service.count() == 1)
@@ -179,7 +187,6 @@ struct AIRuntimeTests {
             case "selection":
                 let old = fixture.state!
                 fixture.state = AISuggestionState(input: old.input, anchor: AIClientAnchor(client: old.anchor.client, mark: old.anchor.mark, selection: NSRange(location: 4, length: 0)))
-            case "context": fixture.content = AISurroundingContext(precedingText: "changed", followingText: "后文", precedingAvailable: true, followingAvailable: true)
             case "configuration": try fixture.isolated.settings.smart.save(baseURL: "https://changed.invalid", apiKey: "synthetic", model: "fixture")
             case "off": fixture.isolated.settings.smart.isEnabled = false
             case "lifecycle": fixture.coordinator.invalidate()
@@ -205,8 +212,8 @@ struct AIRuntimeTests {
         acceptance.coordinator.synchronize(); await wait(0.54)
         await acceptance.service.resolve(0); await wait(0.03)
         verify(acceptance.shown != nil)
-        acceptance.readHook = { acceptance.coordinator.invalidate() }
-        verify(acceptance.coordinator.takeSuggestion() == nil, "Reentrant context invalidation prevents acceptance")
+        acceptance.stateHook = { acceptance.coordinator.invalidate() }
+        verify(acceptance.coordinator.takeSuggestion() == nil, "Reentrant state getter invalidation prevents acceptance")
 
         let missingContext = try RuntimeFixture(); defer { missingContext.stop() }
         missingContext.contextAvailable = false

@@ -28,11 +28,11 @@ levels so they remain queryable after the process exits, subject to macOS log
 retention. This follows Apple's [unified logging guidance](https://developer.apple.com/documentation/os/generating-log-messages-from-your-code).
 
 - If there is no dispatch, inspect the gate or context failure reason: configuration,
-  secure input, candidate visibility, owned mark/selection or document length.
+  secure input, candidate visibility or owned mark/selection.
 - If dispatch occurs, inspect transport status/error and elapsed time. Cancellation
   is distinct from service failure. Do not infer that a request was never sent merely
   because no suggestion appeared.
-- If a result arrives, inspect stale-state/context and presentation failures before
+- If a result arrives, inspect stale-state and presentation failures before
   attributing the problem to the provider. A successful result can be discarded when
   the active input session changes.
 - Deactivation checkpoints help separate normal controller cleanup from interruption
@@ -40,13 +40,40 @@ retention. This follows Apple's [unified logging guidance](https://developer.app
   consult the matching macOS DiagnosticReports file.
 
 Logs contain fixed event/reason labels, random correlation IDs, status/timing and
-availability metadata. They never include input text, Pinyin, suggestions, API keys,
+availability and document-length/marked-end scalars. They never include input text, Pinyin, suggestions, API keys,
 URLs, model names, HTTP bodies or arbitrary provider/error descriptions. Keep this
 boundary when extending diagnostics; do not enable raw request/response dumps.
 
 The earlier build `1e88aa4` did not log the AI lifecycle. Its in-memory Settings
 request error cannot reconstruct a failed session after process exit. Missing records
 from that build do not establish which trigger or response guard failed.
+
+### Document length is shorter than the owned composition
+
+**Observed failure:** Installed build `8024ac03` repeatedly logged
+`contextRejected reason=documentShorterThanMark`, followed by
+`discarded reason=contextUnavailable`, without dispatching a request. Its context
+reader treated document length shorter than the owned mark as an inference blocker.
+
+**Experiment:** Treat length as advisory and read surrounding text once when the
+request starts. A usable length clips the suffix at document end; shorter, negative
+or unknown lengths use a bounded request instead. Unavailable text becomes empty
+context. Returned Unicode text is limited to 256 characters per side without
+requiring exact returned-range metadata. Valid owned mark, client, selection and
+secure-input checks still surround capture. Response display and Tab revalidate the
+current composition and visibility without rereading or comparing document text.
+
+The fallback records `contextCaptured reason=documentShorterThanMark` with
+`reported_document_length`, `marked_end` and both availability flags. Follow that
+attempt through dispatch, shown and accepted. A missing suffix can reduce contextual
+quality, but no longer prevents a same-composition suggestion or Tab adoption.
+
+The headless regression first reproduced `zero-length: requests=0 suggestion=false`
+against the previous code. Its success checks require request, preview and exact-once
+Tab with both committed sides preserved for zero, short and negative reported lengths.
+It also covers unavailable or changed surroundings during the request and preview,
+with no response/Tab document reads. These simulated client results establish the
+new functional path; the installed editor behavior still requires a typing trial.
 
 ### Candidate visibility becomes ready after the final input refresh
 
@@ -84,10 +111,12 @@ prefixes, ordinary candidate keys, client range/length profiles and exact-once T
 adoption. The delayed-show regression now reaches
 `visible=true requests=1 suggestion=true`. Live mode performs the four short, long,
 mixed-language and long-typo fixtures through the same pipeline with DeepSeek V4
-Flash. It verifies complete original Pinyin (including `zhegn`), both surrounding
-texts, required meaning-bearing phrases, one request, correlated diagnostic stages
+Flash. Live fixtures now report document length zero and require the best-effort
+capture diagnostic, available prefix and unavailable suffix. The ordinary stub
+fixtures retain healthy two-sided context. Both modes verify complete original
+Pinyin (including `zhegn`), required meaning-bearing phrases, one request, correlated diagnostic stages
 and exact insertion preserving the surrounding document. It never falls back to a
-stub response. All four live fixtures passed on 2026-09-08.
+stub response.
 
 **Evidence boundary:** These tests deliver timed `NSEvent` sequences with actual
 physical key codes and modifiers through the production controller, Rime engine,

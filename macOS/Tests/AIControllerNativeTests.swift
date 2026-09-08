@@ -221,6 +221,12 @@ struct AIControllerNativeTests {
                     windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: true, keyCode: 48)!
                 let old = client.document
                 check(controller.handle(repeated, client: client) && old == client.document, "A held Tab cannot accept a newly arrived suggestion")
+            } else if action == "context" {
+                check(suggestion != nil, "Changed surrounding text retains a valid same-composition suggestion")
+                client.mutations.removeAll()
+                check(controller.handle(keyEvent(48, "\t"), client: client))
+                check(client.document == "改文😀【你好吗】后文" && client.mutations == ["mark:", "insert:你好吗"],
+                      "Tab preserves the current surrounding document")
             } else { check(suggestion == nil, "Late result suppressed after \(action)") }
             controller.engine?.clear(); controller.refresh(client); controller.panel?.hide()
             settings.smart.isEnabled = true

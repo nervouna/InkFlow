@@ -58,6 +58,7 @@ struct AIHeadlessPipelineTests {
             if !live {
                 try await ordinaryControls(settings)
                 try await profiles(settings)
+                try await changedSurroundings(settings)
                 try await secureChecks(settings)
                 try await delayedVisibility(settings)
                 try await visibilityLifecycle(settings)
@@ -75,6 +76,7 @@ struct AIHeadlessPipelineTests {
         await AIDiagnostics.$observe.withValue({ records.append($0) }) {
             let service = AIHeadlessService(live: live, response: value.stub)
             let (controller, client, endpoint) = fixture(settings: settings, service: service)
+            if live { client.reportedLength = 0 }
             defer { controller.engine?.clear(); controller.refresh(client) }
             let lastKey = await AIHeadlessKeyboard.type(value.pinyin, into: controller, client: client)
             check(endpoint.candidatesVisible && !endpoint.candidates.isEmpty && endpoint.refreshCount == value.pinyin.count,
@@ -97,7 +99,14 @@ struct AIHeadlessPipelineTests {
             check(lastKey.duration(to: calls[0].started) >= .milliseconds(480), "Request respects the real 0.5s threshold")
             let input = calls[0].input
             check(input.pinyin == value.pinyin && input.selectedPrefix.isEmpty, "Service receives entire unmodified raw Pinyin")
-            check(input.precedingText == preceding && input.followingText == following, "Service receives both actual client surroundings")
+            check(input.precedingText == preceding && input.followingText == (live ? "" : following),
+                  "Service receives available context; zero reported length uses a bounded suffix which this client cannot read")
+            if live {
+                check(records.records.contains { $0.event == .contextCaptured && $0.reason == .documentShorterThanMark &&
+                    $0.reportedDocumentLength == 0 && $0.markedEnd == NSMaxRange(client.mark) &&
+                    $0.precedingAvailable == true && $0.followingAvailable == false },
+                      "Every live fixture exercises the observed zero-length fallback")
+            }
             let suggestion = endpoint.suggestion!
             check(value.required.allSatisfy { suggestion.lowercased().contains($0) }, "Suggestion preserves the fixture's intended meaning")
             await wait(0.15)
@@ -125,7 +134,7 @@ struct AIHeadlessPipelineTests {
             }
             check(records.excludes([value.pinyin, preceding, following, suggestion, "synthetic", "example.invalid"]), "Logs omit input/output/key/URL")
             // All text printed here is a declared synthetic fixture, never a real user's document.
-            print("PASS effect \(value.name): suggestion=\(suggestion) request_count=1 latency=\(lastKey.duration(to: calls[0].started))")
+            print("PASS effect \(value.name): context=\(live ? "zero-length-best-effort" : "two-sided") suggestion=\(suggestion) request_count=1 latency=\(lastKey.duration(to: calls[0].started))")
             fflush(stdout)
         }
     }
@@ -161,7 +170,7 @@ struct AIHeadlessPipelineTests {
     }
 
     @MainActor static func profiles(_ settings: IFSettings) async throws {
-        for profile in ["exact", "unknown-length", "unchanged-actual-range", "unavailable-context", "short-document", "invalid-mark", "outside-selection"] {
+        for profile in ["zero-length", "short-document", "exact", "unknown-length", "negative-length", "unchanged-actual-range", "unavailable-context", "invalid-mark", "outside-selection"] {
             let records = AIDiagnosticCapture(), service = AIHeadlessService()
             let (controller, client, endpoint) = fixture(settings: settings, service: service)
             defer { controller.engine?.clear(); controller.refresh(client) }
@@ -177,29 +186,83 @@ struct AIHeadlessPipelineTests {
                     }
                 case "unchanged-actual-range": client.updatesActualRange = false
                 case "unavailable-context": client.contextAvailable = false
-                case "short-document": client.reportedLength = 0
+                case "zero-length": client.reportedLength = 0
+                case "short-document": client.reportedLength = 4
+                case "negative-length": client.reportedLength = -1
                 case "invalid-mark": client.mark = NSRange(location: NSNotFound, length: 0)
                 case "outside-selection": client.selection = NSRange(location: 0, length: 0)
                 default: break
                 }
                 await wait(0.75)
                 let calls = await service.captured()
-                let valid = !["short-document", "invalid-mark", "outside-selection"].contains(profile)
-                check(calls.count == (valid ? 1 : 0) && endpoint.suggestionVisible == valid, "Client profile has explicit safe eligibility")
+                let valid = !["invalid-mark", "outside-selection"].contains(profile)
+                print("OBSERVED client profile \(profile): requests=\(calls.count) suggestion=\(endpoint.suggestionVisible)")
+                fflush(stdout)
+                check(calls.count == (valid ? 1 : 0) && endpoint.suggestionVisible == valid, "Advisory document length must allow request and preview for a valid owned composition")
                 if valid {
                     let expectedBefore = profile == "unavailable-context" ? "" : preceding
-                    let expectedAfter = profile == "unavailable-context" ? "" : following
+                    let unavailableSuffix = ["unavailable-context", "zero-length", "short-document", "negative-length"].contains(profile)
+                    let expectedAfter = unavailableSuffix ? "" : following
                     check(calls[0].input.precedingText == expectedBefore && calls[0].input.followingText == expectedAfter)
+                    if ["zero-length", "short-document", "negative-length"].contains(profile) {
+                        check(records.records.contains { $0.event == .contextCaptured && $0.reason == .documentShorterThanMark &&
+                            $0.reportedDocumentLength == client.reportedLength && $0.markedEnd == NSMaxRange(client.mark) &&
+                            $0.precedingAvailable == true && $0.followingAvailable == false },
+                              "Fallback is observable as captured context with actual scalar length and availability")
+                    }
+                    client.mutations.removeAll()
+                    check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
+                    check(client.document == preceding + "你好" + following && client.mutations == ["mark:", "insert:你好"],
+                          "Best-effort context permits exact-once Tab while preserving both document sides")
                 } else {
-                    let reason: AIDiagnosticReason = profile == "short-document" ? .documentShorterThanMark : profile == "invalid-mark" ? .invalidMark : .selectionOutsideMark
+                    let reason: AIDiagnosticReason = profile == "invalid-mark" ? .invalidMark : .selectionOutsideMark
                     check(records.records.contains { $0.reason == reason }, "Rejected profile includes the exact observed gate")
                 }
             }
             // Restore test-client range consistency before normal teardown clears its mark.
-            client.mark = NSRange(location: preceding.utf16.count, length: controller.engine!.snapshot().preedit.utf16.count)
-            client.selection = NSRange(location: NSMaxRange(client.mark), length: 0)
+            if ["invalid-mark", "outside-selection"].contains(profile) {
+                client.mark = NSRange(location: preceding.utf16.count, length: controller.engine!.snapshot().preedit.utf16.count)
+                client.selection = NSRange(location: NSMaxRange(client.mark), length: 0)
+            }
             print("PASS headless client profile \(profile)")
         }
+    }
+
+    @MainActor static func changedSurroundings(_ settings: IFSettings) async throws {
+        for phase in ["request", "preview"] {
+            for unavailable in [false, true] {
+                let service = DelayedAIService()
+                let (controller, client, endpoint) = fixture(settings: settings, service: service)
+                defer { controller.engine?.clear(); controller.refresh(client) }
+                _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
+                await wait(0.6)
+                let calls = await service.count(); check(calls == 1)
+                let reads = client.requests.count, lengthReads = client.lengthReads
+                if phase == "preview" {
+                    await service.resolve(0)
+                    await until { endpoint.suggestionVisible }
+                }
+                let expectedBefore = unavailable ? preceding : preceding.replacingOccurrences(of: "记录", with: "修改")
+                let expectedAfter = unavailable ? following : following.replacingOccurrences(of: "候选", with: "词库")
+                client.contextAvailable = !unavailable
+                if !unavailable {
+                    client.document = client.document!.replacingOccurrences(of: preceding, with: expectedBefore)
+                        .replacingOccurrences(of: following, with: expectedAfter)
+                }
+                if phase == "request" {
+                    await service.resolve(0)
+                    await until { endpoint.suggestionVisible }
+                }
+                client.mutations.removeAll()
+                check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
+                check(client.document == expectedBefore + "你好吗" + expectedAfter &&
+                    client.mutations == ["mark:", "insert:你好吗"],
+                      "Same-composition Tab preserves current document despite changed or unavailable surroundings after \(phase)")
+                check(client.requests.count == reads && client.lengthReads == lengthReads && lengthReads == 1,
+                      "Response and Tab never reread surrounding document text or length")
+            }
+        }
+        print("PASS headless changed/unavailable surroundings during request/preview and no response/Tab document reads")
     }
 
     @MainActor static func secureChecks(_ settings: IFSettings) async throws {

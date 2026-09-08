@@ -15,7 +15,7 @@ enum AIDiagnosticReason: String, Sendable {
     case none, ready, disabled, incompleteConfiguration, credentialRead, credentialWrite
     case accepting, secureInput, missingPanel, panelHidden, emptyCandidates, missingEngine, inputUnavailable
     case missingClient, unownedMark, invalidMark, emptyMark, invalidSelection, selectionOutsideMark
-    case anchorChanged, documentShorterThanMark, contextUnavailable, contextChanged, staleState
+    case anchorChanged, documentShorterThanMark, contextUnavailable, staleState
     case inputChanged, configurationChanged, stateChanged, presentation, accepted, acceptanceUnavailable
     case commit, deactivate, hidePalettes, workspaceChanged, engineChanged, settingsChanged, teardown, explicit
     case invalidConfiguration, network, httpStatus, invalidResponse, emptySuggestion, incompleteSuggestion
@@ -36,6 +36,8 @@ struct AIDiagnosticRecord: Sendable {
     var modelPresent: Bool?
     var precedingAvailable: Bool?
     var followingAvailable: Bool?
+    var reportedDocumentLength: Int?
+    var markedEnd: Int?
 
     var message: String {
         var fields = ["event=\(event.rawValue)", "reason=\(reason.rawValue)"]
@@ -50,6 +52,8 @@ struct AIDiagnosticRecord: Sendable {
         if let modelPresent { fields.append("model_present=\(modelPresent)") }
         if let precedingAvailable { fields.append("preceding_available=\(precedingAvailable)") }
         if let followingAvailable { fields.append("following_available=\(followingAvailable)") }
+        if let reportedDocumentLength { fields.append("reported_document_length=\(reportedDocumentLength)") }
+        if let markedEnd { fields.append("marked_end=\(markedEnd)") }
         return fields.joined(separator: " ")
     }
 }
