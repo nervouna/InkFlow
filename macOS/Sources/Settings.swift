@@ -7,6 +7,11 @@ extension Notification.Name {
 
 @MainActor
 final class IFSettings: ObservableObject {
+    enum PagingKeys: String, CaseIterable {
+        case brackets = "[]"
+        case minusEqual = "-="
+    }
+
     static let sharedSettings: IFSettings = {
         // Only a process-local argument-domain flag isolates the exact-initializer harness.
         // Persisted preferences can never select this credential store.
@@ -91,10 +96,50 @@ final class IFSettings: ObservableObject {
         get { integer(for: "vertical", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "vertical") }
     }
+
+    private func inputValue(_ option: InputOption) -> Bool {
+        integer(for: "input.\(option.rawValue)", allowed: [0, 1], fallback: option.defaultValue ? 1 : 0) != 0
+    }
+
+    var fuzzyEnabled: Bool {
+        get { [.fuzzyZ, .fuzzyC, .fuzzyS].contains { inputValue($0) } }
+        set { setInputOptions([.fuzzyZ: newValue, .fuzzyC: newValue, .fuzzyS: newValue]) }
+    }
+
+    var pagingKeys: PagingKeys {
+        get { !inputValue(.bracketPaging) && inputValue(.minusEqualPaging) ? .minusEqual : .brackets }
+        set { setInputOptions([.bracketPaging: newValue == .brackets, .minusEqualPaging: newValue == .minusEqual]) }
+    }
+
+    var inputPreferences: InputPreferences {
+        var values = Dictionary(uniqueKeysWithValues: InputOption.allCases.map { ($0, inputValue($0)) })
+        // Canonicalize legacy independent choices before exposing a composition snapshot.
+        for option: InputOption in [.fuzzyZ, .fuzzyC, .fuzzyS] { values[option] = fuzzyEnabled }
+        values[.bracketPaging] = pagingKeys == .brackets
+        values[.minusEqualPaging] = pagingKeys == .minusEqual
+        return InputPreferences(values)
+    }
+
+    func setInputOption(_ option: InputOption, enabled: Bool) {
+        switch option {
+        case .fuzzyZ, .fuzzyC, .fuzzyS: fuzzyEnabled = enabled
+        case .bracketPaging: pagingKeys = enabled ? .brackets : .minusEqual
+        case .minusEqualPaging: pagingKeys = enabled ? .minusEqual : .brackets
+        default: setInputOptions([option: enabled])
+        }
+    }
+
+    private func setInputOptions(_ values: [InputOption: Bool]) {
+        guard values.contains(where: { inputValue($0.key) != $0.value }) else { return }
+        objectWillChange.send()
+        for (option, enabled) in values { defaults.set(enabled, forKey: "input.\(option.rawValue)") }
+        NotificationCenter.default.post(name: .settingsDidChange, object: self)
+    }
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
+    case input = "输入"
     case personalization = "个性化"
     case smart = "智能"
     case dictionaries = "词库"
@@ -103,6 +148,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .appearance: "paintbrush"
+        case .input: "keyboard"
         case .personalization: "person.crop.circle"
         case .smart: "sparkles"
         case .dictionaries: "books.vertical"
@@ -135,6 +181,7 @@ struct SettingsView: View {
         } detail: {
             Group {
                 if section == .about { about }
+                else if section == .input { input }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
                 else if section == .smart { SmartSettingsView(smart: settings.smart) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
@@ -164,6 +211,65 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .accessibilityIdentifier("settings.appearance")
+    }
+
+    private func inputToggle(_ title: String, _ option: InputOption) -> some View {
+        Toggle(title, isOn: Binding(get: { settings.inputPreferences[option] },
+                                   set: { settings.setInputOption(option, enabled: $0) }))
+            .accessibilityIdentifier("settings.input.\(option.rawValue)")
+    }
+
+    private func punctuationPicker(_ key: String, mapped: String, option: InputOption) -> some View {
+        Picker("按下 \(key) 时输入", selection: Binding(get: { settings.inputPreferences[option] },
+                                                   set: { settings.setInputOption(option, enabled: $0) })) {
+            Text("原样输入").tag(false)
+            Text("输入 \(mapped)").tag(true)
+        }
+        .pickerStyle(.menu)
+        .accessibilityIdentifier("settings.input.\(option.rawValue)")
+    }
+
+    private var input: some View {
+        Form {
+            Section {
+                inputToggle("简拼", .abbreviation)
+                inputToggle("自动纠错", .typoTolerance)
+                Toggle("模糊音", isOn: $settings.fuzzyEnabled)
+                    .accessibilityIdentifier("settings.input.fuzzy")
+            }
+            Section {
+                inputToggle("显示 Emoji 候选", .emoji)
+                LabeledContent("翻页") {
+                    Picker("翻页", selection: $settings.pagingKeys) {
+                        ForEach(IFSettings.PagingKeys.allCases, id: \.self) { keys in
+                            Text(keys.rawValue).tag(keys)
+                                .accessibilityIdentifier("settings.input.paging.\(keys == .brackets ? "brackets" : "minusEqual")")
+                        }
+                    }
+                    .pickerStyle(.radioGroup)
+                    .horizontalRadioGroupLayout()
+                    .labelsHidden()
+                }
+            }
+            Section {
+                inputToggle("英文标点", .englishPunctuation)
+                Group {
+                    punctuationPicker("{}", mapped: "「」", option: .cornerQuotes)
+                    punctuationPicker("`", mapped: "·", option: .middleDot)
+                    punctuationPicker("|", mapped: "｜", option: .fullwidthPipe)
+                    punctuationPicker("\\", mapped: "、", option: .ideographicComma)
+                }
+                .disabled(settings.inputPreferences[.englishPunctuation])
+            }
+            Section {
+                inputToggle("繁体输入", .traditional)
+            }
+            if let error = settings.inputSettingsError {
+                Text(error).foregroundStyle(.red)
+            }
+        }
+        .formStyle(.grouped)
+        .accessibilityIdentifier("settings.input")
     }
 
     private var about: some View {

@@ -3,24 +3,33 @@
 schema:
   schema_id: inkflow_pinyin
   name: InkFlow 简体拼音
-  version: '1.7'
-  dependencies: [easy_en, inkflow_mixed]
+  version: '1.8'
+  dependencies: [easy_en, inkflow_mixed, inkflow_spelling_0, inkflow_spelling_1, inkflow_spelling_2, inkflow_spelling_3, inkflow_spelling_4, inkflow_spelling_5, inkflow_spelling_6, inkflow_spelling_7, inkflow_spelling_8, inkflow_spelling_9, inkflow_spelling_10, inkflow_spelling_11, inkflow_spelling_12, inkflow_spelling_13, inkflow_spelling_14, inkflow_spelling_15, inkflow_spelling_16, inkflow_spelling_17, inkflow_spelling_18, inkflow_spelling_19, inkflow_spelling_20, inkflow_spelling_21, inkflow_spelling_22, inkflow_spelling_23, inkflow_spelling_24, inkflow_spelling_25, inkflow_spelling_26, inkflow_spelling_27, inkflow_spelling_28, inkflow_spelling_29, inkflow_spelling_30, inkflow_spelling_31]
 switches:
   - name: ascii_mode
     reset: 0
     states: [中文, 英文]
   - name: emoji_suggestion
     reset: 1
+  - name: ascii_punct
+    reset: 0
+  - name: traditional
+    reset: 0
 engine:
   processors: [ascii_composer, key_binder, speller, punctuator, selector, navigator, express_editor]
   segmentors: [ascii_segmentor, abc_segmentor, punct_segmentor, fallback_segmentor]
   translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english]
-  filters: [simplifier@emoji_suggestion, uniquifier]
+  filters: [simplifier@emoji_suggestion, simplifier@traditional, uniquifier]
 emoji_suggestion:
   opencc_config: inkflow_emoji.json
   option_name: emoji_suggestion
   tips: none
   inherit_comment: false
+traditional:
+  opencc_config: inkflow_s2t.json
+  option_name: traditional
+  tips: none
+  excluded_types: [user_table, simplified]
 custom_phrase:
   dictionary: ""
   user_dict: inkflow_custom_phrases_empty

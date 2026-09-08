@@ -1,15 +1,20 @@
 import Foundation
 
-/// Only outer engine operations enter the recorder, including nested digit/select and toggle/commit.
+/// Only outer engine operations enter the recorder, including nested digit/select callbacks.
 enum QualityAction {
     case key(Int32, Int32), select(Int, QualityTrigger, Bool), highlight, flush(QualityTrigger), toggle, clear
 
     var keypress: Bool {
         switch self { case .key, .toggle: true; default: false }
     }
-    var pageRequest: Bool {
-        if case .key(let key, _) = self { return [0xff55, 0xff56, 45, 61, 91, 93].contains(key) }
-        return false
+    func requestsPage(with inputOptions: [String: Bool]?) -> Bool {
+        guard case .key(let key, _) = self else { return false }
+        switch key {
+        case 0xff55, 0xff56: return true
+        case 45, 61: return inputOptions?["minusEqualPaging"] ?? true
+        case 91, 93: return inputOptions?["bracketPaging"] ?? true
+        default: return false
+        }
     }
     var candidateMove: Bool {
         switch self {
@@ -82,12 +87,13 @@ final class QualityRecorder {
         observe(snapshot)
         guard envelope != nil, let before = latest else { return }
         if action.keypress { envelope?.composition.operations.keypresses += 1; sinceDecision.keypresses += 1 }
-        if action.pageRequest && !before.candidates.isEmpty { envelope?.composition.operations.pageRequests += 1; sinceDecision.pageRequests += 1 }
+        if action.requestsPage(with: before.configuration.inputOptions) && !before.candidates.isEmpty {
+            envelope?.composition.operations.pageRequests += 1; sinceDecision.pageRequests += 1
+        }
         commitKind = .unknown
         switch action {
         case .key(0xff0d, _): commitKind = .rawReturn
         case .flush: commitKind = .forcedFlush
-        case .toggle: commitKind = .modeToggle
         default: break
         }
         let selection = selection(for: action, snapshot: before)
@@ -130,7 +136,7 @@ final class QualityRecorder {
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||
             before.selectedPrefix != snapshot.selectedPrefix || before.selectedPrefixValid != snapshot.selectedPrefixValid
         if edited && operation.action.edit { envelope?.composition.operations.preeditEdits += 1; sinceDecision.preeditEdits += 1 }
-        if operation.action.pageRequest || operation.action.candidateMove,
+        if operation.action.requestsPage(with: before.configuration.inputOptions) || operation.action.candidateMove,
            before.page != snapshot.page, !before.rawInput.isEmpty, !snapshot.rawInput.isEmpty {
             envelope?.composition.operations.pageTurns += 1; sinceDecision.pageTurns += 1
         }
@@ -260,8 +266,8 @@ final class QualityRecorder {
             return nil
         case .flush(let trigger):
             return candidate(snapshot.highlightedDisplayIndex, trigger, .forcedFlush, regular: false)
-        case .toggle:
-            return candidate(snapshot.highlightedDisplayIndex, .modeToggle, .modeToggle, regular: false)
+        // A mode request preserves the composition. Its later selection/flush owns the decision.
+        case .toggle: return nil
         default: return nil
         }
     }

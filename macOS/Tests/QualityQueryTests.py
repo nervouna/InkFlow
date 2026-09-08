@@ -315,9 +315,11 @@ class QueryTests(unittest.TestCase):
         self.assertEqual({k:' '.join(v.split()) for k,v in actual.items()},
                          {k:' '.join(v.split()) for k,v in DDL.items()})
         result=self.result(db=ENGINE_DB)
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[39,35,36])
-        self.assertEqual(result['coverage']['valid'],27)
-        self.assertEqual(result['coverage']['regular_issued'],28)
+        # The deferred-toggle then panel-selection fixture adds one valid composition,
+        # decision and issued candidate commit; the toggle itself adds no decision.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[40,36,37])
+        self.assertEqual(result['coverage']['valid'],28)
+        self.assertEqual(result['coverage']['regular_issued'],29)
         self.assertEqual(result['coverage']['regular_not_issued'],1)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)

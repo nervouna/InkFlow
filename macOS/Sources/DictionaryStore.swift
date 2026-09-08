@@ -337,7 +337,8 @@ struct IFDictionaryStore: Sendable {
         let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self, at: IFDictionaryFiles.child(IFDictionaryPreparedReceipt.filename, in: directory))
         let required = ["shared/\(IFDictionaryManifest.filename)", "shared/\(IFDictionaryCatalog.dictionaryFilename)",
                         "cache/inkflow_pinyin.schema.yaml", "cache/pinyin_simp.table.bin", "cache/pinyin_simp.prism.bin",
-                        "cache/easy_en.table.bin", "cache/inkflow_mixed.table.bin"]
+                        "cache/easy_en.table.bin", "cache/inkflow_mixed.table.bin"] +
+                       InputPreferences.compiledSpellingFiles.map { "cache/\($0)" }
         guard receipt.contentVersion == version.contentVersion, receipt.runtimeFingerprint == version.runtimeFingerprint else {
             throw IFDictionaryUpdateError(.verify, "prepared-version")
         }
