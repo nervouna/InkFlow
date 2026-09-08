@@ -342,14 +342,19 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
               let engine, !engine.snapshot().preedit.isEmpty else { return false }
         // A held Tab never accepts a suggestion that arrived after its initial keydown.
         if event.isARepeat { return presentation?.suggestionVisible ?? false }
-        guard let accepted = smartSuggestions?.takeSuggestion() else { return false }
+        guard let adoption = smartSuggestions?.takeSuggestion() else { return false }
         acceptingAI = true
         engine.beginDelivery()
         qualityInsertionDepth += 1
         defer { qualityInsertionDepth -= 1; engine.endDelivery(); acceptingAI = false }
         engine.clear()
+        // Match ordinary commits: insertion replaces the client's active mark. Clear
+        // only our ownership first, so a reentrant refresh cannot erase that mark.
+        ownsMarkedText = false
+        AIDiagnostics.emit(.insertionIssued, attempt: adoption.attempt, session: smartDiagnosticSession)
+        client.insertText(adoption.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        AIDiagnostics.emit(.insertionReturned, attempt: adoption.attempt, session: smartDiagnosticSession)
         refresh(client)
-        client.insertText(accepted.text, replacementRange: NSRange(location: accepted.anchor.mark.location, length: 0))
         return true
     }
 }

@@ -21,7 +21,7 @@ To observe one reproduction in real time:
 
 The AI category records settings availability, controller eligibility gates,
 debounce scheduling, request dispatch, HTTP status and elapsed time, cancellation,
-stale results, presentation and acceptance. Follow the controller and attempt IDs
+stale results, presentation, adoption commands and insertion calls. Follow the controller and attempt IDs
 across stages. Gate changes are deduplicated; an unchanged invalid state does not
 produce a new record on every validation tick. Important events use notice/error
 levels so they remain queryable after the process exits, subject to macOS log
@@ -35,6 +35,10 @@ retention. This follows Apple's [unified logging guidance](https://developer.app
 - If a result arrives, inspect stale-state and presentation failures before
   attributing the problem to the provider. A successful result can be discarded when
   the active input session changes.
+- After Tab, follow `adoptionRequested`, `insertionIssued` and `insertionReturned`
+  with the same attempt/session IDs. These distinguish consuming a preview from
+  issuing an editor insertion and returning from that call. A return does not prove
+  that the external editor displayed the text.
 - Deactivation checkpoints help separate normal controller cleanup from interruption
   by a crash. A missing completion checkpoint is a clue, not proof of the crash cause;
   consult the matching macOS DiagnosticReports file.
@@ -65,7 +69,7 @@ current composition and visibility without rereading or comparing document text.
 
 The fallback records `contextCaptured reason=documentShorterThanMark` with
 `reported_document_length`, `marked_end` and both availability flags. Follow that
-attempt through dispatch, shown and accepted. A missing suffix can reduce contextual
+attempt through dispatch, shown and the insertion checkpoints. A missing suffix can reduce contextual
 quality, but no longer prevents a same-composition suggestion or Tab adoption.
 
 The headless regression first reproduced `zero-length: requests=0 suggestion=false`
@@ -74,6 +78,31 @@ Tab with both committed sides preserved for zero, short and negative reported le
 It also covers unavailable or changed surroundings during the request and preview,
 with no response/Tab document reads. These simulated client results establish the
 new functional path; the installed editor behavior still requires a typing trial.
+
+### Tab removes the Pinyin but the suggestion does not appear
+
+**Observed failure:** In installed build `4e502fa`, the user reported this behavior
+in Codex. Its `accepted` event was emitted when the coordinator consumed the preview,
+before any editor call; that event did not establish successful insertion. Other
+editors were not verified. The AI path first refreshed an empty Rime composition,
+clearing the client's mark, then inserted at a cached explicit offset. The regression
+records two mutations, no active mark at insertion and a nondefault replacement
+range. It does not establish why Codex rejected or lost that later insertion.
+
+**Fix:** Match ordinary candidate commits: clear Rime internally, release controller
+mark ownership, insert once with `NSNotFound` while the client still has its mark,
+then refresh the empty composition. The delivery lease and callback reentry guards
+remain in effect. `adoptionRequested` replaces the misleading `accepted` label;
+`insertionIssued` and `insertionReturned` bracket the editor call with the original
+attempt/session IDs and no text or additional document reads.
+
+The headless regression requires the active-mark/default-range contract, one editor
+mutation, preserved surrounding text and selected prefix, and exact-once insertion
+under repeated Tab and synchronous callbacks. It also checks checkpoint ordering
+and correlation. The native harness uses real candidate/AppKit windows but still
+uses `RecordingClient` for text delivery; neither harness proves an external
+editor's cross-process behavior. Confirm actual visible text in an installed typing
+trial rather than treating an insertion-return record as display confirmation.
 
 ### Candidate visibility becomes ready after the final input refresh
 
@@ -126,8 +155,9 @@ simulated endpoints; `RecordingClient` simulates an editor's document, and the
 existing test shim substitutes IMK framework initialization, client lookup and
 deactivation. No key window, app activation or global secure-input change is needed,
 so screen locking does not invalidate this automation. These checks do not establish
-native panel geometry or an external editor's cross-process IMK behavior; use the
-native harness and installed-process logs for those separate boundaries.
+native panel geometry or an external editor's cross-process IMK behavior. The native
+harness checks panel geometry but still uses `RecordingClient` for editor calls;
+installed-process logs trace actual calls, and a typing trial confirms visible text.
 
 ## Settings window loses its fixed width and minimum height
 

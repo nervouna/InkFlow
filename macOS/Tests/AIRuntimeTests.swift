@@ -52,7 +52,7 @@ struct AIRuntimeTests {
             try await invalidationChecks()
             try await reentrantChecks()
         }
-        for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown, .accepted, .cancelled, .failed, .discarded, .invalidated] {
+        for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown, .adoptionRequested, .cancelled, .failed, .discarded, .invalidated] {
             verify(diagnostics.contains(event), "Every request lifecycle outcome is observable")
         }
         for reason in [AIDiagnosticReason.secureInput, .unownedMark, .invalidMark, .selectionOutsideMark] {
@@ -61,12 +61,14 @@ struct AIRuntimeTests {
         verify(diagnostics.contains(.contextCaptured, reason: .documentShorterThanMark))
         verify(diagnostics.contains(.discarded, reason: .staleState))
         verify(diagnostics.contains(.discarded, reason: .contextUnavailable) && diagnostics.contains(.discarded, reason: .presentation))
-        let lifecycle = diagnostics.records.filter { [.scheduled, .dispatched, .shown, .accepted, .cancelled, .failed, .discarded, .invalidated].contains($0.event) }
+        let lifecycle = diagnostics.records.filter { [.scheduled, .dispatched, .shown, .adoptionRequested, .cancelled, .failed, .discarded, .invalidated].contains($0.event) }
         verify(lifecycle.allSatisfy { $0.attempt != nil && $0.session != nil }, "Attempt and session survive async and acceptance paths")
-        let accepted = lifecycle.first { $0.event == .accepted }!.attempt
+        let adoption = lifecycle.first { $0.event == .adoptionRequested }!.attempt
         for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown] {
-            verify(lifecycle.contains { $0.attempt == accepted && $0.event == event }, "One logical request is correlated through acceptance")
+            verify(lifecycle.contains { $0.attempt == adoption && $0.event == event }, "One logical request is correlated through the adoption command")
         }
+        verify(!diagnostics.contains(.insertionIssued) && !diagnostics.contains(.insertionReturned),
+               "Consuming a coordinator preview alone does not claim delivery to an editor")
         verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Runtime records omit all content and configuration values")
         print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI runtime: bounded Unicode context captured once, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
@@ -147,7 +149,8 @@ struct AIRuntimeTests {
         fixture.coordinator.synchronize(ownedRefresh: true)
         await wait(0.55)
         verify(await fixture.service.count() == 1 && fixture.shown != nil, "Paging a visible suggestion never repeats inference")
-        verify(fixture.coordinator.takeSuggestion()?.anchor.mark.length == 5)
+        let adoption = fixture.coordinator.takeSuggestion()
+        verify(adoption?.text == "你好吗" && adoption?.attempt != nil, "Adoption retains request identity after coordinator invalidation")
         verify(fixture.coordinator.takeSuggestion() == nil, "Acceptance consumes eligibility exactly once")
         verify(fixture.reads == 1, "Response, navigation and Tab do not recapture request context")
 

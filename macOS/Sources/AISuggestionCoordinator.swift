@@ -196,16 +196,16 @@ final class AISuggestionCoordinator {
         return context
     }
 
-    func takeSuggestion() -> (text: String, anchor: AIClientAnchor)? {
+    func takeSuggestion() -> (text: String, attempt: UUID?)? {
         guard refreshDepth == 0 else { return nil }
         let token = revision
         guard let state, let preview, let configuration, visible(),
               matches(token, input: state.input, configuration: configuration), visible(),
-              revision == token, let currentState = self.state else { invalidate(reason: .acceptanceUnavailable); return nil }
-        let accepted = (preview, currentState.anchor)
-        log(.accepted)
-        invalidate(reason: .accepted)
-        return accepted
+              revision == token else { invalidate(reason: .acceptanceUnavailable); return nil }
+        let adoption = (preview, attemptID)
+        log(.adoptionRequested)
+        invalidate(reason: .adoptionRequested)
+        return adoption
     }
 
     func beginRefresh() {

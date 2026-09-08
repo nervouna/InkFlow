@@ -6,7 +6,8 @@ import OSLog
 enum AIDiagnosticEvent: String, Sendable {
     case settingsLoaded, settingsSaved, settingsToggled, credentialFailed
     case eligibility, anchorRejected, contextRejected, contextCaptured
-    case scheduled, dispatched, invalidated, cancelled, discarded, failed, shown, accepted
+    case scheduled, dispatched, invalidated, cancelled, discarded, failed, shown, adoptionRequested
+    case insertionIssued, insertionReturned
     case transportStarted, httpResponse, transportSucceeded, transportFailed, transportCancelled
     case presentationFailed, deactivateEntered, deactivateCommitted, deactivateSuperReturned, deactivateFinished
 }
@@ -16,7 +17,7 @@ enum AIDiagnosticReason: String, Sendable {
     case accepting, secureInput, missingPanel, panelHidden, emptyCandidates, missingEngine, inputUnavailable
     case missingClient, unownedMark, invalidMark, emptyMark, invalidSelection, selectionOutsideMark
     case anchorChanged, documentShorterThanMark, contextUnavailable, staleState
-    case inputChanged, configurationChanged, stateChanged, presentation, accepted, acceptanceUnavailable
+    case inputChanged, configurationChanged, stateChanged, presentation, adoptionRequested, acceptanceUnavailable
     case commit, deactivate, hidePalettes, workspaceChanged, engineChanged, settingsChanged, teardown, explicit
     case invalidConfiguration, network, httpStatus, invalidResponse, emptySuggestion, incompleteSuggestion
     case invalidCandidateFrame, noCandidateWindow, ambiguousCandidateWindow, suggestionHidden

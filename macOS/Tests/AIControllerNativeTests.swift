@@ -148,15 +148,18 @@ struct AIControllerNativeTests {
                 var callbacks = 0
                 client.onMutation = {
                     callbacks += 1
-                    check(!IFEngine.allSessionsIdle, "AI clear/insert holds dictionary delivery lease")
+                    check(!IFEngine.allSessionsIdle, "AI insertion holds dictionary delivery lease")
+                    check(client.mark.location != NSNotFound, "Client mark remains active when insertion is issued")
                     controller.commitComposition(client)
                     _ = controller.handle(keyEvent(48, "\t"), client: client)
                 }
                 check(controller.handle(keyEvent(48, "\t"), client: client))
                 client.onMutation = nil
-                check(callbacks == 2, "AI emits one owned mark clear and one direct insertion")
+                check(callbacks == 1 && client.insertions.count == 1 &&
+                    client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0),
+                      "AI emits one insertion through the ordinary candidate replacement contract")
                 check(client.document == "前文😀【你好吗】后文", "Tab preserves both committed sides and selected prefix")
-                check(client.mutations == ["mark:", "insert:你好吗"], "No Rime default commit or duplicate AI insertion")
+                check(client.mutations == ["insert:你好吗"], "No Rime default commit or duplicate AI insertion")
                 let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                     windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: true, keyCode: 48)!
                 _ = controller.handle(repeated, client: client); _ = controller.handle(keyEvent(48, "\t"), client: client)
@@ -225,7 +228,7 @@ struct AIControllerNativeTests {
                 check(suggestion != nil, "Changed surrounding text retains a valid same-composition suggestion")
                 client.mutations.removeAll()
                 check(controller.handle(keyEvent(48, "\t"), client: client))
-                check(client.document == "改文😀【你好吗】后文" && client.mutations == ["mark:", "insert:你好吗"],
+                check(client.document == "改文😀【你好吗】后文" && client.mutations == ["insert:你好吗"],
                       "Tab preserves the current surrounding document")
             } else { check(suggestion == nil, "Late result suppressed after \(action)") }
             controller.engine?.clear(); controller.refresh(client); controller.panel?.hide()

@@ -117,21 +117,38 @@ struct AIHeadlessPipelineTests {
             let afterNavigation = await service.captured()
             check(afterNavigation.count == 1 && endpoint.suggestion == suggestion, "Navigation neither duplicates requests nor removes ready suggestion")
             client.mutations.removeAll()
+            var callbacks = 0
+            client.onMutation = {
+                callbacks += 1
+                check(!IFEngine.allSessionsIdle, "AI insertion holds the dictionary delivery lease")
+                check(controller.engine!.snapshot().preedit.isEmpty && client.mark.location != NSNotFound,
+                      "Rime is cleared internally while the client's mark remains available for insertion")
+                check(records.records.last?.event == .insertionIssued && !records.contains(.insertionReturned),
+                      "The insertion call is observable before the editor callback, with no premature return record")
+                controller.commitComposition(client)
+                check(!controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client), "Reentrant Tab cannot adopt twice")
+            }
             check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
+            client.onMutation = nil
+            check(callbacks == 1, "Adoption invokes the editor once without an empty mark update")
             check(client.document == preceding + suggestion + following, "Tab preserves committed surroundings")
             check(client.mark.location == NSNotFound && controller.engine!.snapshot().preedit.isEmpty && !endpoint.candidatesVisible && !endpoint.suggestionVisible)
-            check(client.mutations == ["mark:", "insert:" + suggestion], "Tab clears mark and inserts once without a Rime default commit")
+            print("OBSERVED AI delivery: mutation_count=\(client.mutations.count) default_range=\(client.insertions.last?.replacementRange.location == NSNotFound) active_mark=\(client.insertions.last?.markedRange.location != NSNotFound)")
+            fflush(stdout)
+            check(client.mutations == ["insert:" + suggestion], "Tab must insert once while the client mark remains, without a preliminary empty mark")
+            check(client.insertions.count == 1 && client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0) &&
+                client.insertions[0].markedRange.location == preceding.utf16.count && client.insertions[0].markedRange.length > 0,
+                  "AI uses the same active-mark/default-range delivery contract as ordinary candidates")
             _ = controller.handle(AIHeadlessKeyboard.event(48, "\t", repeated: true), client: client)
             _ = controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client)
             controller.commitComposition(client)
             check(client.mutations.filter { $0.hasPrefix("insert:") }.count == 1, "Repeated Tab and finish do not insert twice")
-            let accepted = records.records.filter { $0.event == .accepted }
-            check(accepted.count == 1 && accepted[0].attempt != nil && accepted[0].session != nil)
-            let lifecycle: [AIDiagnosticEvent] = live ? [.scheduled, .dispatched, .transportStarted, .httpResponse, .transportSucceeded, .shown, .accepted] : [.scheduled, .dispatched, .shown, .accepted]
-            for event in lifecycle {
-                check(records.records.contains { $0.event == event && $0.attempt == accepted[0].attempt && $0.session == accepted[0].session },
-                      "Every successful lifecycle stage has the same session and attempt IDs")
-            }
+            let adoption = records.records.filter { $0.event == .adoptionRequested }
+            check(adoption.count == 1 && adoption[0].attempt != nil && adoption[0].session != nil)
+            let lifecycle: [AIDiagnosticEvent] = live ? [.scheduled, .dispatched, .transportStarted, .httpResponse, .transportSucceeded, .shown, .adoptionRequested, .insertionIssued, .insertionReturned] : [.scheduled, .dispatched, .shown, .adoptionRequested, .insertionIssued, .insertionReturned]
+            let correlated = records.records.filter { $0.attempt == adoption[0].attempt && $0.session == adoption[0].session }
+            check(correlated.filter { lifecycle.contains($0.event) }.map(\.event) == lifecycle,
+                  "Request, display, adoption command and insertion call/return are ordered once with the same correlation IDs")
             check(records.excludes([value.pinyin, preceding, following, suggestion, "synthetic", "example.invalid"]), "Logs omit input/output/key/URL")
             // All text printed here is a declared synthetic fixture, never a real user's document.
             print("PASS effect \(value.name): context=\(live ? "zero-length-best-effort" : "two-sided") suggestion=\(suggestion) request_count=1 latency=\(lastKey.duration(to: calls[0].started))")
@@ -156,8 +173,18 @@ struct AIHeadlessPipelineTests {
             if action == "partial" {
                 let calls = await service.captured()
                 check(calls.count == 1 && calls[0].input.pinyin == "nihao" && calls[0].input.selectedPrefix == "你")
+                var callbacks = 0
+                client.onMutation = {
+                    callbacks += 1
+                    controller.commitComposition(client)
+                    _ = controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client)
+                }
                 check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
-                check(client.document == preceding + "你好" + following && client.mutations == ["mark:", "insert:你好"])
+                client.onMutation = nil
+                check(callbacks == 1 && client.insertions.count == 1 &&
+                    client.insertions[0].replacementRange.location == NSNotFound && client.insertions[0].markedRange.location != NSNotFound,
+                      "Selected-prefix adoption retains active-mark insertion and reentrant exact-once behavior")
+                check(client.document == preceding + "你好" + following && client.mutations == ["insert:你好"])
             } else {
                 let index = action == "space" ? endpoint.highlight : 1
                 let expected = endpoint.candidates[index]
@@ -212,7 +239,7 @@ struct AIHeadlessPipelineTests {
                     }
                     client.mutations.removeAll()
                     check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
-                    check(client.document == preceding + "你好" + following && client.mutations == ["mark:", "insert:你好"],
+                    check(client.document == preceding + "你好" + following && client.mutations == ["insert:你好"],
                           "Best-effort context permits exact-once Tab while preserving both document sides")
                 } else {
                     let reason: AIDiagnosticReason = profile == "invalid-mark" ? .invalidMark : .selectionOutsideMark
@@ -256,7 +283,7 @@ struct AIHeadlessPipelineTests {
                 client.mutations.removeAll()
                 check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
                 check(client.document == expectedBefore + "你好吗" + expectedAfter &&
-                    client.mutations == ["mark:", "insert:你好吗"],
+                    client.mutations == ["insert:你好吗"],
                       "Same-composition Tab preserves current document despite changed or unavailable surroundings after \(phase)")
                 check(client.requests.count == reads && client.lengthReads == lengthReads && lengthReads == 1,
                       "Response and Tab never reread surrounding document text or length")
