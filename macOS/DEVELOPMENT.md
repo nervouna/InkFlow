@@ -57,6 +57,28 @@ For GUI-evidence recording and reuse, follow the same-machine, source-tree and e
 
 ### Test coverage and focused entry points
 
+`test.sh` accepts one or more groups, runs each once in the existing suite order, and rejects unknown arguments before running checks. No arguments or `all` retains the full non-GUI suite; do not combine `all` with group names. Use `--help` to list groups.
+
+```sh
+bash macOS/scripts/test.sh settings
+bash macOS/scripts/test.sh engine controller
+bash macOS/scripts/test-test-runner.sh # Isolated test-runner regression checks
+```
+
+| Group | Coverage and prerequisites |
+| --- | --- |
+| `quality` | Store, metadata, engine capture, then query tests against freshly captured evidence |
+| `preparation` | Rime preparation policy fixtures |
+| `dictionary-generator` | Dictionary generation, with dependency preparation |
+| `deployment` | Deployment scenarios, with dependencies and test dictionaries |
+| `engine` | Engine scenarios, with dependencies and test dictionaries |
+| `controller` | Headless controller scenarios, with dependencies and test dictionaries |
+| `settings` | Settings logic, with librime compilation dependencies; no built app or test dictionaries required |
+| `dictionary-updates` | Update/worker scenarios; run `build.sh` first for a current app and generated dictionary sources |
+| `dictionary-activation` | Native activation/recovery; run `build.sh` first for a current app and generated dictionary sources |
+
+Group selection does not infer affected modules from Git changes. The worker existence check does not prove build freshness; rebuild when its source or resource inputs have changed. GUI suites remain separate.
+
 The test scenarios are Swift executables. `Tests/NativeTestSupport.m` contains the small Objective-C runtime/exception helper needed to inspect native font rendering and accessibility objects, and to intercept framework initialization/teardown and supplied-client lookup in the headless controller test. Swift controllers always run their real initializers. Settings tests use isolated defaults suites; the production initializer test overrides only its process-local argument domain.
 
 `test.sh` reuses the previously built application/worker and includes dictionary generation, source/update preparation, and native activation/recovery suites. `test-settings-ui.sh` exercises the Dictionary pane through native accessibility button/disclosure actions, real window close/reopen, all error stages, background progress, engine rollback/unavailability and minimum/enlarged layout. Its backend is explicitly injected with synthetic transport results, temporary dictionary/user roots and a captured diagnostic sink; it never contacts update repositories or reads real learning/preferences. The default unconfigured Settings window remains inert. Native engine/worker correctness has separate lower-layer tests; UI assertions do not substitute for those tests or for the real-client checks in [DICTIONARIES.md](DICTIONARIES.md#manual-acceptance).
