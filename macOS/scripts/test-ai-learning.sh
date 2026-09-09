@@ -1,0 +1,28 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+source macOS/scripts/swift-common.sh
+xcrun swiftc -swift-version 6 -warnings-as-errors -parse-as-library \
+  -module-cache-path build/swift-module-cache macOS/Sources/InputPreferences.swift \
+  macOS/Sources/AIPronunciation.swift macOS/Tests/AIPronunciationTests.swift -o build/ai-pronunciation-tests
+build/ai-pronunciation-tests
+build_swift_test build/ai-adoption-learning-tests macOS/Tests/AIAdoptionLearningTests.swift
+user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-learning.XXXXXX")
+trap 'rm -rf "$user_dir"' EXIT
+shared="${1:-$PWD/build/test-shared}"
+build/ai-adoption-learning-tests "$shared" "$user_dir" write
+build/ai-adoption-learning-tests "$shared" "$user_dir" read
+manager="$PWD/build/deps/dist/bin/rime_dict_manager"
+export DYLD_LIBRARY_PATH="$PWD/build/deps/dist/lib"
+(cd "$user_dir" && "$manager" -e pinyin_simp learned.txt)
+awk -F '\t' '
+  $1 == "你好" || $1 == "再见" { exit 1 }
+  $1 == "测试" { if ($2 != "ce shi" || $3 != 1) exit 1; ordinary++ }
+  $1 == "星墨量" { if ($2 != "xing mo liang" || $3 != 2) exit 1; found++ }
+  $1 == "星墨蓝" { if ($2 != "xing mo lan" || $3 != 1) exit 1; found++ }
+  $1 == "星墨海" { if ($2 != "xing mo hai" || $3 != 1) exit 1; found++ }
+  $1 == "星墨好" { if ($2 != "xing mo hao" || $3 != 1) exit 1; found++ }
+  END { if (found != 4 || ordinary != 1) exit 1 }
+' "$user_dir/learned.txt"
+echo 'PASS canonical userdb export: correct full codes only; exact adoption counts; no raw typo/abbreviation'
+echo 'PASS ordinary learning: immediate Backspace undoes commits before/after AI callbacks; retained commit learns once'

@@ -2,7 +2,7 @@ import AppKit
 @preconcurrency import InputMethodKit
 
 private struct FixedAIService: AISuggestionServing {
-    func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String { "你好吗" }
+    func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String { "你好" }
 }
 
 @main
@@ -50,7 +50,7 @@ struct AIControllerNativeTests {
                     check(diagnostics.contains(event), "Legacy deactivation emits checkpoints without changing its path")
                 }
                 check(diagnostics.contains(.presentationFailed, reason: .ambiguousCandidateWindow))
-                check(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Native AI diagnostics omit input, output and config")
+                check(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好"]), "Native AI diagnostics omit input, output and config")
                 print("PASS AI diagnostics native pid=\(ProcessInfo.processInfo.processIdentifier)")
                 fflush(stdout); exit(0)
             }
@@ -159,13 +159,13 @@ struct AIControllerNativeTests {
                 check(callbacks == 1 && client.insertions.count == 1 &&
                     client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0),
                       "AI emits one insertion through the ordinary candidate replacement contract")
-                check(client.document == "前文😀【你好吗】后文", "Tab preserves both committed sides and selected prefix")
-                check(client.mutations == ["insert:你好吗"], "No Rime default commit or duplicate AI insertion")
+                check(client.document == "前文😀【你好】后文", "Tab preserves both committed sides and selected prefix")
+                check(client.mutations == ["insert:你好"], "No Rime default commit or duplicate AI insertion")
                 let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                     windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: true, keyCode: 48)!
                 _ = controller.handle(repeated, client: client); _ = controller.handle(keyEvent(48, "\t"), client: client)
                 controller.commitComposition(client)
-                check(client.mutations.filter { $0.hasPrefix("insert:") } == ["insert:你好吗"])
+                check(client.mutations.filter { $0.hasPrefix("insert:") } == ["insert:你好"])
             } else {
                 let selected = action == "space" ? controller.engine!.snapshot().highlight : 1
                 if action == "click" { controller.candidateSelected(NSAttributedString(string: ordinary[selected])) }
@@ -229,7 +229,7 @@ struct AIControllerNativeTests {
                 check(suggestion != nil, "Changed surrounding text retains a valid same-composition suggestion")
                 client.mutations.removeAll()
                 check(controller.handle(keyEvent(48, "\t"), client: client))
-                check(client.document == "改文😀【你好吗】后文" && client.mutations == ["insert:你好吗"],
+                check(client.document == "改文😀【你好】后文" && client.mutations == ["insert:你好"],
                       "Tab preserves the current surrounding document")
             } else { check(suggestion == nil, "Late result suppressed after \(action)") }
             controller.engine?.clear(); controller.refresh(client); controller.panel?.hide()

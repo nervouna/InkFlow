@@ -52,7 +52,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
                     AIDiagnostics.emit(.contextRejected, reason: .missingClient); return nil
                 }
                 return AISurroundingContext.read(client, anchor: anchor, secureInput: self.secureInput)
-            }, present: { [weak self] text in self?.presentation?.presentSuggestion(text) ?? false },
+            }, allows: { [weak self] input, text in self?.engine?.allowsAIRecommendation(input: input, text: text) ?? false },
+            present: { [weak self] text in self?.presentation?.presentSuggestion(text) ?? false },
             visible: { [weak self] in self?.presentation?.suggestionVisible ?? false },
             hide: { [weak self] in self?.presentation?.hideSuggestion() })
     }
@@ -431,7 +432,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         guard event.type == .keyDown, event.keyCode == 48,
               event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
               let client, ObjectIdentifier(client as AnyObject) == smartClient.map({ ObjectIdentifier($0 as AnyObject) }),
-              let engine, !engine.snapshot().preedit.isEmpty else { return false }
+              let engine, !engine.snapshot().preedit.isEmpty,
+              let input = engine.aiInputIdentity() else { return false }
         // A held Tab never accepts a suggestion that arrived after its initial keydown.
         if event.isARepeat, presentation?.suggestionVisible == true {
             engine.qualityRecorder?.recordExternalKey(.tab, isRepeat: true, at: entered)
@@ -446,7 +448,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         defer { qualityInsertionDepth -= 1; engine.endDelivery(); acceptingAI = false }
         engine.qualityRecorder?.recordExternalKey(.aiTab, isRepeat: false, at: entered)
         engine.qualityRecorder?.finishExternalSelection(reason: "ai_adopted", at: entered)
+        let preferences = engine.inputPreferences
+        let pronunciation = engine.aiPronunciation(input: input, text: adoption.text)
         engine.clear(recordQuality: false)
+        engine.learnAIAdoption(input: input, text: adoption.text, preferences: preferences, pronunciation: pronunciation)
         // Match ordinary commits: insertion replaces the client's active mark. Clear
         // only our ownership first, so a reentrant refresh cannot erase that mark.
         ownsMarkedText = false

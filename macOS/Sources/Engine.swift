@@ -110,7 +110,7 @@ final class IFEngine {
         let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
                      "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
                     (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
@@ -146,7 +146,7 @@ final class IFEngine {
         if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
         do {
             let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
-            for file in InputPreferences.compiledSpellingFiles {
+            for file in ["pinyin_simp.reverse.bin"] + InputPreferences.compiledSpellingFiles {
                 guard FileManager.default.isReadableFile(atPath: compiled.appendingPathComponent(file).path) else {
                     throw IFDictionaryUpdateError(.apply, "compiled-file-missing", file: file)
                 }
@@ -602,6 +602,51 @@ final class IFEngine {
         guard offset >= 0, offset <= preedit.utf8.count,
               let prefix = String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) else { return nil }
         return AIInputIdentity(rawInput: input, caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix)
+    }
+
+    /// Called only for a consumed AI adoption, inside the controller's delivery scope.
+    /// Learning failure must never prevent insertion or register the original typo.
+    @discardableResult
+    func learnAIAdoption(input: AIInputIdentity, text: String, preferences: InputPreferences? = nil,
+                         pronunciation: AIPronunciation? = nil) -> Bool {
+        guard available, text.hasPrefix(input.selectedPrefix),
+              let code = (pronunciation ?? aiPronunciation(input: input, text: text)).resolve(input: input.rawInput, text: text,
+                  preferences: preferences ?? inputPreferences ?? requestedInput) else { return false }
+        let api = Self.api.pointee
+        let payload = code + "\t" + text
+        api.set_property(session, "inkflow_ai_learning_result", "")
+        payload.withCString { api.set_property(session, "inkflow_ai_learning", $0) }
+        // Properties are transport only: retain no adopted text in the live context.
+        api.set_property(session, "inkflow_ai_learning", "")
+        var result = [CChar](repeating: 0, count: 16)
+        let read = api.get_property(session, "inkflow_ai_learning_result", &result, result.count)
+        api.set_property(session, "inkflow_ai_learning_result", "")
+        return read != 0 && String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == "ok"
+    }
+
+    func allowsAIRecommendation(input: AIInputIdentity, text: String) -> Bool {
+        text.hasPrefix(input.selectedPrefix) &&
+            !aiPronunciation(input: input, text: text).isClearExpansion(input: input.rawInput, text: text,
+                preferences: inputPreferences ?? requestedInput)
+    }
+
+    /// Read only the current recommendation's native phrase/character codes. The
+    /// absolute reverse-table path follows active dictionary activation and rollback.
+    func aiPronunciation(input: AIInputIdentity, text: String) -> AIPronunciation {
+        guard available else { return AIPronunciation(phrases: [:], characters: [:]) }
+        let api = Self.api.pointee
+        Self.compiledDirectory.appendingPathComponent("pinyin_simp.reverse.bin").path.withCString {
+            api.set_property(session, "inkflow_ai_reverse_path", $0)
+        }
+        api.set_property(session, "inkflow_ai_readings_result", "")
+        (input.rawInput + "\t" + text).withCString { api.set_property(session, "inkflow_ai_readings", $0) }
+        var result = [CChar](repeating: 0, count: 128 * 1024)
+        let read = api.get_property(session, "inkflow_ai_readings_result", &result, result.count)
+        for name in ["inkflow_ai_readings", "inkflow_ai_readings_result", "inkflow_ai_reverse_path"] {
+            api.set_property(session, name, "")
+        }
+        let readings = read != 0 ? String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
+        return AIPronunciation(text: text, nativeReadings: readings)
     }
 
     func setQualityPresentation(fontSize: Int, vertical: Bool) {

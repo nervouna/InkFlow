@@ -16,7 +16,7 @@ actor DelayedAIService: AISuggestionServing {
     }
     func count() -> Int { inputs.count }
     func input(_ index: Int) -> AISuggestionInput { inputs[index] }
-    func resolve(_ index: Int, _ result: Result<String, any Error> = .success("你好吗")) {
+    func resolve(_ index: Int, _ result: Result<String, any Error> = .success("你好")) {
         pending.removeValue(forKey: index)?.resume(with: result)
     }
 }

@@ -18,7 +18,7 @@ struct AISuggestionTests {
         expect(diagnostics.records.contains { $0.event == .transportFailed && $0.networkCode == URLError.timedOut.rawValue }, "Network failure includes only its numeric code")
         let transport = diagnostics.records.filter { [.transportStarted, .httpResponse, .transportSucceeded, .transportFailed, .transportCancelled].contains($0.event) }
         expect(transport.allSatisfy { $0.attempt != nil }, "Every transport outcome has an attempt ID")
-        expect(diagnostics.excludes(["fixture-key", "fixture-model", "compatible.example", "private", "朋友问：", "nihao", "你好吗"]), "Diagnostics never contain configuration, input, output or provider errors")
+        expect(diagnostics.excludes(["fixture-key", "fixture-model", "compatible.example", "private", "朋友问：", "nihao", "你好"]), "Diagnostics never contain configuration, input, output or provider errors")
         print("PASS AI diagnostics transport pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI configuration and transport: isolated persistence, atomic credentials, URL/body/auth, responses and cancellation")
     }
@@ -78,6 +78,12 @@ struct AISuggestionTests {
             let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
             expect(json["model"] as? String == "fixture-model" && json["stream"] as? Bool == false && json["thinking"] == nil, "Compatible request uses standard fields")
             let messages = json["messages"] as! [[String: String]]
+            expect(messages[0]["content"]!.contains("MUST NOT add meaning") &&
+                   messages[0]["content"]!.contains("typing-error correction"), "Conversion prompt permits correction but prohibits expansion")
+            let recorded = AIChatCompletionsClient.statisticsConfiguration(config)
+            expect(recorded.promptTemplate == messages[0]["content"] &&
+                   recorded.strategyVersion == "pinyin-conversion-v2" && recorded.promptVersion == "pinyin-replacement-v2",
+                   "Statistics identify the actual conversion strategy and transmitted prompt")
             let input = try JSONSerialization.jsonObject(with: Data(messages[1]["content"]!.utf8)) as! [String: String]
             expect(input["precedingText"] == fixture.precedingText && input["followingText"] == fixture.followingText && input["pinyin"] == "nihao" && input["selectedPrefix"] == "", "Both context sides, Pinyin and prefix must reach the model")
         }
@@ -96,14 +102,14 @@ struct AISuggestionTests {
         let sessionConfig = URLSessionConfiguration.ephemeral
         sessionConfig.protocolClasses = [AIStubURLProtocol.self]
         let client = AIChatCompletionsClient(session: URLSession(configuration: sessionConfig))
-        AIStubURLProtocol.state.configure(status: 200, body: #"{"choices":[{"message":{"content":"  你好吗  "},"finish_reason":"stop"}]}"#)
+        AIStubURLProtocol.state.configure(status: 200, body: #"{"choices":[{"message":{"content":"  你好  "},"finish_reason":"stop"}]}"#)
         let parentAttempt = UUID(), parentSession = UUID()
         let suggestion = try await AIDiagnostics.$attempt.withValue(parentAttempt) {
             try await AIDiagnostics.$session.withValue(parentSession) {
                 try await client.suggest(input: fixture, configuration: config)
             }
         }
-        expect(suggestion == "你好吗", "Allow contextual expansion beyond Pinyin")
+        expect(suggestion == "你好", "Trim a complete Pinyin conversion")
         for event in [AIDiagnosticEvent.transportStarted, .httpResponse, .transportSucceeded] {
             expect(diagnostics.records.contains { $0.event == event && $0.attempt == parentAttempt && $0.session == parentSession }, "Transport preserves the caller's logical attempt and session IDs")
         }
