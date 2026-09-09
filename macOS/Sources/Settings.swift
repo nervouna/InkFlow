@@ -12,16 +12,24 @@ final class IFSettings: ObservableObject {
         case minusEqual = "-="
     }
 
-    static let sharedSettings = IFSettings(defaults: .standard)
+    static let sharedSettings: IFSettings = {
+        // Only a process-local argument-domain flag isolates the exact-initializer harness.
+        // Persisted preferences can never select this credential store.
+        let isolated = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["IFIsolatedAICredentials"] as? Bool == true
+        let credentials: any AICredentialStore = isolated ? MemoryAICredentialStore() : KeychainAICredentialStore()
+        return IFSettings(defaults: .standard, aiCredentials: credentials)
+    }()
     static let candidateCounts = Array(3...9)
     static let fontSizes = [14, 16, 18, 24, 36]
     private let defaults: UserDefaults
+    let smart: IFSmartSettings
     private(set) var customPhrases: [CustomPhrase] = []
     private(set) var customPhrasesLoadError: String?
     @Published var inputSettingsError: String?
 
-    init(defaults: UserDefaults) {
+    init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore()) {
         self.defaults = defaults
+        smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
         guard let stored = defaults.object(forKey: "customPhrases") else { return }
         do {
             guard let data = stored as? Data else { throw CustomPhraseError("数据格式无效。") }
@@ -133,6 +141,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
     case input = "输入"
     case personalization = "个性化"
+    case smart = "智能"
     case dictionaries = "词库"
     case about = "关于"
     var id: Self { self }
@@ -141,6 +150,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .appearance: "paintbrush"
         case .input: "keyboard"
         case .personalization: "person.crop.circle"
+        case .smart: "sparkles"
         case .dictionaries: "books.vertical"
         case .about: "info.circle"
         }
@@ -173,6 +183,7 @@ struct SettingsView: View {
                 if section == .about { about }
                 else if section == .input { input }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
+                else if section == .smart { SmartSettingsView(smart: settings.smart) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }
@@ -299,6 +310,20 @@ final class SettingsHostingController: NSHostingController<SettingsView> {
 @MainActor
 final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
+    private static let editingMenuItem: NSMenuItem = {
+        let menu = NSMenu(title: "编辑")
+        menu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        menu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
+            .keyEquivalentModifierMask = [.command, .shift]
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        menu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        menu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        menu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let item = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
+        item.submenu = menu
+        return item
+    }()
     var dictionaries: IFDictionaryCoordinator?
 
     func windowWillClose(_ notification: Notification) { dictionaries?.presentationClosed() }
@@ -330,6 +355,14 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     func present() {
         dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
+        // The accessory app has no storyboard menu. Standard nil-target actions let
+        // AppKit route editing shortcuts to the focused native or secure field editor.
+        let mainMenu = NSApp.mainMenu ?? NSMenu()
+        if !mainMenu.items.contains(where: { $0 === Self.editingMenuItem }) {
+            Self.editingMenuItem.menu?.removeItem(Self.editingMenuItem)
+            mainMenu.addItem(Self.editingMenuItem)
+        }
+        NSApp.mainMenu = mainMenu
         NSApp.setActivationPolicy(.accessory)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)

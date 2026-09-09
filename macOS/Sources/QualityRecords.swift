@@ -101,6 +101,8 @@ struct QualityOperations: Codable, Equatable, Sendable {
     var candidateMoves = 0
     /// Actual Backspace/Delete/caret-edit operations that changed composition state, excluding typing and selection.
     var preeditEdits = 0
+    /// Absent in older records or when capture was suppressed. Never interpret absence as zero.
+    var timing: QualityTiming? = nil
 
     mutating func add(_ other: Self) {
         keypresses += other.keypresses
@@ -108,7 +110,55 @@ struct QualityOperations: Codable, Equatable, Sendable {
         pageTurns += other.pageTurns
         candidateMoves += other.candidateMoves
         preeditEdits += other.preeditEdits
+        // Timing is a phase snapshot, not an additive counter. In particular, do not
+        // double-count dwell when a tentative punctuation decision is folded back.
     }
+}
+
+enum QualityKeyKind: String, Codable, Sendable {
+    case typing, backspace, delete, caret, candidateMove = "candidate_move", page
+    case space, digit, returnRaw = "return", escape, tab, aiTab = "ai_tab"
+    case shortcut, modeToggle = "mode_toggle", other
+}
+
+struct QualityKeySample: Codable, Equatable, Sendable {
+    var sequence: Int
+    /// Seconds at the controller keyDown callback entry (or direct engine call),
+    /// on the monotonic timeline relative to QualityTiming.startedAt.
+    var offset: TimeInterval
+    var interval: TimeInterval?
+    var kind: QualityKeyKind
+    var isRepeat: Bool
+}
+
+/// Composition-level samples and decision-level phase snapshots share this schema.
+/// Visibility is observed at refresh/key boundaries and a bounded polling interval;
+/// it proves panel visibility at observations, not attention or exact display onset.
+struct QualityTiming: Codable, Equatable, Sendable {
+    var version = 1
+    var startedAt: Date
+    var keySamples: [QualityKeySample] = []
+    var droppedKeyCount = 0
+    var lastEditOffset: TimeInterval? = nil
+    var phaseStartedOffset: TimeInterval? = nil
+    var endedOffset: TimeInterval? = nil
+    var postEditWait: TimeInterval? = nil
+    var observedVisibleDuration: TimeInterval? = nil
+    /// A partial candidate selection starts a new remaining-input phase without
+    /// resetting the whole last-edit-to-final-selection measurements above.
+    var phaseWait: TimeInterval? = nil
+    var phaseObservedVisibleDuration: TimeInterval? = nil
+    var visibilityObservationInterval: TimeInterval? = nil
+
+    var lastEditAt: Date? { lastEditOffset.map { startedAt.addingTimeInterval($0) } }
+}
+
+/// One injectable monotonic source for physical key entry, edit, visibility and end.
+/// NSEvent timestamps are deliberately not mixed with this clock (fixtures may be zero).
+@MainActor
+struct QualityClock {
+    var monotonic: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+    var utc: () -> Date = { Date() }
 }
 
 enum QualityCompositionOutcome: String, Codable, Sendable {
@@ -204,6 +254,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
         var budget = QualityMemoryBudget()
         budget.record(512)
         budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason)
+        budget.timing(composition.operations.timing)
         for revision in revisions {
             if budget.exhausted { return false }
             budget.record(256)
@@ -214,6 +265,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
             if budget.exhausted { return false }
             budget.record(512)
             budget.strings(decision.id, decision.selectedText, decision.commitID, decision.unknownRankReason, decision.pathReason)
+            budget.timing(decision.operations.timing)
             budget.page(decision.snapshot)
             if let first = decision.firstPage { budget.page(first) }
             for page in decision.visitedPages {
@@ -236,6 +288,8 @@ enum QualityLimits {
     static let batchEnvelopes = 16
     static let flushInterval: TimeInterval = 1
     static let metricRuleVersion = 1
+    static let keySamples = 256
+    static let visibilityObservationInterval: TimeInterval = 0.1
 }
 
 /// Conservative logical retained-byte budget. The worker separately checks encoded bytes.
@@ -243,6 +297,10 @@ private struct QualityMemoryBudget {
     var remaining = QualityLimits.envelopeBytes
     var exhausted: Bool { remaining < 0 }
     mutating func record(_ size: Int) { remaining -= size }
+    mutating func timing(_ value: QualityTiming?) {
+        guard let value else { return }
+        record(256 + value.keySamples.count * 96)
+    }
     mutating func strings(_ values: String?...) {
         for value in values {
             guard !exhausted else { return }

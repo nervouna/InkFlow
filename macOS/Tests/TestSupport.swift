@@ -47,6 +47,7 @@ func drainEvents(seconds: TimeInterval = 0.15) {
 @MainActor
 final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     var mutations: [String] = []
+    var insertions: [(replacementRange: NSRange, markedRange: NSRange)] = []
     var insertionCallback: (() -> Void)?
     var onMutation: (() -> Void)?
     var testBundleID: String? = "inkflow.recording-client"
@@ -58,25 +59,27 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     var updatesActualRange = true
     var requests: [NSRange] = []
     var substringResponse: ((NSRange) -> (String?, NSRange))?
+    var lengthReads = 0
+    var reportedLength: Int?
 
     init(document: String? = nil) {
         self.document = document
         if let document { selection = NSRange(location: document.utf16.count, length: 0) }
     }
 
-    private func replace(_ text: String, marked: Bool, cursor: NSRange? = nil) {
+    private func replace(_ text: String, marked: Bool, cursor: NSRange? = nil, requested: NSRange? = nil) {
         guard let document else { return }
-        let range = mark.location != NSNotFound ? mark : selection
+        let range = requested.flatMap { $0.location != NSNotFound ? $0 : nil } ?? (mark.location != NSNotFound ? mark : selection)
         check(range.location != NSNotFound && NSMaxRange(range) <= document.utf16.count)
         self.document = (document as NSString).replacingCharacters(in: range, with: text)
         selection = NSRange(location: range.location + (cursor?.location ?? text.utf16.count), length: cursor?.length ?? 0)
         mark = marked && !text.isEmpty ? NSRange(location: range.location, length: text.utf16.count) : NSRange(location: NSNotFound, length: 0)
     }
     func insertText(_ string: Any!, replacementRange: NSRange) {
-        check(replacementRange == NSRange(location: NSNotFound, length: 0))
+        insertions.append((replacementRange, mark))
         mutations.append("insert:\(string as! String)")
         onMutation?()
-        replace(string as! String, marked: false)
+        replace(string as! String, marked: false, requested: replacementRange)
         insertionCallback?()
     }
     func setMarkedText(_ string: Any!, selectionRange: NSRange, replacementRange: NSRange) {
@@ -90,7 +93,7 @@ final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     func selectedRange() -> NSRange { selection }
     func markedRange() -> NSRange { mark }
     func attributedSubstring(from range: NSRange) -> NSAttributedString! { nil }
-    func length() -> Int { 0 }
+    func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
     func characterIndex(for point: NSPoint, tracking mappingMode: IMKLocationToOffsetMappingMode,
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>!) -> Int { NSNotFound }
     func attributes(forCharacterIndex index: Int, lineHeightRectangle lineRect: UnsafeMutablePointer<NSRect>!) -> [AnyHashable: Any]! { [:] }

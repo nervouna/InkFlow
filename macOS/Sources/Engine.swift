@@ -80,6 +80,7 @@ final class IFEngine {
     let qualityRecorder: QualityRecorder?
     private(set) var qualityRevision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))
     private var qualityDepth = 0
+    private var qualityEventTime: TimeInterval?
     private var qualityFontSize = 14
     private var qualityVertical = false
 
@@ -109,7 +110,7 @@ final class IFEngine {
         let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
                      "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
                     (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
@@ -145,7 +146,7 @@ final class IFEngine {
         if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
         do {
             let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
-            for file in InputPreferences.compiledSpellingFiles {
+            for file in ["pinyin_simp.reverse.bin"] + InputPreferences.compiledSpellingFiles {
                 guard FileManager.default.isReadableFile(atPath: compiled.appendingPathComponent(file).path) else {
                     throw IFDictionaryUpdateError(.apply, "compiled-file-missing", file: file)
                 }
@@ -216,8 +217,8 @@ final class IFEngine {
         NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
     }
 
-    init?(qualityStore: QualityStore? = nil) {
-        qualityRecorder = (qualityStore ?? Self.productionQualityStore).map(QualityRecorder.init)
+    init?(qualityStore: QualityStore? = nil, qualityClock: QualityClock = QualityClock()) {
+        qualityRecorder = (qualityStore ?? Self.productionQualityStore).map { QualityRecorder(store: $0, clock: qualityClock) }
         guard Self.ready else { return nil }
         do { try restoreSession() } catch { detachSession(); return nil }
         Self.instances[ObjectIdentifier(self)] = WeakSession(self)
@@ -261,12 +262,12 @@ final class IFEngine {
     }
 
     @discardableResult
-    func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
+    func key(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false) -> Bool {
         guard available else { return false }
         defer { Self.signalIdle() }
         // Apply existing idle configuration before capturing the values this key actually uses.
         applyConfigurationIfIdle()
-        return qualityOperation(.key(key, modifiers)) { performKey(key, modifiers: modifiers) }
+        return qualityOperation(.key(key, modifiers, isRepeat)) { performKey(key, modifiers: modifiers) }
     }
 
     private func performKey(_ key: Int32, modifiers: Int32) -> Bool {
@@ -434,17 +435,19 @@ final class IFEngine {
     }
 
     @discardableResult
-    func event(_ event: NSEvent) -> Bool {
+    func event(_ event: NSEvent, capturedAt: TimeInterval? = nil) -> Bool {
         guard available else { return false }
+        qualityEventTime = capturedAt
+        defer { qualityEventTime = nil }
         defer { Self.signalIdle() }
         let flags = event.modifierFlags
         if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
-            return qualityOperation(.toggle) {
+            return qualityOperation(.toggle(event.isARepeat)) {
                 asciiMode = !savedASCII
                 return true
             }
         }
-        guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0)) { false } }
+        guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0, event.isARepeat)) { false } }
         let key: Int32
         switch event.keyCode {
         case 36, 76: key = 0xff0d
@@ -462,16 +465,19 @@ final class IFEngine {
         case 121: key = 0xff56
         default:
             guard let characters = event.characters, characters.utf16.count == 1,
-                  let character = characters.utf16.first, character <= 127 else { return false }
+                  let character = characters.utf16.first, character <= 127 else {
+                return qualityOperation(.key(-2, 0, event.isARepeat)) { false }
+            }
             key = Int32(character)
         }
-        return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0)
+        return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0, isRepeat: event.isARepeat)
     }
 
-    func select(_ index: Int, trigger: QualityTrigger = .other, ambiguousText: Bool = false) {
+    func select(_ index: Int, trigger: QualityTrigger = .other, ambiguousText: Bool = false,
+                capturedAt: TimeInterval? = nil) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.select(index, trigger, ambiguousText)) {
+        _ = qualityOperation(.select(index, trigger, ambiguousText), capturedAt: capturedAt) {
             guard candidateOrder.indices.contains(index) else { return false }
             let handled = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index]) != 0
             updateOrdering()
@@ -493,24 +499,26 @@ final class IFEngine {
         orderedContent = content(of: rawSnapshot())
     }
 
-    func commit(trigger: QualityTrigger = .forceFlush) {
+    func commit(trigger: QualityTrigger = .forceFlush, capturedAt: TimeInterval? = nil) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.flush(trigger)) {
+        _ = qualityOperation(.flush(trigger), capturedAt: capturedAt) {
             let handled = Self.api.pointee.commit_composition(session) != 0
             updateOrdering()
             return handled
         }
     }
 
-    func clear() {
+    func clear(recordQuality: Bool = true) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.clear) {
-            Self.api.pointee.clear_composition(session)
-            updateOrdering()
+        let clear = {
+            Self.api.pointee.clear_composition(self.session)
+            self.updateOrdering()
             return true
         }
+        if recordQuality { _ = qualityOperation(.clear, clear) }
+        else { _ = clear() }
     }
 
     private func moveHighlight(_ delta: Int, key: Int32) -> Bool {
@@ -583,6 +591,66 @@ final class IFEngine {
         return result
     }
 
+    /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
+    func aiInputIdentity() -> AIInputIdentity? {
+        guard available, !asciiMode else { return nil }
+        let input = Self.string(Self.api.pointee.get_input(session))
+        guard !input.isEmpty else { return nil }
+        var context = Self.makeContext()
+        guard Self.api.pointee.get_context(session, &context) != 0 else { return nil }
+        defer { _ = Self.api.pointee.free_context(&context) }
+        let preedit = Self.string(context.composition.preedit)
+        let offset = Int(context.composition.sel_start)
+        guard offset >= 0, offset <= preedit.utf8.count,
+              let prefix = String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) else { return nil }
+        return AIInputIdentity(rawInput: input, caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix)
+    }
+
+    /// Called only for a consumed AI adoption, inside the controller's delivery scope.
+    /// Learning failure must never prevent insertion or register the original typo.
+    @discardableResult
+    func learnAIAdoption(input: AIInputIdentity, text: String, preferences: InputPreferences? = nil,
+                         pronunciation: AIPronunciation? = nil) -> Bool {
+        guard available, text.hasPrefix(input.selectedPrefix),
+              let code = (pronunciation ?? aiPronunciation(input: input, text: text)).resolve(input: input.rawInput, text: text,
+                  preferences: preferences ?? inputPreferences ?? requestedInput) else { return false }
+        let api = Self.api.pointee
+        let payload = code + "\t" + text
+        api.set_property(session, "inkflow_ai_learning_result", "")
+        payload.withCString { api.set_property(session, "inkflow_ai_learning", $0) }
+        // Properties are transport only: retain no adopted text in the live context.
+        api.set_property(session, "inkflow_ai_learning", "")
+        var result = [CChar](repeating: 0, count: 16)
+        let read = api.get_property(session, "inkflow_ai_learning_result", &result, result.count)
+        api.set_property(session, "inkflow_ai_learning_result", "")
+        return read != 0 && String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == "ok"
+    }
+
+    func allowsAIRecommendation(input: AIInputIdentity, text: String) -> Bool {
+        text.hasPrefix(input.selectedPrefix) &&
+            !aiPronunciation(input: input, text: text).isClearExpansion(input: input.rawInput, text: text,
+                preferences: inputPreferences ?? requestedInput)
+    }
+
+    /// Read only the current recommendation's native phrase/character codes. The
+    /// absolute reverse-table path follows active dictionary activation and rollback.
+    func aiPronunciation(input: AIInputIdentity, text: String) -> AIPronunciation {
+        guard available else { return AIPronunciation(phrases: [:], characters: [:]) }
+        let api = Self.api.pointee
+        Self.compiledDirectory.appendingPathComponent("pinyin_simp.reverse.bin").path.withCString {
+            api.set_property(session, "inkflow_ai_reverse_path", $0)
+        }
+        api.set_property(session, "inkflow_ai_readings_result", "")
+        (input.rawInput + "\t" + text).withCString { api.set_property(session, "inkflow_ai_readings", $0) }
+        var result = [CChar](repeating: 0, count: 128 * 1024)
+        let read = api.get_property(session, "inkflow_ai_readings_result", &result, result.count)
+        for name in ["inkflow_ai_readings", "inkflow_ai_readings_result", "inkflow_ai_reverse_path"] {
+            api.set_property(session, name, "")
+        }
+        let readings = read != 0 ? String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
+        return AIPronunciation(text: text, nativeReadings: readings)
+    }
+
     func setQualityPresentation(fontSize: Int, vertical: Bool) {
         guard qualityFontSize != fontSize || qualityVertical != vertical else { return }
         qualityFontSize = fontSize
@@ -600,11 +668,11 @@ final class IFEngine {
         }
     }
 
-    private func qualityOperation(_ action: QualityAction, _ body: () -> Bool) -> Bool {
+    private func qualityOperation(_ action: QualityAction, capturedAt: TimeInterval? = nil, _ body: () -> Bool) -> Bool {
         guard let qualityRecorder, qualityDepth == 0 else { return body() }
         qualityDepth += 1
         defer { qualityDepth -= 1 }
-        qualityRecorder.willMutate(qualitySnapshot(), revision: qualityRevision, action: action)
+        qualityRecorder.willMutate(qualitySnapshot(), revision: qualityRevision, action: action, at: capturedAt ?? qualityEventTime)
         let handled = body()
         qualityRecorder.didMutate(qualitySnapshot(), handled: handled)
         return handled

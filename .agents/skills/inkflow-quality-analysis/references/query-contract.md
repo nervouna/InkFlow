@@ -18,6 +18,8 @@ database or empty filter result, exits 0. Help is available at each command.
   applied configuration/build metadata for those decisions. Stored `*_json` fields
   become decoded objects without that suffix. Candidate source and consumed spans
   remain absent/null when unavailable. It does not infer them.
+- `timing`: composition-level timing coverage, retained adjacent-key intervals,
+  ended/unfinished wait and visible-duration distributions, without raw typed text.
 
 `--db PATH` defaults to the current user's existing InkFlow data directory,
 `~/Library/Application Support/InkFlow/quality.sqlite3`. `--app` is an exact bundle
@@ -155,3 +157,39 @@ The totals combine persisted cumulative counters from **all runs in the DB**.
 They cannot allocate drops to a filtered event cohort, prove complete capture, or
 provide an exact filtered drop denominator. A fatal failure may leave the last
 durable status as running. Recorder statistics are coverage context, not a monitor.
+
+## Input timing
+
+`timing` uses `compositions.operations_json.timing` once per matching composition,
+never the copies in decision snapshots. Existing date/app/config/kind filter
+semantics apply: config/kind select compositions with at least one matching
+decision, then the whole matching composition's timing is included. No timing
+field or unsupported version means unavailable evidence, not a zero duration.
+Coverage reports missing/unsupported timing, ended versus unfinished snapshots,
+truncated compositions, dropped keys and retained key counts. Existing commands
+and quality schema v1 remain compatible.
+
+All timing units are **seconds**. `key_intervals.all` and category/repeat groups
+use the stored interval of each retained key, including navigation and finishing
+keys such as AI Tab. The first interval is null. Capture retains the first 255
+keys and latest key (maximum 256); after truncation the latest interval still uses
+the actual preceding physical key, not the preceding array element. Distributions
+are explicitly retained-samples-only and do not reconstruct omitted keys.
+
+`postEditWait` spans the last actual edit through the captured end. Continued
+typing, backspace and effective caret edits restart it; navigation does not.
+`observedVisibleDuration` accumulates only observed visible intervals after that
+edit, excluding hidden time. Partial selection starts a remaining-input phase:
+`phaseWait` and `phaseObservedVisibleDuration` measure that phase without resetting
+the whole-last-edit metrics. Ended snapshots have `endedOffset`; unfinished
+snapshots are reported separately as observations, not final selection waits.
+Missing visibility evidence stays null independently of a known wait.
+
+P50/P95 use sorted known observations with linear interpolation at `(n-1)*p`,
+reporting known and unknown counts. Timing uses controller keyDown callback entry
+and a monotonic clock, not hardware event timestamps. Native visibility is observed
+at key/refresh boundaries and nominal 100 ms polling. The recorded observation
+interval is precision context, not an exact render timestamp or human attention.
+Direct engine fixtures may record key timing without any visibility observations.
+Individual `inspect` already exposes the persisted timing object for detailed
+evidence. The AI sample expiry policy does not change ordinary quality retention.

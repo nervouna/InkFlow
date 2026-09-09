@@ -367,7 +367,7 @@ struct EngineTests {
 
     @MainActor static func missingEnglishResources(shared: String, user: String) throws {
         for resource in ["inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                         "lua/inkflow_english.lua", "lua/inkflow_mixed.lua"] {
+                         "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua"] {
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-missing-\(UUID().uuidString)")
             try FileManager.default.copyItem(at: URL(fileURLWithPath: shared), to: copy)
             defer { try? FileManager.default.removeItem(at: copy) }
@@ -598,7 +598,7 @@ struct EngineTests {
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
                      "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua",
                      "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
             try files.createSymbolicLink(at: directory.appendingPathComponent(name),
                                          withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))

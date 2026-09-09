@@ -6,6 +6,8 @@ import Carbon
 // The legacy superclass blocks inferred Sendable conformance. State stays on MainActor;
 // callback arguments only enter synchronous assumeIsolated scopes, never tasks or queues.
 final class InkFlowInputController: IMKInputController, @unchecked Sendable {
+    static var statisticsStore: AIStatisticsStore?
+    private var injectedAIStatisticsStore: AIStatisticsStore?
     private(set) var engine: IFEngine?
     var panel: IMKCandidates?
     private var selectionLayout: TISInputSource?
@@ -14,29 +16,80 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var ownsMarkedText = false
     private var qualityInsertionDepth = 0
     private var injectedQualityStore: QualityStore?
+    private let qualityClock: QualityClock
+    private var qualityVisibilityTimer: Timer?
     private let settings: IFSettings
     private let settingsWindow: IFSettingsWindowController
+    private var smartClient: IMKTextInput?
+    private var acceptingAI = false
+    private var smartService: any AISuggestionServing = AIChatCompletionsClient()
+    private var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
+    private var presentation: (any AIInputPresentation)?
+    private var smartSuggestions: AISuggestionCoordinator?
+    private let smartDiagnosticSession = UUID()
+    private var smartGateReason: AIDiagnosticReason?
+    private var statisticsAppBundleID: String?
+
+    private func configureSmartSuggestions() {
+        smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
+            diagnosticSession: smartDiagnosticSession,
+            statisticsStore: injectedAIStatisticsStore,
+            statisticsAssociation: { [weak self] in
+                guard let self else { return .init() }
+                let recorder = self.engine?.qualityRecorder
+                return .init(compositionID: recorder?.activeCompositionID, appBundleID: self.statisticsAppBundleID,
+                    lastEditAt: recorder?.timingSnapshot?.lastEditAt, lastEditMonotonic: recorder?.lastEditMonotonicTime,
+                    observedVisibleAfterEdit: recorder?.timingSnapshot?.observedVisibleDuration,
+                    candidates: self.strings, candidatePage: self.engine?.snapshot().page)
+            }, statisticsNow: { [weak self] in
+                guard let self else { return .now }
+                return .init(utc: self.qualityClock.utc(), monotonic: self.qualityClock.monotonic())
+            },
+            current: { [weak self] in self?.smartState() },
+            candidatesVisible: { [weak self] in self?.presentation?.candidatesVisible ?? false },
+            context: { [weak self] anchor in
+                guard let self, let client = self.smartClient else {
+                    AIDiagnostics.emit(.contextRejected, reason: .missingClient); return nil
+                }
+                return AISurroundingContext.read(client, anchor: anchor, secureInput: self.secureInput)
+            }, allows: { [weak self] input, text in self?.engine?.allowsAIRecommendation(input: input, text: text) ?? false },
+            present: { [weak self] text in self?.presentation?.presentSuggestion(text) ?? false },
+            visible: { [weak self] in self?.presentation?.suggestionVisible ?? false },
+            hide: { [weak self] in self?.presentation?.hideSuggestion() })
+    }
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         settings = MainActor.assumeIsolated { .sharedSettings }
         settingsWindow = MainActor.assumeIsolated { .sharedController }
+        qualityClock = MainActor.assumeIsolated { QualityClock() }
+        injectedAIStatisticsStore = MainActor.assumeIsolated { Self.statisticsStore }
         super.init(server: server, delegate: delegate, client: inputClient)
         nonisolated(unsafe) let callbackServer = server
         MainActor.assumeIsolated { configure(server: callbackServer) }
     }
 
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
-          settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil) {
+          settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil,
+          qualityClock: QualityClock = QualityClock(),
+          aiStatisticsStore: AIStatisticsStore? = nil,
+          smartService: any AISuggestionServing = AIChatCompletionsClient(),
+          secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
+          presentation: (any AIInputPresentation)? = nil) {
         injectedQualityStore = qualityStore
+        self.qualityClock = qualityClock
+        injectedAIStatisticsStore = aiStatisticsStore
         self.settings = settings
         self.settingsWindow = settingsWindow
+        self.smartService = smartService
+        self.secureInput = secureInput
+        self.presentation = presentation
         super.init(server: server, delegate: delegate, client: inputClient)
         configure(server: server)
     }
 
     private func configure(server: IMKServer?) {
-        engine = IFEngine(qualityStore: injectedQualityStore)
-        if let server {
+        engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
+        if presentation == nil, let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
             let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
             if let layouts = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource],
@@ -46,16 +99,28 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
                 panel?.setSelectionKeysKeylayout(layout)
             }
             panel?.setDismissesAutomatically(false)
+            if let panel { presentation = NativeAIInputPresentation(panel: panel) }
         }
+        configureSmartSuggestions()
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(engineChanged(_:)),
                                                name: .engineAvailabilityDidChange, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged(_:)),
                                                name: .settingsDidChange, object: settings)
+        NotificationCenter.default.addObserver(self, selector: #selector(smartSettingsChanged(_:)),
+                                               name: .smartSettingsDidChange, object: settings.smart)
+        for name in [NSWorkspace.didDeactivateApplicationNotification, NSWorkspace.activeSpaceDidChangeNotification] {
+            NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(workspaceChanged(_:)), name: name, object: nil)
+        }
     }
 
     isolated deinit {
+        qualityVisibilityTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        smartSuggestions?.invalidate(reason: .teardown)
+        presentation?.hideSuggestion()
+        presentation = nil
         panel = nil
         selectionLayout = nil
     }
@@ -65,6 +130,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) var result: NSMenu?
         MainActor.assumeIsolated {
             let menu = NSMenu(title: "InkFlow")
+            menu.autoenablesItems = false
             let ascii = engine?.requestedASCIIMode ?? false
             menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
                          action: #selector(toggleInputMode(_:)), keyEquivalent: "").target = self
@@ -76,6 +142,12 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
             menu.addItem(.separator())
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
+            let available = settings.smart.isAvailable
+            // IMK enables exported entries with an action, even when NSMenuItem is disabled.
+            let smart = menu.addItem(withTitle: "智能预测", action: available ? #selector(toggleSmartPrediction(_:)) : nil, keyEquivalent: "")
+            smart.target = self
+            smart.isEnabled = available
+            smart.state = settings.smart.isEnabled ? .on : .off
             result = menu
         }
         return result
@@ -84,6 +156,13 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func showPreferences(_ sender: Any!) {
         // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }
+    }
+
+    @objc nonisolated func toggleSmartPrediction(_ sender: Any!) {
+        MainActor.assumeIsolated {
+            guard settings.smart.isAvailable else { return }
+            settings.smart.isEnabled.toggle()
+        }
     }
 
     @objc nonisolated func toggleInputMode(_ sender: Any?) {
@@ -131,11 +210,16 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func engineChanged(_ notification: Notification) {
-        if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore) }
+        smartSuggestions?.invalidate(reason: .engineChanged)
+        if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock) }
         applySettings()
     }
 
     func refresh(_ client: IMKTextInput?) {
+        observeQualityVisibility()
+        smartSuggestions?.beginRefresh()
+        defer { smartSuggestions?.endRefresh() }
+        smartClient = client
         let deliveringEngine = engine
         deliveringEngine?.beginDelivery()
         defer { deliveringEngine?.endDelivery() }
@@ -170,22 +254,40 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         strings = state.candidates
         updating = true
         applySettings()
-        panel?.update()
-        if !strings.isEmpty, let panel {
-            let index = min(max(0, state.highlight), strings.count - 1)
-            panel.selectCandidate(withIdentifier: panel.candidateStringIdentifier(strings[index]))
-            panel.show(kIMKLocateCandidatesBelowHint)
-        } else { panel?.hide() }
+        presentation?.refreshCandidates(strings, highlight: state.highlight)
         updating = false
         if let engine {
             engine.qualityRecorder?.presented(engine.qualitySnapshot(), revision: engine.qualityRevision,
-                                              panelShowIssued: panel != nil && !strings.isEmpty)
+                                              panelShowIssued: presentation != nil && !strings.isEmpty)
+        }
+        observeQualityVisibility()
+    }
+
+    /// Native panel show is asynchronous. Observe only visibility during an active
+    /// composition, even when AI is disabled; never read document content per tick.
+    private func observeQualityVisibility(at monotonicTime: TimeInterval? = nil) {
+        guard let recorder = engine?.qualityRecorder else { return }
+        recorder.setTimingCaptureEnabled(!secureInput())
+        guard recorder.activeCompositionID != nil, recorder.timingSnapshot != nil else {
+            qualityVisibilityTimer?.invalidate()
+            qualityVisibilityTimer = nil
+            return
+        }
+        if let presentation { recorder.observeCandidateVisibility(presentation.candidatesVisible, at: monotonicTime) }
+        if qualityVisibilityTimer == nil, presentation != nil {
+            let timer = Timer(timeInterval: QualityLimits.visibilityObservationInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.observeQualityVisibility() }
+            }
+            qualityVisibilityTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
         }
     }
 
     private func associateQualityClient(_ client: IMKTextInput?) {
+        let app = client?.bundleIdentifier()
+        statisticsAppBundleID = app
         engine?.qualityRecorder?.associateClient(client.map { $0 as AnyObject },
-            id: client?.uniqueClientIdentifierString(), app: client?.bundleIdentifier())
+            id: client?.uniqueClientIdentifierString(), app: app)
     }
 
     // InputMethodKit's legacy callbacks are synchronous and main-thread-bound but lack actor annotations.
@@ -193,17 +295,23 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
-            if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore); applySettings() }
+            guard !acceptingAI else { return false }
+            let entered = qualityClock.monotonic()
+            observeQualityVisibility(at: entered)
+            smartSuggestions?.validate()
+            if let callbackEvent, acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) { return true }
+            if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock); applySettings() }
             guard let engine, engine.available, let callbackEvent, callbackEvent.type == .keyDown else { return false }
             associateQualityClient(callbackClient as? IMKTextInput)
+            engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             // A selection/flush must use the order already shown, even if the client
             // stops exposing its document or moves the selection before that event.
             if engine.snapshot().preedit.isEmpty {
                 engine.setPrecedingText(IFPrecedingText.read(from: callbackClient as? IMKTextInput,
                                                            ownsMarkedText: ownsMarkedText))
             }
-            let handled = engine.event(callbackEvent)
-            if !handled && !engine.snapshot().preedit.isEmpty { engine.commit() }
+            let handled = engine.event(callbackEvent, capturedAt: entered)
+            if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
             refresh(callbackClient as? IMKTextInput)
             return handled
         }
@@ -216,9 +324,11 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func candidateSelected(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            let entered = qualityClock.monotonic()
             associateQualityClient(client())
-            engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1)
+            observeQualityVisibility(at: entered)
+            engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1, capturedAt: entered)
             refresh(client())
         }
     }
@@ -226,7 +336,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func candidateSelectionChanged(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            observeQualityVisibility()
             engine?.highlight(index)
             refresh(client())
         }
@@ -235,16 +346,121 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func commitComposition(_ sender: Any!) {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
+            guard !acceptingAI else { return }
+            let entered = qualityClock.monotonic()
+            smartSuggestions?.invalidate(reason: .commit)
             let activeClient = (callbackClient as? IMKTextInput) ?? client()
             associateQualityClient(activeClient)
-            engine?.commit()
+            observeQualityVisibility(at: entered)
+            engine?.commit(capturedAt: entered)
             refresh(activeClient)
-            panel?.hide()
+            presentation?.hideCandidates()
+            observeQualityVisibility()
         }
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
+        MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateEntered, session: smartDiagnosticSession) }
         commitComposition(sender)
+        MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateCommitted, session: smartDiagnosticSession) }
         super.deactivateServer(sender)
+        MainActor.assumeIsolated {
+            AIDiagnostics.emit(.deactivateSuperReturned, session: smartDiagnosticSession)
+            smartSuggestions?.invalidate(reason: .deactivate); smartClient = nil
+            AIDiagnostics.emit(.deactivateFinished, session: smartDiagnosticSession)
+        }
+    }
+
+    nonisolated override func hidePalettes() {
+        MainActor.assumeIsolated {
+            smartSuggestions?.invalidate(reason: .hidePalettes)
+            observeQualityVisibility()
+            presentation?.hideCandidates()
+            observeQualityVisibility()
+        }
+        super.hidePalettes()
+    }
+
+    @objc private func workspaceChanged(_ notification: Notification) {
+        smartSuggestions?.invalidate(reason: .workspaceChanged)
+        observeQualityVisibility()
+    }
+
+    @objc private func smartSettingsChanged(_ notification: Notification) {
+        smartSuggestions?.invalidate(reason: .settingsChanged)
+        smartSuggestions?.synchronize()
+    }
+
+    private func smartState() -> AISuggestionState? {
+        guard !acceptingAI else { recordSmartGate(.accepting); return nil }
+        guard !secureInput() else { recordSmartGate(.secureInput); return nil }
+        guard let presentation else { recordSmartGate(.missingPanel); return nil }
+        guard !strings.isEmpty else { recordSmartGate(.emptyCandidates); return nil }
+        guard let engine else { recordSmartGate(.missingEngine); return nil }
+        guard let input = engine.aiInputIdentity() else { recordSmartGate(.inputUnavailable); return nil }
+        guard let anchor = AIClientAnchor.read(smartClient, ownsMarkedText: ownsMarkedText, secureInput: false,
+                                              rejected: recordSmartGate) else { return nil }
+        // Native show() can complete on a later run-loop turn. Composition identity
+        // remains valid while the coordinator waits for actual window visibility.
+        recordSmartGate(presentation.candidatesVisible ? .ready : .panelHidden)
+        return AISuggestionState(input: input, anchor: anchor)
+    }
+
+    private func recordSmartGate(_ reason: AIDiagnosticReason) {
+        guard smartGateReason != reason else { return }
+        smartGateReason = reason
+        AIDiagnostics.emit(.eligibility, reason: reason, session: smartDiagnosticSession)
+    }
+
+    static func candidateScreenFrame(_ panel: IMKCandidates) -> NSRect? {
+        let size = panel.candidateFrame().size
+        guard size.width > 0, size.height > 0 else {
+            AIDiagnostics.emit(.presentationFailed, reason: .invalidCandidateFrame); return nil
+        }
+        let matches = NSApp.windows.filter {
+            $0.isVisible && !AISuggestionPanel.isSuggestionWindow($0) &&
+                abs($0.frame.width - size.width) < 1 && abs($0.frame.height - size.height) < 1
+        }
+        guard matches.count == 1 else {
+            AIDiagnostics.emit(.presentationFailed, reason: matches.isEmpty ? .noCandidateWindow : .ambiguousCandidateWindow)
+            return nil
+        }
+        return matches[0].frame
+    }
+
+    private func acceptSuggestion(_ event: NSEvent, client: IMKTextInput?, entered: TimeInterval) -> Bool {
+        guard event.type == .keyDown, event.keyCode == 48,
+              event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
+              let client, ObjectIdentifier(client as AnyObject) == smartClient.map({ ObjectIdentifier($0 as AnyObject) }),
+              let engine, !engine.snapshot().preedit.isEmpty,
+              let input = engine.aiInputIdentity() else { return false }
+        // A held Tab never accepts a suggestion that arrived after its initial keydown.
+        if event.isARepeat, presentation?.suggestionVisible == true {
+            engine.qualityRecorder?.recordExternalKey(.tab, isRepeat: true, at: entered)
+            return true
+        }
+        if event.isARepeat { return false }
+        let enteredStamp = AIStatisticsStamp(utc: qualityClock.utc().addingTimeInterval(entered - qualityClock.monotonic()), monotonic: entered)
+        guard let adoption = smartSuggestions?.takeSuggestion(at: enteredStamp) else { return false }
+        acceptingAI = true
+        engine.beginDelivery()
+        qualityInsertionDepth += 1
+        defer { qualityInsertionDepth -= 1; engine.endDelivery(); acceptingAI = false }
+        engine.qualityRecorder?.recordExternalKey(.aiTab, isRepeat: false, at: entered)
+        engine.qualityRecorder?.finishExternalSelection(reason: "ai_adopted", at: entered)
+        let preferences = engine.inputPreferences
+        let pronunciation = engine.aiPronunciation(input: input, text: adoption.text)
+        engine.clear(recordQuality: false)
+        engine.learnAIAdoption(input: input, text: adoption.text, preferences: preferences, pronunciation: pronunciation)
+        // Match ordinary commits: insertion replaces the client's active mark. Clear
+        // only our ownership first, so a reentrant refresh cannot erase that mark.
+        ownsMarkedText = false
+        adoption.statistics?.record(.insertionIssued, at: .init(utc: qualityClock.utc(), monotonic: qualityClock.monotonic()))
+        AIDiagnostics.emit(.insertionIssued, attempt: adoption.attempt, session: smartDiagnosticSession)
+        client.insertText(adoption.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        adoption.statistics?.record(.insertionReturned, at: .init(utc: qualityClock.utc(), monotonic: qualityClock.monotonic()))
+        AIDiagnostics.emit(.insertionReturned, attempt: adoption.attempt, session: smartDiagnosticSession)
+        refresh(client)
+        return true
     }
 }

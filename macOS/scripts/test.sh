@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-groups=(quality preparation dictionary-generator deployment engine controller settings dictionary-updates dictionary-activation termination installer-core)
+groups=(quality ai preparation dictionary-generator deployment engine controller settings dictionary-updates dictionary-activation termination installer-core)
 usage() {
   echo 'Usage: test.sh [all | GROUP ...]'
   echo "Groups: ${groups[*]}"
@@ -15,7 +15,7 @@ if [[ $# -eq 0 || ( $# -eq 1 && "$1" == all ) ]]; then
 else
   for group in "$@"; do
     case "$group" in
-      quality|preparation|dictionary-generator|deployment|engine|controller|settings|dictionary-updates|dictionary-activation|termination|installer-core) ;;
+      quality|ai|preparation|dictionary-generator|deployment|engine|controller|settings|dictionary-updates|dictionary-activation|termination|installer-core) ;;
       *) echo "Unknown test group: $group" >&2; usage >&2; exit 2 ;;
     esac
   done
@@ -26,17 +26,25 @@ if has dictionary-updates || has dictionary-activation; then
 fi
 if has quality; then
   bash macOS/scripts/test-quality-store.sh
+  bash macOS/scripts/test-quality-timing.sh
   bash macOS/scripts/test-quality-metadata.sh
 fi
-if has dictionary-generator || has deployment || has engine || has controller || has settings || has dictionary-activation; then
+if has ai || has dictionary-generator || has deployment || has engine || has controller || has settings || has dictionary-activation; then
   macOS/scripts/dependencies.sh
 fi
 if has preparation; then bash macOS/scripts/test-prepare-rime.sh; fi
 if has dictionary-generator; then bash macOS/scripts/test-dictionary-generator.sh; fi
-if has deployment || has engine || has controller; then
+if has ai || has deployment || has engine || has controller; then
   bash macOS/scripts/prepare-rime.sh build/test-shared
 fi
 source macOS/scripts/swift-common.sh
+if has ai; then
+  bash macOS/scripts/test-ai-suggestions.sh
+  bash macOS/scripts/test-ai-statistics.sh
+  bash macOS/scripts/test-ai-statistics-query.sh
+  bash macOS/scripts/test-ai-runtime.sh
+  bash macOS/scripts/test-ai-learning.sh
+fi
 if has quality; then
   bash macOS/scripts/test-quality-capture.sh
   bash macOS/scripts/test-quality-query.sh --require-engine

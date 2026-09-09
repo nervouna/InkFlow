@@ -2,13 +2,13 @@ import Foundation
 
 /// Only outer engine operations enter the recorder, including nested digit/select callbacks.
 enum QualityAction {
-    case key(Int32, Int32), select(Int, QualityTrigger, Bool), highlight, flush(QualityTrigger), toggle, clear
+    case key(Int32, Int32, Bool = false), select(Int, QualityTrigger, Bool), highlight, flush(QualityTrigger), toggle(Bool), clear
 
     var keypress: Bool {
         switch self { case .key, .toggle: true; default: false }
     }
     func requestsPage(with inputOptions: [String: Bool]?) -> Bool {
-        guard case .key(let key, _) = self else { return false }
+        guard case .key(let key, _, _) = self else { return false }
         switch key {
         case 0xff55, 0xff56: return true
         case 45, 61: return inputOptions?["minusEqualPaging"] ?? true
@@ -19,16 +19,16 @@ enum QualityAction {
     var candidateMove: Bool {
         switch self {
         case .highlight: true
-        case .key(let key, _): key == 0xff52 || key == 0xff54
+        case .key(let key, _, _): key == 0xff52 || key == 0xff54
         default: false
         }
     }
     var edit: Bool {
-        if case .key(let key, _) = self { return [0xff08, 0xffff, 0xff51, 0xff53, 0xff50, 0xff57].contains(key) }
+        if case .key(let key, _, _) = self { return [0xff08, 0xffff, 0xff51, 0xff53, 0xff50, 0xff57].contains(key) }
         return false
     }
     var cancellation: Bool {
-        switch self { case .clear, .key(0xff1b, _): true; default: false }
+        switch self { case .clear, .key(0xff1b, _, _): true; default: false }
     }
 }
 
@@ -36,6 +36,19 @@ enum QualityAction {
 @MainActor
 final class QualityRecorder {
     private let store: QualityStore
+    private let clock: QualityClock
+    private var timing: QualityTiming?
+    private var monotonicStart: TimeInterval = 0
+    private var lastKeyOffset: TimeInterval?
+    private var keySequence = 0
+    private var visible = false
+    private var visibilityObserved = false
+    private var visibleSince: TimeInterval?
+    private var visibleAccumulated: TimeInterval = 0
+    private var phaseVisibleSince: TimeInterval?
+    private var phaseVisibleAccumulated: TimeInterval = 0
+    private var timingEnabled = true
+    private var timingSuppressed = false
     private var envelope: QualityEnvelope?
     private var observedComposition = false
     private var latest: QualityPageSnapshot?
@@ -47,7 +60,7 @@ final class QualityRecorder {
     private var generation = 0
     private var sinceDecision = QualityOperations()
     private var pendingPrefixes: [Int: String] = [:]
-    private var inProgress: (action: QualityAction, before: QualityPageSnapshot, decision: Int?)?
+    private var inProgress: (action: QualityAction, before: QualityPageSnapshot, decision: Int?, entered: TimeInterval)?
     private var expectedCommit: String?
     private var commitKind: QualityCommitKind = .unknown
     private var allowPunctuationSuffix = false
@@ -57,7 +70,51 @@ final class QualityRecorder {
     private weak var associatedClient: AnyObject?
     private var hadClient = false
 
-    init(store: QualityStore) { self.store = store }
+    init(store: QualityStore, clock: QualityClock = QualityClock()) { self.store = store; self.clock = clock }
+
+    var activeCompositionID: String? { suppressed ? nil : envelope?.composition.id }
+    var timingSnapshot: QualityTiming? { snapshotTiming(at: offsetNow) }
+    var lastEditMonotonicTime: TimeInterval? { timing?.lastEditOffset.map { monotonicStart + $0 } }
+    private var offsetNow: TimeInterval { max(0, clock.monotonic() - monotonicStart) }
+
+    func setTimingCaptureEnabled(_ enabled: Bool) {
+        timingEnabled = enabled
+        if !enabled {
+            timing = nil
+            timingSuppressed = envelope != nil
+            envelope?.composition.operations.timing = nil
+            if let envelope { for index in envelope.decisions.indices { self.envelope?.decisions[index].operations.timing = nil } }
+        }
+    }
+
+    func observeCandidateVisibility(_ isVisible: Bool, at monotonicTime: TimeInterval? = nil) {
+        guard timing != nil, timing?.endedOffset == nil else { return }
+        let now = monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow
+        if visible, let since = visibleSince { visibleAccumulated += max(0, now - since) }
+        if visible, let since = phaseVisibleSince { phaseVisibleAccumulated += max(0, now - since) }
+        visibilityObserved = true
+        visible = isVisible
+        visibleSince = isVisible ? now : nil
+        phaseVisibleSince = isVisible ? now : nil
+        timing?.visibilityObservationInterval = QualityLimits.visibilityObservationInterval
+    }
+
+    /// Physical keys intercepted by the controller, including held Tabs, never enter Rime.
+    func recordExternalKey(_ kind: QualityKeyKind, isRepeat: Bool, at monotonicTime: TimeInterval? = nil) {
+        guard envelope != nil, !suppressed else { return }
+        envelope?.composition.operations.keypresses += 1
+        sinceDecision.keypresses += 1
+        recordKey(kind, isRepeat: isRepeat, at: monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow)
+        enforceBudget()
+    }
+
+    /// AI insertion has its own content/usage record. Keep this ordinary record text-free
+    /// for that insertion and terminate without inventing a regular candidate decision.
+    func finishExternalSelection(reason: String, at monotonicTime: TimeInterval? = nil) {
+        guard envelope != nil else { return }
+        timing?.endedOffset = monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow
+        finish(.committed, reason: reason)
+    }
 
     func associateClient(_ client: AnyObject?, id: String?, app: String?) {
         if let client, hadClient, associatedClient !== client {
@@ -70,7 +127,8 @@ final class QualityRecorder {
         if let app { appBundleID = app }
     }
 
-    func willMutate(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, action: QualityAction) {
+    func willMutate(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, action: QualityAction,
+                    at monotonicTime: TimeInterval? = nil) {
         if suppressed, snapshot.rawInput.isEmpty { reset() }
         guard !suppressed else { return }
         if snapshot.rawInput.isEmpty && snapshot.candidates.isEmpty {
@@ -83,16 +141,20 @@ final class QualityRecorder {
             }
         }
         self.revision = revision
-        ensureComposition()
+        ensureComposition(at: monotonicTime)
+        let entered = monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow
         observe(snapshot)
         guard envelope != nil, let before = latest else { return }
         if action.keypress { envelope?.composition.operations.keypresses += 1; sinceDecision.keypresses += 1 }
+        if case .key(_, _, let repeated) = action {
+            recordKey(keyKind(action, snapshot: before), isRepeat: repeated, at: entered)
+        } else if case .toggle(let repeated) = action { recordKey(.modeToggle, isRepeat: repeated, at: entered) }
         if action.requestsPage(with: before.configuration.inputOptions) && !before.candidates.isEmpty {
             envelope?.composition.operations.pageRequests += 1; sinceDecision.pageRequests += 1
         }
         commitKind = .unknown
         switch action {
-        case .key(0xff0d, _): commitKind = .rawReturn
+        case .key(0xff0d, _, _): commitKind = .rawReturn
         case .flush: commitKind = .forcedFlush
         default: break
         }
@@ -106,6 +168,8 @@ final class QualityRecorder {
             decision.pageHistoryTruncated = cacheHistoryTruncated
             decision.droppedPageCount = cacheDroppedPages
             decision.operations = sinceDecision
+            decision.operations.timing = snapshotTiming(at: entered, includeKeys: false, ended: true)
+            decision.occurredAt = timing.map { $0.startedAt.addingTimeInterval(entered) } ?? clock.utc()
             sinceDecision = QualityOperations()
             decision.regularRankedSelection = selection.regular
             decision.matchesCustomPhrase = selection.text.map { text in
@@ -120,7 +184,7 @@ final class QualityRecorder {
             allowPunctuationSuffix = selection.trigger == .punctuation
             expectedCommit = selection.text.map { before.selectedPrefix + $0 }
         }
-        inProgress = (action, before, index)
+        inProgress = (action, before, index, entered)
         enforceBudget()
     }
 
@@ -135,6 +199,18 @@ final class QualityRecorder {
         let before = operation.before
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||
             before.selectedPrefix != snapshot.selectedPrefix || before.selectedPrefixValid != snapshot.selectedPrefixValid
+        // Final empty state is a selection/cancellation, not a new Pinyin edit.
+        // Partial selection establishes a new remaining-input phase at this event.
+        if snapshot.rawInput.isEmpty && (!before.rawInput.isEmpty || operation.decision != nil) {
+            timing?.endedOffset = operation.entered
+        } else if edited && !snapshot.rawInput.isEmpty {
+            let partialSelection = operation.decision != nil && before.selectedPrefix != snapshot.selectedPrefix &&
+                snapshot.selectedPrefix.hasPrefix(before.selectedPrefix)
+            if partialSelection { restartPhase(at: operation.entered, edited: false) }
+            else if operation.action.keypress && !operation.action.candidateMove {
+                restartPhase(at: operation.entered, edited: true)
+            }
+        }
         if edited && operation.action.edit { envelope?.composition.operations.preeditEdits += 1; sinceDecision.preeditEdits += 1 }
         if operation.action.requestsPage(with: before.configuration.inputOptions) || operation.action.candidateMove,
            before.page != snapshot.page, !before.rawInput.isEmpty, !snapshot.rawInput.isEmpty {
@@ -253,7 +329,7 @@ final class QualityRecorder {
         }
         switch action {
         case .select(let index, let trigger, let ambiguous): return candidate(index, trigger, regular: [.digit, .space, .panel].contains(trigger), ambiguous: ambiguous)
-        case .key(let key, let modifiers):
+        case .key(let key, let modifiers, _):
             if modifiers == 0, (49...57).contains(key) { return candidate(Int(key - 49), .digit) }
             if key == 32, modifiers == 0 { return candidate(snapshot.highlightedDisplayIndex, .space) }
             if key == 0xff0d, !snapshot.rawInput.isEmpty, !snapshot.candidates.isEmpty {
@@ -272,10 +348,81 @@ final class QualityRecorder {
         }
     }
 
-    private func ensureComposition() {
+    private func ensureComposition(at monotonicTime: TimeInterval? = nil) {
         guard envelope == nil, !suppressed else { return }
-        envelope = QualityEnvelope(composition: QualityComposition(appBundleID: appBundleID,
+        let now = clock.monotonic()
+        monotonicStart = monotonicTime ?? now
+        let startedAt = clock.utc().addingTimeInterval(monotonicStart - now)
+        if timingEnabled && !timingSuppressed { timing = QualityTiming(startedAt: startedAt) }
+        envelope = QualityEnvelope(composition: QualityComposition(startedAt: startedAt, appBundleID: appBundleID,
             clientID: clientID, outcome: .unknown))
+    }
+
+    private func keyKind(_ action: QualityAction, snapshot: QualityPageSnapshot) -> QualityKeyKind {
+        guard case .key(let key, let modifiers, _) = action else { return .other }
+        if key == -1 || modifiers > 1 { return .shortcut }
+        if action.requestsPage(with: snapshot.configuration.inputOptions), !snapshot.candidates.isEmpty { return .page }
+        switch key {
+        case 0xff08: return .backspace
+        case 0xffff: return .delete
+        case 0xff51, 0xff53, 0xff50, 0xff57: return .caret
+        case 0xff52, 0xff54: return .candidateMove
+        case 0xff55, 0xff56: return .page
+        case 0xff0d: return .returnRaw
+        case 0xff1b: return .escape
+        case 9, 0xff09: return .tab
+        case 32: return .space
+        case 48...57: return .digit
+        case 65...90, 97...122, 39: return .typing
+        default: return .other
+        }
+    }
+
+    private func recordKey(_ kind: QualityKeyKind, isRepeat: Bool, at offset: TimeInterval) {
+        guard timing != nil else { return }
+        let sample = QualityKeySample(sequence: keySequence, offset: offset,
+            interval: lastKeyOffset.map { max(0, offset - $0) }, kind: kind, isRepeat: isRepeat)
+        keySequence += 1
+        lastKeyOffset = offset
+        if timing!.keySamples.count == QualityLimits.keySamples {
+            // Keep the first N-1 keys and latest key, so the terminating operation and
+            // its actual adjacent interval survive even an unusually long composition.
+            timing?.keySamples.removeLast()
+            timing?.droppedKeyCount += 1
+        }
+        timing?.keySamples.append(sample)
+    }
+
+    private func restartPhase(at offset: TimeInterval, edited: Bool) {
+        if edited {
+            timing?.lastEditOffset = offset
+            visibleAccumulated = 0
+            visibleSince = visible ? offset : nil
+        }
+        timing?.phaseStartedOffset = offset
+        timing?.endedOffset = nil
+        phaseVisibleAccumulated = 0
+        phaseVisibleSince = visible ? offset : nil
+    }
+
+    private func snapshotTiming(at offset: TimeInterval, includeKeys: Bool = true, ended: Bool = false) -> QualityTiming? {
+        guard var result = timing else { return nil }
+        let end = result.endedOffset ?? offset
+        if ended { result.endedOffset = end }
+        if let lastEdit = result.lastEditOffset {
+            result.postEditWait = max(0, end - lastEdit)
+            if visibilityObserved {
+                result.observedVisibleDuration = visibleAccumulated + (visibleSince.map { max(0, end - $0) } ?? 0)
+            }
+        }
+        if let phaseStart = result.phaseStartedOffset {
+            result.phaseWait = max(0, end - phaseStart)
+            if visibilityObserved {
+                result.phaseObservedVisibleDuration = phaseVisibleAccumulated + (phaseVisibleSince.map { max(0, end - $0) } ?? 0)
+            }
+        }
+        if !includeKeys { result.keySamples = []; result.droppedKeyCount = 0 }
+        return result
     }
 
     private func sameGeneration(_ lhs: QualityPageSnapshot, _ rhs: QualityPageSnapshot) -> Bool {
@@ -326,6 +473,7 @@ final class QualityRecorder {
     }
 
     private func enforceBudget() {
+        envelope?.composition.operations.timing = timingSnapshot
         guard var record = envelope else { return }
         // Include all transient cache pages in the same active cap, retaining decision/first-page core.
         if let latest {
@@ -356,7 +504,10 @@ final class QualityRecorder {
         }
         record.composition.outcome = outcome
         record.composition.outcomeReason = reason
-        record.composition.endedAt = Date()
+        record.composition.operations.timing = snapshotTiming(at: offsetNow, ended: true)
+        record.composition.endedAt = record.composition.operations.timing.map {
+            $0.startedAt.addingTimeInterval($0.endedOffset ?? offsetNow)
+        } ?? clock.utc()
         // Empty finish callbacks and idle highlight calls do not create compositions.
         if !record.decisions.isEmpty || !record.commits.isEmpty || observedComposition {
             store.submit(record)
@@ -380,5 +531,15 @@ final class QualityRecorder {
         commitKind = .unknown
         allowPunctuationSuffix = false
         suppressed = false
+        timing = nil
+        timingSuppressed = false
+        lastKeyOffset = nil
+        keySequence = 0
+        visible = false
+        visibilityObserved = false
+        visibleSince = nil
+        visibleAccumulated = 0
+        phaseVisibleSince = nil
+        phaseVisibleAccumulated = 0
     }
 }

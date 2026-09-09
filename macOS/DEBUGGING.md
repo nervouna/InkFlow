@@ -28,7 +28,164 @@ at complete Pinyin boundaries, rejected case variants, and ordinary Chinese inpu
 After building, `bash macOS/scripts/check-bundle.sh` verifies the generated
 dictionary and Lua filter are packaged. Real-client typing remains a separate
 acceptance step.
+## AI suggestions do not appear
 
+Start with the installed process and its retained unified log, before restarting the
+input method or changing configuration. Match the process ID to the installed app;
+unit tests and native harnesses also use the same logging subsystem.
+
+```sh
+ps -Ao pid=,etime=,comm= | rg '/InkFlow.app/Contents/MacOS/InkFlow$'
+/usr/bin/log show --last 10m --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
+```
+
+To observe one reproduction in real time:
+
+```sh
+/usr/bin/log stream --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
+```
+
+The AI category records settings availability, controller eligibility gates,
+debounce scheduling, request dispatch, HTTP status and elapsed time, cancellation,
+stale results, presentation, adoption commands and insertion calls. Follow the controller and attempt IDs
+across stages. Gate changes are deduplicated; an unchanged invalid state does not
+produce a new record on every validation tick. Important events use notice/error
+levels so they remain queryable after the process exits, subject to macOS log
+retention. This follows Apple's [unified logging guidance](https://developer.apple.com/documentation/os/generating-log-messages-from-your-code).
+
+- If there is no dispatch, inspect the gate or context failure reason: configuration,
+  secure input, candidate visibility or owned mark/selection.
+- If dispatch occurs, inspect transport status/error and elapsed time. Cancellation
+  is distinct from service failure. Do not infer that a request was never sent merely
+  because no suggestion appeared.
+- If a result arrives, inspect stale-state and presentation failures before
+  attributing the problem to the provider. A successful result can be discarded when
+  the active input session changes.
+- After Tab, follow `adoptionRequested`, `insertionIssued` and `insertionReturned`
+  with the same attempt/session IDs. These distinguish consuming a preview from
+  issuing an editor insertion and returning from that call. A return does not prove
+  that the external editor displayed the text.
+- Deactivation checkpoints help separate normal controller cleanup from interruption
+  by a crash. A missing completion checkpoint is a clue, not proof of the crash cause;
+  consult the matching macOS DiagnosticReports file.
+
+Logs contain fixed event/reason labels, random correlation IDs, status/timing and
+availability and document-length/marked-end scalars. They never include input text, Pinyin, suggestions, API keys,
+URLs, model names, HTTP bodies or arbitrary provider/error descriptions. Keep this
+boundary when extending diagnostics; do not enable raw request/response dumps.
+
+The earlier build `1e88aa4` did not log the AI lifecycle. Its in-memory Settings
+request error cannot reconstruct a failed session after process exit. Missing records
+from that build do not establish which trigger or response guard failed.
+
+### Document length is shorter than the owned composition
+
+**Observed failure:** Installed build `8024ac03` repeatedly logged
+`contextRejected reason=documentShorterThanMark`, followed by
+`discarded reason=contextUnavailable`, without dispatching a request. Its context
+reader treated document length shorter than the owned mark as an inference blocker.
+
+**Experiment:** Treat length as advisory and read surrounding text once when the
+request starts. A usable length clips the suffix at document end; shorter, negative
+or unknown lengths use a bounded request instead. Unavailable text becomes empty
+context. Returned Unicode text is limited to 256 characters per side without
+requiring exact returned-range metadata. Valid owned mark, client, selection and
+secure-input checks still surround capture. Response display and Tab revalidate the
+current composition and visibility without rereading or comparing document text.
+
+The fallback records `contextCaptured reason=documentShorterThanMark` with
+`reported_document_length`, `marked_end` and both availability flags. Follow that
+attempt through dispatch, shown and the insertion checkpoints. A missing suffix can reduce contextual
+quality, but no longer prevents a same-composition suggestion or Tab adoption.
+
+The headless regression first reproduced `zero-length: requests=0 suggestion=false`
+against the previous code. Its success checks require request, preview and exact-once
+Tab with both committed sides preserved for zero, short and negative reported lengths.
+It also covers unavailable or changed surroundings during the request and preview,
+with no response/Tab document reads. These simulated client results establish the
+new functional path; the installed editor behavior still requires a typing trial.
+
+### Tab removes the Pinyin but the suggestion does not appear
+
+**Observed failure:** In installed build `4e502fa`, the user reported this behavior
+in Codex. Its `accepted` event was emitted when the coordinator consumed the preview,
+before any editor call; that event did not establish successful insertion. Other
+editors were not verified. The AI path first refreshed an empty Rime composition,
+clearing the client's mark, then inserted at a cached explicit offset. The regression
+records two mutations, no active mark at insertion and a nondefault replacement
+range. It does not establish why Codex rejected or lost that later insertion.
+
+**Fix:** Match ordinary candidate commits: clear Rime internally, release controller
+mark ownership, insert once with `NSNotFound` while the client still has its mark,
+then refresh the empty composition. The delivery lease and callback reentry guards
+remain in effect. `adoptionRequested` replaces the misleading `accepted` label;
+`insertionIssued` and `insertionReturned` bracket the editor call with the original
+attempt/session IDs and no text or additional document reads.
+
+The headless regression requires the active-mark/default-range contract, one editor
+mutation, preserved surrounding text and selected prefix, and exact-once insertion
+under repeated Tab and synchronous callbacks. It also checks checkpoint ordering
+and correlation. The native harness uses real candidate/AppKit windows but still
+uses `RecordingClient` for text delivery; neither harness proves an external
+editor's cross-process behavior. Confirm actual visible text in an installed typing
+trial rather than treating an insertion-return record as display confirmation.
+
+### Candidate visibility becomes ready after the final input refresh
+
+**Reproduced failure:** If the candidate window was still hidden when the final
+controller refresh returned, the previous eligibility check discarded the composition
+and its tracker. Becoming visible later did not schedule another check. A per-key
+`nihao` regression with a window endpoint delayed by 160 ms reached
+`visible=true requests=0 suggestion=false`, without filling candidate data or forcing
+a request. This establishes a trigger defect; it cannot retrospectively identify the
+cause of an earlier user session whose logs are missing.
+
+**Fix:** Keep stable composition identity separate from candidate visibility. The
+0.5-second deadline starts at the last actual input change. After that deadline,
+wait for visible candidates while the composition, client and configuration remain
+valid. This wait reads no surrounding document text and makes no network request.
+Paging and highlighting preserve the deadline. Once visibility permits capture,
+hiding the candidates invalidates an in-flight request or displayed suggestion;
+secure input, changed state and lifecycle callbacks also cancel the attempt. The
+same injected secure-input source checks eligibility and both context anchors;
+production still reads the actual system secure-input state each time.
+
+**Automated regression:** Prepare the isolated Rime resources with
+`bash macOS/scripts/test.sh`, then run:
+
+```sh
+bash macOS/scripts/test-ai-headless.sh
+bash macOS/scripts/test-ai-headless.sh --delayed-visibility
+# Optional paid acceptance; the parser requires an ignored, untracked configuration.
+bash macOS/scripts/test-ai-headless.sh --live /absolute/path/to/ignored/.env
+```
+
+The stub suite covers delayed visibility before and after the debounce deadline,
+hidden-context isolation, pending and in-flight cancellation, partial selected
+prefixes, ordinary candidate keys, client range/length profiles and exact-once Tab
+adoption. The delayed-show regression now reaches
+`visible=true requests=1 suggestion=true`. Live mode performs the four short, long,
+mixed-language and long-typo fixtures through the same pipeline with DeepSeek V4
+Flash. Live fixtures now report document length zero and require the best-effort
+capture diagnostic, available prefix and unavailable suffix. The ordinary stub
+fixtures retain healthy two-sided context. Both modes verify complete original
+Pinyin (including `zhegn`), required meaning-bearing phrases, one request, correlated diagnostic stages
+and exact insertion preserving the surrounding document. It never falls back to a
+stub response.
+
+**Evidence boundary:** These tests deliver timed `NSEvent` sequences with actual
+physical key codes and modifiers through the production controller, Rime engine,
+normal candidate refresh, marked-text/context handling, coordinator and Tab adoption.
+Live mode also uses the production HTTP client. Window rendering and visibility are
+simulated endpoints; `RecordingClient` simulates an editor's document, and the
+existing test shim substitutes IMK framework initialization, client lookup and
+deactivation. No key window, app activation or global secure-input change is needed,
+so screen locking does not invalidate this automation. These checks do not establish
+native panel geometry or an external editor's cross-process IMK behavior. The native
+harness checks panel geometry but still uses `RecordingClient` for editor calls;
+installed-process logs trace actual calls, and a typing trial confirms visible text.
 ## Settings window loses its fixed width and minimum height
 
 **Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default
@@ -204,6 +361,42 @@ The harness waits up to five seconds for a visible, key window and an active app
 then fails with the foreground application's bundle ID/PID and the public console/login
 session flags. An activation request is asynchronous; a timeout alone does not identify
 whether the desktop was locked or another application held focus.
+
+## Settings fields ignore Command-V and other editing shortcuts
+
+Observed on macOS 26.6.2 (25G83), 2026-09-08.
+
+**Cause:** The accessory application's programmatic settings window had no main Edit
+menu. Normal typing reached the native field editor, but AppKit had no menu key
+equivalents for Command-A or Command-V, including in SwiftUI `SecureField`.
+
+**Fix:** Settings presentation installs one standard Edit menu, preserving other main
+menu items. Its nil-target editing actions use AppKit's responder chain. Native text
+and secure field editors retain their own validation and editing behavior.
+
+**Regression:** `bash macOS/scripts/test-settings-ui.sh --smart-only` sends mouse and
+keyboard events through `NSApplication`, pastes synthetic values into all three LLM
+fields, presses Save through accessibility, and checks isolated configuration and
+defaults. The test preserves all clipboard items and data types without printing
+their contents. It also checks repeated presentation does not duplicate the menu.
+
+## Disabled prediction menu item still appears clickable in the input-source menu
+
+Observed on macOS 26.6.2 (25G83), 2026-09-08.
+
+**Cause:** IMK's menu serialization enables entries with a nonempty action, overriding
+the local `NSMenuItem.isEnabled` value. Checking only the returned menu object misses
+the state sent to the system's menu host; ordinary menu validation does not fix it.
+
+**Fix:** An unavailable prediction item has both `isEnabled = false` and a nil action.
+The action is restored when all three configuration fields are nonempty. The action
+handler separately guards incomplete configuration, including stale menu dispatch.
+
+**Regression:** The Settings GUI harness checks IMK's actual serialized enabled state
+and action for empty, complete, and each individually missing field. A test-only
+private inspection method fails explicitly if unavailable on a future OS. Production
+uses only public menu APIs. System menu rendering remains a separate installed-app
+acceptance check.
 
 ## Dictionary disclosure contents have missing accessibility identifiers
 
