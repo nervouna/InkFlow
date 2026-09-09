@@ -60,7 +60,7 @@ were saved. Refused or timed-out termination never swaps or kills the IME.
 
 ## Shipped candidate boundary for packaging
 
-Task D owns the ZIP extraction step. Its caller must locate the signed installer's
+Task C owns the ZIP extraction step. Its caller must locate the signed installer's
 own `Contents/Resources/Payload/InkFlow.zip`, verify the outer bundle before
 unpacking, and unpack that shipped resource into an owned canonical temporary
 root. Retain that directory until `perform(.installAndEnable)` finishes. Construct
@@ -70,6 +70,42 @@ ZIP is present, and verifies inner identity, team, version/build and signature;
 it verifies the copy again at staging and after atomic commit. This is a narrow
 unpacked-candidate API, not an arbitrary ZIP extraction utility. Production has
 no unsigned/ad-hoc or team-check bypass.
+
+## Native application and packaging probe (task C)
+
+`NativeWindow.swift` binds `IFInstallWindowController` directly to the coordinator,
+with an injected async factory and cleanup closure. The owner task stays alive
+through preparation, file commit, activation and payload cleanup. Both window
+close and the application's Quit action return a deferred termination reply while
+busy; preparation may request core cancellation, but the owner task is never
+cancelled. `IFInstallAppDelegate` replies only after that task settles.
+
+`ShippedPayload.swift` provides the actor-isolated `IFShippedPayload.load()` and
+`clean()` pair. It verifies the outer bundle before extraction, accepts only its
+own sealed `Payload/InkFlow.zip`, uses bounded system ditto extraction in an owned
+private temporary directory, requires exactly `InkFlow.app`, and repeats the
+core's candidate verification with version/build read from the outer plist.
+Cleanup checks the owned directory identity. No unsigned-production mode exists.
+
+Build with `bash macOS/scripts/build-installer.sh /path/to/InkFlow.zip [output.app]`.
+The default is `build/InkFlow Installer.app`; an existing output is preserved and
+rejected. The script copies version/build from `macOS/Info.plist` and reuses the
+input method's icon. It compiles and assembles only; release packaging signs the
+result. The separate `AppMain.swift` entrypoint is outside `Installer*.swift`.
+
+After signing the outer bundle, run its actual executable with `--check-payload`.
+This calls the same loader and cleanup, prints version/build on success and exits
+nonzero on failure, before creating NSApplication. It performs no installation,
+registration, enablement, selection, or IME launch. A successful local signed
+probe is not notarization or trusted downloaded-release evidence.
+
+`bash macOS/scripts/test-installer-window.sh` builds a separate test app using
+fake file/TIS/lifecycle backends and injected settings/termination replies. Native
+buttons, progress, bounded diagnostics, recovery and fallback states, duplicate
+submissions, cancellation, and actual close/Quit actions are checked. It captures
+only test-owned windows under `build/installer-task/ui/`; a 25-second watchdog
+bounds the executable. AppKit tests may require execution outside the agent
+sandbox. The production entrypoint is not linked into the test executable.
 
 Only known `/tmp` and `/var` aliases are canonicalized. Links within candidate,
 state or target paths are rejected. Payloads must use regular files/directories,
