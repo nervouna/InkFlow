@@ -29,8 +29,6 @@ for mode in success dictionary-failure store-failure disabled; do
     *) printf 'drain-start\ndrain-end\nengine-stop\nstore-close\nwill-terminate\n' ;;
   esac > "$termination_root/expected"
   diff -u "$termination_root/expected" "$termination_root/$mode/trace"
-  [[ $(stat -f %Lp "$termination_root/$mode/runtime") == 700 ]]
-  for receipt in "$termination_root/$mode/runtime/"*.json; do [[ $(stat -f %Lp "$receipt") == 600 ]]; done
   if [[ "$mode" != disabled ]]; then
     [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select status from recording_runs') == closed ]]
   fi

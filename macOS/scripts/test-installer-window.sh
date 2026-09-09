@@ -10,9 +10,9 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 PLIST
 xcrun swiftc -swift-version 6 -warnings-as-errors -target arm64-apple-macosx26.0 \
   -module-cache-path build/installer-task/compiler/module-cache \
-  macOS/Shared/InputSourceManager.swift macOS/Sources/RuntimeStatus.swift \
+  macOS/Shared/InputSourceManager.swift \
   macOS/Installer/Installer*.swift macOS/Installer/NativeWindow.swift \
   macOS/Tests/InstallerWindowTests.swift \
-  -framework Foundation -framework AppKit -framework Carbon -framework Security \
+  -framework Foundation -framework AppKit -framework Carbon \
   -o "$app/Contents/MacOS/WindowTests"
 "$app/Contents/MacOS/WindowTests" "$root"

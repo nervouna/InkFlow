@@ -16,21 +16,9 @@ struct IFInputRoster: Sendable {
     let enabled: [IFInputSource]
     let selectedID: String
 
-    func unique(_ id: String) throws -> IFInputSource? {
-        let matches = installed.filter { $0.id == id }
-        guard matches.count <= 1 else { throw IFInputError.duplicate(id) }
-        return matches.first
-    }
-    func isEnabled(_ id: String) -> Bool {
-        let entries = enabled.filter { $0.id == id }
-        return entries.count == 1 && entries[0].enabled
-    }
-    func mode() throws -> IFInputSource? {
-        guard let value = try unique(IFInputIdentity.modeID) else { return nil }
-        guard value.bundleID == IFInputIdentity.bundleID, value.keyboardMode, value.selectable,
-              ["墨流拼音", "InkFlow Pinyin"].contains(value.name) else { throw IFInputError.invalidMode }
-        return value
-    }
+    func source(_ id: String) -> IFInputSource? { installed.first { $0.id == id } }
+    func isEnabled(_ id: String) -> Bool { enabled.contains { $0.id == id && $0.enabled } }
+
 }
 
 enum IFInputIdentity {
@@ -42,8 +30,6 @@ enum IFInputIdentity {
 enum IFInputError: Error, Equatable {
     case api(String, Int32)
     case unavailable(String)
-    case duplicate(String)
-    case invalidMode
 }
 
 @MainActor protocol IFInputSourceOperations {
@@ -74,12 +60,7 @@ enum IFInputError: Error, Equatable {
                      ascii: flag(kTISPropertyInputSourceIsASCIICapable))
     }
     func snapshot() throws -> IFInputRoster {
-        var installed = try list([kTISPropertyBundleID as String: IFInputIdentity.bundleID], all: true).map(value)
-        for id in [IFInputIdentity.bundleID, IFInputIdentity.modeID] {
-            installed += try list([kTISPropertyInputSourceID as String: id], all: true).map(value)
-                .filter { $0.bundleID != IFInputIdentity.bundleID }
-        }
-
+        let installed = try list([kTISPropertyBundleID as String: IFInputIdentity.bundleID], all: true).map(value)
         let enabled = try list([:], all: false).map(value)
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else {
             throw IFInputError.unavailable("TISCopyCurrentKeyboardInputSource")
@@ -88,23 +69,16 @@ enum IFInputError: Error, Equatable {
         guard !selected.isEmpty else { throw IFInputError.unavailable("current keyboard identity") }
         return .init(installed: installed, enabled: enabled, selectedID: selected)
     }
-    private var launchServicesRegisteredURL: URL?
     func register(at url: URL) throws {
-        if launchServicesRegisteredURL != url {
-            let ls = LSRegisterURL(url as CFURL, true)
-            guard ls == noErr else { throw IFInputError.api("LSRegisterURL", ls) }
-            launchServicesRegisteredURL = url
-        }
+        let ls = LSRegisterURL(url as CFURL, true)
+        guard ls == noErr else { throw IFInputError.api("LSRegisterURL", ls) }
         let tis = TISRegisterInputSource(url as CFURL)
         guard tis == noErr else { throw IFInputError.api("TISRegisterInputSource", tis) }
     }
     private func source(_ id: String) throws -> TISInputSource {
         let matches = try list([kTISPropertyInputSourceID as String: id], all: true)
-        guard matches.count == 1 else {
-            if matches.count > 1 { throw IFInputError.duplicate(id) }
-            throw IFInputError.unavailable(id)
-        }
-        return matches[0]
+        guard let source = matches.first else { throw IFInputError.unavailable(id) }
+        return source
     }
     func enable(_ id: String) throws {
         let result = TISEnableInputSource(try source(id))

@@ -3,7 +3,7 @@ import AppKit
 @main struct IFInstallerMain {
     @MainActor static func main() {
         if CommandLine.arguments.dropFirst() == ["--check-payload"] {
-            // Packaging probe uses the exact production trust boundary, before creating NSApplication.
+            // Release assembly probe: extract the embedded app before creating NSApplication.
             Task.detached {
                 let payload = IFShippedPayload()
                 do {
@@ -41,7 +41,7 @@ import AppKit
         let version = IFAppVersion(version: info["CFBundleShortVersionString"] as? String ?? "未知",
                                    build: info["CFBundleVersion"] as? String ?? "未知")
         let target = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods/InkFlow.app")
-        // Display-only metadata. All installation decisions use the core's verified identities.
+        // Display-only metadata; versions do not restrict installation.
         var existing: IFAppVersion?
         if let data = try? Data(contentsOf: target.appendingPathComponent("Contents/Info.plist")),
            let values = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],

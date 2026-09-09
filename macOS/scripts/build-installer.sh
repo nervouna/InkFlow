@@ -28,10 +28,10 @@ cp build/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 cp "$payload" "$app/Contents/Resources/Payload/InkFlow.zip"
 xcrun swiftc -swift-version 6 -warnings-as-errors -O -target arm64-apple-macosx26.0 \
   -module-cache-path build/installer-task/compiler/module-cache \
-  macOS/Shared/InputSourceManager.swift macOS/Sources/RuntimeStatus.swift \
+  macOS/Shared/InputSourceManager.swift \
   macOS/Installer/Installer*.swift macOS/Installer/ShippedPayload.swift \
   macOS/Installer/NativeWindow.swift macOS/Installer/AppMain.swift \
-  -framework Foundation -framework AppKit -framework Carbon -framework Security \
+  -framework Foundation -framework AppKit -framework Carbon \
   -o "$app/Contents/MacOS/InkFlowInstaller"
 /usr/bin/plutil -lint "$app/Contents/Info.plist"
 mkdir -p "$(dirname "$output")"

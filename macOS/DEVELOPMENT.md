@@ -71,8 +71,8 @@ evidence now requires this suite as well as controller initialization and Settin
 compiles the installer and copies version/build from `macOS/Info.plist` without
 signing, registration or installation. The output path must not exist. After
 Developer ID signing, execute `"/new/output.app/Contents/MacOS/InkFlowInstaller" --check-payload`
-to validate the actual sealed ZIP, inner signature and matching team/version, then
-clean up the temporary extraction. This read-only probe does not use TIS or start
+to check extraction of the embedded ZIP and app metadata, print payload version/build,
+then clean up temporary files. Signature and notarization checks remain separate release QA. This read-only probe does not use TIS or start
 the input method. Local signed, unnotarized fixtures do not prove release trust.
 
 The release helper uses `package.sh prepare` then `package.sh finish`. Between them,

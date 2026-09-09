@@ -22,10 +22,10 @@ import Foundation
             }
             let roster = try system.snapshot()
             print("registered_mode_count=\(roster.installed.filter { $0.id == IFInputIdentity.modeID }.count)")
-            guard let mode = try roster.mode() else { throw IFInputError.invalidMode }
+            guard let mode = roster.source(IFInputIdentity.modeID) else { throw IFInputError.unavailable(IFInputIdentity.modeID) }
             print("mode_name=\(mode.name)\nmode_select_capable=\(mode.selectable ? 1 : 0)")
             if verify {
-                let parent = try roster.unique(IFInputIdentity.bundleID)
+                let parent = roster.source(IFInputIdentity.bundleID)
                 let parentEnabled = parent?.enabled == true && roster.isEnabled(IFInputIdentity.bundleID)
                 let modeEnabled = mode.enabled && roster.isEnabled(IFInputIdentity.modeID)
                 print("parent_enabled=\(parentEnabled ? 1 : 0)\nmode_enabled=\(modeEnabled ? 1 : 0)")

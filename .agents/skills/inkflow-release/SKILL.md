@@ -98,7 +98,9 @@ Finish requires the stapled input method, matching source plist, Developer ID te
 fresh ZIP containing the stapled app as a signed data resource, then builds and
 signs `assembly.XXXXXX/stage/InkFlow Installer.app`. It checks installer arm64 and
 system-only dynamic dependencies, outer identity/version/signature and executes
-the signed installer's actual `--check-payload` before creating the final DMG.
+the installer's actual `--check-payload` extraction/structure probe before creating
+the final DMG. The probe reports payload version/build; it does not validate trust.
+Signature and notarization checks above remain required.
 The DMG contains only `InkFlow Installer.app` and `安装说明.txt`. Assembly directories
 remain inspectable. Version/build come from `macOS/Info.plist`; finish never bumps
 or re-signs the inner payload. This DMG still needs its own notarization:

@@ -191,51 +191,21 @@ import AppKit
             primary.isHidden = true; secondary.isHidden = true
         case .committing:
             heading.stringValue = "正在完成安装"
-            summary.stringValue = "正在完成程序替换与恢复处理，请稍候。"
+            summary.stringValue = "正在替换程序，请稍候。"
             primary.isHidden = true; secondary.isHidden = true
         case .activating:
             heading.stringValue = "正在启用墨流"
-            summary.stringValue = "正在检查系统启用与启动状态，请稍候。"
+            summary.stringValue = "正在启用并选择输入法，请稍候。"
             primary.isHidden = true; secondary.isHidden = true
-        case .installedEnabled(let observation):
-            switch observation {
-            case .ready, .waitingForSystemLaunch:
-                heading.stringValue = "墨流已安装并启用"
-                summary.stringValue = observation == .ready ? "墨流已完成启动，可以使用。" : "已确认启用和选择，正在等待系统按需启动墨流。"
-                secondary.isHidden = true
-            case .initializing, .terminating, .unverifiedReceipt:
-                // Defensive rendering: these observations are not successful core outcomes.
-                heading.stringValue = "已安装，墨流尚未就绪"
-                summary.stringValue = "尚未确认墨流完成启动，请重试启用。"
-                primary.title = "重试启用"; primaryAction = .retryActivation
-                technical = String(describing: observation)
-            }
+        case .installedEnabled:
+            heading.stringValue = "墨流已安装并启用"
+            summary.stringValue = "已确认启用和选择，可以开始使用墨流。"
+            secondary.isHidden = true
         case .installedAwaitingApproval(let message):
             heading.stringValue = "已安装，等待系统确认"
             summary.stringValue = "系统尚未确认启用或切换。请在系统设置的「键盘」中检查输入法及可能出现的确认提示，然后重试启用。"
             primary.title = "重试启用"; primaryAction = .retryActivation
             settings.isHidden = false; technical = message
-        case .installedMissingRegistration, .installedRegistrationFailed:
-            heading.stringValue = "已安装，尚未完成注册"
-            summary.stringValue = "系统尚未确认墨流输入法。可以重试注册，或重新检查启用状态。"
-            primary.title = "重试注册"; primaryAction = .repairMissingRegistration
-            secondary.title = "重试启用"; secondaryAction = .retryActivation
-            settings.isHidden = false
-            if case .installedRegistrationFailed(let message) = state { technical = message }
-        case .installedRuntimeFailed(let reason, let restored):
-            heading.stringValue = "已安装，墨流尚未就绪"
-            summary.stringValue = restored ? "墨流启动未完成，已切回可用的备用输入法。安装文件已保留，可以重试启用。" : "墨流启动未完成，尚未确认恢复备用输入法。请先从输入菜单选择可用键盘，再重试启用。"
-            primary.title = "重试启用"; primaryAction = .retryActivation
-            technical = reason
-        case .installedRecoveryRequired(let message):
-            heading.stringValue = "安装收尾尚未完成"
-            summary.stringValue = "程序替换时已通过检查，但备份或收尾未完成。请继续恢复，再启用墨流。"
-            primary.title = "继续恢复"; primaryAction = .resumeRecovery; technical = message
-        case .legacyNeedsReview(let version):
-            heading.stringValue = "旧版本需要检查"
-            summary.stringValue = "已保留现有安装。需要先核实 \(version.version) 版本的正常退出行为，再重试更新。"
-            primary.title = "重试更新"; primaryAction = .installAndEnable
-            technical = "现有版本：\(version.version)（\(version.build)）"
         case .failed(let installed, let message):
             heading.stringValue = installed ? "已安装，启用未完成" : "安装未完成"
             summary.stringValue = installed ? "安装文件已保留，启用遇到问题。请查看诊断后重试启用。" : "准备或安装遇到问题，请查看诊断并处理后重试。"

@@ -82,7 +82,7 @@ otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; 
 done
 codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$installer"
 verify_app "$installer" io.damao.inkflow.installer
-# Exercise the real signed resource loader before creating any DMG. No NSApplication/TIS.
+# Assembly-only extraction/metadata probe. Signature checks above remain separate. No TIS.
 "$binary" --check-payload
 cp .agents/skills/inkflow-release/assets/安装说明.txt "$scratch/stage/安装说明.txt"
 assembled="$scratch/InkFlow-$version-$build-arm64.dmg"

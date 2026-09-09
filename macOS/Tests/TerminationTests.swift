@@ -13,15 +13,6 @@ import SQLite3
         // Exits only this synthetic subprocess if either AppKit or the test driver stalls.
         DispatchQueue.global().asyncAfter(deadline: .now() + 15) { exit(99) }
         let app = NSApplication.shared
-        let receipt = try IFRuntimeStatus(directory: root.appendingPathComponent("runtime"), bundle: .main)
-        try receipt.update(engineReady: true, serverCreated: true)
-        let decoded = try JSONDecoder().decode(IFRuntimeReceipt.self, from: Data(contentsOf: receipt.url))
-        var identity = proc_bsdinfo()
-        check(proc_pidinfo(getpid(), PROC_PIDTBSDINFO, 0, &identity, Int32(MemoryLayout<proc_bsdinfo>.size)) > 0)
-        check(decoded.pid == getpid() && decoded.engineReady && decoded.serverCreated)
-        check(decoded.startSeconds == identity.pbi_start_tvsec && decoded.startMicroseconds == identity.pbi_start_tvusec)
-        check(URL(fileURLWithPath: decoded.executablePath).resolvingSymlinksInPath() == URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath())
-        check(decoded.version == "1.2.3-test" && decoded.build == "42", "Capture process bundle version")
         let gate = DispatchSemaphore(value: 0)
         let started = DispatchSemaphore(value: 0)
         @Sendable func factoryHasStarted() -> Bool { started.wait(timeout: .now()) == .success }
@@ -63,8 +54,6 @@ import SQLite3
             check(closed, "Unavailable recording with no pending data must allow termination")
             record("store-close")
             return closed
-        }, stateChanged: { terminating in
-            try! receipt.update(engineReady: false, serverCreated: true, terminating: terminating)
         }, didTerminate: { record("will-terminate") })
         app.delegate = delegate
         _ = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
@@ -81,8 +70,6 @@ import SQLite3
                 MainActor.assumeIsolated {
                     check(delegate.failure != nil, "Failed cleanup must deny the first native quit")
                     check(!IFEngine.ready)
-                    let current = try! JSONDecoder().decode(IFRuntimeReceipt.self, from: Data(contentsOf: receipt.url))
-                    check(current.terminating && !current.engineReady, "Denied quit never advertises normal service")
                     record("denied-retry")
                     app.terminate(nil)
                 }

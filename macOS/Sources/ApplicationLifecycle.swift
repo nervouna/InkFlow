@@ -5,7 +5,6 @@ import AppKit
     private let stopDictionaries: () async throws -> Void
     private let stopEngine: () -> Void
     private let closeStore: () async -> Bool
-    private let stateChanged: (Bool) -> Void
     private let didTerminate: () -> Void
     private var cleanup: Task<Void, Never>?
     private var complete = false
@@ -14,17 +13,16 @@ import AppKit
     private(set) var failure: String?
 
     init(stopDictionaries: @escaping () async throws -> Void, stopEngine: @escaping () -> Void,
-         closeStore: @escaping () async -> Bool, stateChanged: @escaping (Bool) -> Void,
+         closeStore: @escaping () async -> Bool,
          didTerminate: @escaping () -> Void = {}) {
         self.stopDictionaries = stopDictionaries; self.stopEngine = stopEngine
-        self.closeStore = closeStore; self.stateChanged = stateChanged; self.didTerminate = didTerminate
+        self.closeStore = closeStore; self.didTerminate = didTerminate
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if complete { return .terminateNow }
         guard cleanup == nil else { return .terminateLater }
         failure = nil
-        stateChanged(true)
         cleanup = Task { [self] in
             do {
                 if !dictionariesStopped {

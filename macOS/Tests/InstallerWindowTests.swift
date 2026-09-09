@@ -1,7 +1,7 @@
 import AppKit
 import Darwin
 
-private let testApp = IFVerifiedApp(version: .init(version: "0.2.0", build: "3"), executable: "Fake", codeHash: Data([1]))
+private let testApp = IFAppVersion(version: "0.2.0", build: "3")
 private func expect(_ condition: Bool, _ message: String) throws {
     if !condition { throw IFInstallerError.invalid("TEST: " + message) }
 }
@@ -10,29 +10,24 @@ private actor WindowFiles: IFInstallerFileOperations {
     var prepares = 0
     var commits = 0
     var cancels = 0
-    var recoveries = 0
     var failPrepare = false
-    var failArchive = false
     var old = false
     var delayCommit = false
-    func configure(failPrepare: Bool = false, failArchive: Bool = false, old: Bool = false, delayCommit: Bool = false) {
-        self.failPrepare = failPrepare; self.failArchive = failArchive; self.old = old; self.delayCommit = delayCommit
+    func configure(failPrepare: Bool = false, old: Bool = false, delayCommit: Bool = false) {
+        self.failPrepare = failPrepare; self.old = old; self.delayCommit = delayCommit
     }
-    func prepare() async throws -> IFInstallPreparation {
+    func prepare() async throws -> Bool {
         prepares += 1
         try await Task.sleep(for: .milliseconds(80))
         if failPrepare { throw IFInstallerError.invalid(String(repeating: "A long diagnostic /path/value ", count: 500)) }
-        return .init(installed: old ? testApp : nil, candidate: testApp, needsReplacement: true)
+        return old
     }
     func commit() async throws {
         commits += 1
         if delayCommit { try await Task.sleep(for: .milliseconds(160)) }
-        if failArchive { throw IFInstallerError.installedRecoveryRequired("archive unavailable") }
     }
-    func resumeRecovery() -> IFVerifiedApp { recoveries += 1; return testApp }
-    func release(cancelPrepared: Bool) { if cancelPrepared { cancels += 1 } }
-    func validateInstalled() -> IFVerifiedApp { testApp }
-    func counts() -> (Int, Int, Int, Int) { (prepares, commits, cancels, recoveries) }
+    func clean() { cancels += 1 }
+    func counts() -> (Int, Int, Int) { (prepares, commits, cancels) }
 }
 @MainActor private final class WindowSources: IFInputSourceOperations {
     var registered = true
@@ -40,7 +35,6 @@ private actor WindowFiles: IFInstallerFileOperations {
     var childEnabled = true
     var refusal = false
     var registerError = false
-    var restoreFailure = false
     var selected = "ascii"
     var registrations = 0
     func snapshot() -> IFInputRoster {
@@ -59,21 +53,14 @@ private actor WindowFiles: IFInstallerFileOperations {
         if refusal { return }
         if id == IFInputIdentity.bundleID { parentEnabled = true } else { childEnabled = true }
     }
-    func select(_ id: String) { if !(restoreFailure && id == "ascii") { selected = id } }
+    func select(_ id: String) { selected = id }
 }
 @MainActor private final class WindowLifecycle: IFInstallerLifecycleOperations {
-    var observation: IFRuntimeObservation = .ready
     var delayTermination = false
-    var delayObservation = false
-    func inspectForReplacement(_ app: IFVerifiedApp, at target: URL) {}
-    func terminateOld(_ app: IFVerifiedApp, at target: URL) async throws {
+    func terminateOld() async throws {
         if delayTermination { try await Task.sleep(for: .milliseconds(160)) }
     }
-    func assertStopped(_ app: IFVerifiedApp?, at target: URL) {}
-    func observe(_ app: IFVerifiedApp, at target: URL) async throws -> IFRuntimeObservation {
-        if delayObservation { try await Task.sleep(for: .milliseconds(160)) }
-        return observation
-    }
+
 }
 @MainActor private final class WindowFixture {
     let files = WindowFiles()
@@ -84,10 +71,15 @@ private actor WindowFiles: IFInstallerFileOperations {
     var settingsCalls = 0
     var loadDelay = false
     var failFirstLoad = false
-    lazy var coordinator = IFInstallerCoordinator(files: files, sources: sources, lifecycle: lifecycle, pause: {})
+    lazy var coordinator = makeCoordinator()
+    private func makeCoordinator() -> IFInstallerCoordinator {
+        IFInstallerCoordinator(files: files, sources: sources, lifecycle: lifecycle, pause: {
+            try await Task.sleep(nanoseconds: 30_000_000)
+        })
+    }
     lazy var ui = makeUI()
     private func makeUI() -> IFInstallWindowController {
-        IFInstallWindowController(version: testApp.version, installedVersion: nil, target: files.target,
+        IFInstallWindowController(version: testApp, installedVersion: nil, target: files.target,
         makeCoordinator: { [self] in
             loads += 1
             if failFirstLoad && loads == 1 { throw IFInstallerError.invalid("fake payload validation failure") }
@@ -129,7 +121,7 @@ private actor WindowFiles: IFInstallerFileOperations {
         try expect(!f.ui.progress.isHidden && !f.ui.primary.isEnabled, "progress and duplicate guard")
         try await waitFor { !f.ui.busy }
         try expect(f.loads == 1 && f.cleanups == 1, "one load and settled cleanup")
-        try expect(f.ui.state == .installedEnabled(.ready) && f.ui.primary.title == "完成", "ready done")
+        try expect(f.ui.state == .installedEnabled && f.ui.primary.title == "完成", "ready done")
         try expect(await f.files.counts().0 == 1, "one preparation")
         try await screenshot(f.ui, "completed")
         var done = false; f.ui.requestExit = { done = true }; f.ui.primary.performClick(nil)
@@ -141,7 +133,7 @@ private actor WindowFiles: IFInstallerFileOperations {
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
         try expect(f.ui.primary.title == "重试安装" && f.cleanups == 1, "payload failure releases resources")
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.loads == 2 && f.ui.state == .installedEnabled(.ready), "payload retry loads again")
+        try expect(f.loads == 2 && f.ui.state == .installedEnabled, "payload retry loads again")
     }
     do {
         let f = WindowFixture(); await f.files.configure(failPrepare: true); f.show()
@@ -151,7 +143,7 @@ private actor WindowFiles: IFInstallerFileOperations {
         try expect(f.ui.details.isSelectable && !f.ui.details.isEditable && f.ui.details.string.count > 8000, "long selectable diagnostic")
         try await screenshot(f.ui, "long-error")
         await f.files.configure(); f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.loads == 2 && f.cleanups == 2 && f.ui.state == .installedEnabled(.ready), "file retry reload")
+        try expect(f.loads == 2 && f.cleanups == 2 && f.ui.state == .installedEnabled, "file retry reload")
         f.ui.window?.orderOut(nil)
     }
     do {
@@ -161,33 +153,15 @@ private actor WindowFiles: IFInstallerFileOperations {
         f.ui.settings.performClick(nil); try expect(f.settingsCalls == 1, "injected settings only")
         try await screenshot(f.ui, "approval")
         f.sources.refusal = false; f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.loads == 1 && f.ui.state == .installedEnabled(.ready), "activation retry without reinstall")
+        try expect(f.loads == 1 && f.ui.state == .installedEnabled, "activation retry without reinstall")
         f.ui.window?.orderOut(nil)
     }
     do {
         let f = WindowFixture(); f.sources.registered = false; f.sources.registerError = true
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "重试注册", "registration retry")
+        try expect(f.ui.primary.title == "重试启用", "registration retry")
         f.sources.registerError = false; f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
         try expect(f.sources.registrations == 2 && f.loads == 1, "registration stage retry")
-    }
-    do {
-        let f = WindowFixture(); await f.files.configure(failArchive: true)
-        f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "继续恢复" && f.ui.settings.isHidden, "recovery action only")
-        f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        let counts = await f.files.counts()
-        try expect(counts.0 == 1 && counts.1 == 1 && counts.3 == 1 && f.ui.state == .installedEnabled(.ready), "resume without copy")
-    }
-    for restored in [true, false] {
-        let f = WindowFixture(); f.lifecycle.observation = .initializing; f.sources.restoreFailure = !restored; f.show()
-        f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        guard case .installedRuntimeFailed(_, let actual) = f.ui.state else { throw IFInstallerError.invalid("runtime failure missing") }
-        try expect(actual == restored && f.ui.summary.stringValue.contains(restored ? "已切回" : "尚未确认恢复"), "accurate fallback")
-        try await screenshot(f.ui, restored ? "fallback-restored" : "fallback-unconfirmed")
-        f.lifecycle.observation = .waitingForSystemLaunch; f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.state == .installedEnabled(.waitingForSystemLaunch) && f.ui.summary.stringValue.contains("按需启动"), "deferred launch completion")
-        f.ui.window?.orderOut(nil)
     }
     for duringLoad in [false, true] {
         let f = WindowFixture(); f.loadDelay = duringLoad
@@ -202,7 +176,7 @@ private actor WindowFiles: IFInstallerFileOperations {
             let f = WindowFixture()
             await f.files.configure(old: phase == .stoppingOldVersion, delayCommit: phase == .committing)
             f.lifecycle.delayTermination = phase == .stoppingOldVersion
-            f.lifecycle.delayObservation = phase == .activating
+            f.sources.refusal = phase == .activating; f.sources.parentEnabled = phase != .activating
             var replies = 0
             let delegate = IFInstallAppDelegate(controller: f.ui, reply: {
                 if $0 { replies += 1 }
@@ -229,20 +203,12 @@ private actor WindowFiles: IFInstallerFileOperations {
             try expect(f.ui.owningTask?.isCancelled == false, "owning task never cancelled")
             try await waitFor { !f.ui.busy }
             try expect(replies == 1, "reply after settled exactly once")
-            if phase != .preparing { try expect(f.ui.state == .installedEnabled(.ready), "critical stage completes") }
+            if phase != .preparing && phase != .activating { try expect(f.ui.state == .installedEnabled, "critical stage completes") }
             f.ui.window?.orderOut(nil)
             NSApp.delegate = nil
         }
     }
-    // Complete display contract, including defensive states the coordinator normally excludes.
-    let f = WindowFixture()
-    for state in [IFInstallerState.installedMissingRegistration, .legacyNeedsReview(testApp.version),
-                  .failed(installed: true, message: "API unavailable"), .installedRecoveryRequired("journal"),
-                  .installedEnabled(.unverifiedReceipt), .installedEnabled(.terminating)] {
-        f.ui.render(state)
-        try expect(!f.ui.summary.stringValue.isEmpty, "all states have user copy")
-    }
-    print("PASS native window: buttons, layout, progress, long errors, retries, duplicate click, cancellation, 8 close/quit gates, runtime/fallback, recovery; fake backends only")
+    print("PASS native window: buttons, layout, progress, long errors, retries, duplicate click, cancellation, 8 close/quit gates; fake backends only")
 }
 
 @main struct InstallerWindowTests {
