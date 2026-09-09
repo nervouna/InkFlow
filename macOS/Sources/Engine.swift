@@ -80,6 +80,7 @@ final class IFEngine {
     let qualityRecorder: QualityRecorder?
     private(set) var qualityRevision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))
     private var qualityDepth = 0
+    private var qualityEventTime: TimeInterval?
     private var qualityFontSize = 14
     private var qualityVertical = false
 
@@ -214,8 +215,8 @@ final class IFEngine {
         NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
     }
 
-    init?(qualityStore: QualityStore? = nil) {
-        qualityRecorder = (qualityStore ?? Self.productionQualityStore).map(QualityRecorder.init)
+    init?(qualityStore: QualityStore? = nil, qualityClock: QualityClock = QualityClock()) {
+        qualityRecorder = (qualityStore ?? Self.productionQualityStore).map { QualityRecorder(store: $0, clock: qualityClock) }
         guard Self.ready else { return nil }
         do { try restoreSession() } catch { detachSession(); return nil }
         Self.instances[ObjectIdentifier(self)] = WeakSession(self)
@@ -259,12 +260,12 @@ final class IFEngine {
     }
 
     @discardableResult
-    func key(_ key: Int32, modifiers: Int32 = 0) -> Bool {
+    func key(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false) -> Bool {
         guard available else { return false }
         defer { Self.signalIdle() }
         // Apply existing idle configuration before capturing the values this key actually uses.
         applyConfigurationIfIdle()
-        return qualityOperation(.key(key, modifiers)) { performKey(key, modifiers: modifiers) }
+        return qualityOperation(.key(key, modifiers, isRepeat)) { performKey(key, modifiers: modifiers) }
     }
 
     private func performKey(_ key: Int32, modifiers: Int32) -> Bool {
@@ -432,17 +433,19 @@ final class IFEngine {
     }
 
     @discardableResult
-    func event(_ event: NSEvent) -> Bool {
+    func event(_ event: NSEvent, capturedAt: TimeInterval? = nil) -> Bool {
         guard available else { return false }
+        qualityEventTime = capturedAt
+        defer { qualityEventTime = nil }
         defer { Self.signalIdle() }
         let flags = event.modifierFlags
         if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
-            return qualityOperation(.toggle) {
+            return qualityOperation(.toggle(event.isARepeat)) {
                 asciiMode = !savedASCII
                 return true
             }
         }
-        guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0)) { false } }
+        guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0, event.isARepeat)) { false } }
         let key: Int32
         switch event.keyCode {
         case 36, 76: key = 0xff0d
@@ -460,16 +463,19 @@ final class IFEngine {
         case 121: key = 0xff56
         default:
             guard let characters = event.characters, characters.utf16.count == 1,
-                  let character = characters.utf16.first, character <= 127 else { return false }
+                  let character = characters.utf16.first, character <= 127 else {
+                return qualityOperation(.key(-2, 0, event.isARepeat)) { false }
+            }
             key = Int32(character)
         }
-        return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0)
+        return self.key(key, modifiers: flags.contains(.shift) ? 1 : 0, isRepeat: event.isARepeat)
     }
 
-    func select(_ index: Int, trigger: QualityTrigger = .other, ambiguousText: Bool = false) {
+    func select(_ index: Int, trigger: QualityTrigger = .other, ambiguousText: Bool = false,
+                capturedAt: TimeInterval? = nil) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.select(index, trigger, ambiguousText)) {
+        _ = qualityOperation(.select(index, trigger, ambiguousText), capturedAt: capturedAt) {
             guard candidateOrder.indices.contains(index) else { return false }
             let handled = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index]) != 0
             updateOrdering()
@@ -491,24 +497,26 @@ final class IFEngine {
         orderedContent = content(of: rawSnapshot())
     }
 
-    func commit(trigger: QualityTrigger = .forceFlush) {
+    func commit(trigger: QualityTrigger = .forceFlush, capturedAt: TimeInterval? = nil) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.flush(trigger)) {
+        _ = qualityOperation(.flush(trigger), capturedAt: capturedAt) {
             let handled = Self.api.pointee.commit_composition(session) != 0
             updateOrdering()
             return handled
         }
     }
 
-    func clear() {
+    func clear(recordQuality: Bool = true) {
         guard available else { return }
         defer { Self.signalIdle() }
-        _ = qualityOperation(.clear) {
-            Self.api.pointee.clear_composition(session)
-            updateOrdering()
+        let clear = {
+            Self.api.pointee.clear_composition(self.session)
+            self.updateOrdering()
             return true
         }
+        if recordQuality { _ = qualityOperation(.clear, clear) }
+        else { _ = clear() }
     }
 
     private func moveHighlight(_ delta: Int, key: Int32) -> Bool {
@@ -613,11 +621,11 @@ final class IFEngine {
         }
     }
 
-    private func qualityOperation(_ action: QualityAction, _ body: () -> Bool) -> Bool {
+    private func qualityOperation(_ action: QualityAction, capturedAt: TimeInterval? = nil, _ body: () -> Bool) -> Bool {
         guard let qualityRecorder, qualityDepth == 0 else { return body() }
         qualityDepth += 1
         defer { qualityDepth -= 1 }
-        qualityRecorder.willMutate(qualitySnapshot(), revision: qualityRevision, action: action)
+        qualityRecorder.willMutate(qualitySnapshot(), revision: qualityRevision, action: action, at: capturedAt ?? qualityEventTime)
         let handled = body()
         qualityRecorder.didMutate(qualitySnapshot(), handled: handled)
         return handled

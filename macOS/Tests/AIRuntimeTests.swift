@@ -14,7 +14,16 @@ private final class RuntimeFixture {
     var stateHook: (() -> Void)?
     var contextAvailable = true
     var presentationAvailable = true
+    let statistics: AIStatisticsStore?
+    var compositionID = "composition-A"
+    var associationHook: (() -> Void)?
+    var associationReads = 0
     lazy var coordinator = AISuggestionCoordinator(settings: isolated.settings.smart, service: service,
+        statisticsStore: statistics,
+        statisticsAssociation: { [weak self] in
+            self?.associationReads += 1; self?.associationHook?()
+            return .init(compositionID: self?.compositionID, candidates: ["你好吗"], candidatePage: 0)
+        },
         current: { [weak self] in self?.stateHook?(); return self?.state }, context: { [weak self] anchor in
             guard let self, self.state?.anchor == anchor else { return nil }
             self.reads += 1; self.readHook?(); return self.contextAvailable ? self.content : nil
@@ -24,7 +33,8 @@ private final class RuntimeFixture {
         },
         visible: { [weak self] in self?.shown != nil }, hide: { [weak self] in self?.shown = nil })
 
-    init() throws {
+    init(statistics: AIStatisticsStore? = nil) throws {
+        self.statistics = statistics
         try isolated.settings.smart.save(baseURL: "https://example.invalid", apiKey: "synthetic", model: "fixture")
         isolated.settings.smart.isEnabled = true
         setInput("nihao")
@@ -51,6 +61,7 @@ struct AIRuntimeTests {
             try await debounceChecks()
             try await invalidationChecks()
             try await reentrantChecks()
+            try await statisticsChecks()
         }
         for event in [AIDiagnosticEvent.scheduled, .dispatched, .shown, .adoptionRequested, .cancelled, .failed, .discarded, .invalidated] {
             verify(diagnostics.contains(event), "Every request lifecycle outcome is observable")
@@ -72,6 +83,52 @@ struct AIRuntimeTests {
         verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Runtime records omit all content and configuration values")
         print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI runtime: bounded Unicode context captured once, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
+    }
+
+    @MainActor static func statisticsChecks() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-ai-runtime-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let db = AIStatisticsTestDatabase(url: root.appendingPathComponent("ai-statistics.sqlite3"))
+        let rule = AIPriceRule(id: "synthetic", provider: "https://example.invalid", model: "fixture", currency: "USD", inputPerMillion: 2, cachedInputPerMillion: Decimal(string: "0.2"), outputPerMillion: 4)
+        let store = AIStatisticsStore(url: db.url, pricing: .init(version: 1, rules: [rule]))
+        let fixture = try RuntimeFixture(statistics: store)
+        await fixture.service.setStatisticsMetadata(.parse(Data(#"{"usage":{"prompt_tokens":250,"completion_tokens":50,"prompt_tokens_details":{"cached_tokens":100},"completion_tokens_details":{"reasoning_tokens":10}}}"#.utf8)))
+        fixture.coordinator.synchronize(); await wait(0.56)
+        fixture.compositionID = "composition-B"; fixture.setInput("nihaoma")
+        fixture.coordinator.synchronize(); await wait(0.56)
+        verify(await fixture.service.count() == 2)
+        await fixture.service.resolve(1); await wait(0.03)
+        fixture.coordinator.validate(); fixture.coordinator.validate()
+        let adoption = fixture.coordinator.takeSuggestion()
+        verify(adoption != nil && fixture.coordinator.takeSuggestion() == nil)
+        await fixture.service.resolve(0); await wait(0.03)
+        fixture.stop(); await store.close()
+        let attempts = db.rows("SELECT * FROM attempts ORDER BY scheduled_at")
+        verify(attempts.count == 2 && attempts.allSatisfy { $0["estimated_cost"] == "0.00052" }, "Both overlapping attempts retain late independently observed costs")
+        verify(attempts[0]["composition_id"] == "composition-A" && attempts[0]["dispatch_composition_id"] == "composition-A" && attempts[1]["dispatch_composition_id"] == "composition-B", "Async responses never query a later composition")
+        verify(db.rows("SELECT * FROM attempt_events WHERE kind='shown'").count == 1 && db.rows("SELECT * FROM attempt_events WHERE kind='adoptionRequested'").count == 1, "Refresh and repeated Tab do not add exposure/adoption")
+        verify(db.rows("SELECT * FROM attempt_events WHERE kind='insertionIssued'").isEmpty, "Coordinator consumption never claims editor insertion")
+        verify(db.rows("SELECT * FROM samples WHERE response_text IS NOT NULL").count == 2, "Undisplayed and adopted recommendations are retained independently")
+        for phase in [1, 2] {
+            let reentrantDB = AIStatisticsTestDatabase(url: root.appendingPathComponent("reentrant-\(phase).sqlite3"))
+            let reentrantStore = AIStatisticsStore(url: reentrantDB.url)
+            let reentrant = try RuntimeFixture(statistics: reentrantStore)
+            reentrant.associationHook = {
+                guard reentrant.associationReads == phase else { return }
+                reentrant.associationHook = nil
+                reentrant.compositionID = "composition-B"; reentrant.setInput("nihaoma")
+                reentrant.coordinator.synchronize()
+            }
+            reentrant.coordinator.synchronize(); await wait(1.1)
+            verify(await reentrant.service.count() == 1, "Reentrant association cannot dispatch stale input")
+            await reentrant.service.resolve(0); await wait(0.03)
+            verify(reentrant.coordinator.takeSuggestion() != nil)
+            reentrant.stop(); await reentrantStore.close()
+            let rows = reentrantDB.rows("SELECT * FROM attempts WHERE dispatch_composition_id IS NOT NULL")
+            verify(rows.count == 1 && rows[0]["composition_id"] == "composition-B" && rows[0]["dispatch_composition_id"] == "composition-B", "Scheduling/dispatch association cannot overwrite a newer handle")
+            verify(reentrantDB.rows("SELECT * FROM attempt_events e JOIN attempts a ON a.id=e.attempt_id WHERE a.dispatch_composition_id IS NULL AND e.kind='serviceFailed'").isEmpty, "Cancelled debounce is not a service invocation failure")
+        }
+        print("PASS AI statistics coordinator: overlapping original associations, late costs, unshown results and exact-once first display/adoption")
     }
 
     @MainActor static func contextChecks() {

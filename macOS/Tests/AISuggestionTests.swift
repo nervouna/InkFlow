@@ -8,6 +8,7 @@ struct AISuggestionTests {
             try configuration()
             try requests()
             try await responses(diagnostics)
+            try await statisticsResponses()
         }
         for event in [AIDiagnosticEvent.settingsLoaded, .settingsSaved, .settingsToggled, .credentialFailed,
                       .transportStarted, .httpResponse, .transportSucceeded, .transportFailed, .transportCancelled] {
@@ -138,6 +139,42 @@ struct AISuggestionTests {
             _ = try await client.suggest(input: fixture, configuration: config)
             fatalError("Synthetic network failure must fail")
         } catch { expect(error as? AIServiceError == .network, "Network error remains sanitized") }
+    }
+
+    @MainActor static func statisticsResponses() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-ai-transport-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let db = AIStatisticsTestDatabase(url: root.appendingPathComponent("ai-statistics.sqlite3"))
+        let store = AIStatisticsStore(url: db.url)
+        let sessionConfig = URLSessionConfiguration.ephemeral
+        sessionConfig.protocolClasses = [AIStubURLProtocol.self]
+        let client = AIChatCompletionsClient(session: URLSession(configuration: sessionConfig))
+        for choices in [#"{}"#, #"[]"#, #"[{"message":{"content":"incomplete-private"},"finish_reason":"length"}]"#] {
+            let handle = store.begin(configuration: AIChatCompletionsClient.statisticsConfiguration(config))
+            AIStubURLProtocol.state.configure(status: 200, body: "{\"model\":\"returned-fixture\",\"choices\":\(choices),\"usage\":{\"prompt_tokens\":250,\"completion_tokens\":50}}")
+            do {
+                _ = try await AIStatisticsScope.$attempt.withValue(handle) { try await client.suggest(input: fixture, configuration: config) }
+                fatalError("Invalid content must retain metadata while still failing")
+            } catch { expect(error is AIServiceError, "Original content error is preserved") }
+        }
+        let cancelled = store.begin(configuration: AIChatCompletionsClient.statisticsConfiguration(config))
+        AIStubURLProtocol.state.configure(status: 200, body: #"{"model":"returned-fixture","choices":[{"message":{"content":"cancelled-private"}}],"usage":{"prompt_tokens":250,"completion_tokens":50}}"#)
+        let operation = Task {
+            try await AIStatisticsScope.$attempt.withValue(cancelled) {
+                try await AIDiagnostics.$observe.withValue({ record in
+                    if record.event == .httpResponse { withUnsafeCurrentTask { $0?.cancel() } }
+                }) { try await client.suggest(input: fixture, configuration: config) }
+            }
+        }
+        do { _ = try await operation.value; fatalError("Cancellation after observed HTTP response must reject content") }
+        catch { expect(error is CancellationError, "Cancellation stays distinct") }
+        await store.close()
+        let attempts = db.rows("SELECT * FROM attempts")
+        expect(attempts.count == 4 && attempts.allSatisfy { $0["usage_state"] == "valid" && $0["prompt_tokens"] == "250" && $0["returned_model"] == "returned-fixture" }, "Usage and returned model do not depend on valid choices, stop, or uncancelled task")
+        expect(db.scalar("SELECT response_text FROM samples WHERE attempt_id='\(cancelled.id)'") == "cancelled-private", "Response observed before diagnostic cancellation retains its bounded sample")
+        expect(db.scalar("SELECT reason FROM attempt_events WHERE attempt_id='\(cancelled.id)' AND kind='transportEnded'") == "cancelled", "Transport cancellation remains an independent fact")
+        expect(db.rows("SELECT * FROM configurations").allSatisfy { !String(describing: $0).contains("fixture-key") }, "Configuration snapshots never serialize API keys")
+        print("PASS AI statistics transport: invalid choices/content and cancellation after HTTP preserve original usage and bounded response")
     }
 }
 

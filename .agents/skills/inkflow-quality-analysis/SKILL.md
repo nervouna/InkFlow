@@ -16,6 +16,7 @@ query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
 "$python_bin" "$query" summary --format json
 "$python_bin" "$query" ranking-issues --format json
 "$python_bin" "$query" inspect COMPOSITION_ID --format json
+"$python_bin" "$query" timing --format json
 ```
 
 For a quick quality overview, use `summary`. For repeatedly choosing another
@@ -24,6 +25,14 @@ candidate over first-page top1, use `ranking-issues` (default at least 3 occurre
 use `--min-count 1` when the user requests individual cases. Read
 [the query contract](references/query-contract.md) before interpreting rates,
 comparing configurations, investigating incomplete evidence, or changing queries.
+
+Use `timing` for composition-level key intervals, last-edit waits and observed
+candidate visibility. It has no raw input text and does not multiply timing by
+decision count. Old or suppressed timing remains unknown; bounded key distributions
+cover retained samples only. For separate AI request, usage, cost and adoption
+statistics, use `macOS/Tools/ai-statistics.py`; read
+[its contract](../../../macOS/AI_STATISTICS.md) before interpreting its rates or
+inspecting the deliberately retained 30-day AI samples.
 
 All commands accept `--db`, `--since`, `--until`, `--app`, `--config`, `--kind` and
 `--format table|json|csv` after the command. Time defaults to all saved history.

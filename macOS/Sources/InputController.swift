@@ -6,6 +6,8 @@ import Carbon
 // The legacy superclass blocks inferred Sendable conformance. State stays on MainActor;
 // callback arguments only enter synchronous assumeIsolated scopes, never tasks or queues.
 final class InkFlowInputController: IMKInputController, @unchecked Sendable {
+    static var statisticsStore: AIStatisticsStore?
+    private var injectedAIStatisticsStore: AIStatisticsStore?
     private(set) var engine: IFEngine?
     var panel: IMKCandidates?
     private var selectionLayout: TISInputSource?
@@ -14,6 +16,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var ownsMarkedText = false
     private var qualityInsertionDepth = 0
     private var injectedQualityStore: QualityStore?
+    private let qualityClock: QualityClock
+    private var qualityVisibilityTimer: Timer?
     private let settings: IFSettings
     private let settingsWindow: IFSettingsWindowController
     private var smartClient: IMKTextInput?
@@ -24,10 +28,23 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private var smartSuggestions: AISuggestionCoordinator?
     private let smartDiagnosticSession = UUID()
     private var smartGateReason: AIDiagnosticReason?
+    private var statisticsAppBundleID: String?
 
     private func configureSmartSuggestions() {
         smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
             diagnosticSession: smartDiagnosticSession,
+            statisticsStore: injectedAIStatisticsStore,
+            statisticsAssociation: { [weak self] in
+                guard let self else { return .init() }
+                let recorder = self.engine?.qualityRecorder
+                return .init(compositionID: recorder?.activeCompositionID, appBundleID: self.statisticsAppBundleID,
+                    lastEditAt: recorder?.timingSnapshot?.lastEditAt, lastEditMonotonic: recorder?.lastEditMonotonicTime,
+                    observedVisibleAfterEdit: recorder?.timingSnapshot?.observedVisibleDuration,
+                    candidates: self.strings, candidatePage: self.engine?.snapshot().page)
+            }, statisticsNow: { [weak self] in
+                guard let self else { return .now }
+                return .init(utc: self.qualityClock.utc(), monotonic: self.qualityClock.monotonic())
+            },
             current: { [weak self] in self?.smartState() },
             candidatesVisible: { [weak self] in self?.presentation?.candidatesVisible ?? false },
             context: { [weak self] anchor in
@@ -43,6 +60,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         settings = MainActor.assumeIsolated { .sharedSettings }
         settingsWindow = MainActor.assumeIsolated { .sharedController }
+        qualityClock = MainActor.assumeIsolated { QualityClock() }
+        injectedAIStatisticsStore = MainActor.assumeIsolated { Self.statisticsStore }
         super.init(server: server, delegate: delegate, client: inputClient)
         nonisolated(unsafe) let callbackServer = server
         MainActor.assumeIsolated { configure(server: callbackServer) }
@@ -50,10 +69,14 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
 
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
           settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil,
+          qualityClock: QualityClock = QualityClock(),
+          aiStatisticsStore: AIStatisticsStore? = nil,
           smartService: any AISuggestionServing = AIChatCompletionsClient(),
           secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
           presentation: (any AIInputPresentation)? = nil) {
         injectedQualityStore = qualityStore
+        self.qualityClock = qualityClock
+        injectedAIStatisticsStore = aiStatisticsStore
         self.settings = settings
         self.settingsWindow = settingsWindow
         self.smartService = smartService
@@ -64,7 +87,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     private func configure(server: IMKServer?) {
-        engine = IFEngine(qualityStore: injectedQualityStore)
+        engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
         if presentation == nil, let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
             let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
@@ -91,6 +114,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     isolated deinit {
+        qualityVisibilityTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         smartSuggestions?.invalidate(reason: .teardown)
@@ -186,11 +210,12 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
 
     @objc private func engineChanged(_ notification: Notification) {
         smartSuggestions?.invalidate(reason: .engineChanged)
-        if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore) }
+        if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock) }
         applySettings()
     }
 
     func refresh(_ client: IMKTextInput?) {
+        observeQualityVisibility()
         smartSuggestions?.beginRefresh()
         defer { smartSuggestions?.endRefresh() }
         smartClient = client
@@ -234,11 +259,34 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             engine.qualityRecorder?.presented(engine.qualitySnapshot(), revision: engine.qualityRevision,
                                               panelShowIssued: presentation != nil && !strings.isEmpty)
         }
+        observeQualityVisibility()
+    }
+
+    /// Native panel show is asynchronous. Observe only visibility during an active
+    /// composition, even when AI is disabled; never read document content per tick.
+    private func observeQualityVisibility(at monotonicTime: TimeInterval? = nil) {
+        guard let recorder = engine?.qualityRecorder else { return }
+        recorder.setTimingCaptureEnabled(!secureInput())
+        guard recorder.activeCompositionID != nil, recorder.timingSnapshot != nil else {
+            qualityVisibilityTimer?.invalidate()
+            qualityVisibilityTimer = nil
+            return
+        }
+        if let presentation { recorder.observeCandidateVisibility(presentation.candidatesVisible, at: monotonicTime) }
+        if qualityVisibilityTimer == nil, presentation != nil {
+            let timer = Timer(timeInterval: QualityLimits.visibilityObservationInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.observeQualityVisibility() }
+            }
+            qualityVisibilityTimer = timer
+            RunLoop.main.add(timer, forMode: .common)
+        }
     }
 
     private func associateQualityClient(_ client: IMKTextInput?) {
+        let app = client?.bundleIdentifier()
+        statisticsAppBundleID = app
         engine?.qualityRecorder?.associateClient(client.map { $0 as AnyObject },
-            id: client?.uniqueClientIdentifierString(), app: client?.bundleIdentifier())
+            id: client?.uniqueClientIdentifierString(), app: app)
     }
 
     // InputMethodKit's legacy callbacks are synchronous and main-thread-bound but lack actor annotations.
@@ -247,19 +295,22 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
             guard !acceptingAI else { return false }
+            let entered = qualityClock.monotonic()
+            observeQualityVisibility(at: entered)
             smartSuggestions?.validate()
-            if let callbackEvent, acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput) { return true }
-            if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore); applySettings() }
+            if let callbackEvent, acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) { return true }
+            if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock); applySettings() }
             guard let engine, engine.available, let callbackEvent, callbackEvent.type == .keyDown else { return false }
             associateQualityClient(callbackClient as? IMKTextInput)
+            engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             // A selection/flush must use the order already shown, even if the client
             // stops exposing its document or moves the selection before that event.
             if engine.snapshot().preedit.isEmpty {
                 engine.setPrecedingText(IFPrecedingText.read(from: callbackClient as? IMKTextInput,
                                                            ownsMarkedText: ownsMarkedText))
             }
-            let handled = engine.event(callbackEvent)
-            if !handled && !engine.snapshot().preedit.isEmpty { engine.commit() }
+            let handled = engine.event(callbackEvent, capturedAt: entered)
+            if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
             refresh(callbackClient as? IMKTextInput)
             return handled
         }
@@ -273,8 +324,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         let text = candidate?.string
         MainActor.assumeIsolated {
             guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            let entered = qualityClock.monotonic()
             associateQualityClient(client())
-            engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1)
+            observeQualityVisibility(at: entered)
+            engine?.select(index, trigger: .panel, ambiguousText: strings.filter { $0 == text }.count > 1, capturedAt: entered)
             refresh(client())
         }
     }
@@ -283,6 +336,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         let text = candidate?.string
         MainActor.assumeIsolated {
             guard !acceptingAI, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            observeQualityVisibility()
             engine?.highlight(index)
             refresh(client())
         }
@@ -292,12 +346,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
             guard !acceptingAI else { return }
+            let entered = qualityClock.monotonic()
             smartSuggestions?.invalidate(reason: .commit)
             let activeClient = (callbackClient as? IMKTextInput) ?? client()
             associateQualityClient(activeClient)
-            engine?.commit()
+            observeQualityVisibility(at: entered)
+            engine?.commit(capturedAt: entered)
             refresh(activeClient)
             presentation?.hideCandidates()
+            observeQualityVisibility()
         }
     }
 
@@ -314,11 +371,19 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func hidePalettes() {
-        MainActor.assumeIsolated { smartSuggestions?.invalidate(reason: .hidePalettes); presentation?.hideCandidates() }
+        MainActor.assumeIsolated {
+            smartSuggestions?.invalidate(reason: .hidePalettes)
+            observeQualityVisibility()
+            presentation?.hideCandidates()
+            observeQualityVisibility()
+        }
         super.hidePalettes()
     }
 
-    @objc private func workspaceChanged(_ notification: Notification) { smartSuggestions?.invalidate(reason: .workspaceChanged) }
+    @objc private func workspaceChanged(_ notification: Notification) {
+        smartSuggestions?.invalidate(reason: .workspaceChanged)
+        observeQualityVisibility()
+    }
 
     @objc private func smartSettingsChanged(_ notification: Notification) {
         smartSuggestions?.invalidate(reason: .settingsChanged)
@@ -362,24 +427,33 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         return matches[0].frame
     }
 
-    private func acceptSuggestion(_ event: NSEvent, client: IMKTextInput?) -> Bool {
+    private func acceptSuggestion(_ event: NSEvent, client: IMKTextInput?, entered: TimeInterval) -> Bool {
         guard event.type == .keyDown, event.keyCode == 48,
               event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
               let client, ObjectIdentifier(client as AnyObject) == smartClient.map({ ObjectIdentifier($0 as AnyObject) }),
               let engine, !engine.snapshot().preedit.isEmpty else { return false }
         // A held Tab never accepts a suggestion that arrived after its initial keydown.
-        if event.isARepeat { return presentation?.suggestionVisible ?? false }
-        guard let adoption = smartSuggestions?.takeSuggestion() else { return false }
+        if event.isARepeat, presentation?.suggestionVisible == true {
+            engine.qualityRecorder?.recordExternalKey(.tab, isRepeat: true, at: entered)
+            return true
+        }
+        if event.isARepeat { return false }
+        let enteredStamp = AIStatisticsStamp(utc: qualityClock.utc().addingTimeInterval(entered - qualityClock.monotonic()), monotonic: entered)
+        guard let adoption = smartSuggestions?.takeSuggestion(at: enteredStamp) else { return false }
         acceptingAI = true
         engine.beginDelivery()
         qualityInsertionDepth += 1
         defer { qualityInsertionDepth -= 1; engine.endDelivery(); acceptingAI = false }
-        engine.clear()
+        engine.qualityRecorder?.recordExternalKey(.aiTab, isRepeat: false, at: entered)
+        engine.qualityRecorder?.finishExternalSelection(reason: "ai_adopted", at: entered)
+        engine.clear(recordQuality: false)
         // Match ordinary commits: insertion replaces the client's active mark. Clear
         // only our ownership first, so a reentrant refresh cannot erase that mark.
         ownsMarkedText = false
+        adoption.statistics?.record(.insertionIssued, at: .init(utc: qualityClock.utc(), monotonic: qualityClock.monotonic()))
         AIDiagnostics.emit(.insertionIssued, attempt: adoption.attempt, session: smartDiagnosticSession)
         client.insertText(adoption.text, replacementRange: NSRange(location: NSNotFound, length: 0))
+        adoption.statistics?.record(.insertionReturned, at: .init(utc: qualityClock.utc(), monotonic: qualityClock.monotonic()))
         AIDiagnostics.emit(.insertionReturned, attempt: adoption.attempt, session: smartDiagnosticSession)
         refresh(client)
         return true

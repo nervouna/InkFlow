@@ -19,6 +19,10 @@ final class AISuggestionCoordinator {
     private let hide: () -> Void
     private let delay: Duration
     private let diagnosticSession: UUID
+    private let statisticsStore: AIStatisticsStore?
+    private let statisticsAssociation: () -> AIStatisticsAssociation
+    private let statisticsNow: () -> AIStatisticsStamp
+    private var statisticsAttempt: AIStatisticsHandle?
     private var attemptID: UUID?
     private var settingsGate: AIDiagnosticReason?
     private var state: AISuggestionState?
@@ -33,17 +37,23 @@ final class AISuggestionCoordinator {
 
     init(settings: IFSmartSettings, service: any AISuggestionServing,
          delay: Duration = .milliseconds(500), diagnosticSession: UUID = UUID(),
+         statisticsStore: AIStatisticsStore? = nil,
+         statisticsAssociation: @escaping () -> AIStatisticsAssociation = { .init() },
+         statisticsNow: @escaping () -> AIStatisticsStamp = { .now },
          current: @escaping () -> AISuggestionState?,
          candidatesVisible: @escaping () -> Bool = { true },
          context: @escaping (AIClientAnchor) -> AISurroundingContext?,
          present: @escaping (String) -> Bool, visible: @escaping () -> Bool, hide: @escaping () -> Void) {
         self.settings = settings; self.service = service; self.delay = delay
         self.diagnosticSession = diagnosticSession
+        self.statisticsStore = statisticsStore; self.statisticsAssociation = statisticsAssociation
+        self.statisticsNow = statisticsNow
         self.current = current; self.candidatesVisible = candidatesVisible; self.context = context
         self.present = present; self.visible = visible; self.hide = hide
     }
 
     isolated deinit {
+        statisticsAttempt?.record(.uiEnded, at: statisticsNow(), reason: "teardown")
         if attemptID != nil { log(.invalidated, reason: .teardown) }
         request?.cancel(); tracker?.invalidate(); hide()
     }
@@ -59,6 +69,8 @@ final class AISuggestionCoordinator {
     }
 
     func invalidate(reason: AIDiagnosticReason = .explicit) {
+        statisticsAttempt?.record(.uiEnded, at: statisticsNow(), reason: reason.rawValue)
+        statisticsAttempt = nil
         if attemptID != nil { log(.invalidated, reason: reason) }
         attemptID = nil
         revision &+= 1
@@ -105,8 +117,14 @@ final class AISuggestionCoordinator {
         let attempt = UUID(), diagnosticSession = diagnosticSession
         attemptID = attempt
         state = next; configuration = settings.configuration
-        log(.scheduled)
         let token = revision, configuration = settings.configuration
+        let association = statisticsStore == nil ? AIStatisticsAssociation() : statisticsAssociation()
+        guard revision == token, state == next, self.configuration == configuration else { return }
+        let statistics = statisticsStore?.begin(id: attempt, at: statisticsNow(),
+            configuration: AIChatCompletionsClient.statisticsConfiguration(settings.configuration),
+            association: association)
+        statisticsAttempt = statistics
+        log(.scheduled)
         let observer = AIDiagnostics.observe
         let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
             AIDiagnostics.$observe.withValue(observer) {
@@ -118,6 +136,7 @@ final class AISuggestionCoordinator {
         request = Task { [weak self] in
           await AIDiagnostics.$session.withValue(diagnosticSession) {
            await AIDiagnostics.$attempt.withValue(attempt) {
+            var serviceStarted = false
             do {
                 try await Task.sleep(for: delay)
                 await self?.waitForRefresh()
@@ -126,6 +145,7 @@ final class AISuggestionCoordinator {
                 // reference across each wait permits untouched sessions to deallocate.
                 while true {
                     guard self?.matches(token, input: next.input, configuration: configuration) == true else {
+                        statistics?.record(.uiEnded, reason: "staleState")
                         AIDiagnostics.emit(.discarded, reason: .staleState); return
                     }
                     if self?.candidatesVisible() == true { break }
@@ -133,13 +153,28 @@ final class AISuggestionCoordinator {
                     await self?.waitForRefresh()
                 }
                 self?.requiresVisibleCandidates = true
-                guard let self, let context = self.capture(token, input: next.input, configuration: configuration) else { return }
+                guard let self, let context = self.capture(token, input: next.input, configuration: configuration) else {
+                    statistics?.record(.uiEnded, reason: "contextUnavailable"); return
+                }
                 let input = AISuggestionInput(precedingText: context.precedingText, followingText: context.followingText,
                                               pinyin: next.input.rawInput, selectedPrefix: next.input.selectedPrefix)
+                let association = statistics == nil ? AIStatisticsAssociation() : self.statisticsAssociation()
+                if statistics != nil && !self.matches(token, input: next.input, configuration: configuration) {
+                    statistics?.record(.uiEnded, at: self.statisticsNow(), reason: "staleState"); return
+                }
+                statistics?.dispatch(.init(preceding: input.precedingText, following: input.followingText,
+                                           pinyin: input.pinyin, selectedPrefix: input.selectedPrefix,
+                                           precedingAvailable: context.precedingAvailable, followingAvailable: context.followingAvailable),
+                                     association: association, at: self.statisticsNow())
                 AIDiagnostics.emit(.dispatched)
-                let text = try await service.suggest(input: input, configuration: configuration)
+                serviceStarted = true
+                let text = try await AIStatisticsScope.$attempt.withValue(statistics) {
+                    try await service.suggest(input: input, configuration: configuration)
+                }
+                statistics?.returned(text, at: self.statisticsNow())
                 await self.waitForRefresh()
                 guard self.matches(token, input: next.input, configuration: configuration) else {
+                    statistics?.record(.uiEnded, at: self.statisticsNow(), reason: "staleState")
                     AIDiagnostics.emit(.discarded, reason: .staleState); return
                 }
                 self.settings.setRequestError(nil)
@@ -151,6 +186,7 @@ final class AISuggestionCoordinator {
                     AIDiagnostics.emit(.discarded, reason: .presentation)
                     self.invalidate(reason: .presentation); return
                 }
+                statistics?.record(.shown, at: self.statisticsNow())
                 guard self.matches(token, input: next.input, configuration: configuration) else {
                     AIDiagnostics.emit(.discarded, reason: .staleState)
                     self.invalidate(reason: .stateChanged); return
@@ -158,11 +194,18 @@ final class AISuggestionCoordinator {
                 self.preview = text
                 AIDiagnostics.emit(.shown)
             } catch {
-                guard !(error is CancellationError) else { AIDiagnostics.emit(.cancelled); return }
+                if serviceStarted {
+                    statistics?.record(.serviceFailed, reason: error is CancellationError ? "cancelled" : AIDiagnostics.reason(for: error).rawValue)
+                }
+                guard !(error is CancellationError) else {
+                    statistics?.record(.uiEnded, reason: "cancelled"); AIDiagnostics.emit(.cancelled); return
+                }
                 guard let self, self.matches(token, input: next.input, configuration: configuration) else {
+                    statistics?.record(.uiEnded, reason: "staleState")
                     AIDiagnostics.emit(.discarded, reason: .staleState); return
                 }
                 AIDiagnostics.emit(.failed, reason: AIDiagnostics.reason(for: error))
+                statistics?.record(.uiEnded, at: self.statisticsNow(), reason: AIDiagnostics.reason(for: error).rawValue)
                 self.settings.setRequestError(error as? AIServiceError ?? .network)
             }
            }
@@ -196,13 +239,14 @@ final class AISuggestionCoordinator {
         return context
     }
 
-    func takeSuggestion() -> (text: String, attempt: UUID?)? {
+    func takeSuggestion(at entered: AIStatisticsStamp? = nil) -> (text: String, attempt: UUID?, statistics: AIStatisticsHandle?)? {
         guard refreshDepth == 0 else { return nil }
         let token = revision
         guard let state, let preview, let configuration, visible(),
               matches(token, input: state.input, configuration: configuration), visible(),
               revision == token else { invalidate(reason: .acceptanceUnavailable); return nil }
-        let adoption = (preview, attemptID)
+        let adoption = (preview, attemptID, statisticsAttempt)
+        statisticsAttempt?.record(.adoptionRequested, at: entered ?? statisticsNow())
         log(.adoptionRequested)
         invalidate(reason: .adoptionRequested)
         return adoption

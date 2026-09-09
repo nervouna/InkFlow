@@ -258,6 +258,69 @@ def decode_row(row):
         for key, value in row.items()}
 
 
+def sql_distribution(db, sql, parameters, expression, total, unit):
+    # SQLite sorts scalar values; only the four interpolation endpoints reach Python.
+    result = db.execute(sql + f""", values_to_rank AS (SELECT {expression} AS value FROM cohort),
+        ranked AS (SELECT value,ROW_NUMBER() OVER (ORDER BY value)-1 AS position,COUNT(*) OVER () AS n
+                   FROM values_to_rank WHERE typeof(value) IN ('integer','real') AND value>=0)
+        SELECT MAX(n) AS n,
+          MAX(CASE WHEN position=CAST((n-1)*0.50 AS INTEGER) THEN value END) AS low50,
+          MAX(CASE WHEN position=CAST((n-1)*0.50 AS INTEGER)+1 THEN value END) AS high50,
+          MAX(CASE WHEN position=CAST((n-1)*0.95 AS INTEGER) THEN value END) AS low95,
+          MAX(CASE WHEN position=CAST((n-1)*0.95 AS INTEGER)+1 THEN value END) AS high95 FROM ranked
+        """, parameters).fetchone()
+    count = result['n'] or 0
+    def percentile(suffix, p):
+        if not count:
+            return None
+        low, high = result['low'+suffix], result['high'+suffix]
+        position = (count-1)*p
+        return low if high is None else low+(high-low)*(position-int(position))
+    return dict(unit=unit, count=count, unknown=total-count, p50=percentile('50', 0.5), p95=percentile('95', 0.95),
+                interpolation='linear_at_(n-1)*p')
+
+def timing(db, args):
+    composition_filter, _, parameters = filters(args)
+    sql = f"""WITH selected AS (SELECT c.operations_json FROM compositions c WHERE {composition_filter}),
+        timings AS (SELECT json_extract(operations_json,'$.timing') AS timing FROM selected
+                    WHERE json_type(operations_json,'$.timing')='object' AND json_extract(operations_json,'$.timing.version')=1),
+        keys AS (SELECT j.value AS sample FROM timings t,json_each(t.timing,'$.keySamples') j)
+        """
+    coverage = rows(db, sql + """SELECT
+        (SELECT COUNT(*) FROM selected) AS compositions, COUNT(*) AS timing_v1,
+        (SELECT COUNT(*) FROM selected WHERE json_type(operations_json,'$.timing') IS NULL
+            OR json_type(operations_json,'$.timing')='null') AS unavailable,
+        COALESCE(SUM(json_extract(timing,'$.endedOffset') IS NOT NULL),0) AS ended,
+        COALESCE(SUM(json_extract(timing,'$.endedOffset') IS NULL),0) AS unfinished,
+        COALESCE(SUM(COALESCE(json_extract(timing,'$.droppedKeyCount'),0)>0),0) AS truncated_compositions,
+        COALESCE(SUM(json_extract(timing,'$.droppedKeyCount')),0) AS dropped_keys,
+        (SELECT COUNT(*) FROM keys) AS retained_keys FROM timings""", parameters)[0]
+    coverage['unsupported_version'] = coverage['compositions']-coverage['unavailable']-coverage['timing_v1']
+    key_sql = sql + ',cohort AS (SELECT sample FROM keys)'
+    intervals = sql_distribution(db, key_sql, parameters, "json_extract(sample,'$.interval')", coverage['retained_keys'], 'seconds')
+    groups = rows(db, sql + """SELECT json_extract(sample,'$.kind') AS kind,json_extract(sample,'$.isRepeat') AS is_repeat,
+        COUNT(*) AS count FROM keys GROUP BY kind,is_repeat ORDER BY kind,is_repeat""", parameters)
+    # The bounded category/repeat groups return only counts and interpolation endpoints.
+    for group in groups:
+        group_parameters = dict(parameters, key_kind=group['kind'], key_repeat=group['is_repeat'])
+        group_sql = sql + """,cohort AS (SELECT sample FROM keys WHERE json_extract(sample,'$.kind') IS :key_kind
+            AND json_extract(sample,'$.isRepeat') IS :key_repeat)"""
+        group['intervals'] = sql_distribution(db, group_sql, group_parameters, "json_extract(sample,'$.interval')", group.pop('count'), 'seconds')
+        if group['is_repeat'] is not None:
+            group['is_repeat'] = bool(group['is_repeat'])
+    durations = {}
+    for state, condition, count in [('ended', 'IS NOT NULL', coverage['ended']),
+                                    ('unfinished_observations', 'IS NULL', coverage['unfinished'])]:
+        duration_sql = sql + f",cohort AS (SELECT timing FROM timings WHERE json_extract(timing,'$.endedOffset') {condition})"
+        durations[state] = {field: sql_distribution(db, duration_sql, parameters, f"json_extract(timing,'$.{field}')", count, 'seconds')
+                            for field in ('postEditWait', 'observedVisibleDuration', 'phaseWait', 'phaseObservedVisibleDuration')}
+    return dict(scope='composition_operations_once', coverage=coverage,
+                key_intervals=dict(scope='retained_samples_only; each stored interval uses the actual preceding key',
+                                   all=intervals, by_category_repeat=groups), durations=durations,
+                visibility_observation_interval=sql_distribution(db, sql+',cohort AS (SELECT timing FROM timings)', parameters,
+                    "json_extract(timing,'$.visibilityObservationInterval')", coverage['timing_v1'], 'seconds'),
+                observation='controller keyDown receipt with monotonic clock; visibility polled nominally every 0.1 seconds, not attention or exact render onset')
+
 
 def inspect(db, args):
     composition_filter, decision_filter, parameters = filters(args)
@@ -308,7 +371,7 @@ def render(result, output_format):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest='command', required=True)
-    for command in ('summary', 'ranking-issues', 'inspect'):
+    for command in ('summary', 'ranking-issues', 'inspect', 'timing'):
         sub = commands.add_parser(command)
         if command == 'inspect':
             sub.add_argument('composition_id', help='Composition ID returned by ranking-issues')
@@ -333,7 +396,7 @@ def main(argv=None):
             raise QueryError('--since must be earlier than the exclusive --until boundary.')
         with closing(connect(args.db)) as db:
             db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
-            result = {'summary': summary, 'ranking-issues': ranking_issues, 'inspect': inspect}[args.command](db, args)
+            result = {'summary': summary, 'ranking-issues': ranking_issues, 'inspect': inspect, 'timing': timing}[args.command](db, args)
         result = dict(command=args.command, filters={k: str(v) if isinstance(v, Path) else v
                       for k, v in vars(args).items() if k in ('db','since','until','app','config','kind')}, **result)
         render(result, args.format)

@@ -6,12 +6,18 @@ let result: Int32 = autoreleasepool {
     let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
     let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
     let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version)
+    let statisticsStore = AIStatisticsStore(url: user.appendingPathComponent("ai-statistics.sqlite3"),
+        pricingURL: user.appendingPathComponent("ai-pricing.json"),
+        buildIdentity: [bundle.bundleIdentifier, bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                        bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String].compactMap { $0 }.joined(separator: ":"))
+    InkFlowInputController.statisticsStore = statisticsStore
     IFEngine.configureQualityRecording(qualityStore)
     defer {
         let drained = DispatchSemaphore(value: 0)
-        Task.detached { await qualityStore.close(); drained.signal() }
+        Task.detached { await qualityStore.close(); await statisticsStore.close(); drained.signal() }
         drained.wait()
         IFEngine.configureQualityRecording(nil)
+        InkFlowInputController.statisticsStore = nil
     }
     // Only the production entry point supplies a real root. Factory failure is retryable from Settings.
     let dictionaries = IFDictionaryCoordinator(backendFactory: {

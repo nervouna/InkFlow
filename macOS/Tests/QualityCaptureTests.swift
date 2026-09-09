@@ -52,6 +52,7 @@ struct QualityCaptureTests {
         classification()
         pureSnapshots()
         try await engineAndController(store, db, isolated.settings)
+        try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
         let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: .unknown)

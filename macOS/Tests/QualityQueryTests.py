@@ -304,6 +304,58 @@ class QueryTests(unittest.TestCase):
             db.execute('ANALYZE')
         self.assertEqual(self.result()['coverage']['compositions'],21)
 
+    def test_timing_legacy_unknown_and_one_snapshot_per_composition(self):
+        legacy = self.result('timing')
+        self.assertEqual(legacy['coverage']['unavailable'], 21)
+        self.assertEqual(legacy['coverage']['timing_v1'], 0)
+        self.assertIsNone(legacy['durations']['ended']['postEditWait']['p50'])
+        samples = [dict(sequence=0, offset=0, kind='typing', isRepeat=False),
+                   dict(sequence=1, offset=0.2, interval=0.2, kind='typing', isRepeat=False),
+                   dict(sequence=256, offset=4, interval=0.4, kind='ai_tab', isRepeat=True)]
+        value = dict(version=1, keySamples=samples, droppedKeyCount=254, endedOffset=4,
+                     postEditWait=0.8, observedVisibleDuration=0.5, phaseWait=0.3,
+                     phaseObservedVisibleDuration=0.2, visibilityObservationInterval=0.1)
+        with contextlib.closing(sqlite3.connect(self.db)) as db, db:
+            db.execute("UPDATE compositions SET operations_json=? WHERE id='a'", (json.dumps(dict(OPS, timing=value)),))
+            # Decision snapshots deliberately contain the same data. Never sum these copies.
+            db.execute('UPDATE candidate_decisions SET operations_json=?', (json.dumps(dict(OPS, timing=value)),))
+            unfinished = dict(value)
+            unfinished.pop('endedOffset')
+            unfinished.pop('observedVisibleDuration')
+            unfinished['keySamples'] = []
+            unfinished['droppedKeyCount'] = 0
+            db.execute("UPDATE compositions SET operations_json=? WHERE id='b'", (json.dumps(dict(OPS, timing=unfinished)),))
+            db.execute("UPDATE compositions SET operations_json=? WHERE id='c'", (json.dumps(dict(OPS, timing=dict(version=2))),))
+        result = self.result('timing')
+        self.assertEqual(result['scope'], 'composition_operations_once')
+        self.assertEqual(result['coverage'], dict(compositions=21, timing_v1=2, unavailable=18, unsupported_version=1,
+                                                ended=1, unfinished=1, truncated_compositions=1, dropped_keys=254, retained_keys=3))
+        intervals = result['key_intervals']['all']
+        self.assertEqual(intervals['count'], 2)
+        self.assertEqual(intervals['unknown'], 1)
+        self.assertAlmostEqual(intervals['p50'], 0.3)
+        self.assertAlmostEqual(intervals['p95'], 0.39)
+        self.assertEqual(result['key_intervals']['by_category_repeat'][0]['kind'], 'ai_tab')
+        self.assertEqual(result['key_intervals']['by_category_repeat'][0]['intervals']['p50'], 0.4)
+        self.assertEqual(result['durations']['ended']['observedVisibleDuration']['p50'], 0.5)
+        self.assertIsNone(result['durations']['unfinished_observations']['observedVisibleDuration']['p50'])
+        self.assertEqual(self.result('timing', '--kind', 'emoji')['coverage']['compositions'], 1)
+        self.assertEqual(self.result('timing', '--kind', 'emoji')['coverage']['timing_v1'], 0)
+        self.assertNotIn('rawInput', json.dumps(result))
+
+    def test_timing_actual_controller_writer(self):
+        if not ENGINE_DB.exists():
+            if REQUIRE_ENGINE:
+                self.fail('Run test-quality-capture.sh first')
+            self.skipTest('Actual controller DB absent')
+        result = self.result('timing', db=ENGINE_DB)
+        self.assertEqual(result['coverage']['compositions'], 40)
+        self.assertGreater(result['coverage']['timing_v1'], 0)
+        self.assertGreater(result['key_intervals']['all']['count'], 0)
+        # This engine/controller fixture does not observe native panel visibility.
+        self.assertIsNone(result['visibility_observation_interval']['p50'])
+        self.assertEqual(result['visibility_observation_interval']['count'], 0)
+
     def test_actual_engine_schema_and_controller_cohort(self):
         if not ENGINE_DB.exists():
             if REQUIRE_ENGINE:
