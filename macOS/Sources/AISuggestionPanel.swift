@@ -15,20 +15,20 @@ final class AISuggestionPanel {
     private let heading: NSTextField
     private let hint: NSTextField
     private var suggestion = ""
+    private var font = NSFont.systemFont(ofSize: 14)
+    private var maximumWidth: CGFloat = 520
     var isVisible: Bool { panel.isVisible }
     var frame: NSRect { panel.frame }
     static func isSuggestionWindow(_ window: NSWindow) -> Bool { window is AISuggestionWindow }
 
     init() {
-        let width: CGFloat = 310
         body = NSTextField(wrappingLabelWithString: "")
-        heading = NSTextField(labelWithString: "AI 建议")
+        heading = NSTextField(labelWithString: "AI")
         hint = NSTextField(labelWithString: "Tab 采纳")
-        body.font = .systemFont(ofSize: 14)
         body.textColor = .labelColor
-        body.preferredMaxLayoutWidth = width - 24
-        let bodyHeight = ceil(body.fittingSize.height)
-        let size = NSSize(width: width, height: bodyHeight + 42)
+        body.maximumNumberOfLines = 0
+        body.lineBreakMode = .byWordWrapping
+        let size = NSSize(width: 200, height: 28)
         panel = AISuggestionWindow(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -44,49 +44,75 @@ final class AISuggestionPanel {
         panel.hasShadow = true
 
         let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
-        background.material = .popover
+        background.material = .menu
         background.blendingMode = .behindWindow
         background.state = .active
         background.wantsLayer = true
-        background.layer?.cornerRadius = 10
+        background.autoresizingMask = [.width, .height]
         background.layer?.masksToBounds = true
         panel.contentView = background
 
-        let title = heading
-        title.font = .systemFont(ofSize: 11, weight: .medium)
-        title.textColor = .secondaryLabelColor
-        title.frame = NSRect(x: 12, y: size.height - 24, width: 120, height: 14)
-        background.addSubview(title)
+        heading.font = .systemFont(ofSize: 11, weight: .medium)
+        heading.textColor = .secondaryLabelColor
         hint.font = .systemFont(ofSize: 11)
         hint.textColor = .secondaryLabelColor
         hint.alignment = .right
-        hint.frame = NSRect(x: width - 102, y: size.height - 24, width: 90, height: 14)
+        background.addSubview(heading)
         background.addSubview(hint)
-        body.frame = NSRect(x: 12, y: 10, width: width - 24, height: bodyHeight)
         background.addSubview(body)
     }
 
-    func setSuggestion(_ text: String) {
-        guard text != suggestion else { return }
+    func setSuggestion(_ text: String, font: NSFont = .systemFont(ofSize: 14)) {
+        guard text != suggestion || self.font != font else { return }
         suggestion = text
+        self.font = font
         body.stringValue = text
-        let width: CGFloat = 310, maximumHeight: CGFloat = 170
-        // Explicitly disclose clipping; Tab always inserts the full, complete model response.
-        let naturalHeight = ceil(body.fittingSize.height)
-        let clipped = naturalHeight > maximumHeight
-        let height = min(naturalHeight, maximumHeight)
-        body.maximumNumberOfLines = 0
-        body.lineBreakMode = .byWordWrapping
-        heading.stringValue = clipped ? "AI 建议（部分显示）" : "AI 建议"
-        heading.frame = NSRect(x: 12, y: height + 18, width: 180, height: 14)
-        hint.frame = NSRect(x: width - 102, y: height + 18, width: 90, height: 14)
-        body.frame = NSRect(x: 12, y: 10, width: width - 24, height: height)
-        panel.setContentSize(NSSize(width: width, height: height + 42))
+        body.font = font
         panel.setAccessibilityValue(text)
+        layout()
+    }
+
+    private func layout() {
+        let inset: CGFloat = 12, gap: CGFloat = 8, maximumHeight: CGFloat = 170
+        heading.stringValue = "AI"
+        let hintSize = hint.fittingSize
+        // Reserve the text field inset in addition to the measured string width.
+        let naturalWidth = ceil((suggestion as NSString).size(withAttributes: [.font: font]).width) + 4
+        func measure() -> (CGFloat, CGFloat, CGFloat) {
+            let headingWidth = ceil(heading.fittingSize.width)
+            let chrome = inset * 2 + gap * 2 + headingWidth + ceil(hintSize.width)
+            let width = max(chrome + max(font.pointSize, 24), min(maximumWidth, chrome + naturalWidth))
+            let bodyWidth = max(1, width - chrome)
+            body.preferredMaxLayoutWidth = bodyWidth
+            return (width, bodyWidth, ceil(body.fittingSize.height))
+        }
+        var (width, bodyWidth, naturalHeight) = measure()
+        if naturalHeight > maximumHeight {
+            heading.stringValue = "AI · 部分显示"
+            (width, bodyWidth, naturalHeight) = measure()
+        }
+        let bodyHeight = min(naturalHeight, maximumHeight)
+        let height = max(bodyHeight, max(heading.fittingSize.height, hintSize.height)) + 10
+        let headingWidth = ceil(heading.fittingSize.width)
+        heading.frame = NSRect(x: inset, y: (height - heading.fittingSize.height) / 2,
+                               width: headingWidth, height: heading.fittingSize.height)
+        body.frame = NSRect(x: inset + headingWidth + gap, y: (height - bodyHeight) / 2,
+                            width: bodyWidth, height: bodyHeight)
+        hint.frame = NSRect(x: width - inset - hintSize.width, y: (height - hintSize.height) / 2,
+                            width: hintSize.width, height: hintSize.height)
+        panel.setContentSize(NSSize(width: width, height: height))
+        let singleLineHeight = ceil(font.ascender - font.descender + font.leading) + 4
+        panel.contentView?.layer?.cornerRadius = bodyHeight <= singleLineHeight ? height / 2 : 12
+        panel.invalidateShadow()
     }
 
     func show(relativeTo candidateFrame: NSRect,
               screens: [NSRect] = NSScreen.screens.map(\.visibleFrame)) {
+        if let screen = Self.screen(for: candidateFrame, screens: screens),
+           maximumWidth != min(520, screen.width) {
+            maximumWidth = min(520, screen.width)
+            layout()
+        }
         guard let position = Self.position(candidateFrame: candidateFrame, panelSize: panel.frame.size, screens: screens) else {
             hide()
             return
@@ -107,19 +133,8 @@ final class AISuggestionPanel {
         }
         guard valid(candidateFrame), panelSize.width.isFinite, panelSize.height.isFinite,
               panelSize.width > 0, panelSize.height > 0, gap.isFinite, gap >= 0 else { return nil }
-        func overlap(_ screen: NSRect) -> CGFloat {
-            let intersection = screen.intersection(candidateFrame)
-            return intersection.isNull ? 0 : intersection.width * intersection.height
-        }
-        func distance(_ screen: NSRect) -> CGFloat {
-            let dx = candidateFrame.midX - min(max(candidateFrame.midX, screen.minX), screen.maxX)
-            let dy = candidateFrame.midY - min(max(candidateFrame.midY, screen.minY), screen.maxY)
-            return dx * dx + dy * dy
-        }
-        guard let screen = screens.filter(valid).max(by: { lhs, rhs in
-            let leftOverlap = overlap(lhs), rightOverlap = overlap(rhs)
-            return leftOverlap == rightOverlap ? distance(lhs) > distance(rhs) : leftOverlap < rightOverlap
-        }), panelSize.width <= screen.width, panelSize.height <= screen.height else { return nil }
+        guard let screen = Self.screen(for: candidateFrame, screens: screens),
+              panelSize.width <= screen.width, panelSize.height <= screen.height else { return nil }
 
         let x = min(max(candidateFrame.minX, screen.minX), screen.maxX - panelSize.width)
         let below = NSRect(x: x, y: candidateFrame.minY - gap - panelSize.height,
@@ -135,5 +150,21 @@ final class AISuggestionPanel {
             if screen.contains(side) { return side }
         }
         return nil
+    }
+    nonisolated private static func screen(for candidateFrame: NSRect, screens: [NSRect]) -> NSRect? {
+        func overlap(_ screen: NSRect) -> CGFloat {
+            let intersection = screen.intersection(candidateFrame)
+            return intersection.isNull ? 0 : intersection.width * intersection.height
+        }
+        func distance(_ screen: NSRect) -> CGFloat {
+            let dx = candidateFrame.midX - min(max(candidateFrame.midX, screen.minX), screen.maxX)
+            let dy = candidateFrame.midY - min(max(candidateFrame.midY, screen.minY), screen.maxY)
+            return dx * dx + dy * dy
+        }
+        return screens.filter { $0.width > 0 && $0.height > 0 && [$0.minX, $0.minY, $0.maxX, $0.maxY].allSatisfy(\.isFinite) }.max(by: { lhs, rhs in
+            let leftOverlap = overlap(lhs), rightOverlap = overlap(rhs)
+            return leftOverlap == rightOverlap ? distance(lhs) > distance(rhs) : leftOverlap < rightOverlap
+        })
+
     }
 }
