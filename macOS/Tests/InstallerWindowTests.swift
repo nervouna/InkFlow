@@ -114,7 +114,9 @@ private actor WindowFiles: IFInstallerFileOperations {
     do {
         let f = WindowFixture(); f.show()
         try expect(f.ui.primary.title == "安装并启用" && f.ui.primary.keyEquivalent == "\r", "install default key")
-        try expect(f.ui.secondary.keyEquivalent == "\u{1b}" && f.ui.pathLabel.isSelectable, "escape and selectable path")
+        try expect(f.ui.secondary.keyEquivalent == "\u{1b}", "escape closes")
+        try expect(f.ui.heading.stringValue == "安装墨流" && f.ui.versionLabel.stringValue == "0.2.0(3)", "minimal install identity")
+        try expect(f.ui.summary.isHidden, "initial explanation removed")
         try await screenshot(f.ui, "ready")
         f.ui.primary.performClick(nil); f.ui.primary.performClick(nil)
         try await waitFor { f.ui.state == .preparing }
@@ -122,6 +124,7 @@ private actor WindowFiles: IFInstallerFileOperations {
         try await waitFor { !f.ui.busy }
         try expect(f.loads == 1 && f.cleanups == 1, "one load and settled cleanup")
         try expect(f.ui.state == .installedEnabled && f.ui.primary.title == "完成", "ready done")
+        try expect(f.ui.heading.stringValue == "安装完成" && f.ui.summary.isHidden, "minimal completion")
         try expect(await f.files.counts().0 == 1, "one preparation")
         try await screenshot(f.ui, "completed")
         var done = false; f.ui.requestExit = { done = true }; f.ui.primary.performClick(nil)
@@ -131,15 +134,17 @@ private actor WindowFiles: IFInstallerFileOperations {
     do {
         let f = WindowFixture(); f.failFirstLoad = true
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "重试安装" && f.cleanups == 1, "payload failure releases resources")
+        try expect(f.ui.primary.title == "重试" && f.ui.heading.stringValue == "安装失败" && f.cleanups == 1, "payload failure releases resources")
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
         try expect(f.loads == 2 && f.ui.state == .installedEnabled, "payload retry loads again")
     }
     do {
         let f = WindowFixture(); await f.files.configure(failPrepare: true); f.show()
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "重试安装", "file failure retry")
+        try expect(f.ui.primary.title == "重试" && f.ui.heading.stringValue == "安装失败", "file failure retry")
+        try expect(f.ui.summary.isHidden && f.ui.diagnostics.title == "详情", "minimal failure copy")
         f.ui.diagnostics.performClick(nil)
+        try expect(f.ui.diagnostics.title == "收起", "compact details toggle")
         try expect(f.ui.details.isSelectable && !f.ui.details.isEditable && f.ui.details.string.count > 8000, "long selectable diagnostic")
         try await screenshot(f.ui, "long-error")
         await f.files.configure(); f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
@@ -149,7 +154,8 @@ private actor WindowFiles: IFInstallerFileOperations {
     do {
         let f = WindowFixture(); f.sources.parentEnabled = false; f.sources.refusal = true; f.show()
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "重试启用" && !f.ui.settings.isHidden, "approval recovery")
+        try expect(f.ui.primary.title == "重试" && !f.ui.settings.isHidden, "approval recovery")
+        try expect(f.ui.heading.stringValue == "需要系统确认" && f.ui.summary.stringValue == "请在系统设置中启用墨流。", "minimal approval guidance")
         f.ui.settings.performClick(nil); try expect(f.settingsCalls == 1, "injected settings only")
         try await screenshot(f.ui, "approval")
         f.sources.refusal = false; f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
@@ -159,7 +165,7 @@ private actor WindowFiles: IFInstallerFileOperations {
     do {
         let f = WindowFixture(); f.sources.registered = false; f.sources.registerError = true
         f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
-        try expect(f.ui.primary.title == "重试启用", "registration retry")
+        try expect(f.ui.primary.title == "重试" && f.ui.heading.stringValue == "启用失败", "registration retry")
         f.sources.registerError = false; f.ui.primary.performClick(nil); try await waitFor { !f.ui.busy }
         try expect(f.sources.registrations == 2 && f.loads == 1, "registration stage retry")
     }
@@ -170,6 +176,7 @@ private actor WindowFiles: IFInstallerFileOperations {
         try await waitFor { !f.ui.busy }
         let counts = await f.files.counts()
         try expect(f.ui.state == .cancelled && counts.1 == 0 && f.cleanups == 1, "cancel preparation only")
+        try expect(f.ui.heading.stringValue == "已取消" && f.ui.summary.isHidden, "minimal cancellation")
     }
     for phase in [IFInstallerState.preparing, .stoppingOldVersion, .committing, .activating] {
         for windowClose in [false, true] {
@@ -185,6 +192,7 @@ private actor WindowFiles: IFInstallerFileOperations {
             })
             NSApp.delegate = delegate
             f.show(); f.ui.primary.performClick(nil); try await waitFor { f.ui.state == phase }
+            try expect(f.ui.heading.stringValue == "正在安装…" && f.ui.summary.isHidden, "one visible installation state")
             // Deliver as an AppKit event, outside the async test's executor stack.
             Timer.scheduledTimer(withTimeInterval: 0.001, repeats: false) { _ in
                 MainActor.assumeIsolated {

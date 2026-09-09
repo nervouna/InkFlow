@@ -4,12 +4,11 @@ import AppKit
     let heading = NSTextField(labelWithString: "")
     let summary = NSTextField(wrappingLabelWithString: "")
     let versionLabel = NSTextField(wrappingLabelWithString: "")
-    let pathLabel = NSTextField(wrappingLabelWithString: "")
     let progress = NSProgressIndicator()
     let primary = NSButton(title: "", target: nil, action: nil)
     let secondary = NSButton(title: "", target: nil, action: nil)
     let settings = NSButton(title: "打开系统设置", target: nil, action: nil)
-    let diagnostics = NSButton(title: "查看诊断", target: nil, action: nil)
+    let diagnostics = NSButton(title: "详情", target: nil, action: nil)
     let details = NSTextView()
     private let detailScroll = NSScrollView()
     private let exitLabel = NSTextField(wrappingLabelWithString: "")
@@ -27,10 +26,9 @@ import AppKit
     private var primaryAction: IFInstallerAction?
     private var secondaryAction: IFInstallerAction?
     private let initialTitle: String
-    private let initialSummary: String
     var busy: Bool { owningTask != nil || loading || state.busy }
 
-    init(version: IFAppVersion, installedVersion: IFAppVersion?, target: URL,
+    init(version: IFAppVersion, installedVersion _: IFAppVersion?, target _: URL,
          makeCoordinator: @escaping @MainActor () async throws -> IFInstallerCoordinator,
          cleanup: @escaping @MainActor () async throws -> Void = {},
          openSettings: @escaping @MainActor () -> Void = {
@@ -38,7 +36,6 @@ import AppKit
          }) {
         self.makeCoordinator = makeCoordinator; self.cleanup = cleanup; self.openSettings = openSettings
         initialTitle = "安装并启用"
-        initialSummary = installedVersion == nil ? "将墨流安装到当前用户，并启用墨流拼音。" : "将检查现有版本；需要更新时会短暂切换输入法，请先结束当前输入。"
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 570, height: 400),
                               styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "墨流安装器"
@@ -47,12 +44,10 @@ import AppKit
         window.delegate = self
         heading.font = .systemFont(ofSize: 23, weight: .semibold)
         summary.font = .systemFont(ofSize: 14)
-        [summary, versionLabel, pathLabel, exitLabel].forEach {
+        [summary, versionLabel, exitLabel].forEach {
             $0.maximumNumberOfLines = 0; $0.lineBreakMode = .byWordWrapping
         }
-        versionLabel.stringValue = "安装版本：\(version.version)（\(version.build)）" + (installedVersion.map { "    安装前版本：\($0.version)（\($0.build)）" } ?? "")
-        pathLabel.stringValue = "当前用户安装位置：\n\(target.path)"
-        pathLabel.isSelectable = true; pathLabel.textColor = .secondaryLabelColor
+        versionLabel.stringValue = "\(version.version)(\(version.build))"
         versionLabel.isSelectable = true
         exitLabel.textColor = .secondaryLabelColor
         progress.style = .spinning; progress.controlSize = .small; progress.isIndeterminate = true
@@ -77,7 +72,7 @@ import AppKit
         helpers.orientation = .horizontal; helpers.spacing = 8
         let buttons = NSStackView(views: [secondary, primary])
         buttons.orientation = .horizontal; buttons.spacing = 8
-        let stack = NSStackView(views: [heading, versionLabel, pathLabel, summary, progress, exitLabel, helpers, detailScroll, buttons])
+        let stack = NSStackView(views: [heading, versionLabel, summary, progress, exitLabel, helpers, detailScroll, buttons])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 16
         stack.translatesAutoresizingMaskIntoConstraints = false
         window.contentView!.addSubview(stack)
@@ -88,7 +83,6 @@ import AppKit
             stack.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor, constant: -26),
             summary.widthAnchor.constraint(equalTo: stack.widthAnchor),
             versionLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            pathLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             exitLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
             detailScroll.widthAnchor.constraint(equalTo: stack.widthAnchor),
             buttons.trailingAnchor.constraint(equalTo: stack.trailingAnchor)
@@ -118,7 +112,7 @@ import AppKit
     @objc private func settingsClicked() { if !busy { openSettings() } }
     @objc private func diagnosticsClicked() {
         detailScroll.isHidden.toggle()
-        diagnostics.title = detailScroll.isHidden ? "查看诊断" : "收起诊断"
+        diagnostics.title = detailScroll.isHidden ? "详情" : "收起"
         fitWindow()
     }
     private func cancelPreparation() {
@@ -178,42 +172,43 @@ import AppKit
         var technical = ""
         switch state {
         case .idle, .cancelled:
-            heading.stringValue = state == .idle ? "安装墨流" : "已取消安装"
-            summary.stringValue = state == .idle ? initialSummary : "安装准备已取消，可以重新开始。"
+            heading.stringValue = state == .idle ? "安装墨流" : "已取消"
+            summary.stringValue = ""
             primary.title = initialTitle; primaryAction = .installAndEnable
         case .preparing:
-            heading.stringValue = "正在准备安装"
-            summary.stringValue = "正在检查并准备安装包，请稍候。"
+            heading.stringValue = "正在安装…"
+            summary.stringValue = ""
             primary.isHidden = true; secondary.title = "取消"; secondaryAction = .cancel
         case .stoppingOldVersion:
-            heading.stringValue = "正在更新墨流"
-            summary.stringValue = "正在等待旧版本安全退出，请稍候。"
+            heading.stringValue = "正在安装…"
+            summary.stringValue = ""
             primary.isHidden = true; secondary.isHidden = true
         case .committing:
-            heading.stringValue = "正在完成安装"
-            summary.stringValue = "正在替换程序，请稍候。"
+            heading.stringValue = "正在安装…"
+            summary.stringValue = ""
             primary.isHidden = true; secondary.isHidden = true
         case .activating:
-            heading.stringValue = "正在启用墨流"
-            summary.stringValue = "正在启用并选择输入法，请稍候。"
+            heading.stringValue = "正在安装…"
+            summary.stringValue = ""
             primary.isHidden = true; secondary.isHidden = true
         case .installedEnabled:
-            heading.stringValue = "墨流已安装并启用"
-            summary.stringValue = "已确认启用和选择，可以开始使用墨流。"
+            heading.stringValue = "安装完成"
+            summary.stringValue = ""
             secondary.isHidden = true
         case .installedAwaitingApproval(let message):
-            heading.stringValue = "已安装，等待系统确认"
-            summary.stringValue = "系统尚未确认启用或切换。请在系统设置的「键盘」中检查输入法及可能出现的确认提示，然后重试启用。"
-            primary.title = "重试启用"; primaryAction = .retryActivation
+            heading.stringValue = "需要系统确认"
+            summary.stringValue = "请在系统设置中启用墨流。"
+            primary.title = "重试"; primaryAction = .retryActivation
             settings.isHidden = false; technical = message
         case .failed(let installed, let message):
-            heading.stringValue = installed ? "已安装，启用未完成" : "安装未完成"
-            summary.stringValue = installed ? "安装文件已保留，启用遇到问题。请查看诊断后重试启用。" : "准备或安装遇到问题，请查看诊断并处理后重试。"
-            primary.title = installed ? "重试启用" : "重试安装"
+            heading.stringValue = installed ? "启用失败" : "安装失败"
+            summary.stringValue = ""
+            primary.title = "重试"
             primaryAction = installed ? .retryActivation : .installAndEnable
             technical = message
         }
-        if !preserveDetails { details.string = technical; detailScroll.isHidden = true; diagnostics.title = "查看诊断" }
+        summary.isHidden = summary.stringValue.isEmpty
+        if !preserveDetails { details.string = technical; detailScroll.isHidden = true; diagnostics.title = "详情" }
         diagnostics.isHidden = details.string.isEmpty
         if diagnostics.isHidden { detailScroll.isHidden = true }
         progress.isHidden = !busy
@@ -222,7 +217,7 @@ import AppKit
         secondary.isEnabled = secondaryAction == .cancel ? !cancellationRequested : !busy && !exitRequested
         settings.isEnabled = !busy; diagnostics.isEnabled = !busy
         exitLabel.isHidden = !exitRequested
-        exitLabel.stringValue = "已收到退出请求，将在当前操作安全结束后退出。"
+        exitLabel.stringValue = "操作完成后退出。"
         fitWindow()
     }
     private func fitWindow() {
