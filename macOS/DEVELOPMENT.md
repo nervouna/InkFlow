@@ -31,7 +31,19 @@ The TSV starts with `# no comment` so literal phrases beginning with `#` are sup
 
 ## Verification
 
-Run the following scripts sequentially from the repository root. The GUI checks require a logged-in, unlocked macOS desktop session and the runner's existing Accessibility access; their bounded public accessibility initialization does not change system settings.
+### Daily development
+
+For development, commits, and local merges, run affected unit tests plus necessary related-module and integration checks. Select checks using behavior, callers, shared configuration, and resources, not only changed filenames. Build affected targets and verify the bundle when build inputs or packaged resources change. Documentation-only changes require scoped review and `git diff --check`, not application tests.
+
+Do not run full regression or complete GUI suites by default. Changes to native windows, candidate panels, focus, or input interactions still require targeted GUI/native interaction verification. Use existing focused scripts or supported harness options, such as the Input-page check below; if no focused entry point covers the change, use the smallest existing suite that does. Respect build/resource prerequisites and do not rely on stale application or worker binaries. Broaden checks when failures or uncertain impact justify it.
+
+Report checks run, their scope, and missing, failed, or skipped relevant checks. Passing scoped checks establishes development verification only; it does not establish readiness for formal installation or release. An unavailable GUI session leaves the affected GUI behavior unverified.
+
+### Before formal installation or release
+
+A formal installation replaces the input method used day to day, regardless of Debug or Developer ID signing. Temporary installations specifically for diagnosis do not establish formal acceptance. `install.sh` does not enforce the test gate; the caller must complete it before formal installation.
+
+Run the following full verification sequence from the repository root before formal installation or release. The GUI checks require a logged-in, unlocked macOS desktop session and the runner's existing Accessibility access; their bounded public accessibility initialization does not change system settings.
 
 ```sh
 bash macOS/scripts/build.sh
@@ -43,6 +55,34 @@ bash macOS/scripts/test-installer-window.sh
 bash macOS/scripts/check-installer-core.sh
 bash .agents/skills/inkflow-release/scripts/test.sh
 ```
+
+For GUI-evidence recording and reuse, follow the same-machine, source-tree and environment requirements in [the release skill](../.agents/skills/inkflow-release/SKILL.md#2-verify-the-release-contents). A successful `gui-verification.sh check` may replace rerunning the two GUI suites above; missing or invalid evidence requires a fresh recording. Full non-GUI checks must still run for formal installation or release. Releases additionally require all release-skill checks, including signing, notarization, and final artifact verification. Do not proceed with missing or failed required checks. Real installed-input-method typing acceptance remains a separate user-owned step.
+
+### Test coverage and focused entry points
+
+`test.sh` accepts one or more groups, runs each once in the existing suite order, and rejects unknown arguments before running checks. No arguments or `all` retains the full non-GUI suite; do not combine `all` with group names. Use `--help` to list groups.
+
+```sh
+bash macOS/scripts/test.sh settings
+bash macOS/scripts/test.sh engine controller
+bash macOS/scripts/test-test-runner.sh # Isolated test-runner regression checks
+```
+
+| Group | Coverage and prerequisites |
+| --- | --- |
+| `quality` | Store, metadata, engine capture, then query tests against freshly captured evidence |
+| `preparation` | Rime preparation policy fixtures |
+| `dictionary-generator` | Dictionary generation, with dependency preparation |
+| `deployment` | Deployment scenarios, with dependencies and test dictionaries |
+| `engine` | Engine scenarios, with dependencies and test dictionaries |
+| `controller` | Headless controller scenarios, with dependencies and test dictionaries |
+| `settings` | Settings logic, with librime compilation dependencies; no built app or test dictionaries required |
+| `dictionary-updates` | Update/worker scenarios; run `build.sh` first for a current app and generated dictionary sources |
+| `dictionary-activation` | Native activation/recovery; run `build.sh` first for a current app and generated dictionary sources |
+| `termination` | Graceful input-method shutdown and timeout handling |
+| `installer-core` | Transactional installation, validation, rollback, and state reporting |
+
+Group selection does not infer affected modules from Git changes. The worker existence check does not prove build freshness; rebuild when its source or resource inputs have changed. GUI suites remain separate.
 
 The test scenarios are Swift executables. `Tests/NativeTestSupport.m` contains the small Objective-C runtime/exception helper needed to inspect native font rendering and accessibility objects, and to intercept framework initialization/teardown and supplied-client lookup in the headless controller test. Swift controllers always run their real initializers. Settings tests use isolated defaults suites; the production initializer test overrides only its process-local argument domain.
 
