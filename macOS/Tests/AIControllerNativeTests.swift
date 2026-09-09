@@ -94,6 +94,7 @@ struct AIControllerNativeTests {
               "Untouched controller releases without constructing a suggestion panel")
 
         placementChecks()
+        panelLayoutChecks()
         print("PASS untouched controller teardown and placement"); fflush(stdout)
         try await acceptance(server: server, settings: settings, host: host, field: field)
         try await staleChecks(server: server, settings: settings)
@@ -180,7 +181,7 @@ struct AIControllerNativeTests {
         long.show(relativeTo: NSRect(x: 200, y: 400, width: 350, height: 30))
         check(long.isVisible && long.frame.height <= 212)
         let labels = NSApp.windows.first { AISuggestionPanel.isSuggestionWindow($0) && $0.isVisible }?.contentView?.subviews.compactMap { $0 as? NSTextField } ?? []
-        check(labels.contains { $0.stringValue == "AI 建议（部分显示）" }, "Long response clipping is explicitly disclosed")
+        check(labels.contains { $0.stringValue == "AI · 部分显示" }, "Long response clipping is explicitly disclosed")
         long.hide()
         host.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); host.makeFirstResponder(field)
         await until { host.isKeyWindow && host.firstResponder === field }
@@ -251,6 +252,35 @@ struct AIControllerNativeTests {
         check(client.document == "前文😀【" + text! + "】后文" && suggestion == nil)
         let seconds = started.duration(to: .now)
         print("PASS live production API→panel→Tab: complete synthetic suggestion, exact insertion, preserved sides; elapsed=\(seconds)")
+    }
+
+    @MainActor static func panelLayoutChecks() {
+        let panel = AISuggestionPanel()
+        let screen = NSRect(x: 0, y: 0, width: 1000, height: 800)
+        let candidate = NSRect(x: 200, y: 500, width: 200, height: 28)
+        panel.setSuggestion("你好", font: .systemFont(ofSize: 14))
+        panel.show(relativeTo: candidate, screens: [screen])
+        let short = panel.frame.size
+        let window = NSApp.windows.first { AISuggestionPanel.isSuggestionWindow($0) && $0.isVisible }!
+        check(!window.canBecomeKey && !window.canBecomeMain && window.ignoresMouseEvents)
+        panel.setSuggestion("你好", font: .systemFont(ofSize: 36))
+        check(panel.frame.width > short.width && panel.frame.height > short.height,
+              "Same suggestion responds to candidate font changes")
+        panel.setSuggestion(String(repeating: "这是完整的很长的推荐文本", count: 200), font: .systemFont(ofSize: 36))
+        panel.show(relativeTo: candidate, screens: [screen])
+        let labels = window.contentView!.subviews.compactMap { $0 as? NSTextField }
+        check(panel.frame.width > short.width && panel.frame.width <= 520 && panel.frame.height <= 180)
+        check(labels.contains { $0.stringValue.contains("部分显示") }, "Clipped text is explicitly disclosed")
+        check(labels.contains { $0.stringValue.count > 1000 }, "Rendering preserves the full suggestion")
+        let narrow = NSRect(x: 0, y: 0, width: 300, height: 800)
+        panel.show(relativeTo: NSRect(x: 240, y: 500, width: 60, height: 28), screens: [narrow])
+        check(panel.isVisible && narrow.contains(panel.frame), "Wrapped AI panel fits the selected screen")
+        for label in labels { check(window.contentView!.bounds.contains(label.frame), "All inline labels remain within the panel") }
+        panel.show(relativeTo: NSRect(x: 0, y: 500, width: 10, height: 28),
+                   screens: [NSRect(x: 0, y: 0, width: 50, height: 800)])
+        check(!panel.isVisible, "No presentation when the screen cannot fit labels and text")
+        panel.hide()
+        print("PASS compact AI panel: adaptive content/font sizing, partial disclosure, bounds and passive focus")
     }
 
     @MainActor static func placementChecks() {

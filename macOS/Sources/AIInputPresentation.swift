@@ -40,7 +40,8 @@ final class NativeAIInputPresentation: AIInputPresentation {
         guard let frame = InkFlowInputController.candidateScreenFrame(panel) else { return false }
         if suggestion == nil { suggestion = AISuggestionPanel() }
         guard let suggestion else { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden); return false }
-        suggestion.setSuggestion(text)
+        let font = panel.attributes()?[NSAttributedString.Key.font] as? NSFont ?? .systemFont(ofSize: 14)
+        suggestion.setSuggestion(text, font: font)
         suggestion.show(relativeTo: frame)
         if !suggestion.isVisible { AIDiagnostics.emit(.presentationFailed, reason: .suggestionHidden) }
         return suggestion.isVisible
