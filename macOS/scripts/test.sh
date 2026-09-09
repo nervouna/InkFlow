@@ -23,3 +23,5 @@ build_swift_test build/settings-tests macOS/Tests/SettingsTests.swift
 build/settings-tests
 bash macOS/scripts/test-dictionary-updates.sh
 bash macOS/scripts/test-dictionary-activation.sh
+bash macOS/scripts/test-termination.sh
+bash macOS/scripts/test-installer-core.sh

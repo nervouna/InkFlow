@@ -1,7 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-app="$PWD/build/InkFlow.app"
+[[ $# -le 1 ]] || { echo "Usage: check-bundle.sh [app]" >&2; exit 2; }
+app="${1:-$PWD/build/InkFlow.app}"
 bash macOS/scripts/quality-metadata.sh "$app" --verify
 plutil -lint "$app/Contents/Info.plist"
 [[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]

@@ -24,7 +24,7 @@ case "${1:-}" in
       backup=$(mktemp -d "$PWD/build/gui-previous.XXXXXX")
       mv build/InkFlow.app "$backup/"
     fi
-    for script in build test-controller-initialization test-settings-ui; do
+    for script in build test-controller-initialization test-settings-ui test-installer-window; do
       if ! bash "macOS/scripts/$script.sh" > "$evidence/$script.log" 2>&1; then
         fail "GUI evidence not recorded: $script failed. See $evidence/$script.log"
       fi
@@ -36,7 +36,7 @@ case "${1:-}" in
   check)
     [[ ! -d "$evidence/running" ]] || fail 'GUI verification is still running.'
     [[ -f "$evidence/passed.tree" ]] || fail 'No passing GUI record. Run gui-verification.sh record on an unlocked desktop.'
-    for script in build test-controller-initialization test-settings-ui; do
+    for script in build test-controller-initialization test-settings-ui test-installer-window; do
       [[ -f "$evidence/$script.log" ]] || fail 'GUI verification log is missing.'
     done
     tested=$(cat "$evidence/passed.tree")

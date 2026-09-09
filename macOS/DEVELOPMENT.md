@@ -39,11 +39,14 @@ bash macOS/scripts/test.sh
 bash macOS/scripts/check-bundle.sh
 bash macOS/scripts/test-controller-initialization.sh
 bash macOS/scripts/test-settings-ui.sh
+bash macOS/scripts/test-installer-window.sh
+bash macOS/scripts/check-installer-core.sh
+bash .agents/skills/inkflow-release/scripts/test.sh
 ```
 
 The test scenarios are Swift executables. `Tests/NativeTestSupport.m` contains the small Objective-C runtime/exception helper needed to inspect native font rendering and accessibility objects, and to intercept framework initialization/teardown and supplied-client lookup in the headless controller test. Swift controllers always run their real initializers. Settings tests use isolated defaults suites; the production initializer test overrides only its process-local argument domain.
 
-`test.sh` reuses the previously built application/worker and includes dictionary generation, source/update preparation, and native activation/recovery suites. `test-settings-ui.sh` exercises the Dictionary pane through native accessibility button/disclosure actions, real window close/reopen, all error stages, background progress, engine rollback/unavailability and minimum/enlarged layout. Its backend is explicitly injected with synthetic transport results, temporary dictionary/user roots and a captured diagnostic sink; it never contacts update repositories or reads real learning/preferences. The default unconfigured Settings window remains inert. Native engine/worker correctness has separate lower-layer tests; UI assertions do not substitute for those tests or for the real-client checks in [DICTIONARIES.md](DICTIONARIES.md#manual-acceptance).
+`test.sh` reuses the previously built application/worker and includes dictionary generation, source/update preparation, and native activation/recovery suites, plus `test-termination.sh` and `test-installer-core.sh`. `test-settings-ui.sh` exercises the Dictionary pane through native accessibility button/disclosure actions, real window close/reopen, all error stages, background progress, engine rollback/unavailability and minimum/enlarged layout. Its backend is explicitly injected with synthetic transport results, temporary dictionary/user roots and a captured diagnostic sink; it never contacts update repositories or reads real learning/preferences. The default unconfigured Settings window remains inert. Native engine/worker correctness has separate lower-layer tests; UI assertions do not substitute for those tests or for the real-client checks in [DICTIONARIES.md](DICTIONARIES.md#manual-acceptance).
 
 Custom phrase tests cover normalized CRUD, stable IDs and persistence, duplicate/control rejection, corrupt-data preservation, real Rime priority/deduplication and ordinary candidates, exact matching, multiple pages and native selection, composing-session isolation, settings notifications, pending-commit preservation, deletion after selection, engine restart, failed writes/retry, temporary-file removal and unchanged deployed schema bytes. The GUI harness starts Personalization explicitly to check native table/control layout and empty state at minimum/enlarged sizes. For interactive acceptance, navigate to Personalization, add two phrases under one code, reject an invalid/duplicate entry, cancel an editor, edit and delete the selection, then reopen settings and inspect the list. The harness uses an isolated preferences suite.
 
@@ -54,3 +57,37 @@ For interactive UI inspection, `bash macOS/scripts/test-settings-ui.sh --hold` l
 `bash macOS/scripts/test-settings-ui.sh --input-only --dump-accessibility` checks the compact Input page through native fuzzy/radio/popup actions, mutual exclusion, disabled mapping preservation and error display, then exits before unrelated pane scenarios.
 
 Bundle verification checks the runtime controller name, metadata, icons, resources, arm64 architecture, and system/bundled dynamic-library closure. These checks do not establish installed-IME typing acceptance, signing, or behavior on an older macOS host.
+
+## Native installer packaging
+
+`Installer/CoreAPI.md` describes the core/window/payload boundary. Compile the core
+and registration CLI with `bash macOS/scripts/check-installer-core.sh`. The full
+regression includes isolated termination and installer transaction/state tests.
+`test-installer-window.sh` exercises an isolated native window with fake backends;
+it needs an unlocked desktop and never operates the daily input source. Formal GUI
+evidence now requires this suite as well as controller initialization and Settings.
+
+`bash macOS/scripts/build-installer.sh /absolute/path/to/InkFlow.zip /new/output.app`
+compiles the installer and copies version/build from `macOS/Info.plist` without
+signing, registration or installation. The output path must not exist. After
+Developer ID signing, execute `"/new/output.app/Contents/MacOS/InkFlowInstaller" --check-payload`
+to validate the actual sealed ZIP, inner signature and matching team/version, then
+clean up the temporary extraction. This read-only probe does not use TIS or start
+the input method. Local signed, unnotarized fixtures do not prove release trust.
+
+The release helper uses `package.sh prepare` then `package.sh finish`. Between them,
+explicitly submit the retained input-method ZIP through the existing notary wrapper,
+wait for acceptance, and staple/validate the input-method app. Finish creates a fresh
+ZIP of that app, builds/signs the installer, checks arm64 and system dependency
+closure, runs its actual `--check-payload`, and creates a DMG containing only the
+installer and Chinese instructions. `check-bundle.sh [app]` checks either the normal
+build or an explicitly supplied payload with the existing resource/engine checks.
+The final DMG requires its own external notarization and stapling. See the
+[release workflow](../.agents/skills/inkflow-release/SKILL.md) for commands and recovery.
+
+Release acceptance additionally requires trusted downloaded/quarantined DMG launch,
+extraction of the inner app with its ticket intact and independent signature/stapler
+assessment, clean-user installation and old-version upgrade, and actual client typing.
+Builds, fixture tests and the read-only payload probe establish none of those runtime
+outcomes. Do not run native GUI suites on a locked screen or replace daily installation
+acceptance with a temporary diagnostic installation.

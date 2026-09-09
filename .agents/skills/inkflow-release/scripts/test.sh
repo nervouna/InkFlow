@@ -82,17 +82,17 @@ cp "$root/macOS/Info.plist" "$fixture/repo/macOS/Info.plist"
 cp "$root/macOS/Info.plist" "$fixture/repo/build/InkFlow.app/Contents/Info.plist"
 touch "$fixture/repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 chmod +x "$fixture/repo/build/InkFlow.app/Contents/MacOS/InkFlow"
-if INKFLOW_SIGN_IDENTITY=invalid bash "$scripts/package.sh" > "$fixture/error.log" 2>&1; then exit 1; fi
+if INKFLOW_SIGN_IDENTITY=invalid bash "$scripts/package.sh" prepare > "$fixture/error.log" 2>&1; then exit 1; fi
 [[ ! -e "$fixture/repo/build/releases" ]]
 version=$(plutil -extract CFBundleShortVersionString raw "$fixture/repo/macOS/Info.plist")
 build=$(plutil -extract CFBundleVersion raw "$fixture/repo/macOS/Info.plist")
 output="$fixture/repo/build/releases/InkFlow-$version-$build"
 mkdir -p "$output"
 echo preserved > "$output/sentinel"
-if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts/package.sh" > "$fixture/error.log" 2>&1; then exit 1; fi
+if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts/package.sh" prepare > "$fixture/error.log" 2>&1; then exit 1; fi
 [[ "$(cat "$output/sentinel")" == preserved && ! -e "$output/stage" ]]
 plutil -replace CFBundleVersion -string 999 "$fixture/repo/build/InkFlow.app/Contents/Info.plist"
-if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts/package.sh" > "$fixture/error.log" 2>&1; then exit 1; fi
+if INKFLOW_SIGN_IDENTITY=0000000000000000000000000000000000000000 bash "$scripts/package.sh" prepare > "$fixture/error.log" 2>&1; then exit 1; fi
 [[ ! -e "$output/stage" ]]
 echo 'PASS: version updates, configuration loading/overrides, invalid-input rejection and package overwrite protection'
 
@@ -156,7 +156,7 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   expect_rejected
   mkdir -p "$evidence"
   git rev-parse 'HEAD^{tree}' > "$evidence/passed.tree"
-  for script in build test-controller-initialization test-settings-ui; do
+  for script in build test-controller-initialization test-settings-ui test-installer-window; do
     echo 'Synthetic successful fixture' > "$evidence/$script.log"
   done
   bash "$gui" check
@@ -186,10 +186,13 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   mkdir "$evidence/running"
   expect_rejected
   rmdir "$evidence/running"
+  rm "$evidence/test-installer-window.log"
+  expect_rejected
+  echo 'Synthetic successful fixture' > "$evidence/test-installer-window.log"
   rm "$evidence/test-settings-ui.log"
   expect_rejected
   # Stub commands exercise receipt lifecycle without a desktop or app build.
-  for script in build test-controller-initialization test-settings-ui; do
+  for script in build test-controller-initialization test-settings-ui test-installer-window; do
     printf '#!/bin/bash\nexit "${GUI_FIXTURE_EXIT:-0}"\n' > "macOS/scripts/$script.sh"
     git add "macOS/scripts/$script.sh"
   done
@@ -203,3 +206,4 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   expect_rejected
 )
 echo 'PASS: GUI evidence permits only version/build changes and requires complete local passing records'
+bash "$root/.agents/skills/inkflow-release/scripts/test-package.sh"

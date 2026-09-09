@@ -1,48 +1,94 @@
 #!/bin/bash
 set -euo pipefail
 if [[ "${1:-}" == --help ]]; then
-  echo 'Usage: bash package.sh (reads repository .release.local.plist; environment overrides)'
-  echo 'Package the already validated build; no build, installation, notarization or publication.'
+  echo 'Usage: bash package.sh prepare|finish'
+  echo 'Prepare signs the input method and retains its submission ZIP. Finish requires its stapled app.'
+  echo 'No installation, notarization submission or publication. Existing outputs are preserved.'
   exit 0
 fi
-[[ $# -eq 0 ]] || { echo 'Unexpected argument; use --help.' >&2; exit 2; }
+[[ $# -eq 1 && ( "$1" == prepare || "$1" == finish ) ]] || { echo 'Use package.sh prepare|finish.' >&2; exit 2; }
+phase=$1
 cd "$(dirname "$0")/../../../.."
-# shellcheck source=release-config.sh
 source .agents/skills/inkflow-release/scripts/release-config.sh
 load_release_config
 identity=$INKFLOW_SIGN_IDENTITY
-source_app="$PWD/build/InkFlow.app"
-cmp macOS/Info.plist "$source_app/Contents/Info.plist"
+fail() { echo "$*" >&2; exit 1; }
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
 build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
-[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && "$build" =~ ^[1-9][0-9]*$ ]] || { echo 'Invalid release version/build.' >&2; exit 1; }
-[[ -x "$source_app/Contents/MacOS/InkFlow" ]] || { echo 'Missing built executable.' >&2; exit 1; }
+[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && "$build" =~ ^[1-9][0-9]*$ ]] || fail 'Invalid release version/build.'
 release_dir="$PWD/build/releases/InkFlow-$version-$build"
-[[ ! -e "$release_dir" ]] || { echo 'Release output already exists; inspect it before retrying.' >&2; exit 1; }
-bash .agents/skills/inkflow-release/scripts/check-credentials.sh
-mkdir -p "$(dirname "$release_dir")"
-mkdir "$release_dir" # Refuse to overwrite an existing release attempt.
-mkdir "$release_dir/stage"
-app="$release_dir/stage/InkFlow.app"
-ditto "$source_app" "$app"
-# Debug symbols remain in the original build, outside the distributed bundle.
-find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
-signing=(--force --options runtime --timestamp --sign "$identity")
-for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
-  codesign "${signing[@]}" "$binary"
-done
-codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$app"
-codesign --verify --deep --strict --verbose=2 "$app"
-metadata=$(codesign -dvvv "$app" 2>&1)
-[[ "$metadata" == *'TeamIdentifier=T7976FL2LP'* && "$metadata" == *'Authority=Developer ID Application:'* && "$metadata" == *'Identifier=io.damao.inputmethod.inkflow'* ]] || { echo 'Unexpected signing identity or bundle ID.' >&2; exit 1; }
-codesign --display --entitlements - --xml "$app" > "$release_dir/entitlements.plist"
-plutil -lint "$release_dir/entitlements.plist" >/dev/null
-if [[ "$(plutil -extract com.apple.security.get-task-allow raw "$release_dir/entitlements.plist" 2>/dev/null || true)" == true ]]; then
-  echo 'Debug entitlement in release app.' >&2; exit 1
-fi
-cp .agents/skills/inkflow-release/assets/安装说明.txt "$release_dir/stage/安装说明.txt"
+app="$release_dir/payload/InkFlow.app"
 dmg="$release_dir/InkFlow-$version-$build-arm64.dmg"
-hdiutil create -volname "InkFlow $version" -srcfolder "$release_dir/stage" -format UDZO "$dmg"
-codesign --force --timestamp --sign "$identity" "$dmg"
-codesign --verify --strict --verbose=2 "$dmg"
-printf 'Signed DMG (not yet notarized): %s\n' "$dmg"
+signing=(--force --options runtime --timestamp --sign "$identity")
+verify_app() {
+  local target=$1 expected_id=$2 metadata entitlements
+  codesign --verify --deep --strict --verbose=2 "$target"
+  metadata=$(codesign -dvvv "$target" 2>&1)
+  printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Unexpected signing team.'
+  printf '%s\n' "$metadata" | grep -Fq 'Authority=Developer ID Application:' || fail 'Expected Developer ID Application signature.'
+  printf '%s\n' "$metadata" | grep -Fxq "Identifier=$expected_id" || fail 'Unexpected signed bundle ID.'
+  [[ $(plutil -extract CFBundleIdentifier raw "$target/Contents/Info.plist") == "$expected_id" ]] || fail 'Unexpected bundle ID.'
+  [[ $(plutil -extract CFBundleShortVersionString raw "$target/Contents/Info.plist") == "$version" && $(plutil -extract CFBundleVersion raw "$target/Contents/Info.plist") == "$build" ]] || fail 'Payload/installer version mismatch.'
+  entitlements=$(mktemp "$release_dir/entitlements.XXXXXX")
+  codesign --display --entitlements - --xml "$target" > "$entitlements"
+  plutil -lint "$entitlements" >/dev/null
+  [[ $(plutil -extract com.apple.security.get-task-allow raw "$entitlements" 2>/dev/null || true) != true ]] || fail 'Debug entitlement in release app.'
+}
+if [[ "$phase" == prepare ]]; then
+  [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || fail 'Release output already exists; inspect it before retrying.'
+  source_app="$PWD/build/InkFlow.app"
+  cmp macOS/Info.plist "$source_app/Contents/Info.plist"
+  [[ -x "$source_app/Contents/MacOS/InkFlow" ]] || fail 'Missing built executable.'
+  bash .agents/skills/inkflow-release/scripts/check-credentials.sh
+  bash macOS/scripts/check-bundle.sh
+  mkdir -p "$(dirname "$release_dir")"
+  mkdir "$release_dir"
+  mkdir "$release_dir/payload"
+  ditto "$source_app" "$app"
+  find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
+  for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
+    codesign "${signing[@]}" "$binary"
+  done
+  codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$app"
+  verify_app "$app" io.damao.inputmethod.inkflow
+  ditto -c -k --sequesterRsrc --keepParent "$app" "$release_dir/inputmethod-submission.zip"
+  printf 'Submit externally: %s\nThen staple/validate: %s\nThen run package.sh finish.\n' "$release_dir/inputmethod-submission.zip" "$app"
+  exit 0
+fi
+[[ -d "$release_dir" && ! -L "$release_dir" && -f "$release_dir/inputmethod-submission.zip" && -d "$app" && ! -L "$app" ]] || fail 'Missing prepared payload; run prepare first or inspect the interrupted attempt.'
+[[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Final DMG already exists; preserve it and inspect/resume notarization.'
+# Prevent concurrent finish attempts. An interrupted lock requires explicit inspection/removal.
+mkdir "$release_dir/finishing" 2>/dev/null || fail 'Finish already running or interrupted; inspect finishing lock.'
+trap 'rmdir "$release_dir/finishing"' EXIT
+verify_app "$app" io.damao.inputmethod.inkflow
+cmp macOS/Info.plist "$app/Contents/Info.plist"
+xcrun stapler validate "$app"
+bash macOS/scripts/check-bundle.sh "$app"
+bash .agents/skills/inkflow-release/scripts/check-credentials.sh
+scratch=$(mktemp -d "$release_dir/assembly.XXXXXX")
+printf 'Retained assembly: %s\n' "$scratch"
+# Fresh archive includes the app ticket; never embed the pre-stapling submission ZIP.
+ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/InkFlow.zip"
+mkdir "$scratch/stage"
+installer="$scratch/stage/InkFlow Installer.app"
+bash macOS/scripts/build-installer.sh "$scratch/InkFlow.zip" "$installer"
+binary="$installer/Contents/MacOS/InkFlowInstaller"
+xcrun lipo "$binary" -verify_arch arm64
+otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
+  case "$dependency" in
+    /usr/lib/*|/System/Library/*) ;;
+    *) fail "Unbundled installer dependency: $dependency" ;;
+  esac
+done
+codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$installer"
+verify_app "$installer" io.damao.inkflow.installer
+# Exercise the real signed resource loader before creating any DMG. No NSApplication/TIS.
+"$binary" --check-payload
+cp .agents/skills/inkflow-release/assets/安装说明.txt "$scratch/stage/安装说明.txt"
+assembled="$scratch/InkFlow-$version-$build-arm64.dmg"
+hdiutil create -volname "InkFlow $version" -srcfolder "$scratch/stage" -format UDZO "$assembled"
+codesign --force --timestamp --sign "$identity" "$assembled"
+codesign --verify --strict --verbose=2 "$assembled"
+# Exclusive publication on the same volume; never overwrite even an unknown existing output.
+ln "$assembled" "$dmg"
+printf 'Signed installer DMG (not yet notarized): %s\n' "$dmg"
