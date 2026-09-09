@@ -183,6 +183,8 @@ final class IFEngine {
         qualityRecorders = []
         // Invalidate every object before finalize; a stale deinit can never destroy a reused native ID.
         for engine in liveSessions { engine.detachSession() }
+        // librime 1.17 RimeFinalize joins maintenance before stopping service/unloading modules.
+        // sync_user_data starts backup/sync maintenance and is not a generic shutdown flush.
         if ready { api.pointee.finalize(); ready = false }
         contextRanker = nil
         generation &+= 1

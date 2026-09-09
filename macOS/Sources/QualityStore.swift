@@ -46,6 +46,7 @@ final class QualityStore: @unchecked Sendable {
     // Worker-only lifecycle state.
     private var ready = false
     private var closed = false
+    private var closeSucceeded = false
 
     init(url: URL, engineVersion: String, buildMetadata: QualityBuildMetadata? = nil,
          metadataURL: URL? = nil, hooks: QualityStoreHooks = QualityStoreHooks()) {
@@ -112,18 +113,27 @@ final class QualityStore: @unchecked Sendable {
     }
 
     /// Stops accepting immediately, drains accepted work, saves the run, then closes asynchronously.
-    func close() async {
+    @discardableResult
+    func close() async -> Bool {
         let target = lock.withLock { accepting = false; return acceptedSequence }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+        return await withCheckedContinuation { continuation in
             queue.async { [self] in
                 if !closed {
                     timer?.cancel()
+                    let writtenBefore = statistics().written
+                    let pendingCount = lock.withLock { pending.count }
                     drain(upTo: target)
-                    do { try database.finish(statistics: statistics(), status: statsDisabled ? "disabled" : "closed") }
-                    catch { handle(error, count: 0) }
+                    do {
+                        try database.finish(statistics: statistics(), status: statsDisabled ? "disabled" : "closed")
+                        closeSucceeded = statistics().written >= writtenBefore + pendingCount
+                    } catch {
+                        handle(error, count: 0)
+                        // No pending data means metadata failure alone need not block quitting.
+                        closeSucceeded = pendingCount == 0
+                    }
                     closed = true
                 }
-                continuation.resume()
+                continuation.resume(returning: closeSucceeded)
             }
         }
     }

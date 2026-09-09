@@ -58,9 +58,10 @@ final class IFDictionaryCoordinator {
     private(set) var engineAvailable = false
     private(set) var isBusy = false
     private(set) var isPresented = false
-    var canCheck: Bool { backend != nil && fingerprint != nil && engineAvailable && !isBusy }
+    private(set) var isShuttingDown = false
+    var canCheck: Bool { !isShuttingDown && backend != nil && fingerprint != nil && engineAvailable && !isBusy }
     var canUpdate: Bool { canCheck && checked?.hasUpdate == true }
-    var canRetry: Bool { (backend != nil || backendFactory != nil) && !isBusy && retryOperation != nil }
+    var canRetry: Bool { !isShuttingDown && (backend != nil || backendFactory != nil) && !isBusy && retryOperation != nil }
 
     @ObservationIgnored private var backend: IFDictionaryBackend?
     @ObservationIgnored private let backendFactory: (@Sendable () throws -> IFDictionaryBackend)?
@@ -129,7 +130,7 @@ final class IFDictionaryCoordinator {
     func bootstrap() { bootstrap(prepared: nil) }
 
     private func bootstrap(prepared: IFRecoveryPreparation?) {
-        guard !isBusy, !IFEngine.ready else { return }
+        guard !isShuttingDown, !isBusy, !IFEngine.ready else { return }
         if backend == nil, let backendFactory {
             do { backend = try backendFactory() }
             catch { recordUnavailable(error); return }
@@ -252,6 +253,21 @@ final class IFDictionaryCoordinator {
         IFEngine.idleHandler = nil
     }
 
+    /// Drain owned tasks, including detached file/worker work. Never cancel a filesystem transaction midway.
+    /// Pending activation is abandoned only after every producer has stopped; normal replacement is unchanged.
+    func shutdown() async throws {
+        isShuttingDown = true
+        IFEngine.idleHandler = nil
+        while let current = task { await current.value }
+        IFEngine.idleHandler = nil
+        pending = nil
+        if let backend {
+            try await Task.detached { try backend.store.abandonActivation() }.value
+            _ = try await Task.detached { try backend.store.cleanup() }.value
+        }
+        isBusy = false; operationID = nil; progress = nil
+    }
+
     func checkForUpdates() {
         guard canCheck else { return }
         begin(.check)
@@ -270,7 +286,7 @@ final class IFDictionaryCoordinator {
     }
 
     private func begin(_ operation: Operation) {
-        guard !isBusy else { return }
+        guard !isShuttingDown, !isBusy else { return }
         failure = nil; retryOperation = nil; isBusy = true; progress = nil
         operationPresentation = presentationGeneration
         let id = UUID(); operationID = id
@@ -371,7 +387,7 @@ final class IFDictionaryCoordinator {
 
     /// Invoked by a deferred native idle signal, never by polling or network work in a key callback.
     func activateIfIdle() {
-        guard let backend, let pending, activity == .waitingForIdle, IFEngine.allSessionsIdle else { return }
+        guard !isShuttingDown, let backend, let pending, activity == .waitingForIdle, IFEngine.allSessionsIdle else { return }
         activity = .applying
         let date = now()
         do {
