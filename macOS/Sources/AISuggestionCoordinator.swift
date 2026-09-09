@@ -15,6 +15,7 @@ final class AISuggestionCoordinator {
     private let candidatesVisible: () -> Bool
     private let context: (AIClientAnchor) -> AISurroundingContext?
     private let present: (String) -> Bool
+    private let allows: (AIInputIdentity, String) -> Bool
     private let visible: () -> Bool
     private let hide: () -> Void
     private let delay: Duration
@@ -36,11 +37,13 @@ final class AISuggestionCoordinator {
          current: @escaping () -> AISuggestionState?,
          candidatesVisible: @escaping () -> Bool = { true },
          context: @escaping (AIClientAnchor) -> AISurroundingContext?,
+         allows: @escaping (AIInputIdentity, String) -> Bool = { _, _ in true },
          present: @escaping (String) -> Bool, visible: @escaping () -> Bool, hide: @escaping () -> Void) {
         self.settings = settings; self.service = service; self.delay = delay
         self.diagnosticSession = diagnosticSession
         self.current = current; self.candidatesVisible = candidatesVisible; self.context = context
         self.present = present; self.visible = visible; self.hide = hide
+        self.allows = allows
     }
 
     isolated deinit {
@@ -142,6 +145,7 @@ final class AISuggestionCoordinator {
                 guard self.matches(token, input: next.input, configuration: configuration) else {
                     AIDiagnostics.emit(.discarded, reason: .staleState); return
                 }
+                guard self.allows(next.input, text) else { throw AIServiceError.invalidResponse }
                 self.settings.setRequestError(nil)
                 guard self.matches(token, input: next.input, configuration: configuration) else {
                     AIDiagnostics.emit(.discarded, reason: .staleState)

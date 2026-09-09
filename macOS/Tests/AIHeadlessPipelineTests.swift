@@ -57,6 +57,7 @@ struct AIHeadlessPipelineTests {
             for value in AIHeadlessCase.effects { try await effect(value, settings: settings, live: live) }
             if !live {
                 try await ordinaryControls(settings)
+                try await adoptionLearning(settings)
                 try await profiles(settings)
                 try await changedSurroundings(settings)
                 try await secureChecks(settings)
@@ -154,6 +155,41 @@ struct AIHeadlessPipelineTests {
             print("PASS effect \(value.name): context=\(live ? "zero-length-best-effort" : "two-sided") suggestion=\(suggestion) request_count=1 latency=\(lastKey.duration(to: calls[0].started))")
             fflush(stdout)
         }
+    }
+
+    @MainActor static func adoptionLearning(_ settings: IFSettings) async throws {
+        let word = "星墨舟", raw = "xingmozhou"
+        let service = AIHeadlessService(response: word)
+        let (controller, client, endpoint) = fixture(settings: settings, service: service)
+        defer { controller.engine?.clear(); controller.refresh(client) }
+        _ = await AIHeadlessKeyboard.type(raw, into: controller, client: client)
+        let engine = controller.engine!
+        check(engine.snapshot().candidates.first != word, "Novel adoption starts below first place")
+        await until { endpoint.suggestionVisible }
+        check(engine.snapshot().candidates.first != word, "Display alone never learns")
+        client.mutations.removeAll()
+        var callbacks = 0
+        client.onMutation = {
+            callbacks += 1
+            controller.commitComposition(client)
+            _ = controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client)
+        }
+        check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
+        client.onMutation = nil
+        check(callbacks == 1 && client.mutations == ["insert:" + word], "Adoption inserts exactly once")
+        settings.smart.isEnabled = false
+        _ = await AIHeadlessKeyboard.type(raw, into: controller, client: client)
+        check(engine.snapshot().candidates.first == word, "Genuine Tab improves local candidates with AI disabled")
+        engine.clear(); controller.refresh(client)
+        settings.smart.isEnabled = true
+
+        let expansion = AIHeadlessService(response: "你好，很高兴认识你")
+        let (other, otherClient, otherEndpoint) = fixture(settings: settings, service: expansion)
+        defer { other.engine?.clear(); other.refresh(otherClient) }
+        _ = await AIHeadlessKeyboard.type("nihao", into: other, client: otherClient)
+        await until { settings.smart.requestError != nil }
+        check(!otherEndpoint.suggestionVisible && otherClient.insertions.isEmpty, "Clearly expanded result is not displayed or adopted")
+        print("PASS headless AI learning: no pre-adoption learning, exact-once Tab, local recall with AI off and expansion rejection")
     }
 
     @MainActor static func ordinaryControls(_ settings: IFSettings) async throws {
@@ -282,8 +318,8 @@ struct AIHeadlessPipelineTests {
                 }
                 client.mutations.removeAll()
                 check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
-                check(client.document == expectedBefore + "你好吗" + expectedAfter &&
-                    client.mutations == ["insert:你好吗"],
+                check(client.document == expectedBefore + "你好" + expectedAfter &&
+                    client.mutations == ["insert:你好"],
                       "Same-composition Tab preserves current document despite changed or unavailable surroundings after \(phase)")
                 check(client.requests.count == reads && client.lengthReads == lengthReads && lengthReads == 1,
                       "Response and Tab never reread surrounding document text or length")

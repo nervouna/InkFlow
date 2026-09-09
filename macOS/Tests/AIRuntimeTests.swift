@@ -69,7 +69,7 @@ struct AIRuntimeTests {
         }
         verify(!diagnostics.contains(.insertionIssued) && !diagnostics.contains(.insertionReturned),
                "Consuming a coordinator preview alone does not claim delivery to an editor")
-        verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好吗"]), "Runtime records omit all content and configuration values")
+        verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好"]), "Runtime records omit all content and configuration values")
         print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
         print("PASS AI runtime: bounded Unicode context captured once, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
     }
@@ -144,13 +144,13 @@ struct AIRuntimeTests {
         fixture.coordinator.validate(); fixture.setInput("nihao", length: 7)
         fixture.coordinator.synchronize(ownedRefresh: true)
         await fixture.service.resolve(0); await wait(0.05)
-        verify(fixture.shown == "你好吗", "In-flight result binds to the latest owned display mark")
+        verify(fixture.shown == "你好", "In-flight result binds to the latest owned display mark")
         fixture.coordinator.validate(); fixture.setInput("nihao", length: 5)
         fixture.coordinator.synchronize(ownedRefresh: true)
         await wait(0.55)
         verify(await fixture.service.count() == 1 && fixture.shown != nil, "Paging a visible suggestion never repeats inference")
         let adoption = fixture.coordinator.takeSuggestion()
-        verify(adoption?.text == "你好吗" && adoption?.attempt != nil, "Adoption retains request identity after coordinator invalidation")
+        verify(adoption?.text == "你好" && adoption?.attempt != nil, "Adoption retains request identity after coordinator invalidation")
         verify(fixture.coordinator.takeSuggestion() == nil, "Acceptance consumes eligibility exactly once")
         verify(fixture.reads == 1, "Response, navigation and Tab do not recapture request context")
 

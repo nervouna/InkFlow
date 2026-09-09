@@ -18,7 +18,7 @@ switches:
 engine:
   processors: [ascii_composer, key_binder, speller, punctuator, selector, navigator, express_editor]
   segmentors: [ascii_segmentor, abc_segmentor, punct_segmentor, fallback_segmentor]
-  translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english]
+  translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_ai_learning, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english]
   filters: [simplifier@emoji_suggestion, simplifier@traditional, uniquifier]
 emoji_suggestion:
   opencc_config: inkflow_emoji.json
