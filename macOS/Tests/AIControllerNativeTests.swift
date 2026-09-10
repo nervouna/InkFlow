@@ -1,24 +1,71 @@
 import AppKit
 @preconcurrency import InputMethodKit
 
-private struct FixedAIService: AISuggestionServing {
-    func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String { "你好" }
+private final class NativeAITrace: @unchecked Sendable {
+    let run = UUID()
+    private let started = ContinuousClock.now
+    private let lock = NSLock()
+    private var storage: [(AIDiagnosticRecord, ContinuousClock.Instant)] = []
+    var records: [(AIDiagnosticRecord, ContinuousClock.Instant)] { lock.withLock { storage } }
+    func append(_ record: AIDiagnosticRecord) {
+        lock.withLock {
+            let now = ContinuousClock.now
+            storage.append((record, now))
+            print("TRACE run=\(run) pid=\(ProcessInfo.processInfo.processIdentifier) monotonic=\(started.duration(to: now)) \(record.message)")
+            fflush(stdout)
+        }
+    }
 }
 
 @main
 struct AIControllerNativeTests {
+    private static let trace = NativeAITrace()
     @MainActor static var suggestion: NSWindow? {
         NSApp.windows.first { AISuggestionPanel.isSuggestionWindow($0) && $0.isVisible }
     }
     @MainActor static func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
-    @MainActor static func until(_ predicate: () -> Bool, seconds: Double = 3) async {
+    @MainActor static func until(_ phase: String, seconds: Double = 3, prerequisite: Bool = false,
+                                _ predicate: () async -> Bool) async {
+        print("WAIT run=\(trace.run) phase=\(phase)"); fflush(stdout)
+        let started = ContinuousClock.now
         let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
-        while !predicate() && ContinuousClock.now < deadline { await wait(0.025) }
-        check(predicate(), "Timed out waiting for native AI state")
+        while !(await predicate()) && ContinuousClock.now < deadline { await wait(0.025) }
+        let satisfied = await predicate()
+        if !satisfied && prerequisite {
+            print("BLOCKED native prerequisite run=\(trace.run) phase=\(phase) active=\(NSApp.isActive) key=\(NSApp.keyWindow != nil) foreground_pid=\(NSWorkspace.shared.frontmostApplication?.processIdentifier ?? -1)")
+            fflush(stdout); exit(2)
+        }
+        check(satisfied, "run=\(trace.run) phase=\(phase) timed out elapsed=\(started.duration(to: .now))")
+        print("READY run=\(trace.run) phase=\(phase) elapsed=\(started.duration(to: .now))"); fflush(stdout)
+    }
+
+    @MainActor static func dispatched(_ service: DelayedAIService, phase: String) async -> UUID {
+        let scheduled = trace.records.last { $0.0.event == .scheduled }!
+        let attempt = scheduled.0.attempt!
+        await until("\(phase).dispatch") { await service.count() >= 1 }
+        let count = await service.count()
+        check(count == 1, "\(phase) dispatches exactly once")
+        let events = trace.records
+        let dispatch = events.last { $0.0.event == .dispatched && $0.0.attempt == attempt }!
+        check(dispatch.0.session == scheduled.0.session, "\(phase) dispatch belongs to the scheduled session")
+        check(scheduled.1.duration(to: dispatch.1) >= .milliseconds(500), "\(phase) never dispatches before the 0.5s debounce")
+        return attempt
+    }
+
+    @MainActor static func resolved(_ service: DelayedAIService, attempt: UUID, shown: Bool, phase: String) async {
+        let boundary = trace.records.count
+        await service.resolve(0)
+        await until("\(phase).response-processed") {
+            trace.records.dropFirst(boundary).contains {
+                $0.0.attempt == attempt && (shown ? $0.0.event == .shown : $0.0.event == .discarded)
+            }
+        }
+        let count = await service.count()
+        check(count == 1, "\(phase) resolution never duplicates dispatch")
     }
 
     @MainActor static func prepare(server: IMKServer, settings: IFSettings,
-                                    service: any AISuggestionServing = FixedAIService(),
+                                    service: any AISuggestionServing,
                                     input: String = "nihao", secure: @escaping () -> Bool = { false }) -> (InkFlowInputController, RecordingClient) {
         let client = RecordingClient(document: "前文😀【】后文")
         client.selection = NSRange(location: "前文😀【".utf16.count, length: 0)
@@ -40,7 +87,7 @@ struct AIControllerNativeTests {
         Task { @MainActor in
             do {
                 let diagnostics = AIDiagnosticCapture()
-                try await AIDiagnostics.$observe.withValue({ diagnostics.append($0) }) { try await runChecks() }
+                try await AIDiagnostics.$observe.withValue({ diagnostics.append($0); trace.append($0) }) { try await runChecks() }
                 let blocked = diagnostics.records.filter { $0.event == .eligibility && $0.reason == .secureInput }
                 check(!blocked.isEmpty && blocked.allSatisfy { $0.session != nil }, "Pre-request gates identify their controller session")
                 let firstSession = blocked[0].session
@@ -52,6 +99,7 @@ struct AIControllerNativeTests {
                 check(diagnostics.contains(.presentationFailed, reason: .ambiguousCandidateWindow))
                 check(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好"]), "Native AI diagnostics omit input, output and config")
                 print("PASS AI diagnostics native pid=\(ProcessInfo.processInfo.processIdentifier)")
+                print("PASS native AI final run=\(trace.run)")
                 fflush(stdout); exit(0)
             }
             catch { print("FAIL native harness: \((error as? AIServiceError)?.localizedDescription ?? "fixture setup failed")"); exit(1) }
@@ -68,7 +116,7 @@ struct AIControllerNativeTests {
         let field = NSTextView(frame: NSRect(x: 24, y: 24, width: 540, height: 180))
         host.contentView?.addSubview(field)
         host.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); host.makeFirstResponder(field)
-        await until { host.isKeyWindow }
+        await until("host-focus", seconds: 5, prerequisite: true) { host.isKeyWindow && NSApp.isActive }
         print("PASS native host focus"); fflush(stdout)
         defer { host.orderOut(nil) }
         let isolated = IsolatedSettings(); defer { isolated.cleanup() }
@@ -108,7 +156,8 @@ struct AIControllerNativeTests {
     @MainActor static func acceptance(server: IMKServer, settings: IFSettings, host: NSWindow, field: NSTextView) async throws {
         for action in ["tab", "space", "digit", "click", "partial"] {
             print("CHECK native action \(action)"); fflush(stdout)
-            let (controller, client) = prepare(server: server, settings: settings)
+            let service = DelayedAIService()
+            let (controller, client) = prepare(server: server, settings: settings, service: service)
             defer { controller.engine?.clear(); controller.refresh(client); controller.panel?.hide() }
             let initialInput = controller.engine!.aiInputIdentity()!
             let initialPage = controller.engine!.snapshot().page
@@ -121,10 +170,11 @@ struct AIControllerNativeTests {
                 controller.engine!.select(index); controller.refresh(client)
                 check(controller.engine!.aiInputIdentity()?.selectedPrefix == "你")
             }
-            await wait(0.1)
             let originalKeyWindow = NSApp.keyWindow
             let originalResponder = host.firstResponder
-            await until { suggestion != nil }
+            let attempt = await dispatched(service, phase: action)
+            await resolved(service, attempt: attempt, shown: true, phase: action)
+            check(suggestion != nil)
             check(NSApp.keyWindow === originalKeyWindow && host.firstResponder === originalResponder,
                   "Suggestion preserves the native candidate setup's existing keyboard focus")
             let window = suggestion!
@@ -142,7 +192,11 @@ struct AIControllerNativeTests {
             await wait(0.22)
             check(client.requests.count == requests && client.lengthReads == lengths, "Position tracker never reads full context")
             check(controller.handle(keyEvent(125, ""), client: client))
-            check(suggestion != nil, "Highlighting keeps a ready suggestion")
+            check(suggestion === window, "Highlighting immediately keeps the same ready suggestion")
+            check(trace.records.last { $0.0.event == .scheduled }?.0.attempt == attempt,
+                  "Navigation keeps the same request attempt")
+            let dispatchCount = await service.count()
+            check(dispatchCount == 1, "Navigation never duplicates dispatch")
             client.mutations.removeAll()
             let ordinary = controller.engine!.snapshot().candidates
             if action == "tab" || action == "partial" {
@@ -184,10 +238,12 @@ struct AIControllerNativeTests {
         check(labels.contains { $0.stringValue == "AI · 部分显示" }, "Long response clipping is explicitly disclosed")
         long.hide()
         host.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true); host.makeFirstResponder(field)
-        await until { host.isKeyWindow && host.firstResponder === field }
+        await until("passive-panel-host-focus", seconds: 5, prerequisite: true) { host.isKeyWindow && NSApp.isActive && host.firstResponder === field }
         let passive = AISuggestionPanel()
         passive.setSuggestion("独立焦点验证")
         passive.show(relativeTo: NSRect(x: host.frame.minX + 30, y: host.frame.midY, width: 350, height: 30))
+        await until("passive-panel-visible") { passive.isVisible }
+        // Negative focus contract: observing visibility alone cannot catch a later focus steal.
         await wait(0.1)
         check(passive.isVisible && host.isKeyWindow && host.firstResponder === field,
               "The suggestion panel independently preserves a text view's established focus")
@@ -205,8 +261,7 @@ struct AIControllerNativeTests {
             let service = DelayedAIService()
             var secure = false
             let (controller, client) = prepare(server: server, settings: settings, service: service, secure: { secure })
-            await wait(0.58)
-            let count = await service.count(); check(count == 1)
+            let attempt = await dispatched(service, phase: "stale.\(action)")
             switch action {
             case "escape": check(controller.handle(keyEvent(53, ""), client: client))
             case "hide": controller.hidePalettes()
@@ -218,7 +273,7 @@ struct AIControllerNativeTests {
             case "space-change": NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
             default: break
             }
-            await service.resolve(0); await wait(0.08)
+            await resolved(service, attempt: attempt, shown: action == "repeat-tab" || action == "context", phase: "stale.\(action)")
             if action == "repeat-tab" {
                 check(suggestion != nil)
                 let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
@@ -244,7 +299,7 @@ struct AIControllerNativeTests {
         settings.smart.isEnabled = true
         let started = ContinuousClock.now
         let (controller, client) = prepare(server: server, settings: settings, service: AIChatCompletionsClient(), input: "nihao")
-        await until({ suggestion != nil || settings.smart.requestError != nil }, seconds: 25)
+        await until("live-response", seconds: 25) { suggestion != nil || settings.smart.requestError != nil }
         check(settings.smart.requestError == nil, settings.smart.requestError ?? "")
         let text = suggestion?.accessibilityValue() as? String
         check(text?.isEmpty == false)

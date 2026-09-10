@@ -95,6 +95,27 @@ dictionary and Lua filter are packaged. Real-client typing remains a separate
 acceptance step.
 ## AI suggestions do not appear
 
+### Native acceptance timing and prerequisites
+
+`test-ai-native.sh` retains each invocation's compile log, combined stdout/stderr,
+and isolated harness app under `build/ai-native-run.*`. `TRACE` records contain a
+run ID, monotonic elapsed time and the existing allowlisted attempt/session labels.
+`WAIT`/`READY` identify each bounded phase. Only `PASS native AI final` after the
+diagnostic assertions is complete acceptance. Focus prerequisites exit 2 as
+`BLOCKED`, distinct from a product assertion failure; a visible window alone is
+not proof of keyboard focus.
+
+The original suite reproduced a request-count failure after its fixed 0.58-second
+wait despite completing host focus and all five adoption/ordinary-key scenarios.
+This establishes a timing-sensitive assertion, not a diagnosed product defect.
+Positive waits now observe one service dispatch and an attempt-correlated response
+terminal event emitted after resolution. Schedule-to-dispatch timestamps separately
+require at least 0.5 seconds; secure input retains a negative observation window.
+Navigation must immediately retain the same ready window and request attempt,
+not eventually show a replacement. Context-read and passive-focus negative windows
+remain intact. The delayed-visibility headless suite still verifies the natural
+trigger without forcing visibility. No paid API call is needed for these checks.
+
 Start with the installed process and its retained unified log, before restarting the
 input method or changing configuration. Match the process ID to the installed app;
 unit tests and native harnesses also use the same logging subsystem.
