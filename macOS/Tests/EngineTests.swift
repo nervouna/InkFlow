@@ -947,6 +947,21 @@ struct EngineTests {
             engine.setPrecedingText("准备午"); check(engine.snapshot().highlight == 1)
             check(engine.key(32)); check(engine.takeCommit() == ranked.candidates[1])
         }
+        for count in [3, 5, 9] {
+            let engine = prepared("多", "can", count: count)
+            let candidates = engine.snapshot().candidates
+            check(candidates.count == count, "Context retains the configured \(count)-candidate page: \(candidates)")
+            check(candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+                  "Context keeps Chinese first for short English conflicts: \(candidates)")
+            guard let index = candidates.firstIndex(of: "can") else {
+                check(false, "Context keeps exact short English on the first page: \(candidates)")
+                continue
+            }
+            check(index < 3, "Context keeps exact short English in Top-3 for \(count) candidates: \(candidates)")
+            engine.select(index)
+            check(engine.takeCommit() == "can" && engine.snapshot().preedit.isEmpty,
+                  "Context selection commits the displayed short English exactly")
+        }
         for prefix in ["", "完全无关", "准备午，", "准备午 ", "准备午\n", "准备午😀"] {
             let baseline = prepared(""), engine = prepared(prefix)
             check(engine.snapshot().candidates == baseline.snapshot().candidates)
@@ -1027,8 +1042,10 @@ struct EngineTests {
         let ranker = try IFContextRanker(dictionary: url.path)
         check(ranker.order(["惨", "餐", "参"], precedingText: "准备午") == [2, 1, 0], "Longer crossing phrases precede frequency")
         check(ranker.order(["惨", "餐", "参"], precedingText: "午") == [1, 2, 0], "Frequency then stable original order")
+        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午") == [2, 1, 0, 3],
+              "Context reorders eligible Han candidates only within their original slots")
         check(ranker.order(["你好", "你"], precedingText: "迷") == [0, 1], "Unequal-length choices remain in the native relative order")
-        print("PASS context ranking rules: longer match, frequency, stable ties, partial length guard")
+        print("PASS context ranking rules: longer match, frequency, stable ties, fixed ineligible slots, partial length guard")
     }
 
     @MainActor static func englishCandidates() {

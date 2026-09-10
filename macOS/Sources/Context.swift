@@ -80,11 +80,17 @@ struct IFContextRanker: Sendable {
             }
             return (0, 0)
         }
-        return original.sorted {
+        let eligible = original.filter {
+            candidates[$0].count == first.count && candidates[$0].allSatisfy(Self.isHan)
+        }
+        let ranked = eligible.sorted {
             if scores[$0].length != scores[$1].length { return scores[$0].length > scores[$1].length }
             if scores[$0].frequency != scores[$1].frequency { return scores[$0].frequency > scores[$1].frequency }
             return $0 < $1
         }
+        var result = original
+        for (slot, candidate) in zip(eligible, ranked) { result[slot] = candidate }
+        return result
     }
 
     private static func isHan(_ character: Character) -> Bool {
