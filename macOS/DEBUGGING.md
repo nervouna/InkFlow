@@ -17,9 +17,12 @@ Events are emitted only at stage transitions and native activation/deactivation,
 never per key. They use the existing unified log, with no new permanent store.
 
 Read server construction, event-loop progress, and engine readiness separately.
-In the synchronous startup baseline, bootstrap and any recovery worker or Rime
-maintenance finish before server construction. Per-worker timeouts do not bound the
-total fallback chain. Activation/deactivation spans in the same run/PID indicate
+Production starts the immutable `RimePrebuilt` bundled fallback before constructing
+the server. Its integrity checks, index construction and native initialization still
+take time; no zero-latency cold-start claim is made. Downloaded-cache recovery and
+its potentially long worker waits run detached after the fallback is usable.
+Per-worker timeouts do not bound the total fallback chain, but that chain now leaves
+the bundled engine serving. Activation/deactivation spans in the same run/PID indicate
 client lifecycle callbacks rather than a new process. A ready activation reports
 engine availability at callback return; it does not prove first-key/preedit delivery.
 An activation marked skipped means the engine was unavailable then.
@@ -39,6 +42,28 @@ maintenance of 769.807 ms. A prepared engine skipped maintenance and reached
 engine readiness in 92.240 ms. The injected fingerprint failure retained a failed
 stage of 10.788 ms. These are synthetic-root test observations with shared system
 load, not production cold-start timings or a first-key/preedit measurement.
+
+The transient fallback does not overwrite a readable saved current/previous journal.
+Recovery switches only when every client is idle, retains the confirmed activation
+date for equal content, and rolls back to the live fallback if activation fails.
+Unreadable journals are repaired only after bundled input actually started. Failed
+downloaded recovery preserves its saved versions for retry. Shutdown drains owned
+preparation before cleanup and prevents a late native switch.
+
+`RimePrebuilt/inkflow-cache.json` binds the bundled resources and compiled files.
+It deliberately excludes helper/library binary hashes that signing can change.
+Build and bundle verification compile/smoke-test this cache. A missing or invalid
+packaged cache reports engine unavailability and leaves Settings/retry reachable;
+it never falls back to synchronous maintenance. The normal-input guarantee requires
+a valid packaged bundle and does not cover keys before its fallback engine is ready.
+
+Run `bash macOS/scripts/test-serving-startup.sh` after building for actual coordinator
+recovery gates, heartbeat/input/journal/idle-switch/shutdown checks and read-only
+cache profile/custom-phrase/reopen checks. This is included in the
+`test.sh dictionary-activation` group. Add `--native` in a logged-in, unlocked GUI
+session for a focused host, real candidate panel and two-client exact-delivery check.
+It retains the framework-init/client-lookup shim needed for RecordingClient; it does
+not establish external-application cross-process routing or resolve GitHub #1.
 
 ## Uppercase English drops itself and following Pinyin from mixed candidates
 

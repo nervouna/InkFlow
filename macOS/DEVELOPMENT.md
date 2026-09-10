@@ -60,6 +60,7 @@ bash macOS/scripts/build.sh
 bash macOS/scripts/test.sh
 bash macOS/scripts/check-bundle.sh
 bash macOS/scripts/test-controller-initialization.sh
+bash macOS/scripts/test-serving-startup.sh --native
 bash macOS/scripts/test-settings-ui.sh
 bash macOS/scripts/test-installer-window.sh
 bash macOS/scripts/check-installer-core.sh
@@ -69,6 +70,18 @@ bash .agents/skills/inkflow-release/scripts/test.sh
 For GUI-evidence recording and reuse, follow the same-machine, source-tree and environment requirements in [the release skill](../.agents/skills/inkflow-release/SKILL.md#2-verify-the-release-contents). A successful `gui-verification.sh check` may replace rerunning the two GUI suites above; missing or invalid evidence requires a fresh recording. Full non-GUI checks must still run for formal installation or release. Releases additionally require all release-skill checks, including signing, notarization, and final artifact verification. Do not proceed with missing or failed required checks. Real installed-input-method typing acceptance remains a separate user-owned step.
 
 ### Test coverage and focused entry points
+
+The `dictionary-activation` group includes `test-serving-startup.sh`: the production
+startup entry point serves its packaged fallback while actual recovery is gated,
+then switches at all-client idle. It checks saved journal/date preservation,
+failure/retry/shutdown, read-only cache bytes, all spelling profiles, custom phrases,
+and user-root reopen. Run `test-serving-startup.sh --native` for the focused host,
+native candidate panel and two-client delivery variant. Its IMK initialization and
+client-lookup shim is the same synthetic-client boundary used by the AI native
+harness. External application routing remains separate. Each run retains its own
+ignored `build/serving-startup-run.*/run.log`; a failed host-focus prerequisite is
+unsuccessful evidence, not a product assertion or PASS. This new startup check is
+not covered by previously recorded Settings/controller GUI evidence.
 
 `test.sh` accepts one or more groups, runs each once in the existing suite order, and rejects unknown arguments before running checks. No arguments or `all` retains the full non-GUI suite; do not combine `all` with group names. Use `--help` to list groups.
 

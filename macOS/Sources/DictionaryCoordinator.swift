@@ -74,12 +74,16 @@ final class IFDictionaryCoordinator {
     @ObservationIgnored private var configuration: IFEngineConfiguration?
     @ObservationIgnored private var fingerprint: String?
     @ObservationIgnored private var pending: IFPreparedActivation?
+    @ObservationIgnored private var servingStartup: (runtime: IFDictionaryRuntime, user: URL)?
+    @ObservationIgnored private var servingFallback: IFPreparedActivation?
+    @ObservationIgnored private var pendingRecovery: IFDictionaryVersion?
+    @ObservationIgnored private var recoveryAlternatives: [(IFDictionaryVersion, IFPreparedActivation)] = []
     @ObservationIgnored private var retryOperation: Operation?
     @ObservationIgnored private var presentationGeneration: UInt64 = 0
     @ObservationIgnored private var operationPresentation: UInt64 = 0
     /// Narrow fault seam for native initialize/probe/individual session restoration tests.
     @ObservationIgnored var activationFault: (IFEngineSwitchStep, Bool) throws -> Void = { _, _ in }
-    private enum Operation { case check, update, recovery, cleanup }
+    private enum Operation { case check, update, recovery, servingRecovery, cleanup }
 
     /// No default root, preferences, networking, or engine startup. Shared Settings remains inert in harnesses.
     init(backend: IFDictionaryBackend? = nil, backendFactory: (@Sendable () throws -> IFDictionaryBackend)? = nil,
@@ -126,8 +130,31 @@ final class IFDictionaryCoordinator {
         record(IFDictionaryUpdateError.wrapping(error, stage: .recovery), retry: .recovery)
     }
 
-    /// Synchronous bootstrap currently delays IMKServer creation. Timings include failed recovery attempts.
+    /// Legacy synchronous entry point retained for focused harnesses. Production uses bootstrapForServing.
     func bootstrap() { bootstrap(prepared: nil) }
+
+    /// Only immutable, precompiled bundled input precedes server construction. Downloaded recovery
+    /// starts later on a detached executor and cannot confirm over the saved journal prematurely.
+    func bootstrapForServing(runtime: IFDictionaryRuntime, user: URL) {
+        guard !isShuttingDown, !isBusy, !IFEngine.ready else { return }
+        servingStartup = (runtime, user)
+        let span = IFStartupDiagnostics.shared.begin(.bootstrap, source: .bundled)
+        defer { IFStartupDiagnostics.shared.end(span, IFEngine.ready ? .ready : .failed) }
+        do {
+            let descriptor = try IFStartupDiagnostics.shared.measure(.cacheValidation, source: .bundled) {
+                try IFPackagedCache.descriptor(resources: runtime.resources)
+            }
+            let prepared = try Self.prepareIndex(descriptor, user: user)
+            try IFEngine.start(prepared.configuration)
+            servingFallback = prepared
+            use(prepared, date: now())
+            begin(.servingRecovery)
+        } catch {
+            recordUnavailable(error)
+            retryOperation = .servingRecovery
+        }
+        NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+    }
 
     private func bootstrap(prepared: IFRecoveryPreparation?) {
         guard !isShuttingDown, !isBusy, !IFEngine.ready else { return }
@@ -228,9 +255,9 @@ final class IFDictionaryCoordinator {
         }
     }
 
-    /// Manual unavailable-engine recovery performs disk validation, helper work and all indexes in the background.
-    /// Startup remains synchronous before IMKServer exists. Both paths use the same worker/store/index implementation.
-    private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend) -> IFRecoveryPreparation {
+    /// Manual and serving recovery share disk validation, helper work and indexes on a background executor.
+    /// The serving path supplies its already-running packaged fallback to avoid rebuilding its index.
+    private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend, bundledFallback: IFPreparedActivation? = nil) -> IFRecoveryPreparation {
         var errors: [IFDictionaryUpdateError] = []
         var state = IFDictionaryState(), malformed = false
         do { state = try IFStartupDiagnostics.shared.measure(.journal) { try backend.store.recoverInterrupted() } }
@@ -250,9 +277,11 @@ final class IFDictionaryCoordinator {
                 } catch { errors.append(.wrapping(error, stage: .recovery)) }
             }
         }
-        var bundled: IFPreparedActivation?
-        do { bundled = try prepareIndex(backend.store.bundled(backend.runtime.resources), user: backend.user) }
-        catch { errors.append(.wrapping(error, stage: .recovery)) }
+        var bundled = bundledFallback
+        if bundled == nil {
+            do { bundled = try prepareIndex(backend.store.bundled(backend.runtime.resources), user: backend.user) }
+            catch { errors.append(.wrapping(error, stage: .recovery)) }
+        }
         return .init(state: state, malformed: malformed, fingerprint: fingerprint, versions: versions, bundled: bundled, errors: errors)
     }
 
@@ -271,6 +300,7 @@ final class IFDictionaryCoordinator {
         while let current = task { await current.value }
         IFEngine.idleHandler = nil
         pending = nil
+        pendingRecovery = nil; recoveryAlternatives = []
         if let backend {
             try await Task.detached { try backend.store.abandonActivation() }.value
             _ = try await Task.detached { try backend.store.cleanup() }.value
@@ -289,7 +319,11 @@ final class IFDictionaryCoordinator {
     }
     func retry() {
         guard canRetry, let retryOperation else { return }
-        if !engineAvailable { begin(.recovery) }
+        if let startup = servingStartup, retryOperation == .servingRecovery || !engineAvailable {
+            if engineAvailable { begin(.servingRecovery) }
+            else { bootstrapForServing(runtime: startup.runtime, user: startup.user) }
+        }
+        else if !engineAvailable { begin(.recovery) }
         else if retryOperation == .recovery || retryOperation == .cleanup { begin(.cleanup) }
         else if retryOperation == .check { checkForUpdates() }
         else { downloadAndUpdate() }
@@ -300,6 +334,10 @@ final class IFDictionaryCoordinator {
         failure = nil; retryOperation = nil; isBusy = true; progress = nil
         operationPresentation = presentationGeneration
         let id = UUID(); operationID = id
+        if operation == .servingRecovery {
+            beginServingRecovery()
+            return
+        }
         if operation == .recovery {
             activity = .preparing
             task = Task { [self] in
@@ -371,7 +409,7 @@ final class IFDictionaryCoordinator {
                         fingerprint = try await Task.detached { try backend.runtime.fingerprint() }.value
                     }
                     try await Task.detached { try backend.store.abandonActivation() }.value
-                case .recovery: break
+                case .recovery, .servingRecovery: break
                 }
                 retryOperation = nil
             } catch {
@@ -382,6 +420,71 @@ final class IFDictionaryCoordinator {
             await cleanupAfterOperation(backend.store)
             isBusy = false; task = nil; operationID = nil; progress = nil
         }
+    }
+
+    /// Keep the transient bundled engine serving during every disk/index/worker wait. No new
+    /// persistent fallback pointer is needed: only successful recovery confirms the existing journal.
+    private func beginServingRecovery() {
+        activity = .preparing
+        task = Task { [self] in
+            do {
+                if backend == nil, let factory = backendFactory { backend = try await Task.detached { try factory() }.value }
+                guard !isShuttingDown else { finishServingRecovery(); return }
+                guard let backend, let fallback = servingFallback else {
+                    throw IFDictionaryUpdateError(.recovery, "backend-unavailable")
+                }
+                let prepared = await Task.detached { Self.prepareRecovery(backend, bundledFallback: fallback) }.value
+                guard !isShuttingDown else { finishServingRecovery(); return }
+                fingerprint = prepared.fingerprint
+                for error in prepared.errors { record(error, retry: .servingRecovery) }
+                recoveryAlternatives = [prepared.state.current, prepared.state.previous].compactMap { original in
+                    guard let original, let value = prepared.versions[original.artifactID] else { return nil }
+                    return (original, value)
+                }
+                if !recoveryAlternatives.isEmpty {
+                    queueServingRecovery()
+                    return
+                }
+                if prepared.malformed {
+                    let date = now()
+                    // The unreadable journal cannot supply recoverable pointers. Match the existing
+                    // repair contract only after the shipped fallback has actually started successfully.
+                    try await Task.detached { try backend.store.repairBundled(fallback.descriptor.manifest, now: date) }.value
+                    guard !isShuttingDown else { finishServingRecovery(); return }
+                    use(fallback, date: date)
+                    retryOperation = fingerprint == nil ? .servingRecovery : nil
+                    await cleanupAfterOperation(backend.store)
+                    finishServingRecovery(); return
+                }
+                guard prepared.errors.isEmpty else {
+                    retryOperation = .servingRecovery
+                    finishServingRecovery(); return
+                }
+                let date = prepared.state.bundled?.contentVersion == fallback.descriptor.manifest.contentVersion
+                    ? prepared.state.bundled!.activatedAt : now()
+                try await Task.detached { try backend.store.confirmBundled(fallback.descriptor.manifest, now: date) }.value
+                guard !isShuttingDown else { finishServingRecovery(); return }
+                use(fallback, date: date)
+                retryOperation = nil
+                await cleanupAfterOperation(backend.store)
+            } catch {
+                record(.wrapping(error, stage: .recovery), retry: .servingRecovery)
+            }
+            finishServingRecovery()
+        }
+    }
+
+    private func queueServingRecovery() {
+        guard !isShuttingDown, !recoveryAlternatives.isEmpty else { finishServingRecovery(); return }
+        let (original, prepared) = recoveryAlternatives.removeFirst()
+        pendingRecovery = original; pending = prepared
+        activity = .waitingForIdle; task = nil
+        IFEngine.idleHandler = { [weak self] in self?.activateIfIdle() }
+        IFEngine.signalIdle()
+    }
+
+    private func finishServingRecovery() {
+        isBusy = false; task = nil; operationID = nil; activity = .idle; progress = nil
     }
 
     private func acceptProgress(_ update: IFDictionaryProgress, operation: UUID) {
@@ -399,26 +502,48 @@ final class IFDictionaryCoordinator {
     func activateIfIdle() {
         guard !isShuttingDown, let backend, let pending, activity == .waitingForIdle, IFEngine.allSessionsIdle else { return }
         activity = .applying
-        let date = now()
+        let recovery = pendingRecovery
+        let date = recovery.flatMap { original in
+            pending.descriptor.manifest.contentVersion == original.contentVersion ? original.activatedAt : nil
+        } ?? now()
+        var recovered = false
         do {
             try IFEngine.replace(with: pending.configuration, restoring: configuration, fault: activationFault) {
-                try backend.store.confirmActivation(pending.descriptor.version!, now: date)
+                if let recovery {
+                    if pending.descriptor.version == recovery { try backend.store.confirmValidatedFallback(recovery) }
+                    else {
+                        try backend.store.beginValidatedActivation(pending.descriptor.version!)
+                        try backend.store.confirmActivation(pending.descriptor.version!, now: date)
+                    }
+                } else { try backend.store.confirmActivation(pending.descriptor.version!, now: date) }
             }
             use(pending, date: date)
+            recovered = true
             checked = nil; retryOperation = nil; activity = .updated
         } catch {
             engineAvailable = IFEngine.ready
             if !engineAvailable { active = nil; descriptor = nil; configuration = nil }
-            record(.wrapping(error, stage: .apply), retry: .update)
+            record(.wrapping(error, stage: .apply), retry: recovery == nil ? .update : .servingRecovery)
             activity = checked?.hasUpdate == true ? .updateAvailable : .idle
         }
         self.pending = nil
+        pendingRecovery = nil
         IFEngine.idleHandler = nil
         task = Task { [self] in
             // Confirm is compact; journal abandonment and artifact housekeeping follow on a background executor.
             do { try await Task.detached { try backend.store.abandonActivation() }.value }
             catch { record(.wrapping(error, stage: .recovery), retry: .recovery) }
-            await cleanupAfterOperation(backend.store)
+            if recovery != nil && !recovered {
+                if !isShuttingDown, engineAvailable, !recoveryAlternatives.isEmpty {
+                    queueServingRecovery(); return
+                }
+                // Preserve the saved versions for retry when only the transient fallback is usable.
+                recoveryAlternatives = []
+                retryOperation = .servingRecovery
+            } else {
+                recoveryAlternatives = []
+                await cleanupAfterOperation(backend.store)
+            }
             isBusy = false; task = nil; operationID = nil; progress = nil
         }
     }

@@ -70,6 +70,9 @@ if has settings; then
   build/settings-tests
 fi
 if has dictionary-updates; then bash macOS/scripts/test-dictionary-updates.sh; fi
-if has dictionary-activation; then bash macOS/scripts/test-dictionary-activation.sh; fi
+if has dictionary-activation; then
+  bash macOS/scripts/test-dictionary-activation.sh
+  bash macOS/scripts/test-serving-startup.sh
+fi
 if has termination; then bash macOS/scripts/test-termination.sh; fi
 if has installer-core; then bash macOS/scripts/test-installer-core.sh; fi

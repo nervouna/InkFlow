@@ -21,7 +21,7 @@ let result: Int32 = autoreleasepool {
         let worker = IFDictionaryWorkerRunner(runtime: runtime, protectedUserRoot: user, candidatesRoot: store.root.appendingPathComponent("candidates"))
         return .init(store: store, runtime: runtime, user: user, services: .init(client: .init(), worker: worker))
     }, logger: IFDictionaryCoordinator.persistentLogger)
-    dictionaries.bootstrap()
+    dictionaries.bootstrapForServing(runtime: .bundled(helper: helper), user: user)
     IFSettingsWindowController.sharedController.dictionaries = dictionaries
     let lifecycle = IFApplicationLifecycle(stopDictionaries: { try await dictionaries.shutdown() },
         stopEngine: { IFEngine.stop() },

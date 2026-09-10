@@ -10,7 +10,7 @@ cp macOS/scripts/test.sh "$fixture/macOS/scripts/"
 export INKFLOW_RUNNER_LOG="$fixture/commands.log"
 for script in dependencies prepare-rime test-quality-store test-quality-timing test-quality-metadata \
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
-  test-dictionary-updates test-dictionary-activation test-termination test-installer-core \
+  test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
   test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning; do
   cat > "$fixture/macOS/scripts/$script.sh" <<'STUB'
 #!/bin/bash
@@ -82,7 +82,7 @@ chmod +x "$fixture/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
 run dictionary-updates
 expect 'test-dictionary-updates '
 run dictionary-activation
-expect 'dependencies ' 'test-dictionary-activation '
+expect 'dependencies ' 'test-dictionary-activation ' 'test-serving-startup '
 run
 expect 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'dependencies ' \
   'test-prepare-rime ' 'test-dictionary-generator ' 'prepare-rime build/test-shared' \
@@ -90,7 +90,7 @@ expect 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'de
   'test-quality-capture ' 'test-quality-query --require-engine' \
   'build deployment-tests' 'run deployment-tests' 'build engine-tests' 'run engine-tests' \
   'build controller-tests' 'run controller-tests' 'build settings-tests' 'run settings-tests' \
-  'test-dictionary-updates ' 'test-dictionary-activation ' 'test-termination ' 'test-installer-core '
+  'test-dictionary-updates ' 'test-dictionary-activation ' 'test-serving-startup ' 'test-termination ' 'test-installer-core '
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
