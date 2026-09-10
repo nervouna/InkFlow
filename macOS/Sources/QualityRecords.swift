@@ -7,7 +7,8 @@ struct QualityBuildMetadata: Codable, Equatable, Sendable {
     var sourceTreeSHA256: String
     var sourceDirty: Bool?
     var bundledResourcesSHA256: String
-    /// Entire .app bytes except this metadata file. The legacy resources digest remains for compatibility.
+    /// Complete unsigned .app payload, excluding this metadata file and later signing/notarization envelopes.
+    /// The legacy resources digest remains for compatibility.
     var bundleSHA256: String = "unknown"
     var rankingSourceSHA256: String = "unknown"
     var rankingResourcesSHA256: String = "unknown"

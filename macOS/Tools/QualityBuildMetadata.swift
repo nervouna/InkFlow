@@ -25,7 +25,7 @@ struct QualityBuildMetadataTool {
         let paths = try git(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], root: root)
             .split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
         let resourceFiles = try regularFiles(root: resources, excluding: [output])
-        let bundleFiles = try regularFiles(root: app, excluding: [output])
+        let bundleFiles = try regularFiles(root: app, excluding: [output], excludingCodeSignatureArtifacts: true)
         let rankingSources = try manifest(root.appendingPathComponent("macOS/Quality/ranking-sources.txt"), root: root,
                                           requireTracked: true)
         let rankingResources = try manifest(root.appendingPathComponent("macOS/Quality/ranking-resources.txt"), root: resources,
@@ -38,7 +38,8 @@ struct QualityBuildMetadataTool {
         let dirty = try !git(["status", "--porcelain", "--untracked-files=normal"], root: root).isEmpty
         let metadata = QualityBuildMetadata(sourceRevision: revision, sourceTreeSHA256: try digest(paths, root: root),
             sourceDirty: dirty, bundledResourcesSHA256: try digest(resourceFiles, root: resources),
-            bundleSHA256: try digest(bundleFiles, root: app), rankingSourceSHA256: try digest(rankingSources, root: root),
+            bundleSHA256: try digest(bundleFiles, root: app, canonicalizingCodeSignatures: true),
+            rankingSourceSHA256: try digest(rankingSources, root: root),
             rankingResourcesSHA256: try digest(rankingResources, root: resources), appVersion: version, appBuild: build)
         if verify {
             let saved = try QualityJSON.decoder().decode(QualityBuildMetadata.self, from: Data(contentsOf: output))
@@ -49,8 +50,13 @@ struct QualityBuildMetadataTool {
         }
     }
 
-    private static func regularFiles(root: URL, excluding: Set<URL>) throws -> [String] {
+    private static func regularFiles(root: URL, excluding: Set<URL>,
+                                     excludingCodeSignatureArtifacts: Bool = false) throws -> [String] {
         try FileManager.default.subpathsOfDirectory(atPath: root.path).compactMap { path in
+            if excludingCodeSignatureArtifacts && (path.split(separator: "/").contains("_CodeSignature")
+                || path == "Contents/CodeResources") {
+                return nil
+            }
             let url = root.appendingPathComponent(path).standardizedFileURL
             if excluding.contains(url) { return nil }
             let type = try FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType
@@ -82,7 +88,8 @@ struct QualityBuildMetadataTool {
         return entries
     }
 
-    private static func digest(_ paths: [String], root: URL) throws -> String {
+    private static func digest(_ paths: [String], root: URL,
+                               canonicalizingCodeSignatures: Bool = false) throws -> String {
         var hash = SHA256()
         for path in Set(paths).sorted() {
             let url = root.appendingPathComponent(path)
@@ -97,13 +104,52 @@ struct QualityBuildMetadataTool {
                 content = Data(try FileManager.default.destinationOfSymbolicLink(atPath: url.path).utf8)
             } else {
                 kind = "file"
-                content = try Data(contentsOf: url)
+                let bytes = try Data(contentsOf: url)
+                content = canonicalizingCodeSignatures ? try unsignedMachO(bytes, path: path) : bytes
             }
             // Length framing makes filenames/content boundaries unambiguous and excludes mtimes.
             hash.update(data: Data("\(path.utf8.count):\(path)\(kind):\(content.count):".utf8))
             hash.update(data: content)
         }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Code signing replaces only Mach-O signature blobs and adds `_CodeSignature` files.
+    /// Hash the complete unsigned payload so the build-stamped identity survives later
+    /// ad-hoc or Developer ID signing without omitting executable code bytes.
+    private static func unsignedMachO(_ data: Data, path: String) throws -> Data {
+        let magics: Set<[UInt8]> = [
+            [0xce, 0xfa, 0xed, 0xfe], [0xcf, 0xfa, 0xed, 0xfe],
+            [0xfe, 0xed, 0xfa, 0xce], [0xfe, 0xed, 0xfa, 0xcf],
+            [0xca, 0xfe, 0xba, 0xbe], [0xbe, 0xba, 0xfe, 0xca],
+            [0xca, 0xfe, 0xba, 0xbf], [0xbf, 0xba, 0xfe, 0xca],
+        ]
+        guard data.count >= 4, magics.contains(Array(data.prefix(4))) else { return data }
+        let temporary = FileManager.default.temporaryDirectory
+            .appendingPathComponent("inkflow-quality-macho-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        try data.write(to: temporary, options: .atomic)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = ["--remove-signature", temporary.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else {
+            throw Failure("Cannot canonicalize Mach-O code signature: \(path)")
+        }
+        let validation = Process()
+        validation.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        validation.arguments = ["lipo", "-info", temporary.path]
+        validation.standardOutput = FileHandle.nullDevice
+        validation.standardError = FileHandle.nullDevice
+        try validation.run()
+        validation.waitUntilExit()
+        guard validation.terminationStatus == 0 else {
+            throw Failure("Invalid Mach-O while calculating bundle identity: \(path)")
+        }
+        return try Data(contentsOf: temporary)
     }
 
     private static func git(_ arguments: [String], root: URL) throws -> Data {

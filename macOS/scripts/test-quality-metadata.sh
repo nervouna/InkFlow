@@ -18,7 +18,8 @@ cp macOS/Sources/AIInputPresentation.swift "$repo/macOS/Sources/AIInputPresentat
 printf 'macOS/Sources/Engine.swift\nmacOS/Sources/InputRankingContext.swift\nmacOS/Sources/InputControllerCore.swift\nmacOS/Sources/CandidatePresentation.swift\n' > "$repo/macOS/Quality/ranking-sources.txt"
 printf 'Rime/ranking.yaml\n' > "$repo/macOS/Quality/ranking-resources.txt"
 printf 'actual bundled ranking content\n' > "$app/Contents/Resources/Rime/ranking.yaml"
-printf 'executable bytes\n' > "$app/Contents/MacOS/Fixture"
+cp /usr/bin/true "$app/Contents/MacOS/InkFlow"
+chmod +x "$app/Contents/MacOS/InkFlow"
 git -C "$repo" init -q
 git -C "$repo" config user.name 'InkFlow Tests'
 git -C "$repo" config user.email 'tests@invalid'
@@ -32,6 +33,10 @@ xcrun swiftc -swift-version 6 -warnings-as-errors -parse-as-library \
   -o build/quality-build-metadata
 build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
+build/quality-build-metadata "$repo" "$app" --verify
+codesign --force --sign - "$app"
+build/quality-build-metadata "$repo" "$app" --verify
+printf 'simulated stapled notarization ticket\n' > "$app/Contents/CodeResources"
 build/quality-build-metadata "$repo" "$app" --verify
 build/quality-build-metadata "$repo" "$app"
 cmp "$fixture/first.json" "$app/Contents/Resources/QualityBuild.json"
@@ -85,7 +90,7 @@ build/quality-build-metadata "$repo" "$app"
 [[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 printf 'offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
 
-printf 'modified executable bytes\n' > "$app/Contents/MacOS/Fixture"
+printf 'modified executable bytes\n' > "$app/Contents/MacOS/InkFlow"
 build/quality-build-metadata "$repo" "$app"
 [[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 [[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
@@ -126,4 +131,9 @@ for invalid in missing duplicate nonexistent; do
   fi
   cp "$fixture/resources.manifest" "$repo/macOS/Quality/ranking-resources.txt"
 done
+printf '\317\372\355\376broken Mach-O\n' > "$app/Contents/Resources/broken-macho.bin"
+if build/quality-build-metadata "$repo" "$app" > "$fixture/broken-macho.log" 2>&1; then
+  echo 'FAIL: invalid Mach-O signature canonicalization was accepted' >&2
+  exit 1
+fi
 echo 'PASS quality build metadata: deterministic layered hashes, AI boundary, and fail-closed manifests'
