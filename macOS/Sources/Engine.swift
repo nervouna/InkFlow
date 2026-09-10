@@ -106,6 +106,11 @@ final class IFEngine {
     static func start(_ configuration: IFEngineConfiguration,
                       fault: (IFEngineSwitchStep) throws -> Void = { _ in }) throws {
         guard !ready else { return }
+        let startup = IFStartupDiagnostics.shared
+        let source: IFStartupDiagnostics.Source = configuration.cache == nil ? .bundled : .prepared
+        let engineSpan = startup.begin(.engine, source: source)
+        var started = false
+        defer { startup.end(engineSpan, started ? .ready : .failed) }
         try fault(.start)
         let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
@@ -127,6 +132,7 @@ final class IFEngine {
         traits.app_name = cString("rime.inkflow")
         traits.min_log_level = 3
         traits.log_dir = cString("")
+        let initialization = startup.begin(.initialization, source: source)
         shared.withCString { sharedPath in
             user.withCString { userPath in
                 @MainActor func initialize(_ cachePath: UnsafePointer<CChar>?) {
@@ -141,9 +147,14 @@ final class IFEngine {
                 else { initialize(nil) }
             }
         }
+        startup.end(initialization)
         generation &+= 1
         // Prepared caches were compiled/probed by the isolated worker. Never deploy on a live switch.
-        if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 { api.pointee.join_maintenance_thread() }
+        let maintenance = startup.begin(.maintenance, source: source)
+        if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 {
+            api.pointee.join_maintenance_thread()
+            startup.end(maintenance)
+        } else { startup.end(maintenance, .skipped) }
         do {
             let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
             for file in ["pinyin_simp.reverse.bin"] + InputPreferences.compiledSpellingFiles {
@@ -177,6 +188,7 @@ final class IFEngine {
                 try engine.restoreSession(afterCreate: { try fault(.sessionCreated(index)) })
             }
         } catch { stop(); throw error }
+        started = true
     }
 
     static func stop() {

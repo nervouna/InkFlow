@@ -126,13 +126,16 @@ final class IFDictionaryCoordinator {
         record(IFDictionaryUpdateError.wrapping(error, stage: .recovery), retry: .recovery)
     }
 
-    /// Synchronous bootstrap before IMKServer creation; no input callback can be blocked by recovery work.
+    /// Synchronous bootstrap currently delays IMKServer creation. Timings include failed recovery attempts.
     func bootstrap() { bootstrap(prepared: nil) }
 
     private func bootstrap(prepared: IFRecoveryPreparation?) {
         guard !isShuttingDown, !isBusy, !IFEngine.ready else { return }
+        let startup = IFStartupDiagnostics.shared
+        let bootstrapSpan = startup.begin(.bootstrap, source: prepared == nil ? .process : .prepared)
+        defer { startup.end(bootstrapSpan, IFEngine.ready ? .ready : .failed) }
         if backend == nil, let backendFactory {
-            do { backend = try backendFactory() }
+            do { backend = try startup.measure(.backend) { try backendFactory() } }
             catch { recordUnavailable(error); return }
         }
         guard let backend else { return }
@@ -143,9 +146,9 @@ final class IFDictionaryCoordinator {
             fingerprint = prepared.fingerprint
             for error in prepared.errors { record(error, retry: .recovery) }
         } else {
-            do { state = try store.recoverInterrupted() }
+            do { state = try startup.measure(.journal) { try store.recoverInterrupted() } }
             catch { malformed = true; record(.wrapping(error, stage: .recovery), retry: .recovery) }
-            do { fingerprint = try backend.runtime.fingerprint() }
+            do { fingerprint = try startup.measure(.fingerprint) { try backend.runtime.fingerprint() } }
             catch { record(.wrapping(error, stage: .recovery), retry: .recovery) }
         }
 
@@ -202,7 +205,12 @@ final class IFDictionaryCoordinator {
     }
 
     private func recover(_ version: IFDictionaryVersion, backend: IFDictionaryBackend, fingerprint: String) throws -> IFPreparedActivation {
-        do { return try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user) }
+        do {
+            let descriptor = try IFStartupDiagnostics.shared.measure(.cacheValidation, source: .downloaded) {
+                try backend.store.resolve(version, fingerprint: fingerprint)
+            }
+            return try Self.prepareIndex(descriptor, user: backend.user)
+        }
         catch {
             record(.wrapping(error, stage: .recovery), retry: .recovery)
             return try Self.rebuild(version, backend: backend, fingerprint: fingerprint)
@@ -210,12 +218,14 @@ final class IFDictionaryCoordinator {
     }
 
     private nonisolated static func rebuild(_ version: IFDictionaryVersion, backend: IFDictionaryBackend, fingerprint: String) throws -> IFPreparedActivation {
-        let inert = try backend.store.storedDictionary(version)
-        let candidate = try backend.store.candidate()
-        defer { if FileManager.default.fileExists(atPath: candidate.path) { try? backend.store.removeCandidate(candidate) } }
-        _ = try backend.services.rebuild(candidate, inert)
-        let rebuilt = try backend.store.adopt(candidate, fingerprint: fingerprint)
-        return try Self.prepareIndex(backend.store.resolve(rebuilt, fingerprint: fingerprint), user: backend.user)
+        return try IFStartupDiagnostics.shared.measure(.rebuild, source: .downloaded) {
+            let inert = try backend.store.storedDictionary(version)
+            let candidate = try backend.store.candidate()
+            defer { if FileManager.default.fileExists(atPath: candidate.path) { try? backend.store.removeCandidate(candidate) } }
+            _ = try backend.services.rebuild(candidate, inert)
+            let rebuilt = try backend.store.adopt(candidate, fingerprint: fingerprint)
+            return try Self.prepareIndex(backend.store.resolve(rebuilt, fingerprint: fingerprint), user: backend.user)
+        }
     }
 
     /// Manual unavailable-engine recovery performs disk validation, helper work and all indexes in the background.
@@ -223,10 +233,10 @@ final class IFDictionaryCoordinator {
     private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend) -> IFRecoveryPreparation {
         var errors: [IFDictionaryUpdateError] = []
         var state = IFDictionaryState(), malformed = false
-        do { state = try backend.store.recoverInterrupted() }
+        do { state = try IFStartupDiagnostics.shared.measure(.journal) { try backend.store.recoverInterrupted() } }
         catch { malformed = true; errors.append(.wrapping(error, stage: .recovery)) }
         var fingerprint: String?
-        do { fingerprint = try backend.runtime.fingerprint() }
+        do { fingerprint = try IFStartupDiagnostics.shared.measure(.fingerprint) { try backend.runtime.fingerprint() } }
         catch { errors.append(.wrapping(error, stage: .recovery)) }
         var versions: [String: IFPreparedActivation] = [:]
         if let fingerprint, !malformed, state.bundled == nil {
@@ -430,7 +440,9 @@ final class IFDictionaryCoordinator {
     }
 
     private nonisolated static func prepareIndex(_ descriptor: IFDictionaryDescriptor, user: URL) throws -> IFPreparedActivation {
-        let ranker = try IFContextRanker(dictionary: descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+        let ranker = try IFStartupDiagnostics.shared.measure(.indexes, source: descriptor.version == nil ? .bundled : .downloaded) {
+            try IFContextRanker(dictionary: descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+        }
         return .init(descriptor: descriptor, configuration: .init(shared: descriptor.sharedData, cache: descriptor.cache, user: user.path, ranker: ranker))
     }
 

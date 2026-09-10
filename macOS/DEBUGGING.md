@@ -1,5 +1,45 @@
 # Debugging index
 
+## Cold startup versus same-process app-switch delay
+
+Collect category `startup` alongside `dictionary` and the existing AI callback diagnostics:
+
+```sh
+/usr/bin/log show --last 1h --style compact --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND (category == "startup" OR category == "dictionary")'
+```
+
+Startup events use one process `run` UUID plus PID; each stage has a paired `span`
+UUID, source kind, outcome and monotonic `elapsed_ms`. A begin without its matching
+end identifies work still pending (or a process exit), not proof of a deadlock.
+No document text, custom phrases, paths or error descriptions enter these events.
+Dictionary errors retain their existing detailed bounded diagnostic channel.
+Events are emitted only at stage transitions and native activation/deactivation,
+never per key. They use the existing unified log, with no new permanent store.
+
+Read server construction, event-loop progress, and engine readiness separately.
+In the synchronous startup baseline, bootstrap and any recovery worker or Rime
+maintenance finish before server construction. Per-worker timeouts do not bound the
+total fallback chain. Activation/deactivation spans in the same run/PID indicate
+client lifecycle callbacks rather than a new process. A ready activation reports
+engine availability at callback return; it does not prove first-key/preedit delivery.
+An activation marked skipped means the engine was unavailable then.
+
+`bash macOS/scripts/test-startup-diagnostics.sh` verifies a deliberately gated
+stage retains its begin event while server readiness has not occurred, then
+attributes a controlled monotonic delay to that stage. It also verifies bounded
+content-free failure/cancel/timeout/skip events. This is a deterministic diagnostics
+fixture, not a native IMK responsiveness test or evidence that GitHub #1 is caused
+by startup. Use the isolated dictionary activation/update suites for real recovery
+paths, and retain a native incident with matching run/PID before attributing #1.
+
+Isolated activation-suite baseline, 2026-09-10: unified logs for PID 24671,
+run `45248F97-33ED-4064-8BB7-3119259C0AD0`, retained a real worker preparation of
+20,551.723 ms, bundled engine initialization of 23.256 ms, and synchronous
+maintenance of 769.807 ms. A prepared engine skipped maintenance and reached
+engine readiness in 92.240 ms. The injected fingerprint failure retained a failed
+stage of 10.788 ms. These are synthetic-root test observations with shared system
+load, not production cold-start timings or a first-key/preedit measurement.
+
 ## Uppercase English drops itself and following Pinyin from mixed candidates
 
 **Symptoms:** An admitted word works in standalone English, but mixed input such as

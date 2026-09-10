@@ -359,7 +359,15 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         }
     }
 
+    nonisolated override func activateServer(_ sender: Any!) {
+        let span = IFStartupDiagnostics.shared.begin(.activation, source: .client)
+        super.activateServer(sender)
+        IFStartupDiagnostics.shared.end(span, MainActor.assumeIsolated { IFEngine.ready } ? .ready : .skipped)
+    }
+
     nonisolated override func deactivateServer(_ sender: Any!) {
+        let span = IFStartupDiagnostics.shared.begin(.deactivation, source: .client)
+        defer { IFStartupDiagnostics.shared.end(span) }
         MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateEntered, session: smartDiagnosticSession) }
         commitComposition(sender)
         MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateCommitted, session: smartDiagnosticSession) }

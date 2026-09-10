@@ -1,6 +1,8 @@
 import InputMethodKit
 
 let result: Int32 = autoreleasepool {
+    let startup = IFStartupDiagnostics.shared
+    let processSpan = startup.begin(.process)
     _ = NSApplication.shared
     let bundle = Bundle.main
     let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
@@ -32,8 +34,11 @@ let result: Int32 = autoreleasepool {
         })
     NSApp.delegate = lifecycle
     // Even failed recovery must leave the server/menu/Settings reachable for diagnostics and retry.
+    let serverSpan = startup.begin(.server)
     guard let server = IMKServer(name: bundle.object(forInfoDictionaryKey: "InputMethodConnectionName") as? String,
                                  bundleIdentifier: bundle.bundleIdentifier) else {
+        startup.end(serverSpan, .failed)
+        startup.end(processSpan, .failed)
         NSLog("InkFlow could not create its input method server.")
         IFEngine.stop()
         let drained = DispatchSemaphore(value: 0)
@@ -44,6 +49,11 @@ let result: Int32 = autoreleasepool {
         return 1
 
     }
+    startup.end(serverSpan)
+    startup.end(processSpan)
+    // Queue a marker to distinguish a constructed server from a running event loop.
+    let eventLoop = startup.begin(.eventLoop)
+    DispatchQueue.main.async { startup.end(eventLoop) }
     withExtendedLifetime((server, dictionaries, lifecycle, statisticsStore)) { NSApp.run() }
     return 0
 }

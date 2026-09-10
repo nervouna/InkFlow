@@ -130,8 +130,12 @@ struct IFDictionaryWorkerRunner: Sendable {
     /// Blocking process core, also used by focused timeout/pipe tests. Executable always comes from local runtime configuration.
     func runBlocking(_ request: IFDictionaryWorkerRequest, cancellation: IFDictionaryCancellation = .init(),
                      progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
+        let startup = IFStartupDiagnostics.shared
+        let span = startup.begin(.worker, source: .downloaded)
+        var outcome: IFStartupDiagnostics.Status = .failed
+        defer { startup.end(span, outcome) }
         try validateCandidate(request.candidate)
-        if cancellation.isCancelled { throw IFDictionaryUpdateError(.prepare, "cancelled") }
+        if cancellation.isCancelled { outcome = .cancelled; throw IFDictionaryUpdateError(.prepare, "cancelled") }
         let requestURL = try IFDictionaryFiles.child("request.json", in: request.candidate)
         try IFDictionaryFiles.atomicWrite(IFDictionaryFiles.encode(request), to: requestURL)
         let process = Process()
@@ -174,6 +178,7 @@ struct IFDictionaryWorkerRunner: Sendable {
         let (_, stage, result, failure) = output.snapshot()
         let diagnosticText = diagnostics.snapshot().0
         if let interrupted {
+            outcome = interrupted == "cancelled" ? .cancelled : .timeout
             throw IFDictionaryUpdateError(stage, interrupted, exitStatus: process.terminationStatus, stderr: diagnosticText)
         }
         if let failure {
@@ -183,6 +188,7 @@ struct IFDictionaryWorkerRunner: Sendable {
         guard process.terminationStatus == 0, let result else {
             throw IFDictionaryUpdateError(stage, "worker-exit", exitStatus: process.terminationStatus, stderr: diagnosticText)
         }
+        outcome = .ready
         return result
     }
 }
