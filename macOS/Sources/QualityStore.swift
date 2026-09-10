@@ -13,12 +13,14 @@ struct QualityStoreStatistics: Codable, Equatable, Sendable {
     var truncatedEnvelopes = 0
     var peakBuffered = 0
     var buffered = 0
+    var bufferedBytes = 0
+    var peakBufferedBytes = 0
     var errors = 0
     var disabled = false
     var lastErrorCode: Int32? = nil
 }
 
-enum QualitySubmission: Equatable, Sendable { case accepted, queueFull, oversized, disabled }
+enum QualitySubmission: Equatable, Sendable { case accepted, queueFull, oversized, invalid, disabled }
 enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCommit }
 
 /// Test hooks run on the worker only. Production leaves them empty.
@@ -34,7 +36,7 @@ final class QualityStore: @unchecked Sendable {
     let runID: String
     private let queue = DispatchQueue(label: "io.damao.inkflow.quality", qos: .utility)
     private let lock = NSLock()
-    private var pending: [(sequence: Int, envelope: QualityEnvelope)] = []
+    private var pending: [(sequence: Int, envelope: QualityEnvelope, bytes: Int)] = []
     private var inFlight = 0
     private var acceptedSequence = 0
     private var scheduled = false
@@ -74,16 +76,27 @@ final class QualityStore: @unchecked Sendable {
     @discardableResult
     func submit(_ envelope: QualityEnvelope) -> QualitySubmission {
         let bounded = envelope.bounded()
+        var invalid = false
+        if bounded == nil {
+            do { _ = try envelope.validatedConfigurations() }
+            catch QualityEnvelope.ConfigurationFailure.invalid { invalid = true }
+            catch { }
+        }
+        let bytes = bounded?.retainedBytes ?? 0
         return lock.withLock {
             stats.submitted += 1
             guard accepting && !stats.disabled else { stats.droppedDisabled += 1; return .disabled }
+            guard !invalid else { stats.droppedInvalid += 1; return .invalid }
             guard let bounded else { stats.droppedOversized += 1; return .oversized }
-            guard pending.count + inFlight < QualityLimits.bufferedEnvelopes else {
+            guard pending.count + inFlight < QualityLimits.bufferedEnvelopes,
+                  bytes <= QualityLimits.bufferedBytes - stats.bufferedBytes else {
                 stats.droppedQueue += 1
                 return .queueFull
             }
             acceptedSequence += 1
-            pending.append((acceptedSequence, bounded))
+            pending.append((acceptedSequence, bounded, bytes))
+            stats.bufferedBytes += bytes
+            stats.peakBufferedBytes = max(stats.peakBufferedBytes, stats.bufferedBytes)
             stats.buffered = pending.count + inFlight
             stats.peakBuffered = max(stats.peakBuffered, stats.buffered)
             if bounded.composition.pageHistoryTruncated { stats.truncatedEnvelopes += 1 }
@@ -95,6 +108,10 @@ final class QualityStore: @unchecked Sendable {
     /// Active recorders call this once when their core exceeds the same 64 KiB cap.
     func noteOversizedActiveRecord() {
         lock.withLock { stats.submitted += 1; stats.droppedOversized += 1 }
+    }
+
+    func noteInvalidActiveRecord() {
+        lock.withLock { stats.submitted += 1; stats.droppedInvalid += 1 }
     }
 
     func statistics() -> QualityStoreStatistics { lock.withLock { stats } }
@@ -183,17 +200,19 @@ final class QualityStore: @unchecked Sendable {
 
     private func writeBatch(upTo target: Int) {
         guard !closed else { return }
-        let batch: [QualityEnvelope] = lock.withLock {
+        let retainedBatch = lock.withLock {
             let count = pending.prefix(QualityLimits.batchEnvelopes).prefix { $0.sequence <= target }.count
-            let batch = pending.prefix(count).map(\.envelope)
+            let batch = Array(pending.prefix(count))
             pending.removeFirst(count)
             inFlight += count
             return batch
         }
+        let batch = retainedBatch.map(\.envelope)
         guard !batch.isEmpty else { _ = startIfNeeded(); return }
         defer {
             lock.withLock {
                 inFlight -= batch.count
+                stats.bufferedBytes -= retainedBatch.reduce(0) { $0 + $1.bytes }
                 stats.buffered = pending.count + inFlight
             }
         }
@@ -235,6 +254,7 @@ final class QualityStore: @unchecked Sendable {
             stats.disabled = true
             accepting = false
             stats.droppedDisabled += pending.count
+            stats.bufferedBytes -= pending.reduce(0) { $0 + $1.bytes }
             pending.removeAll()
             stats.buffered = inFlight
             return true
@@ -245,6 +265,7 @@ final class QualityStore: @unchecked Sendable {
             hooks.loggedFailure?(code)
             var finalStatistics = statistics()
             finalStatistics.buffered = 0
+            finalStatistics.bufferedBytes = 0
             try? database.finish(statistics: finalStatistics, status: "disabled")
         }
     }
@@ -270,7 +291,7 @@ private final class QualityDatabase: @unchecked Sendable {
     private var runStarted = false
     private var lastSavedStatistics: QualityStoreStatistics?
     private let startedAt = Date()
-    private lazy var encoder = QualityJSON.encoder()
+    private lazy var encoder = QualityJSON.encoder(compact: true)
     private static let applicationID = 0x49465131 // IFQ1
     private static let unsupportedSchema: Int32 = -1001
 
@@ -362,10 +383,12 @@ private final class QualityDatabase: @unchecked Sendable {
         var oversized = 0
         var truncated = 0
         for var envelope in batch {
-            if try encoder.encode(envelope).count > QualityLimits.envelopeBytes {
+            guard let configurations = envelope.configurationsByID else { throw QualityDatabaseError(code: SQLITE_CONSTRAINT) }
+            if try encoder.encode(configurations).count > QualityLimits.configurationBytes { oversized += 1; continue }
+            if try eventBytes(envelope) > QualityLimits.envelopeBytes {
                 let alreadyTruncated = envelope.composition.pageHistoryTruncated
                 envelope.removePageHistory()
-                if try encoder.encode(envelope).count > QualityLimits.envelopeBytes { oversized += 1; continue }
+                if try eventBytes(envelope) > QualityLimits.envelopeBytes { oversized += 1; continue }
                 if !alreadyTruncated && envelope.composition.pageHistoryTruncated { truncated += 1 }
             }
             accepted.append(envelope)
@@ -378,6 +401,13 @@ private final class QualityDatabase: @unchecked Sendable {
             try execute("COMMIT")
             return (accepted.count, oversized, truncated)
         } catch { rollback(); throw error }
+    }
+
+    private func eventBytes(_ envelope: QualityEnvelope) throws -> Int {
+        // Revision payloads have their own cap and are persisted once in config_revisions.
+        var event = envelope
+        event.revisions = []
+        return try encoder.encode(event).count
     }
 
     private func insert(_ envelope: QualityEnvelope) throws {

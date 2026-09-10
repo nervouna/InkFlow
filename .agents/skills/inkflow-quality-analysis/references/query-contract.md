@@ -15,7 +15,8 @@ database or empty filter result, exits 0. Help is available at each command.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
 - `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, and
-  applied configuration/build metadata for those decisions. Stored `*_json` fields
+  applied configuration/build metadata for those decisions and every referenced
+  first/visited page, even when that page uses a different configuration. Stored `*_json` fields
   become decoded objects without that suffix. Candidate source and consumed spans
   remain absent/null when unavailable. It does not infer them.
 - `timing`: composition-level timing coverage, retained adjacent-key intervals,
@@ -123,6 +124,12 @@ extract their current DDL and full acceptance verifies actual engine-written DDL
 | config_revisions | Capture UUID, stable fingerprint, applied config, build/resource metadata, engine and metric-rule versions |
 | recording_runs | Writer lifetime, engine/build identity, status/error and best-effort cumulative counters |
 
+New page JSON stores `configurationRevisionID` and omits the repeated
+`configuration` payload. `configurations` in inspect resolves every retained page
+reference. Legacy full page JSON remains readable in the same schema v1 database;
+compact Swift decoding requires an explicit revision map and fails for missing or
+conflicting configuration evidence. No defaults or database migration are used.
+
 Capture snapshots preserve raw code/caret, validated selected prefix, used preceding
 context, generation, applied settings, actual page size/page, display/native
 candidate mapping and highlight before mutation. Generation survives navigation
@@ -143,9 +150,17 @@ fingerprint, so identical fingerprints do not establish identical learned state.
 
 One serialized utility worker writes SQLite using DELETE rollback journaling.
 The event path only submits bounded in-memory envelopes; it performs no SQL,
-filesystem I/O, JSON encoding or disk waiting. Active and queued envelopes have a
-64 KiB budget, with at most 128 including in-flight envelopes. History is removed
-first; oversized core drops the entire record. Batches contain at most 16 envelopes
+filesystem I/O, JSON encoding or disk waiting. Event data has a 64 KiB budget;
+unique applied configurations within each envelope have a separate 256 KiB budget,
+including input options and configurations carried by reference-only pages. Equal
+values under the same revision ID share Swift copy-on-write storage after validation.
+These are conservative logical retained-byte limits, not measurements of process RSS.
+At most 128 envelopes and 8 MiB of total logical bytes may be pending or in flight;
+the accepted byte charge is released only when its batch finishes or fails.
+Configuration overflow is checked before history trimming; conflicts are invalid
+evidence. Event overflow removes history first, then drops an oversized core. The
+worker separately checks compact event and unique configuration encoded-byte limits
+before persistence, including JSON escaping growth. Batches contain at most 16 envelopes
 or flush on a 1-second timer, atomically writing referenced revisions/composition/
 decisions/commits. Busy writes wait up to 250 ms on the worker, then roll back/drop.
 Fatal FULL/CORRUPT/IO errors disable recording for that run; persistence of the

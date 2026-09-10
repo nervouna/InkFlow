@@ -93,6 +93,58 @@ enum QualityPresentation: String, Codable, Sendable {
     case notShown = "not_shown", candidatesRequested = "candidates_requested", panelShowIssued = "panel_show_issued"
 }
 
+extension QualityPageSnapshot {
+    private enum CodingKeys: String, CodingKey {
+        case generation, rawInput, caret, selectedPrefix, precedingContext, configurationRevisionID, configuration
+        case page, pageSize, candidates, highlightedDisplayIndex, selectedPrefixValid, presentation, capturedAt
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(generation, forKey: .generation)
+        try container.encode(rawInput, forKey: .rawInput)
+        try container.encode(caret, forKey: .caret)
+        try container.encode(selectedPrefix, forKey: .selectedPrefix)
+        try container.encode(precedingContext, forKey: .precedingContext)
+        try container.encode(configurationRevisionID, forKey: .configurationRevisionID)
+        if encoder.userInfo[QualityJSON.compactPages] as? Bool != true {
+            try container.encode(configuration, forKey: .configuration)
+        }
+        try container.encode(page, forKey: .page)
+        try container.encode(pageSize, forKey: .pageSize)
+        try container.encode(candidates, forKey: .candidates)
+        try container.encode(highlightedDisplayIndex, forKey: .highlightedDisplayIndex)
+        try container.encode(selectedPrefixValid, forKey: .selectedPrefixValid)
+        try container.encode(presentation, forKey: .presentation)
+        try container.encode(capturedAt, forKey: .capturedAt)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(String.self, forKey: .configurationRevisionID)
+        let resolved = (decoder.userInfo[QualityJSON.configurationResolver] as? [String: QualityAppliedConfiguration])?[id]
+        guard let configuration = try container.decodeIfPresent(QualityAppliedConfiguration.self, forKey: .configuration) ?? resolved else {
+            throw DecodingError.dataCorruptedError(forKey: .configurationRevisionID, in: container,
+                debugDescription: "Compact quality page requires its applied configuration revision")
+        }
+        if let resolved, resolved != configuration {
+            throw DecodingError.dataCorruptedError(forKey: .configurationRevisionID, in: container,
+                debugDescription: "Quality revision content mismatch")
+        }
+        self.init(generation: try container.decode(Int.self, forKey: .generation),
+            rawInput: try container.decode(String.self, forKey: .rawInput), caret: try container.decode(Int.self, forKey: .caret),
+            selectedPrefix: try container.decode(String.self, forKey: .selectedPrefix),
+            precedingContext: try container.decode(String.self, forKey: .precedingContext),
+            configurationRevisionID: id, configuration: configuration,
+            page: try container.decode(Int.self, forKey: .page), pageSize: try container.decode(Int.self, forKey: .pageSize),
+            candidates: try container.decode([QualityCandidate].self, forKey: .candidates),
+            highlightedDisplayIndex: try container.decode(Int.self, forKey: .highlightedDisplayIndex),
+            selectedPrefixValid: try container.decode(Bool.self, forKey: .selectedPrefixValid),
+            presentation: try container.decode(QualityPresentation.self, forKey: .presentation),
+            capturedAt: try container.decode(Date.self, forKey: .capturedAt))
+    }
+}
+
 /// Counters are separate facts: an arrow crossing a page increments moves and page turns.
 struct QualityOperations: Codable, Equatable, Sendable {
     var keypresses = 0
@@ -233,10 +285,59 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
     /// Counts strings and collection/record overhead with an early exit, without JSON or I/O.
     func bounded() -> QualityEnvelope? {
         guard decisions.count <= 128, commits.count <= 256, revisions.count <= 256 else { return nil }
-        if fitsMemoryBudget { return self }
+        guard let configurations = configurationsByID else { return nil }
         var reduced = self
-        reduced.removePageHistory()
-        return reduced.fitsMemoryBudget ? reduced : nil
+        if !reduced.fitsMemoryBudget { reduced.removePageHistory() }
+        guard reduced.fitsMemoryBudget else { return nil }
+        for index in reduced.revisions.indices {
+            reduced.revisions[index].configuration = configurations[reduced.revisions[index].id]!
+        }
+        for index in reduced.decisions.indices {
+            reduced.decisions[index].snapshot.configuration = configurations[reduced.decisions[index].snapshot.configurationRevisionID]!
+            if let first = reduced.decisions[index].firstPage {
+                reduced.decisions[index].firstPage?.configuration = configurations[first.configurationRevisionID]!
+            }
+            for page in reduced.decisions[index].visitedPages.indices {
+                let id = reduced.decisions[index].visitedPages[page].configurationRevisionID
+                reduced.decisions[index].visitedPages[page].configuration = configurations[id]!
+            }
+        }
+        return reduced
+    }
+
+    /// Includes reference-only pages; conflicting identity is invalid evidence.
+    var configurationsByID: [String: QualityAppliedConfiguration]? { try? validatedConfigurations() }
+
+    enum ConfigurationFailure: Error { case invalid, oversized }
+
+    func validatedConfigurations() throws -> [String: QualityAppliedConfiguration] {
+        var values: [String: QualityAppliedConfiguration] = [:]
+        var budget = QualityMemoryBudget(remaining: QualityLimits.configurationBytes)
+        func add(_ id: String, _ configuration: QualityAppliedConfiguration) throws {
+            if let existing = values[id] {
+                guard existing == configuration else { throw ConfigurationFailure.invalid }
+                return
+            }
+            budget.strings(id)
+            budget.configuration(configuration)
+            guard !budget.exhausted else { throw ConfigurationFailure.oversized }
+            values[id] = configuration
+        }
+        for revision in revisions { try add(revision.id, revision.configuration) }
+        for decision in decisions {
+            try add(decision.snapshot.configurationRevisionID, decision.snapshot.configuration)
+            if let page = decision.firstPage { try add(page.configurationRevisionID, page.configuration) }
+            for page in decision.visitedPages {
+                try add(page.configurationRevisionID, page.configuration)
+            }
+        }
+        return values
+    }
+
+    var retainedBytes: Int {
+        var budget = QualityMemoryBudget(remaining: QualityLimits.configurationBytes)
+        for (id, config) in configurationsByID ?? [:] { budget.strings(id); budget.configuration(config) }
+        return eventBytes + QualityLimits.configurationBytes - budget.remaining
     }
 
     mutating func removePageHistory() {
@@ -251,39 +352,44 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
     }
 
     private var fitsMemoryBudget: Bool {
+        eventBytes <= QualityLimits.envelopeBytes
+    }
+
+    private var eventBytes: Int {
         var budget = QualityMemoryBudget()
         budget.record(512)
         budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason)
         budget.timing(composition.operations.timing)
         for revision in revisions {
-            if budget.exhausted { return false }
+            if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
             budget.record(256)
             budget.strings(revision.id)
-            budget.configuration(revision.configuration)
         }
         for decision in decisions {
-            if budget.exhausted { return false }
+            if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
             budget.record(512)
             budget.strings(decision.id, decision.selectedText, decision.commitID, decision.unknownRankReason, decision.pathReason)
             budget.timing(decision.operations.timing)
             budget.page(decision.snapshot)
             if let first = decision.firstPage { budget.page(first) }
             for page in decision.visitedPages {
-                if budget.exhausted { return false }
+                if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
                 budget.page(page)
             }
         }
         for commit in commits {
-            if budget.exhausted { return false }
+            if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
             budget.record(256)
             budget.strings(commit.id, commit.text, commit.clientID)
         }
-        return !budget.exhausted
+        return QualityLimits.envelopeBytes - budget.remaining
     }
 }
 
 enum QualityLimits {
     static let envelopeBytes = 64 * 1024
+    static let configurationBytes = 256 * 1024
+    static let bufferedBytes = 8 * 1024 * 1024
     static let bufferedEnvelopes = 128
     static let batchEnvelopes = 16
     static let flushInterval: TimeInterval = 1
@@ -313,6 +419,10 @@ private struct QualityMemoryBudget {
     mutating func configuration(_ value: QualityAppliedConfiguration) {
         record(256)
         strings(value.schemaID)
+        for (key, _) in value.inputOptions ?? [:] {
+            guard !exhausted else { return }
+            record(64); strings(key)
+        }
         for phrase in value.customPhrases {
             guard !exhausted else { return }
             record(128)
@@ -323,7 +433,6 @@ private struct QualityMemoryBudget {
         guard !exhausted else { return }
         record(512)
         strings(value.rawInput, value.selectedPrefix, value.precedingContext, value.configurationRevisionID)
-        configuration(value.configuration)
         for candidate in value.candidates {
             guard !exhausted else { return }
             record(256)
@@ -334,8 +443,11 @@ private struct QualityMemoryBudget {
 
 /// Timestamp JSON uses UTC ISO 8601 with milliseconds, matching SQL's time columns.
 enum QualityJSON {
-    static func encoder() -> JSONEncoder {
+    static let compactPages = CodingUserInfoKey(rawValue: "quality.compactPages")!
+    static let configurationResolver = CodingUserInfoKey(rawValue: "quality.configurationResolver")!
+    static func encoder(compact: Bool = false) -> JSONEncoder {
         let encoder = JSONEncoder()
+        encoder.userInfo[compactPages] = compact
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         encoder.dateEncodingStrategy = .custom { date, encoder in
             var container = encoder.singleValueContainer()
@@ -343,8 +455,9 @@ enum QualityJSON {
         }
         return encoder
     }
-    static func decoder() -> JSONDecoder {
+    static func decoder(configurations: [String: QualityAppliedConfiguration]? = nil) -> JSONDecoder {
         let decoder = JSONDecoder()
+        decoder.userInfo[configurationResolver] = configurations
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let value = try container.decode(String.self)

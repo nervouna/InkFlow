@@ -63,6 +63,20 @@ private func makeURL(_ name: String) throws -> URL {
 @main
 struct QualityStoreTests {
     static func main() async throws {
+        for count in [0, 1, 20, 50, 200] {
+            var sample = fixture("phrases-\(count)")
+            let config = QualityAppliedConfiguration(candidateCount: 5, customPhrases: (0..<count).map {
+                QualityPhrase(id: "phrase-\($0)", code: "code\($0)", text: "短语\($0)")
+            })
+            sample.revisions[0].configuration = config
+            sample.decisions[0].snapshot.configuration = config
+            sample.decisions[0].snapshot.candidates = (0..<5).map {
+                QualityCandidate(text: "候选\($0)", displayIndex: $0, displayRank: $0 + 1, nativeIndex: $0, nativeRank: $0 + 1)
+            }
+            sample.decisions[0].firstPage = sample.decisions[0].snapshot
+            sample.decisions[0].visitedPages = Array(repeating: sample.decisions[0].snapshot, count: 8)
+            expect(sample.bounded()?.decisions[0].visitedPages.count == 8, "\(count) short phrases preserve eight history pages")
+        }
         let url = try makeURL("reopen")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = QualityStore(url: url, engineVersion: "test-engine", buildMetadata: metadata)
@@ -86,7 +100,7 @@ struct QualityStoreTests {
         expect(try reader.scalar("SELECT regular_ranked_selection || matches_custom_phrase FROM candidate_decisions") == "11",
                "selection scope and phrase matching are separate stored flags")
         let saved = try reader.scalar("SELECT snapshot_json FROM candidate_decisions")
-        let decoded = try QualityJSON.decoder().decode(QualityPageSnapshot.self, from: Data(saved.utf8))
+        let decoded = try QualityJSON.decoder(configurations: record.configurationsByID).decode(QualityPageSnapshot.self, from: Data(saved.utf8))
         var expected = record.decisions[0].snapshot
         expected.capturedAt = decoded.capturedAt
         expect(decoded == expected, "rank mapping and Unicode JSON round trip")
@@ -102,6 +116,7 @@ struct QualityStoreTests {
         try await busyLocks()
         try await pressureAndTimer()
         try await budgets()
+        try await configurationBudgetsAndReferences()
         try await fatalFaults()
         try await nonDestructiveSchemaAndOpen()
         try await metadataAndRevisions()
@@ -132,6 +147,120 @@ private final class Counter: @unchecked Sendable {
 }
 
 private extension QualityStoreTests {
+    static func configurationBudgetsAndReferences() async throws {
+        let url = try makeURL("configuration-budgets")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        func configured(_ id: String, count: Int, text: String = "短语") -> QualityEnvelope {
+            var value = fixture(id)
+            let config = QualityAppliedConfiguration(candidateCount: 5, customPhrases: (0..<count).map {
+                QualityPhrase(id: "phrase-\($0)", code: "code\($0)", text: text + "\($0)")
+            }, inputOptions: ["tabCandidatePaging": true])
+            value.revisions[0].configuration = config
+            value.decisions[0].snapshot.configuration = config
+            value.decisions[0].snapshot.candidates = (0..<5).map {
+                QualityCandidate(text: "候选\($0)", displayIndex: $0, displayRank: $0 + 1, nativeIndex: $0, nativeRank: $0 + 1)
+            }
+            value.decisions[0].firstPage = value.decisions[0].snapshot
+            value.decisions[0].visitedPages = Array(repeating: value.decisions[0].snapshot, count: 8)
+            return value
+        }
+        for count in [0, 1, 20, 50, 200] {
+            expect(store.submit(configured("matrix-\(count)", count: count)) == .accepted, "moderate configuration accepted")
+        }
+        let unicode = configured("unicode-config", count: 200, text: String(repeating: "😀中文\n", count: 12))
+        expect(store.submit(unicode) == .accepted, "long Unicode configuration accepted")
+        await store.flush()
+        let reader = try Reader(url, writable: true)
+        expect(store.statistics().written == 6 && store.statistics().truncatedEnvelopes == 0, "logical and compact encoded matrix preserves history")
+        expect(try reader.scalar("SELECT count(*) FROM candidate_decisions WHERE json_array_length(visited_pages_json)=8") == "6", "eight persisted pages each")
+        let compact = try reader.scalar("SELECT snapshot_json FROM candidate_decisions WHERE composition_id='matrix-200'")
+        expect(!compact.contains("\"configuration\":"), "persisted pages omit full applied configuration")
+        do {
+            _ = try QualityJSON.decoder().decode(QualityPageSnapshot.self, from: Data(compact.utf8))
+            expect(false, "compact page must not decode without resolver")
+        } catch is DecodingError { }
+        let original = configured("matrix-200", count: 200)
+        let decoded = try QualityJSON.decoder(configurations: original.configurationsByID).decode(QualityPageSnapshot.self, from: Data(compact.utf8))
+        expect(decoded.configuration == original.decisions[0].snapshot.configuration, "explicit resolver restores complete configuration")
+        let legacy = try QualityJSON.encoder().encode(decoded)
+        expect(try QualityJSON.decoder().decode(QualityPageSnapshot.self, from: legacy) == decoded, "legacy full pages remain decodable")
+        var wrongResolver = original.configurationsByID!
+        wrongResolver[decoded.configurationRevisionID]!.candidateCount = 9
+        do {
+            _ = try QualityJSON.decoder(configurations: wrongResolver).decode(QualityPageSnapshot.self, from: legacy)
+            expect(false, "legacy configuration must agree with supplied resolver")
+        } catch is DecodingError { }
+        let legacySQL = String(decoding: legacy, as: UTF8.self).replacingOccurrences(of: "'", with: "''")
+        try reader.execute("UPDATE candidate_decisions SET snapshot_json='\(legacySQL)' WHERE composition_id='matrix-200'")
+        var reference = configured("reference-only", count: 200)
+        reference.decisions[0].snapshot.configurationRevisionID = original.revisions[0].id
+        reference.decisions[0].firstPage = reference.decisions[0].snapshot
+        reference.decisions[0].visitedPages = Array(repeating: reference.decisions[0].snapshot, count: 8)
+        reference.revisions = []
+        expect(reference.retainedBytes > 60_000, "reference-only page configuration is charged")
+        expect(store.submit(reference) == .accepted, "existing revision may be referenced without resending")
+        await store.close()
+        let reopened = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        expect(reopened.submit(configured("after-reopen", count: 50)) == .accepted, "mixed legacy and compact database reopens")
+        await reopened.flush()
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "8", "legacy and compact records preserved on reopen")
+        var missing = reference
+        missing.composition.id = "missing-revision"
+        missing.decisions[0].snapshot.configurationRevisionID = "missing"
+        missing.decisions[0].firstPage = nil
+        missing.decisions[0].visitedPages = []
+        missing.decisions[0].id = "missing-decision"
+        missing.commits = []
+        missing.decisions[0].commitID = nil
+        missing.decisions[0].outcome = .unknown
+        expect(reopened.submit(missing) == .accepted, "missing persisted reference checked on worker")
+        await reopened.flush()
+        expect(reopened.statistics().droppedInvalid == 1, "missing revision rolls back")
+        missing.composition.id = "stored-content-mismatch"
+        missing.decisions[0].id = "stored-content-mismatch-decision"
+        missing.decisions[0].snapshot.configurationRevisionID = original.revisions[0].id
+        missing.decisions[0].snapshot.configuration.candidateCount = 9
+        expect(reopened.submit(missing) == .accepted, "reference content validated against existing SQLite revision")
+        await reopened.flush()
+        expect(reopened.statistics().droppedInvalid == 2, "saved revision content cannot be replaced by reference-only envelope")
+        var mismatch = original
+        mismatch.decisions[0].visitedPages[0].configuration.candidateCount = 9
+        expect(reopened.submit(mismatch) == .invalid, "same ID with conflicting configuration rejected before canonicalization")
+        let oversized = configured("large-config", count: 1, text: String(repeating: "x", count: 140_000))
+        expect(reopened.submit(oversized) == .oversized, "unique configuration cap applies before removing history")
+        var options = fixture("oversized-options")
+        options.decisions[0].snapshot.configuration.inputOptions = [String(repeating: "x", count: 140_000): true]
+        options.revisions = []
+        expect(reopened.submit(options) == .oversized, "reference-only input options count toward unique configuration budget")
+        let escaped = configured("escaped-config", count: 1, text: String(repeating: "\u{0}", count: 50_000))
+        expect(reopened.submit(escaped) == .accepted, "configuration logical budget permits control fixture")
+        await reopened.flush()
+        expect(reopened.statistics().droppedOversized == 3 && reopened.statistics().truncatedEnvelopes == 0, "encoded configuration cap drops without misleading history truncation")
+        await reopened.close()
+
+        let pressureURL = try makeURL("byte-pressure")
+        defer { try? FileManager.default.removeItem(at: pressureURL.deletingLastPathComponent()) }
+        let gate = Gate()
+        let pressure = QualityStore(url: pressureURL, engineVersion: "test", buildMetadata: metadata,
+            hooks: QualityStoreHooks(beforeBatch: { gate.blockOnce() }))
+        await pressure.flush()
+        for index in 0..<16 { expect(pressure.submit(configured("byte-\(index)", count: 1, text: String(repeating: "x", count: 100_000))) == .accepted, "initial batch accepted") }
+        gate.wait()
+        let inFlightBytes = pressure.statistics().bufferedBytes
+        expect(inFlightBytes > 3_000_000, "in-flight batch retains its byte charge")
+        var accepted = 16
+        for index in 16..<100 {
+            if pressure.submit(configured("byte-\(index)", count: 1, text: String(repeating: "x", count: 100_000))) == .accepted { accepted += 1 }
+        }
+        expect(accepted < 128 && pressure.statistics().buffered == accepted, "byte cap binds before count cap")
+        expect(pressure.statistics().bufferedBytes <= QualityLimits.bufferedBytes, "pending plus in-flight byte cap")
+        gate.release.signal()
+        await pressure.close()
+        expect(pressure.statistics().written == accepted && pressure.statistics().bufferedBytes == 0, "entire accepted charge released after drain")
+        print("PASS quality configuration: matrix, Unicode, compact/legacy/mixed reopen, reference integrity, logical/encoded config limits, 8 MiB in-flight queue bound")
+    }
+
     static func atomicityAndReaders() async throws {
         let url = try makeURL("atomicity")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -173,6 +302,7 @@ private extension QualityStoreTests {
         expect(store.submit(fixture("write-locked")) == .accepted, "locked DB does not block submit")
         await store.flush()
         expect(store.statistics().droppedBusy == 1 && !store.statistics().disabled, "writer busy drops batch")
+        expect(store.statistics().bufferedBytes == 0, "busy failure releases in-flight byte charge")
         try locker.execute("ROLLBACK")
         expect(try locker.scalar("SELECT count(*) FROM compositions") == "0", "busy writes leave no partial data")
         try locker.execute("BEGIN")

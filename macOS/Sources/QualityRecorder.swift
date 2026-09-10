@@ -481,13 +481,17 @@ final class QualityRecorder {
                 outcome: .unknown, snapshot: latest, firstPage: firstPage, visitedPages: pages))
         }
         guard var bounded = record.bounded() else {
-            store.noteOversizedActiveRecord()
+            do { _ = try record.validatedConfigurations(); store.noteOversizedActiveRecord() }
+            catch QualityEnvelope.ConfigurationFailure.invalid { store.noteInvalidActiveRecord() }
+            catch { store.noteOversizedActiveRecord() }
             reset()
             suppressed = true
             return
         }
         if latest != nil {
             let cache = bounded.decisions.removeLast()
+            latest = cache.snapshot
+            firstPage = cache.firstPage
             pages = cache.visitedPages
             cacheHistoryTruncated = cacheHistoryTruncated || cache.pageHistoryTruncated
             cacheDroppedPages += cache.droppedPageCount

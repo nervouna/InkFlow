@@ -333,10 +333,19 @@ def inspect(db, args):
         raise QueryError('Composition exists but does not match the supplied filters.')
     decisions = rows(db, f'''SELECT d.*,r.fingerprint FROM candidate_decisions d JOIN config_revisions r
         ON r.id=d.config_revision_id WHERE d.composition_id=:id AND {decision_filter} ORDER BY d.sequence''', parameters)
-    revisions = rows(db, f'''SELECT DISTINCT r.* FROM config_revisions r JOIN candidate_decisions d
-        ON d.config_revision_id=r.id WHERE d.composition_id=:id AND {decision_filter} ORDER BY r.id''', parameters)
+    decoded_decisions = [decode_row(d) for d in decisions]
+    revision_ids = {d['config_revision_id'] for d in decisions}
+    for decision in decoded_decisions:
+        pages = [decision['snapshot'], decision['first_page']] + decision['visited_pages']
+        revision_ids.update(page['configurationRevisionID'] for page in pages if page is not None)
+    revisions = []
+    for revision_id in sorted(revision_ids):
+        revision = db.execute('SELECT * FROM config_revisions WHERE id=?', (revision_id,)).fetchone()
+        if revision is None:
+            raise QueryError('A recorded page references a missing configuration revision.')
+        revisions.append(dict(revision))
     commits = rows(db, 'SELECT * FROM commits WHERE composition_id=:id ORDER BY issued_at,id', parameters)
-    return dict(composition=decode_row(dict(raw)), decisions=[decode_row(d) for d in decisions],
+    return dict(composition=decode_row(dict(raw)), decisions=decoded_decisions,
                 commits=commits, configurations=[decode_row(r) for r in revisions],
                 commit_scope='all commits of the matching composition; decisions honor config/kind filters')
 

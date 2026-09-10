@@ -117,6 +117,24 @@ class QueryTests(unittest.TestCase):
     def result(self, command='summary', *args, db=None):
         return json.loads(self.run_cli(command, *args, '--format', 'json', db=db))
 
+    def test_inspect_compact_and_legacy_page_revisions(self):
+        with sqlite3.connect(self.db) as db:
+            raw = db.execute("SELECT snapshot_json FROM candidate_decisions WHERE composition_id='a'").fetchone()[0]
+            compact = json.loads(raw)
+            compact.pop('configuration')
+            first = dict(compact, configurationRevisionID='rev2', page=0)
+            visited = dict(compact, configurationRevisionID='rev3', page=2)
+            db.execute("UPDATE candidate_decisions SET snapshot_json=?, first_page_json=?, visited_pages_json=? WHERE composition_id='a'",
+                       (json.dumps(compact), json.dumps(first), json.dumps([visited])))
+        result = self.result('inspect', 'a', '--config', 'fingerprint-A')
+        self.assertEqual([r['id'] for r in result['configurations']], ['rev1', 'rev2', 'rev3'])
+        self.assertNotIn('configuration', result['decisions'][0]['snapshot'])
+        self.assertIn('configuration', self.result('inspect', 'b')['decisions'][0]['snapshot'])
+        with sqlite3.connect(self.db) as db:
+            visited['configurationRevisionID'] = 'missing'
+            db.execute("UPDATE candidate_decisions SET visited_pages_json=? WHERE composition_id='a'", (json.dumps([visited]),))
+        self.assertIn('missing configuration', self.run_cli('inspect', 'a', success=False))
+
     def test_summary_exact_denominators_and_ranks(self):
         result = self.result()
         self.assertEqual(result['coverage']['compositions'], 21)
@@ -349,7 +367,7 @@ class QueryTests(unittest.TestCase):
                 self.fail('Run test-quality-capture.sh first')
             self.skipTest('Actual controller DB absent')
         result = self.result('timing', db=ENGINE_DB)
-        self.assertEqual(result['coverage']['compositions'], 40)
+        self.assertEqual(result['coverage']['compositions'], 45)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
         # This engine/controller fixture does not observe native panel visibility.
@@ -369,9 +387,10 @@ class QueryTests(unittest.TestCase):
         result=self.result(db=ENGINE_DB)
         # The deferred-toggle then panel-selection fixture adds one valid composition,
         # decision and issued candidate commit; the toggle itself adds no decision.
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[40,36,37])
-        self.assertEqual(result['coverage']['valid'],28)
-        self.assertEqual(result['coverage']['regular_issued'],29)
+        # The five custom-phrase matrix cases each add one valid decision/commit.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[45,41,42])
+        self.assertEqual(result['coverage']['valid'],33)
+        self.assertEqual(result['coverage']['regular_issued'],34)
         self.assertEqual(result['coverage']['regular_not_issued'],1)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)

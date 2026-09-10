@@ -25,7 +25,10 @@ struct CaptureDatabase {
     }
     func decisions() -> [[String: String]] { rows("SELECT rowid, * FROM candidate_decisions ORDER BY rowid") }
     func page(_ row: [String: String], _ column: String = "snapshot_json") -> QualityPageSnapshot {
-        try! QualityJSON.decoder().decode(QualityPageSnapshot.self, from: Data(row[column]!.utf8))
+        let configurations = Dictionary(uniqueKeysWithValues: rows("SELECT id, applied_config_json FROM config_revisions").map {
+            ($0["id"]!, try! QualityJSON.decoder().decode(QualityAppliedConfiguration.self, from: Data($0["applied_config_json"]!.utf8)))
+        })
+        return try! QualityJSON.decoder(configurations: configurations).decode(QualityPageSnapshot.self, from: Data(row[column]!.utf8))
     }
     func ops(_ row: [String: String]) -> QualityOperations {
         try! QualityJSON.decoder().decode(QualityOperations.self, from: Data(row["operations_json"]!.utf8))
@@ -52,6 +55,7 @@ struct QualityCaptureTests {
         classification()
         pureSnapshots()
         try await engineAndController(store, db, isolated.settings)
+        try await phraseMatrix(store, db)
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
@@ -70,6 +74,35 @@ struct QualityCaptureTests {
         try await equivalence(shared: shared, scratch: scratch)
         try await stalledWriter(shared: shared, scratch: scratch)
         print("PASS quality capture: actual engine/controller SQLite evidence at \(db.url.path)")
+    }
+
+    @MainActor static func phraseMatrix(_ store: QualityStore, _ db: CaptureDatabase) async throws {
+        for count in [0, 1, 20, 50, 200] {
+            let isolated = IsolatedSettings()
+            defer { isolated.cleanup() }
+            isolated.settings.candidateCount = 5
+            for index in 0..<count {
+                try isolated.settings.saveCustomPhrase(code: "zq\(String(repeating: "a", count: index / 26))\(Character(UnicodeScalar(97 + index % 26)!))", text: "短语\(index)")
+            }
+            let before = store.statistics()
+            let client = RecordingClient(document: "")
+            let control = controller(isolated.settings, client, store)
+            input("shi", control, client)
+            let applied = control.engine!.qualitySnapshot()
+            for _ in 0..<7 { check(control.handle(keyEvent(121, ""), client: client)) }
+            digit(0, control, client)
+            await store.flush()
+            let row = db.decisions().last!
+            let page = db.page(row)
+            check(page.configuration == applied.configuration && page.configuration.customPhrases.count == count)
+            check(row["page_history_truncated"] == "0" && row["dropped_page_count"] == "0")
+            let history = try JSONSerialization.jsonObject(with: Data(row["visited_pages_json"]!.utf8)) as! [[String: Any]]
+            check(history.count == 8, "\(count) phrases preserve eight actual visited pages")
+            check(client.document == row["selected_text"] && client.document?.isEmpty == false)
+            check(db.rows("SELECT text FROM commits WHERE id = '\(row["commit_id"]!)'").first?["text"] == client.document)
+            check(store.statistics().written == before.written + 1 && store.statistics().droppedOversized == before.droppedOversized)
+        }
+        print("PASS actual Engine/Controller: 0/1/20/50/200 phrases, five candidates, eight visited pages, applied revision and exact commit output")
     }
 
     @MainActor static func controller(_ settings: IFSettings, _ client: RecordingClient?, _ store: QualityStore?) -> InkFlowInputController {
@@ -585,6 +618,9 @@ struct QualityCaptureTests {
             try files.copyItem(at: initial, to: user)
             try IFEngine.start(shared: shared, user: user.path)
             let settings = IsolatedSettings()
+            for index in 0..<200 {
+                try settings.settings.saveCustomPhrase(code: "zq\(String(repeating: "a", count: index / 26))\(Character(UnicodeScalar(97 + index % 26)!))", text: "短语\(index)")
+            }
             let store = enabled ? QualityStore(url: scratch.appendingPathComponent("equivalence.sqlite3"),
                 engineVersion: IFEngine.version, buildMetadata: .unknown) : nil
             var transcript: [String] = []
@@ -607,7 +643,7 @@ struct QualityCaptureTests {
             transcripts.append(transcript)
         }
         check(transcripts[0] == transcripts[1], "Recording on/off must preserve handled/candidates/commits/document reads/client transcript from identical initial Rime bytes")
-        print("PASS recording on/off equivalence from two copies of identical initial isolated Rime state (including document read transcript)")
+        print("PASS recording on/off equivalence with 200 custom phrases from two copies of identical initial isolated Rime state (including document read transcript)")
     }
 
     @MainActor static func stalledWriter(shared: String, scratch: URL) async throws {
