@@ -2,6 +2,38 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
+check_repository_policy_word() {
+  local word=$1 code=$2
+  if ! awk -F '\t' -v word="$word" -v code="$code" '
+      $1 == word { count++; valid = NF == 3 && $2 == code && $3 == "inkflow-maintained" }
+      END { exit !(count == 1 && valid) }
+    ' macOS/Data/english-technology.tsv; then
+    echo "FAIL: missing canonical technology source $code -> $word" >&2
+    exit 1
+  fi
+  if ! awk -F '\t' -v word="$word" '
+      $1 == word { count++; valid = NF == 6 && $2 == "inkflow-maintained" && $3 == "" && $4 == "" && $5 == "" && $6 == "product-policy-4.0" }
+      END { exit !(count == 1 && valid) }
+    ' macOS/Data/english-technology-provenance.tsv; then
+    echo "FAIL: missing InkFlow-maintained provenance for $word" >&2
+    exit 1
+  fi
+  if ! awk -F '\t' -v word="$word" '
+      $1 == word { count++; valid = NF == 3 && $2 == "4.0" && $3 ~ /[^[:space:]]/ }
+      END { exit !(count == 1 && valid) }
+    ' macOS/config/english-overrides.tsv; then
+    echo "FAIL: missing shared-gate policy override for $word" >&2
+    exit 1
+  fi
+  test "$(awk -F '\t' -v word="$word" '$1 == word { count++ } END { print count + 0 }' macOS/Data/english-wordfreq.tsv)" -eq 0
+}
+
+check_repository_policy_word eBPF ebpf
+check_repository_policy_word Type-C typec
+test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/Data/english-technology.tsv)" -eq 122
+test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/Data/english-technology-provenance.tsv)" -eq 122
+test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/config/english-overrides.tsv)" -eq 111
+
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \

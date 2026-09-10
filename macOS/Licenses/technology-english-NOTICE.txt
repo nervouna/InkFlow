@@ -8,16 +8,16 @@ See rime-ice.txt for the license.
 InkFlow selected 104 exact display spellings from that source, retained their
 capitalization, spaces and punctuation, and supplied lowercase ASCII lookup
 aliases (including cpp for C++, csharp for C#, and dotnet for .NET).
-Sixteen additional display spellings are explicitly maintained by InkFlow:
-AI, Swift, AppKit, UIKit, SwiftData, Git, Docker, Docker Compose, Python, Rust,
-Java, Dart, Flutter, React, Gemini and RAG. These are not attributed to en_ext.
-The 120-row source and per-word provenance are macOS/Data/english-technology.tsv
+Eighteen additional display spellings are explicitly maintained by InkFlow:
+AI, Type-C, eBPF, Swift, AppKit, UIKit, SwiftData, Git, Docker, Docker Compose,
+Python, Rust, Java, Dart, Flutter, React, Gemini and RAG. These are not attributed
+to en_ext. The 122-row source and per-word provenance are macOS/Data/english-technology.tsv
 and macOS/Data/english-technology-provenance.tsv in the source repository.
 
 The selected text/code pairs are merged with the unchanged rime-easy-en input,
 retaining its existing aliases and deduplicating identical pairs. Admission and
 weights use the shared wordfreq/override policy. Explicit 4.0 policy overrides
-for 109 exact display spellings are product decisions, not measured frequencies.
+for 111 exact display spellings are product decisions, not measured frequencies.
 Eleven existing observations at or above the gate are preserved. The resulting
 English and mixed dictionaries also carry their existing easy-en/wordfreq
 attribution; see easy-en-LGPL-3.0.txt, easy-en-GPL-3.0.txt and wordfreq.txt.

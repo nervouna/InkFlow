@@ -10,6 +10,7 @@ GPU	gpu	rime-ice-en-ext
 RAM	ram	rime-ice-en-ext
 SSD	ssd	rime-ice-en-ext
 USB	usb	rime-ice-en-ext
+Type-C	typec	inkflow-maintained
 HTTP	http	rime-ice-en-ext
 HTTPS	https	rime-ice-en-ext
 TCP	tcp	rime-ice-en-ext
@@ -26,6 +27,7 @@ GraphQL	graphql	rime-ice-en-ext
 WebSocket	websocket	rime-ice-en-ext
 WebRTC	webrtc	rime-ice-en-ext
 WebDAV	webdav	rime-ice-en-ext
+eBPF	ebpf	inkflow-maintained
 JSON	json	rime-ice-en-ext
 YAML	yaml	rime-ice-en-ext
 XML	xml	rime-ice-en-ext

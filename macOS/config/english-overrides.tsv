@@ -13,6 +13,7 @@ CPU	4.0	Product policy: admit this curated technology spelling at the shared def
 GPU	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 SSD	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 USB	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Type-C	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 TCP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 UDP	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 DNS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
@@ -27,6 +28,7 @@ GraphQL	4.0	Product policy: admit this curated technology spelling at the shared
 WebSocket	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 WebRTC	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 WebDAV	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+eBPF	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 JSON	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 YAML	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 XML	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.

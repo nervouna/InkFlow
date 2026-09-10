@@ -39,7 +39,7 @@ This describes the implemented baseline, not an expansion plan. Recheck the link
 
 ## Override-table editing rules
 
-Edit `macOS/config/english-overrides.tsv` for accepted individual corrections. The table includes 109 explicit technology admissions at 4.0 for selected spellings with missing/below-gate observations. These are product policy, not measured data; 11 selected spellings already at/above the gate keep their observations. The old `email = 0` workaround and four hard-coded variants are obsolete: the measured snapshot already admits those common spellings.
+Edit `macOS/config/english-overrides.tsv` for accepted individual corrections. The table includes 111 explicit technology admissions at 4.0 for selected spellings with missing/below-gate observations. These are product policy, not measured data; 11 selected spellings already at/above the gate keep their observations. The old `email = 0` workaround and four hard-coded variants are obsolete: the measured snapshot already admits those common spellings.
 
 1. **Record format:** exactly three columns separated by literal TAB characters: `displayed word`, `replacement Zipf`, `reason`. Blank lines and lines whose first non-whitespace character is `#` are ignored. Use no padding or extra tabs; fields are not trimmed or unquoted. The word and reason must each contain non-whitespace text.
 2. **Number syntax:** digits, optionally followed by a dot and more digits, within 0..9 inclusive. `4`, `4.0`, `0` are valid; `.5`, `4.`, negatives, scientific notation, `NaN` and infinity are invalid. A replacement is a Zipf value, not an engine weight. The generator accepts more than two decimals; snapshot precision does not constrain overrides.
@@ -74,7 +74,7 @@ These anchors describe the current defaults and fixtures; future intentional dat
 | `a`, `i`, `D` | Admitted exact short codes remain reachable; `i` can select `I`; intentional uppercase `D` remains available |
 | `niruguoxiangyaozhefenoffer`, `niruguoxiangyaozhefenofferkeyihuifuwo`, `offerhenhao`, `wofaleemails`, `wofaleEmail`, `womenquoffice` | Preserve complete mixed results at initial/internal/final boundaries and exact selection; also exercise edits within `zhefenoffer` |
 | `woyongAPIkeyihuifuwo`, `woyongSwiftUIhenhao`, `banbenDkeyi` | Preserve admitted acronym, source-case and single-letter uppercase words followed by Pinyin; exercise real Shift key events and backspaces across complete Pinyin boundaries |
-| `api`, `Api`, `swiftui`, `claudecode`, `cpp` | Select exact `API`, `API`, `SwiftUI`, `Claude Code`, `C++`; technical spellings still use the shared gate and existing mixed restrictions |
+| `api`, `Api`, `swiftui`, `claudecode`, `cpp`, `ebpf`, `typec` | Select exact `API`, `API`, `SwiftUI`, `Claude Code`, `C++`, `eBPF`, `Type-C`; technical spellings still use the shared gate and existing mixed restrictions |
 | `can`, `you`, `she`, `he`, `man`, `bug` | Chinese stays first; exact English is second and commits exactly. `canpin`, `youxi`, `sheji`, and `hezuo` keep their Chinese first candidates |
 | `offline`, `plugin` | Default exclusion is an accepted baseline limit, not a runtime-gate defect |
 

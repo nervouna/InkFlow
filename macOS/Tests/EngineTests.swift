@@ -169,6 +169,27 @@ struct EngineTests {
         engine.asciiMode = false
         check(engine.key(44)); check(engine.takeCommit() == "，")
 
+        engine.clear()
+        let protectedPreferences = defaults.setting(.cornerQuotes, to: true)
+        configure(engine, protectedPreferences)
+        check(engine.event(keyEvent(49, " ", [.control, .shift])) && engine.asciiMode)
+        for protected in ["user_id", "C++", "https://example.com/api/v1?x=1#top", "/Users/damao/InkFlow/config.yml", "v1.2.3-beta+4"] {
+            var passthrough = ""
+            for character in protected {
+                let text = String(character)
+                check(!engine.event(keyEvent(0, text)), "ASCII mode must pass through \(text)")
+                passthrough += text
+                check(engine.snapshot().candidates.isEmpty && engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty,
+                      "ASCII passthrough must not create candidates or converted punctuation")
+            }
+            check(Array(passthrough.utf8) == Array(protected.utf8), "ASCII mode must preserve bytes for \(protected)")
+        }
+        check(engine.inputPreferences == protectedPreferences, "ASCII mode must not overwrite saved Chinese punctuation")
+        check(engine.event(keyEvent(49, " ", [.control, .shift])) && !engine.asciiMode)
+        check(contains(engine, "nihao", "你好"), "Leaving ASCII mode restores Chinese candidates")
+        engine.clear()
+        check(engine.key(123)); check(engine.takeCommit() == "「", "Leaving ASCII mode restores saved Chinese punctuation")
+
         let retained = IFEngine()!
         type(retained, "hlw"); let retainedState = retained.snapshot()
         configure(retained, exact)
@@ -291,6 +312,8 @@ struct EngineTests {
         selectCandidate("深度求索", input: "shenduqiusuo", engine: engine)
         selectCandidate("阿米诺斯", input: "aminuosi", engine: engine)
         selectCandidate("并发信息系统", input: "bingfaxinxixitong", engine: engine)
+        selectCandidate("eBPF", input: "ebpf", engine: engine)
+        selectCandidate("Type-C", input: "typec", engine: engine)
         let english = try String(contentsOfFile: "macOS/Data/english-technology.tsv", encoding: .utf8)
         var count = 0
         for line in english.split(separator: "\n") where !line.hasPrefix("#") {
@@ -299,7 +322,7 @@ struct EngineTests {
             selectCandidate(String(fields[0]), input: String(fields[1]), engine: engine)
             count += 1
         }
-        check(count == 120, "Every selected technical English spelling is exercised")
+        check(count == 122, "Every selected technical English spelling is exercised")
         selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
         type(engine, "swiftui")
         for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
@@ -308,9 +331,9 @@ struct EngineTests {
             engine.key(0xff08)
         }
         engine.clear()
-        for input in ["woapi", "apihenhao", "wocpp", "claudecodehenhao"] {
+        for input in ["woapi", "apihenhao", "wocpp", "wotypec", "claudecodehenhao"] {
             type(engine, input)
-            check(!allCandidates(engine).contains { $0.contains("API") || $0.contains("C++") || $0.contains("Claude Code") },
+            check(!allCandidates(engine).contains { $0.contains("API") || $0.contains("C++") || $0.contains("Type-C") || $0.contains("Claude Code") },
                   "Short/punctuated/spaced technical aliases do not bypass mixed structural restrictions")
             engine.clear()
         }
@@ -320,7 +343,7 @@ struct EngineTests {
         check(engine.snapshot().candidates.first == "我的接口" && allCandidates(engine).contains("API"),
               "Explicit custom phrases keep priority while technical English remains reachable")
         engine.clear()
-        print("PASS domain vocabulary: all curated Chinese and 120 technical English spellings selectable; exact case/punctuation/space commits, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
+        print("PASS domain vocabulary: all curated Chinese and 122 technical English spellings selectable; exact case/punctuation/space commits, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
     }
 
     @MainActor static func conservativeChinesePrefixes() {

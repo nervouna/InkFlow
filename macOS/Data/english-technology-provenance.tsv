@@ -10,6 +10,7 @@ GPU	rime-ice-en-ext	335	GPU	3.22	product-policy-4.0
 RAM	rime-ice-en-ext	1474	RAM	4.19	preserve-observation
 SSD	rime-ice-en-ext	329	SSD	3.21	product-policy-4.0
 USB	rime-ice-en-ext	1039	USB	3.98	product-policy-4.0
+Type-C	inkflow-maintained				product-policy-4.0
 HTTP	rime-ice-en-ext	1075	HTTP	4.81	preserve-observation
 HTTPS	rime-ice-en-ext	1078	HTTPS	4.42	preserve-observation
 TCP	rime-ice-en-ext	1971	TCP	3.12	product-policy-4.0
@@ -26,6 +27,7 @@ GraphQL	rime-ice-en-ext	1228	GraphQL		product-policy-4.0
 WebSocket	rime-ice-en-ext	2307	WebSocket		product-policy-4.0
 WebRTC	rime-ice-en-ext	1854	WebRTC		product-policy-4.0
 WebDAV	rime-ice-en-ext	1855	WebDAV		product-policy-4.0
+eBPF	inkflow-maintained				product-policy-4.0
 JSON	rime-ice-en-ext	568	JSON	2.75	product-policy-4.0
 YAML	rime-ice-en-ext	523	YAML		product-policy-4.0
 XML	rime-ice-en-ext	1239	XML	3.29	product-policy-4.0

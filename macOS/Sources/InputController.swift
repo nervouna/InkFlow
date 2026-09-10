@@ -132,8 +132,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             let menu = NSMenu(title: "InkFlow")
             menu.autoenablesItems = false
             let ascii = engine?.requestedASCIIMode ?? false
-            menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
-                         action: #selector(toggleInputMode(_:)), keyEquivalent: "").target = self
+            let inputMode = menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
+                                         action: #selector(toggleInputMode(_:)), keyEquivalent: " ")
+            inputMode.keyEquivalentModifierMask = [.control, .shift]
+            inputMode.target = self
             let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: "")
             punctuation.target = self
             punctuation.state = settings.inputPreferences[.englishPunctuation] ? .on : .off

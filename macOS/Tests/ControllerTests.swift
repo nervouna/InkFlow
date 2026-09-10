@@ -11,6 +11,7 @@ struct ControllerTests {
         contextReading()
         runCases(settings: isolated.settings)
         inputSettings(settings: isolated.settings)
+        rawProtection(settings: isolated.settings)
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
@@ -37,7 +38,12 @@ struct ControllerTests {
         check(other.engine!.inputPreferences?[.traditional] == true && !other.engine!.asciiMode,
               "Traditional and punctuation are global; ASCII remains per session")
         let menu = controller.menu()!
-        check(menu.items.contains { $0.title == "切换到中文输入" })
+        guard let modeItem = menu.items.first(where: { $0.title == "切换到中文输入" }) else {
+            check(false, "Input menu must expose the mode toggle")
+            return
+        }
+        check(modeItem.keyEquivalent == " " && modeItem.keyEquivalentModifierMask == [.control, .shift],
+              "Input menu must display the existing Control-Shift-Space shortcut")
         check(menu.items.first { $0.title == "英文标点" }?.state == .on)
         check(menu.items.first { $0.title == "繁体输入" }?.state == .on)
         client.mutations.removeAll()
@@ -57,6 +63,28 @@ struct ControllerTests {
         settings.setInputOption(.englishPunctuation, enabled: false)
         check(controller.menu()!.items.first { $0.title == "繁体输入" }?.state == .off)
         print("PASS controller input preferences: menu/UI global synchronization, session ASCII scope, deferred menu and shortcut, one old commit and cancellation")
+    }
+
+    @MainActor static func rawProtection(settings: IFSettings) {
+        for (raw, mustBeUnknown) in [("getUserName", false), ("InkFlowQuasar", true)] {
+            let client = RecordingClient(document: "")
+            let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            for character in raw {
+                let text = String(character)
+                let flags: NSEvent.ModifierFlags = character.isUppercase ? .shift : []
+                check(controller.handle(keyEvent(0, text, flags), client: client), "Compose raw alphabetic input \(raw)")
+            }
+            check(controller.engine?.qualitySnapshot().rawInput == raw, "Raw identity must retain typed case for \(raw)")
+            if mustBeUnknown {
+                check(!(controller.candidates(nil) as? [String] ?? []).contains(raw), "Project word fixture must stay outside dictionaries")
+            }
+            client.mutations.removeAll()
+            check(controller.handle(keyEvent(36, "\r"), client: client), "Return must commit raw input \(raw)")
+            check(client.document == raw && client.mutations == ["insert:" + raw],
+                  "Return must insert the original alphabetic bytes exactly once for \(raw)")
+        }
+        print("PASS raw protection: Return commits camel-case identifier and unknown project word exactly")
     }
 
     @MainActor static func deliveryAndRecovery(settings: IFSettings, shared: String, user: String) throws {
