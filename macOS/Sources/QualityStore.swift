@@ -9,6 +9,7 @@ struct QualityStoreStatistics: Codable, Equatable, Sendable {
     var droppedOversized = 0
     var droppedBusy = 0
     var droppedInvalid = 0
+    var droppedIdentity = 0
     var droppedDisabled = 0
     var truncatedEnvelopes = 0
     var peakBuffered = 0
@@ -18,10 +19,11 @@ struct QualityStoreStatistics: Codable, Equatable, Sendable {
     var errors = 0
     var disabled = false
     var lastErrorCode: Int32? = nil
+    var lastIdentityError: String? = nil
 }
 
 enum QualitySubmission: Equatable, Sendable { case accepted, queueFull, oversized, invalid, disabled }
-enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCommit }
+enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCommit, beforeMigrationCommit }
 
 /// Test hooks run on the worker only. Production leaves them empty.
 struct QualityStoreHooks: Sendable {
@@ -241,7 +243,8 @@ final class QualityStore: @unchecked Sendable {
     }
 
     private func handle(_ error: Error, count: Int) {
-        let code = (error as? QualityDatabaseError)?.code ?? (error is EncodingError ? SQLITE_MISMATCH : SQLITE_IOERR)
+        let databaseError = error as? QualityDatabaseError
+        let code = databaseError?.code ?? (error is EncodingError ? SQLITE_MISMATCH : SQLITE_IOERR)
         let primary = code & 0xff
         let fatal = primary != SQLITE_BUSY && primary != SQLITE_LOCKED && primary != SQLITE_CONSTRAINT && primary != SQLITE_MISMATCH
         let shouldLog: Bool = lock.withLock {
@@ -259,6 +262,12 @@ final class QualityStore: @unchecked Sendable {
             stats.buffered = inFlight
             return true
         }
+        if let reason = databaseError?.identityFailure {
+            lock.withLock {
+                stats.droppedIdentity += count
+                stats.lastIdentityError = reason
+            }
+        }
         if shouldLog {
             // No input, SQL, filesystem path, or arbitrary SQLite error text enters logs.
             NSLog("InkFlow quality recording disabled (code %d)", code)
@@ -271,7 +280,10 @@ final class QualityStore: @unchecked Sendable {
     }
 }
 
-private struct QualityDatabaseError: Error { var code: Int32 }
+private struct QualityDatabaseError: Error {
+    var code: Int32
+    var identityFailure: String? = nil
+}
 
 private enum QualitySQLValue {
     case text(String), integer(Int), null
@@ -348,19 +360,68 @@ private final class QualityDatabase: @unchecked Sendable {
                     try validateSchema()
                     return
                 }
-                for sql in Self.schema.values.sorted(by: { left, right in left.hasPrefix("CREATE TABLE") && !right.hasPrefix("CREATE TABLE") }) { try execute(sql) }
+                for sql in Self.creationOrder(schema: Self.schemaV2) { try execute(sql) }
+                for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
+                    try ensureIndex(preferredName: name, column: column)
+                }
                 try execute("PRAGMA application_id = \(Self.applicationID)")
-                try execute("PRAGMA user_version = 1")
+                try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
                 try execute("COMMIT")
             } catch { rollback(); throw error }
             return
         }
-        guard version == "1", identity == String(Self.applicationID), rows.count >= Self.schema.count else {
+        guard identity == String(Self.applicationID) else {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
-        var remaining = Set(Self.schema.keys)
+        if version == "1" {
+            try validate(rows: rows, against: Self.schemaV1)
+            try migrateV1()
+            return
+        }
+        guard version == String(QualityLimits.databaseSchemaVersion) else {
+            throw QualityDatabaseError(code: Self.unsupportedSchema)
+        }
+        try validate(rows: rows, against: Self.schemaV2)
+        try validateLayeredIndexes()
+    }
+
+    private func migrateV1() throws {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let lockedVersion = try scalar("PRAGMA user_version")
+            let lockedIdentity = try scalar("PRAGMA application_id")
+            let lockedRows = try query("SELECT name, sql, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")
+            if lockedVersion == String(QualityLimits.databaseSchemaVersion), lockedIdentity == String(Self.applicationID) {
+                try validate(rows: lockedRows, against: Self.schemaV2)
+                try validateLayeredIndexes()
+                rollback()
+                return
+            }
+            guard lockedVersion == "1", lockedIdentity == String(Self.applicationID) else {
+                throw QualityDatabaseError(code: Self.unsupportedSchema)
+            }
+            try validate(rows: lockedRows, against: Self.schemaV1)
+            try execute("ALTER TABLE config_revisions ADD COLUMN ranking_fingerprint TEXT")
+            try execute("ALTER TABLE config_revisions ADD COLUMN settings_fingerprint TEXT")
+            try execute("ALTER TABLE config_revisions ADD COLUMN measurement_fingerprint TEXT")
+            try execute("ALTER TABLE config_revisions ADD COLUMN build_identity TEXT")
+            for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
+                try ensureIndex(preferredName: name, column: column)
+            }
+            try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
+            try inject(.beforeMigrationCommit)
+            try execute("COMMIT")
+        } catch {
+            rollback()
+            throw error
+        }
+    }
+
+    private func validate(rows: [[String]], against schema: [String: String]) throws {
+        guard rows.count >= schema.count else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
+        var remaining = Set(schema.keys)
         for row in rows {
-            if let expected = Self.schema[row[0]] {
+            if let expected = schema[row[0]] {
                 guard Self.normalize(row[1]) == Self.normalize(expected) else {
                     throw QualityDatabaseError(code: Self.unsupportedSchema)
                 }
@@ -376,7 +437,104 @@ private final class QualityDatabase: @unchecked Sendable {
         guard remaining.isEmpty else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
     }
 
-    private static func normalize(_ sql: String) -> String { sql.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+    private static func creationOrder(schema: [String: String]) -> [String] {
+        schema.keys.sorted { left, right in
+            let leftTable = schema[left]!.hasPrefix("CREATE TABLE")
+            let rightTable = schema[right]!.hasPrefix("CREATE TABLE")
+            if leftTable != rightTable { return leftTable }
+            return left < right
+        }.map { schema[$0]! }
+    }
+
+    private func validateLayeredIndexes() throws {
+        for column in Self.layeredIndexes.values where try !hasIndex(on: column) {
+            throw QualityDatabaseError(code: Self.unsupportedSchema)
+        }
+    }
+
+    private func ensureIndex(preferredName: String, column: String) throws {
+        if try hasIndex(on: column) { return }
+        var candidate = preferredName
+        var suffix = 1
+        while try scalar("SELECT count(*) FROM sqlite_master WHERE name = ?", [.text(candidate)]) != "0" {
+            candidate = suffix == 1 ? preferredName + "_owned" : preferredName + "_owned_\(suffix)"
+            suffix += 1
+        }
+        try execute("CREATE INDEX \(Self.quotedIdentifier(candidate)) ON config_revisions(\(Self.quotedIdentifier(column)))")
+    }
+
+    private func hasIndex(on column: String) throws -> Bool {
+        let indexes = try query("PRAGMA index_list(config_revisions)")
+        for index in indexes where index.count >= 5 && index[2] == "0" && index[4] == "0" {
+            let name = index[1]
+            let columns = try query("PRAGMA index_info(\(Self.quotedIdentifier(name)))")
+            if columns.count == 1, columns[0].count >= 3, columns[0][2] == column { return true }
+        }
+        return false
+    }
+
+    private static func quotedIdentifier(_ value: String) -> String {
+        "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+    }
+
+    /// Ignores formatting whitespace while preserving SQL token boundaries and quoted contents.
+    private static func normalize(_ sql: String) -> String {
+        let characters = Array(sql)
+        var tokens: [String] = []
+        var index = 0
+        while index < characters.count {
+            let character = characters[index]
+            if character.isWhitespace { index += 1; continue }
+            if character == "'" || character == "\"" || character == "`" {
+                let quote = character
+                var token = String(character)
+                index += 1
+                while index < characters.count {
+                    token.append(characters[index])
+                    if characters[index] == quote {
+                        if index + 1 < characters.count, characters[index + 1] == quote {
+                            token.append(characters[index + 1]); index += 2; continue
+                        }
+                        index += 1
+                        break
+                    }
+                    index += 1
+                }
+                tokens.append(token)
+                continue
+            }
+            if character == "[" {
+                var token = String(character)
+                index += 1
+                while index < characters.count {
+                    token.append(characters[index])
+                    let ended = characters[index] == "]"
+                    index += 1
+                    if ended { break }
+                }
+                tokens.append(token)
+                continue
+            }
+            if character.isLetter || character.isNumber || character == "_" {
+                var token = String(character)
+                index += 1
+                while index < characters.count,
+                      characters[index].isLetter || characters[index].isNumber || characters[index] == "_" {
+                    token.append(characters[index]); index += 1
+                }
+                tokens.append(token)
+                continue
+            }
+            var token = String(character)
+            if index + 1 < characters.count,
+               ["!=", "<=", ">=", "==", "||", "<<", ">>"].contains(String([character, characters[index + 1]])) {
+                token.append(characters[index + 1]); index += 1
+            }
+            tokens.append(token)
+            index += 1
+        }
+        return tokens.joined(separator: "\u{1f}")
+    }
 
     func write(_ batch: [QualityEnvelope]) throws -> (written: Int, oversized: Int, truncated: Int) {
         var accepted: [QualityEnvelope] = []
@@ -430,8 +588,12 @@ private final class QualityDatabase: @unchecked Sendable {
             // An unchanged revision can be referenced without re-sending it. Never accept a
             // snapshot whose actual applied values disagree with that revision's saved values.
             for page in [decision.snapshot] + [decision.firstPage].compactMap({ $0 }) + decision.visitedPages {
-                guard try scalar("SELECT applied_config_json FROM config_revisions WHERE id = ?", [.text(page.configurationRevisionID)]) == json(page.configuration) else {
+                let saved = try query("SELECT applied_config_json, ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity FROM config_revisions WHERE id = ?", [.text(page.configurationRevisionID)]).first
+                guard saved?.first == (try json(page.configuration)) else {
                     throw QualityDatabaseError(code: SQLITE_CONSTRAINT)
+                }
+                guard saved?.dropFirst().allSatisfy({ !$0.isEmpty }) == true else {
+                    throw QualityDatabaseError(code: SQLITE_MISMATCH, identityFailure: "missing layered revision identity")
                 }
             }
             try execute("INSERT INTO candidate_decisions (id, composition_id, config_revision_id, commit_id, occurred_at, sequence, trigger, outcome, selected_display_index, selected_text, text_kind, snapshot_json, first_page_json, visited_pages_json, page_history_truncated, dropped_page_count, operations_json, regular_ranked_selection, matches_custom_phrase, unknown_rank_reason, path_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -453,18 +615,33 @@ private final class QualityDatabase: @unchecked Sendable {
             let engine: String
             let metricRule: Int
         }
+        let build = buildMetadata ?? .unknown
         let fingerprint = SHA256.hash(data: try encoder.encode(Identity(configuration: revision.configuration,
-            build: buildMetadata ?? .unknown, engine: engineVersion, metricRule: QualityLimits.metricRuleVersion)))
+            build: build, engine: engineVersion, metricRule: QualityLimits.metricRuleVersion)))
             .map { String(format: "%02x", $0) }.joined()
-        let existing = try scalar("SELECT fingerprint FROM config_revisions WHERE id = ?", [.text(revision.id)])
-        if !existing.isEmpty {
-            guard existing == fingerprint else { throw QualityDatabaseError(code: SQLITE_CONSTRAINT) }
+        let fingerprints: QualityFingerprints
+        do {
+            fingerprints = try QualityFingerprints.make(configuration: revision.configuration, build: build,
+                engineVersion: engineVersion, databaseSchemaVersion: QualityLimits.databaseSchemaVersion,
+                metricRuleVersion: QualityLimits.metricRuleVersion,
+                collectionRuleVersion: QualityLimits.collectionRuleVersion)
+        } catch QualityIdentityError.missing(let name) {
+            throw QualityDatabaseError(code: SQLITE_MISMATCH, identityFailure: "missing \(name)")
+        }
+        let existing = try query("SELECT fingerprint, ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity FROM config_revisions WHERE id = ?", [.text(revision.id)]).first
+        if let existing {
+            guard existing == [fingerprint, fingerprints.ranking, fingerprints.settings,
+                               fingerprints.measurement, fingerprints.buildIdentity] else {
+                throw QualityDatabaseError(code: SQLITE_CONSTRAINT)
+            }
             return
         }
-        try execute("INSERT INTO config_revisions (id, fingerprint, created_at, applied_config_json, build_metadata_json, engine_version, metric_rule_version) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        try execute("INSERT INTO config_revisions (id, fingerprint, created_at, applied_config_json, build_metadata_json, engine_version, metric_rule_version, ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     [.text(revision.id), .text(fingerprint), .text(QualityJSON.timestamp(revision.createdAt)),
-                     .text(try json(revision.configuration)), .text(try json(buildMetadata ?? .unknown)),
-                     .text(engineVersion), .integer(QualityLimits.metricRuleVersion)])
+                     .text(try json(revision.configuration)), .text(try json(build)),
+                     .text(engineVersion), .integer(QualityLimits.metricRuleVersion),
+                     .text(fingerprints.ranking), .text(fingerprints.settings),
+                     .text(fingerprints.measurement), .text(fingerprints.buildIdentity)])
     }
 
     func updateRun(statistics: QualityStoreStatistics, status: String) throws {
@@ -528,7 +705,7 @@ private final class QualityDatabase: @unchecked Sendable {
         }
     }
 
-    private static let schema: [String: String] = [
+    private static let schemaV1: [String: String] = [
         "recording_runs": """
         CREATE TABLE recording_runs (
             id TEXT PRIMARY KEY NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
@@ -582,4 +759,25 @@ private final class QualityDatabase: @unchecked Sendable {
         "decisions_composition": "CREATE INDEX decisions_composition ON candidate_decisions(composition_id)",
         "revisions_fingerprint": "CREATE INDEX revisions_fingerprint ON config_revisions(fingerprint)"
     ]
+
+    private static let layeredIndexes: [String: String] = [
+        "revisions_ranking_fingerprint": "ranking_fingerprint",
+        "revisions_settings_fingerprint": "settings_fingerprint",
+        "revisions_measurement_fingerprint": "measurement_fingerprint",
+        "revisions_build_identity": "build_identity"
+    ]
+
+    private static let schemaV2: [String: String] = {
+        var schema = schemaV1
+        schema["config_revisions"] = """
+        CREATE TABLE config_revisions (
+            id TEXT PRIMARY KEY NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL,
+            applied_config_json TEXT NOT NULL, build_metadata_json TEXT NOT NULL,
+            engine_version TEXT NOT NULL, metric_rule_version INTEGER NOT NULL,
+            ranking_fingerprint TEXT, settings_fingerprint TEXT,
+            measurement_fingerprint TEXT, build_identity TEXT
+        )
+        """
+        return schema
+    }()
 }

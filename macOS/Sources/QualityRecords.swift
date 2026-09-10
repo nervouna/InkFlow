@@ -491,6 +491,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
 }
 
 enum QualityLimits {
+    static let databaseSchemaVersion = 2
     static let envelopeBytes = 64 * 1024
     static let configurationBytes = 256 * 1024
     static let bufferedBytes = 8 * 1024 * 1024
@@ -498,6 +499,7 @@ enum QualityLimits {
     static let batchEnvelopes = 16
     static let flushInterval: TimeInterval = 1
     static let metricRuleVersion = 1
+    static let collectionRuleVersion = 1
     static let keySamples = 256
     static let visibilityObservationInterval: TimeInterval = 0.1
 }

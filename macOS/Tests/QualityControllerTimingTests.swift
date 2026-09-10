@@ -26,7 +26,7 @@ extension QualityCaptureTests {
     @MainActor static func controllerTiming(_ output: URL) async throws {
         let db = CaptureDatabase(url: output.appendingPathComponent("controller-timing-" + UUID().uuidString + ".sqlite3"))
         defer { try? FileManager.default.removeItem(at: db.url) }
-        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: .unknown)
+        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
         let aiDB = CaptureDatabase(url: output.appendingPathComponent("controller-ai-" + UUID().uuidString + ".sqlite3"))
         defer { try? FileManager.default.removeItem(at: aiDB.url) }
         let aiStore = AIStatisticsStore(url: aiDB.url, now: { Date(timeIntervalSince1970: 10_000) })

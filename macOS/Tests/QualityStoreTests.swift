@@ -36,8 +36,10 @@ private final class Reader {
 }
 private enum TestError: Error { case failed }
 
-private let metadata = QualityBuildMetadata(sourceRevision: "source", sourceTreeSHA256: "dirty-content-hash",
-    sourceDirty: true, bundledResourcesSHA256: "actual-bundle-hash", appVersion: "0.1.0", appBuild: "1")
+private let metadata = QualityBuildMetadata(sourceRevision: "source", sourceTreeSHA256: String(repeating: "a", count: 64),
+    sourceDirty: true, bundledResourcesSHA256: String(repeating: "b", count: 64),
+    bundleSHA256: String(repeating: "c", count: 64), rankingSourceSHA256: String(repeating: "d", count: 64),
+    rankingResourcesSHA256: String(repeating: "e", count: 64), appVersion: "0.1.0", appBuild: "1")
 
 private func fixture(_ id: String = UUID().uuidString) -> QualityEnvelope {
     let configuration = QualityAppliedConfiguration(candidateCount: 5)
@@ -58,6 +60,69 @@ private func makeURL(_ name: String) throws -> URL {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-quality-" + UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     return directory.appendingPathComponent(name + ".sqlite3")
+}
+
+private func createV1Database(at url: URL, schemaVersion: Int = 1, committedLiteral: String = "committed") throws {
+    let layeredColumns = schemaVersion == 2 ? ", ranking_fingerprint TEXT, settings_fingerprint TEXT, measurement_fingerprint TEXT, build_identity TEXT" : ""
+    let layeredIndexes = schemaVersion == 2 ? """
+        CREATE INDEX revisions_ranking_fingerprint ON config_revisions(ranking_fingerprint);
+        CREATE INDEX revisions_settings_fingerprint ON config_revisions(settings_fingerprint);
+        CREATE INDEX revisions_measurement_fingerprint ON config_revisions(measurement_fingerprint);
+        CREATE INDEX revisions_build_identity ON config_revisions(build_identity);
+        """ : ""
+    let writer = try Reader(url, writable: true)
+    try writer.execute("""
+        PRAGMA application_id = 1229345073;
+        PRAGMA user_version = \(schemaVersion);
+        CREATE TABLE recording_runs (
+            id TEXT PRIMARY KEY NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
+            status TEXT NOT NULL, engine_version TEXT NOT NULL, build_metadata_json TEXT NOT NULL,
+            metric_rule_version INTEGER NOT NULL, stats_json TEXT NOT NULL, error_code INTEGER
+        );
+        CREATE TABLE config_revisions (
+            id TEXT PRIMARY KEY NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL,
+            applied_config_json TEXT NOT NULL, build_metadata_json TEXT NOT NULL,
+            engine_version TEXT NOT NULL, metric_rule_version INTEGER NOT NULL\(layeredColumns)
+        );
+        CREATE TABLE compositions (
+            id TEXT PRIMARY KEY NOT NULL, run_id TEXT NOT NULL REFERENCES recording_runs(id),
+            started_at TEXT NOT NULL, ended_at TEXT NOT NULL, app_bundle_id TEXT, client_id TEXT,
+            outcome TEXT NOT NULL, page_history_truncated INTEGER NOT NULL CHECK(page_history_truncated IN (0,1)),
+            dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0),
+            outcome_reason TEXT, operations_json TEXT NOT NULL
+        );
+        CREATE TABLE commits (
+            id TEXT PRIMARY KEY NOT NULL, composition_id TEXT NOT NULL REFERENCES compositions(id),
+            issued_at TEXT NOT NULL, text TEXT NOT NULL, kind TEXT NOT NULL,
+            insertion_issued INTEGER NOT NULL CHECK(insertion_issued IN (0,1)), client_id TEXT,
+            UNIQUE(id, composition_id)
+        );
+        CREATE TABLE candidate_decisions (
+            id TEXT PRIMARY KEY NOT NULL, composition_id TEXT NOT NULL REFERENCES compositions(id),
+            config_revision_id TEXT NOT NULL REFERENCES config_revisions(id), commit_id TEXT,
+            occurred_at TEXT NOT NULL, sequence INTEGER NOT NULL, trigger TEXT NOT NULL, outcome TEXT NOT NULL,
+            selected_display_index INTEGER, selected_text TEXT, text_kind TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL, first_page_json TEXT, visited_pages_json TEXT NOT NULL,
+            page_history_truncated INTEGER NOT NULL CHECK(page_history_truncated IN (0,1)),
+            dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0), operations_json TEXT NOT NULL,
+            regular_ranked_selection INTEGER NOT NULL CHECK(regular_ranked_selection IN (0,1)),
+            matches_custom_phrase INTEGER NOT NULL CHECK(matches_custom_phrase IN (0,1)),
+            unknown_rank_reason TEXT, path_reason TEXT, UNIQUE(composition_id, sequence),
+            FOREIGN KEY(commit_id, composition_id) REFERENCES commits(id, composition_id),
+            CHECK(outcome != '\(committedLiteral)' OR commit_id IS NOT NULL)
+        );
+        CREATE INDEX compositions_time_app ON compositions(started_at, app_bundle_id);
+        CREATE INDEX decisions_composition ON candidate_decisions(composition_id);
+        CREATE INDEX revisions_fingerprint ON config_revisions(fingerprint);
+        INSERT INTO recording_runs VALUES ('legacy-run','2026-01-01T00:00:00.000Z','2026-01-01T00:00:01.000Z','closed','legacy-engine','{}',1,'{}',NULL);
+        INSERT INTO config_revisions (id,fingerprint,created_at,applied_config_json,build_metadata_json,engine_version,metric_rule_version) VALUES ('legacy-revision','legacy-fingerprint','2026-01-01T00:00:00.000Z','{"candidateCount":5,"customPhrases":[],"schemaID":"inkflow_pinyin","asciiMode":false,"fontSize":14,"vertical":false}','{}','legacy-engine',1);
+        INSERT INTO compositions VALUES ('legacy-composition','legacy-run','2026-01-01T00:00:00.000Z','2026-01-01T00:00:01.000Z','legacy.app',NULL,'committed',0,0,NULL,'{}');
+        INSERT INTO commits VALUES ('legacy-commit','legacy-composition','2026-01-01T00:00:01.000Z','legacy','candidate',1,NULL);
+        INSERT INTO candidate_decisions VALUES ('legacy-decision','legacy-composition','legacy-revision','legacy-commit','2026-01-01T00:00:01.000Z',1,'space','committed',0,'legacy','english','{}',NULL,'[]',0,0,'{}',1,0,NULL,NULL);
+        CREATE INDEX analysis_time ON compositions(ended_at);
+        CREATE VIEW analysis_runs AS SELECT id FROM recording_runs;
+        \(layeredIndexes)
+        """)
 }
 
 @main
@@ -91,7 +156,18 @@ struct QualityStoreTests {
         let reader = try Reader(url)
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1", "decision persisted")
         expect(try reader.scalar("PRAGMA journal_mode") == "delete", "rollback journal")
-        expect(try reader.scalar("PRAGMA user_version") == "1", "schema v1")
+        expect(try reader.scalar("PRAGMA user_version") == "2", "schema v2")
+        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "5",
+               "schema v2 keeps the five-table contract")
+        expect(try reader.scalar("SELECT ranking_fingerprint IS NOT NULL AND settings_fingerprint IS NOT NULL AND measurement_fingerprint IS NOT NULL AND build_identity IS NOT NULL FROM config_revisions") == "1",
+               "new revisions persist every layered identity")
+        let expectedFingerprints = try QualityFingerprints.make(configuration: record.revisions[0].configuration,
+            build: metadata, engineVersion: "test-engine", databaseSchemaVersion: 2,
+            metricRuleVersion: QualityLimits.metricRuleVersion,
+            collectionRuleVersion: QualityLimits.collectionRuleVersion)
+        expect(try reader.rows("SELECT ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity FROM config_revisions").first ==
+               [expectedFingerprints.ranking, expectedFingerprints.settings, expectedFingerprints.measurement, expectedFingerprints.buildIdentity],
+               "stored identities use schema, metric, collection, settings, ranking and build inputs")
         expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "all foreign keys hold")
         let savedOperations = try reader.scalar("SELECT operations_json FROM candidate_decisions")
         expect(try QualityJSON.decoder().decode(QualityOperations.self, from: Data(savedOperations.utf8)) == record.decisions[0].operations,
@@ -118,9 +194,11 @@ struct QualityStoreTests {
         try await budgets()
         try await configurationBudgetsAndReferences()
         try await fatalFaults()
+        try await v1Migration()
+        try await identityFailures()
         try await nonDestructiveSchemaAndOpen()
         try await metadataAndRevisions()
-        print("PASS quality store: 8 persistence/failure groups")
+        print("PASS quality store: 10 persistence/failure groups")
     }
 }
 
@@ -147,6 +225,89 @@ private final class Counter: @unchecked Sendable {
 }
 
 private extension QualityStoreTests {
+    static func v1Migration() async throws {
+        let url = try makeURL("v1-migration")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try createV1Database(at: url)
+        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        expect(store.submit(fixture("after-migration")) == .accepted, "migration stays off producer path")
+        await store.close()
+        let reader = try Reader(url)
+        expect(try reader.scalar("PRAGMA user_version") == "2", "strict v1 migrates to v2")
+        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "5",
+               "migration keeps exactly five owned tables")
+        expect(try reader.scalar("SELECT fingerprint FROM config_revisions WHERE id='legacy-revision'") == "legacy-fingerprint",
+               "legacy fingerprint remains exact")
+        expect(try reader.scalar("SELECT ranking_fingerprint IS NULL AND settings_fingerprint IS NULL AND measurement_fingerprint IS NULL AND build_identity IS NULL FROM config_revisions WHERE id='legacy-revision'") == "1",
+               "legacy layered identities remain unknown")
+        expect(try reader.scalar("SELECT count(*) FROM recording_runs WHERE id='legacy-run'") == "1" &&
+               reader.scalar("SELECT count(*) FROM compositions WHERE id='legacy-composition'") == "1" &&
+               reader.scalar("SELECT count(*) FROM commits WHERE id='legacy-commit'") == "1" &&
+               reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id='legacy-decision'") == "1",
+               "all five legacy table rows survive migration")
+        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE name IN ('analysis_time','analysis_runs')") == "2",
+               "allowed analysis index and view survive migration")
+        expect(try reader.scalar("SELECT count(*) FROM config_revisions WHERE id='revision-after-migration' AND ranking_fingerprint IS NOT NULL AND settings_fingerprint IS NOT NULL AND measurement_fingerprint IS NOT NULL AND build_identity IS NOT NULL") == "1",
+               "post-migration revision gets complete layered identities")
+
+        let rollbackURL = try makeURL("v1-migration-rollback")
+        defer { try? FileManager.default.removeItem(at: rollbackURL.deletingLastPathComponent()) }
+        try createV1Database(at: rollbackURL)
+        let before = try Data(contentsOf: rollbackURL)
+        let failed = QualityStore(url: rollbackURL, engineVersion: "test", buildMetadata: metadata,
+            hooks: QualityStoreHooks(fault: { point in
+                if case .beforeMigrationCommit = point { return SQLITE_IOERR }
+                return nil
+            }))
+        await failed.close()
+        expect(failed.statistics().disabled, "migration failure disables recording")
+        expect(try Data(contentsOf: rollbackURL) == before, "failed migration leaves v1 bytes unchanged")
+
+        let collisionURL = try makeURL("v1-index-collision")
+        defer { try? FileManager.default.removeItem(at: collisionURL.deletingLastPathComponent()) }
+        try createV1Database(at: collisionURL)
+        do {
+            let writer = try Reader(collisionURL, writable: true)
+            try writer.execute("CREATE INDEX revisions_ranking_fingerprint ON config_revisions(created_at)")
+        }
+        let collisionStore = QualityStore(url: collisionURL, engineVersion: "test", buildMetadata: metadata)
+        await collisionStore.close()
+        expect(!collisionStore.statistics().disabled, "analysis index name collision does not block migration")
+        let collisionReader = try Reader(collisionURL)
+        expect(try collisionReader.scalar("SELECT sql FROM sqlite_master WHERE name='revisions_ranking_fingerprint'").contains("created_at"),
+               "colliding analysis index is preserved unchanged")
+        expect(try collisionReader.scalar("SELECT count(*) FROM pragma_index_list('config_revisions') AS l JOIN pragma_index_info(l.name) AS i WHERE i.name='ranking_fingerprint'") == "1",
+               "migration creates a safe alternate ranking index")
+        let collisionReopen = QualityStore(url: collisionURL, engineVersion: "test", buildMetadata: metadata)
+        await collisionReopen.close()
+        expect(!collisionReopen.statistics().disabled, "migrated alternate layered index validates on reopen")
+        print("PASS quality store: strict atomic v1 migration, exact rows, NULL legacy layers, analysis objects, rollback")
+    }
+
+    static func identityFailures() async throws {
+        let url = try makeURL("identity-failure")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        var incomplete = metadata
+        incomplete.rankingSourceSHA256 = "unknown"
+        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: incomplete)
+        expect(store.submit(fixture("identity-a")) == .accepted && store.submit(fixture("identity-b")) == .accepted,
+               "identity generation remains deferred from producer")
+        await store.close()
+        let reader = try Reader(url)
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "0" &&
+               reader.scalar("SELECT count(*) FROM config_revisions") == "0",
+               "identity failure drops the entire batch without partial rows")
+        let stats = store.statistics()
+        expect(stats.droppedInvalid == 2 && stats.droppedIdentity == 2 && stats.lastIdentityError == "missing ranking source",
+               "identity drop count and bounded reason are diagnosable")
+        expect(!stats.disabled, "identity failure does not disable input or future recording attempts")
+        let savedStats = try QualityJSON.decoder().decode(QualityStoreStatistics.self,
+            from: Data(try reader.scalar("SELECT stats_json FROM recording_runs").utf8))
+        expect(savedStats.droppedIdentity == 2 && savedStats.lastIdentityError == "missing ranking source",
+               "identity diagnostics persist with the recording run")
+        print("PASS quality store: incomplete identity drops whole deferred batch with bounded diagnostics")
+    }
+
     static func configurationBudgetsAndReferences() async throws {
         let url = try makeURL("configuration-budgets")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -423,6 +584,30 @@ private extension QualityStoreTests {
             expect(store.statistics().disabled, "foreign or unknown schema disabled")
             expect(try Data(contentsOf: url) == before, "foreign DB bytes unchanged")
         }
+        let incompatibleV1 = try makeURL("incompatible-v1")
+        defer { try? FileManager.default.removeItem(at: incompatibleV1.deletingLastPathComponent()) }
+        try createV1Database(at: incompatibleV1)
+        do {
+            let writer = try Reader(incompatibleV1, writable: true)
+            try writer.execute("CREATE TRIGGER changed_contract AFTER INSERT ON compositions BEGIN DELETE FROM compositions WHERE id = NEW.id; END")
+        }
+        let incompatibleBefore = try Data(contentsOf: incompatibleV1)
+        let incompatible = QualityStore(url: incompatibleV1, engineVersion: "test", buildMetadata: metadata)
+        await incompatible.close()
+        expect(incompatible.statistics().disabled, "contract-changing v1 database is rejected")
+        expect(try Data(contentsOf: incompatibleV1) == incompatibleBefore, "incompatible v1 database bytes remain unchanged")
+
+        for version in [1, 2] {
+            let literalURL = try makeURL("incompatible-literal-v\(version)")
+            defer { try? FileManager.default.removeItem(at: literalURL.deletingLastPathComponent()) }
+            try createV1Database(at: literalURL, schemaVersion: version, committedLiteral: "com mitted")
+            let literalBefore = try Data(contentsOf: literalURL)
+            let literalStore = QualityStore(url: literalURL, engineVersion: "test", buildMetadata: metadata)
+            await literalStore.close()
+            expect(literalStore.statistics().disabled, "v\(version) CHECK string literal mutation is rejected")
+            expect(try Data(contentsOf: literalURL) == literalBefore, "rejected v\(version) literal mutation remains byte-identical")
+        }
+
         let corrupt = try makeURL("corrupt")
         defer { try? FileManager.default.removeItem(at: corrupt.deletingLastPathComponent()) }
         let original = Data("not a sqlite database".utf8)
@@ -477,11 +662,15 @@ private extension QualityStoreTests {
             try analysis.execute("CREATE INDEX analysis_time ON compositions(ended_at); CREATE VIEW analysis_runs AS SELECT id FROM recording_runs")
         }
         var changed = metadata
-        changed.sourceTreeSHA256 = "different-dirty-content"
+        changed.sourceTreeSHA256 = String(repeating: "f", count: 64)
         let next = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
         next.submit(fixture("revision-c"))
         await next.close()
         expect(try reader.scalar("SELECT count(DISTINCT fingerprint) FROM config_revisions") == "2", "dirty source differences split revision comparisons")
+        expect(try reader.scalar("SELECT count(DISTINCT ranking_fingerprint) FROM config_revisions") == "1",
+               "build-only changes retain one ranking identity")
+        expect(try reader.scalar("SELECT count(DISTINCT build_identity) FROM config_revisions") == "2",
+               "build-only changes retain both traceable build identities")
         let mismatch = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
         var invalid = fixture("revision-mismatch")
         invalid.revisions[0].configuration.candidateCount = 9
