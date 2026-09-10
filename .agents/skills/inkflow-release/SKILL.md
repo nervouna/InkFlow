@@ -7,15 +7,17 @@ description: Publish an InkFlow macOS release from main with a confirmed semanti
 
 Deliver a public GitHub Release containing a signed, notarized DMG and SHA-256 checksum. Use `main` and an annotated `vX.Y.Z` tag; do not maintain a `release` branch.
 
-A request to execute this release workflow authorizes its version commit, tag, push and publication after version confirmation. Merely discussing, inspecting or editing this skill does not authorize a release. Honor narrower user instructions. Do not install or register the input method on the publisher's machine.
+A request to execute this release workflow with a confirmed semantic version or bump type is durable authorization for that release's normal end-to-end operations: update and commit the version, create and push the annotated tag with `main`, upload the generated input-method submission ZIP and final DMG to Apple's notarization service, create and populate the GitHub Release in the verified repository, download its assets for verification, and publish it after every gate passes. Exact generated artifact names and submission IDs are covered by this authorization even when they do not exist at request time. Do not ask for renewed authorization at each stage. Merely discussing, inspecting or editing this skill does not authorize a release. Honor narrower user instructions. Do not install or register the input method on the publisher's machine.
 
 Run commands from the repository root. Read `macOS/DEVELOPMENT.md` for the current verification list and use `$apple-signing-workflow` for certificate selection and artifact verification. Helpers live beside this file in `scripts/`.
 
-## Executor dispatch
+## Execution ownership and authorization
 
-For an authorized release or recovery, the parent confirms the version decision and delegates once to `inkflow-release`, defined in `.codex/agents/inkflow-release.toml`. Pass only the checkout and skill paths, version decision, authorization limits and recovery references in a fresh context. Wait for the result or blocker without duplicating execution. The executor follows this skill itself and does not delegate again.
+The current task executes an authorized release or recovery directly and retains its state through completion or a genuine blocker. Do not delegate release execution to a subagent or split mutating release steps across agents. Run state-dependent operations sequentially.
 
-If the tool cannot select a custom agent by name, use the TOML's model, reasoning effort and instructions explicitly. If that is also unsupported, report the limitation instead of silently using another model.
+Treat required sandbox, Keychain, signing and network elevation as an execution mechanism within the authorization above, not as a new product decision. When the environment requires approval, submit the narrow tool escalation directly with the specific command, artifact and destination; do not first ask the same question in chat. Reuse an already approved narrow command prefix when available, and group only operations whose scope and failure state remain clear. An unavoidable host or macOS permission prompt may still require user action.
+
+Pause only when the version decision is missing; the repository, account or destination cannot be verified; `main` diverges; credentials are missing or invalid; a required verification or notarization gate fails; source or artifact provenance is uncertain; an existing tag, Release or asset conflicts; or continuation would require a force update, history rewrite, remote overwrite, repository visibility change, credential creation, installation or another action outside the authorization above. A narrower user instruction or denied elevation also blocks the affected action. Do not convert ordinary stage transitions, recovery of a retained submission, or already authorized uploads into additional confirmation gates.
 
 ## Local configuration
 
@@ -27,7 +29,7 @@ The default `INKFLOW_NOTARY_AUTH=keychain` retains the existing profile behavior
 
 `notary.sh` closes stdin and rejects authentication flags in its arguments; configure authentication through the plist/environment. It can run without a signing identity for standalone notarization checks. `check-credentials.sh` uses the same wrapper for its authentication request. Validate API-key authentication with `notary.sh history` and a known submission's `info` before submitting. For unattended acceptance, run these after the user locks the screen, then submit a test artifact, retain its Submission ID, and verify acceptance/stapling without unlocking. An unlocked test alone is not locked-session acceptance. Developer ID signing remains a separate Keychain concern.
 
-Use elevated execution for Keychain/signing/network checks if the agent sandbox blocks access; an empty sandbox identity list is not proof that the host lacks certificates. Never dump credentials to diagnose authentication. Configuration loading is local; `check-credentials.sh` performs a read-only Apple authentication request. The `notary.sh` wrapper loads the same configuration for every submit/info/log/history call.
+Use the elevation policy above for Keychain/signing/network checks if the agent sandbox blocks access; an empty sandbox identity list is not proof that the host lacks certificates. Never dump credentials to diagnose authentication. Configuration loading is local; `check-credentials.sh` performs a read-only Apple authentication request. The `notary.sh` wrapper loads the same configuration for every submit/info/log/history call.
 
 ## 1. Preflight and version confirmation
 
