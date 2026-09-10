@@ -367,7 +367,8 @@ struct EngineTests {
 
     @MainActor static func missingEnglishResources(shared: String, user: String) throws {
         for resource in ["inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                         "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua"] {
+                         "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
+                         "lua/inkflow_ai_learning.lua"] {
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-missing-\(UUID().uuidString)")
             try FileManager.default.copyItem(at: URL(fileURLWithPath: shared), to: copy)
             defer { try? FileManager.default.removeItem(at: copy) }
@@ -432,13 +433,14 @@ struct EngineTests {
         }
         engine.select(emailIndex)
         check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
-        for (input, expected) in [("compute", "computer"), ("comm", "community"), ("actual", "actually")] {
+        for (input, expected) in [("compute", "computer"), ("comm", "community"),
+                                  ("actual", "actual"), ("cpp", "C++"), ("macos", "macOS")] {
             type(engine, input)
             let english = allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
-            check(english.first == expected, "English frequency before exactness/length for \(input): \(english)")
+            check(english.first == expected, "Exact English code before completions for \(input): \(english)")
             check(!english.contains("compute"), "Excluded exact words cannot bypass admission")
             if input == "actual" {
-                check(english.contains("actual"), "Retain an admitted lower-frequency exact English word")
+                check(english.dropFirst().contains("actually"), "Retain frequency-ordered completions after exact English")
             }
             check(Set(english).count == english.count, "No duplicate English candidates across pages")
             engine.clear()
@@ -460,24 +462,30 @@ struct EngineTests {
             check(english.first == input, "Prefer an exact case match among English with equal source weights")
             engine.clear()
         }
-        for input in ["can", "you", "man", "woman", "time", "name", "line", "email", "bug"] {
+        for input in ["can", "you", "she", "he", "man", "bug"] {
             type(engine, input)
-            check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+            let snapshot = engine.snapshot()
+            check(snapshot.candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
                   "Chinese leads ambiguous English \(input)")
-            var selected = false
-            for _ in 0..<100 {
-                let snapshot = engine.snapshot()
-                if let index = snapshot.candidates.firstIndex(of: input) {
-                    engine.select(index)
-                    check(engine.takeCommit() == input && engine.snapshot().preedit.isEmpty)
-                    print("TRACE ambiguous English \(input) selected on page \(snapshot.page)")
-                    selected = true
-                    break
-                }
-                engine.key(0xff56)
-                if engine.snapshot().page == snapshot.page { break }
+            guard let index = snapshot.candidates.firstIndex(of: input) else {
+                check(false, "Keep exact ambiguous English on the first page: \(input) -> \(snapshot.candidates)")
+                engine.clear()
+                continue
             }
-            check(selected, "Keep ambiguous English reachable: \(input)")
+            check(index < 3, "Keep exact ambiguous English in Top-3: \(input) -> \(snapshot.candidates)")
+            engine.select(index)
+            check(engine.takeCommit() == input && engine.snapshot().preedit.isEmpty,
+                  "Select the exact displayed English candidate: \(input)")
+        }
+        for input in ["canpin", "youxi", "sheji", "hezuo"] {
+            type(engine, input)
+            let first = engine.snapshot().candidates.first ?? ""
+            check(!first.isEmpty && first.unicodeScalars.allSatisfy { $0.value > 127 },
+                  "Short-conflict handling keeps a Chinese continuation first \(input): \(engine.snapshot().candidates)")
+            check(allCandidates(engine).contains { candidate in
+                !candidate.isEmpty && candidate.unicodeScalars.allSatisfy { $0.value > 127 }
+            }, "Short-conflict handling keeps Chinese continuations reachable: \(input)")
+            engine.clear()
         }
         type(engine, "D")
         check(engine.snapshot().candidates.first == "D", "Keep intentional uppercase letter input")
@@ -492,7 +500,7 @@ struct EngineTests {
         check(engine.snapshot().candidates.first == "餐", "Context still ranks Chinese before colliding English")
         check(allCandidates(engine).contains("can"), "Context keeps admitted English reachable")
         engine.clear()
-        for (input, expected) in [("actual", "actually"), ("zhefenoffer", "这份offer")] {
+        for (input, expected) in [("actual", "actual"), ("zhefenoffer", "这份offer")] {
             engine.setPrecedingText("准备午")
             type(engine, input)
             let candidates = engine.snapshot().candidates
@@ -598,7 +606,8 @@ struct EngineTests {
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
                      "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
+                     "lua/inkflow_ai_learning.lua",
                      "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
             try files.createSymbolicLink(at: directory.appendingPathComponent(name),
                                          withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))

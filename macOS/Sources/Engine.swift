@@ -115,7 +115,8 @@ final class IFEngine {
         let shared = configuration.shared.path
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
-                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_ai_learning.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
+                     "lua/inkflow_ai_learning.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
                      "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
                     (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {

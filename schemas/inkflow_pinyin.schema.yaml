@@ -19,7 +19,7 @@ engine:
   processors: [ascii_composer, key_binder, speller, punctuator, selector, navigator, express_editor]
   segmentors: [ascii_segmentor, abc_segmentor, punct_segmentor, fallback_segmentor]
   translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_ai_learning, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english]
-  filters: [simplifier@emoji_suggestion, simplifier@traditional, uniquifier]
+  filters: [simplifier@emoji_suggestion, simplifier@traditional, uniquifier, lua_filter@*inkflow_short_conflict]
 emoji_suggestion:
   opencc_config: inkflow_emoji.json
   option_name: emoji_suggestion
@@ -30,6 +30,8 @@ traditional:
   option_name: traditional
   tips: none
   excluded_types: [user_table, simplified]
+inkflow_short_conflict:
+  inputs: [can, you, she, he, man, bug]
 custom_phrase:
   dictionary: ""
   user_dict: inkflow_custom_phrases_empty

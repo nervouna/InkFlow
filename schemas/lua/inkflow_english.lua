@@ -13,20 +13,26 @@ function M.func(input, segment, env)
   if not input:match("^[A-Za-z]+$") then return end
   if env.input ~= input then
     local entries, seen = {}, {}
-    -- Short prefixes have tens of thousands of matches. Keep exact words there;
-    -- from three letters, inspect every match so a frequent long word is not lost.
-    env.memory:dict_lookup(input, #input >= 3, 0)
-    for entry in env.memory:iter_dict() do
-      local previous = seen[entry.text]
-      if not previous then
-        previous = { text = entry.text, weight = entry.weight }
-        seen[entry.text] = previous
-        entries[#entries + 1] = previous
-      elseif entry.weight > previous.weight then
-        previous.weight = entry.weight
+    local function collect(completion)
+      env.memory:dict_lookup(input, completion, 0)
+      for entry in env.memory:iter_dict() do
+        local previous = seen[entry.text]
+        if not previous then
+          previous = { text = entry.text, weight = entry.weight, exact = not completion }
+          seen[entry.text] = previous
+          entries[#entries + 1] = previous
+        else
+          if entry.weight > previous.weight then previous.weight = entry.weight end
+          if not completion then previous.exact = true end
+        end
       end
     end
+    -- Exact code lookup is separate from completion lookup so aliases such as
+    -- cpp -> C++ rank with exact words. One- and two-letter inputs stay exact-only.
+    collect(false)
+    if #input >= 3 then collect(true) end
     table.sort(entries, function(a, b)
+      if a.exact ~= b.exact then return a.exact end
       if a.weight ~= b.weight then return a.weight > b.weight end
       if (a.text == input) ~= (b.text == input) then return a.text == input end
       return a.text < b.text
