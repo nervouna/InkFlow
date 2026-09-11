@@ -73,8 +73,15 @@ private actor TestGate {
     }
 
     @MainActor static func qualityAcrossReplacement(root: URL, template: IFDictionaryDescriptor) async throws {
+        // This lifecycle fixture needs valid synthetic identity; unknown metadata is
+        // intentionally rejected by the store and is covered in QualityStoreTests.
+        let metadata = QualityBuildMetadata(sourceRevision: "activation-fixture",
+            sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
+            bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
+            rankingSourceSHA256: String(repeating: "d", count: 64), rankingResourcesSHA256: String(repeating: "e", count: 64),
+            appVersion: "test", appBuild: "1")
         let store = QualityStore(url: root.appendingPathComponent("replacement-quality.sqlite3"),
-                                 engineVersion: IFEngine.version, buildMetadata: .unknown)
+                                 engineVersion: IFEngine.version, buildMetadata: metadata)
         IFEngine.configureQualityRecording(store)
         defer { IFEngine.stop(); IFEngine.configureQualityRecording(nil) }
         let configuration = try config(template.sharedData, cache: template.cache,
@@ -86,7 +93,7 @@ private actor TestGate {
         type(existing, "nihao"); existing.key(32); check(existing.takeCommit() == "你好")
         await store.flush()
         let initialWrites = store.statistics().written
-        check(initialWrites > 0)
+        check(initialWrites > 0, "Replacement fixture must persist initial evidence: \(store.statistics())")
 
         try IFEngine.replace(with: configuration, restoring: configuration, confirm: {})
         check(existing.qualityRecorder === recorder)
