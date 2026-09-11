@@ -23,4 +23,26 @@ fi
 build/quality-build-metadata "$PWD" "$app"
 [[ "$(plutil -extract bundledResourcesSHA256 raw "$fixture/first.json")" != "$(plutil -extract bundledResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 [[ "$source_hash" == "$(plutil -extract sourceTreeSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-echo 'PASS quality build metadata: deterministic hashes, source identity, changed resource detection'
+identity_repo="$fixture/identity-repo"
+git clone --quiet --shared --no-hardlinks "$PWD" "$identity_repo"
+tool="$PWD/build/quality-build-metadata"
+before=$($tool "$identity_repo" --build-snapshot)
+[[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
+printf 'documentation only\n' >> "$identity_repo/README.md"
+[[ "$($tool "$identity_repo" --build-snapshot)" == "$before" ]]
+mkdir "$fixture/originals"
+cp "$identity_repo/macOS/Sources/Engine.swift" "$fixture/originals/Engine.swift"
+cp "$identity_repo/macOS/scripts/quality-metadata.sh" "$fixture/originals/quality-metadata.sh"
+cp "$identity_repo/macOS/scripts/build-dictionary-generator.sh" "$fixture/originals/build-dictionary-generator.sh"
+cp "$identity_repo/macOS/DictionaryTool/main.swift" "$fixture/originals/main.swift"
+printf 'build input\n' >> "$identity_repo/macOS/Sources/Engine.swift"
+[[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh macOS/DictionaryTool/main.swift; do
+  cp "$fixture/originals/Engine.swift" "$identity_repo/macOS/Sources/Engine.swift"
+  cp "$fixture/originals/quality-metadata.sh" "$identity_repo/macOS/scripts/quality-metadata.sh"
+  cp "$fixture/originals/build-dictionary-generator.sh" "$identity_repo/macOS/scripts/build-dictionary-generator.sh"
+  cp "$fixture/originals/main.swift" "$identity_repo/macOS/DictionaryTool/main.swift"
+  printf '\nchanged build closure\n' >> "$identity_repo/$changed"
+  [[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+done
+echo 'PASS quality build metadata: deterministic build-input/resources hashes, clean/dirty revision, docs excluded'

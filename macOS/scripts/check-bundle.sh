@@ -1,7 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-[[ $# -le 1 ]] || { echo "Usage: check-bundle.sh [app]" >&2; exit 2; }
+mode=deep
+if [[ "${1:-}" == --fast || "${1:-}" == --deep ]]; then mode=${1#--}; shift; fi
+[[ $# -le 1 ]] || { echo "Usage: check-bundle.sh [--fast|--deep] [app]" >&2; exit 2; }
 app="${1:-$PWD/build/InkFlow.app}"
 bash macOS/scripts/quality-metadata.sh "$app" --verify
 plutil -lint "$app/Contents/Info.plist"
@@ -12,15 +14,6 @@ icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 [[ "$icon" == InputMethod.icns && -s "$app/Contents/Resources/$icon" ]]
 app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
-cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
-cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
-bash macOS/scripts/prepare-rime.sh build/expected-rime
-diff -qr build/expected-rime "$app/Contents/Resources/Rime"
-bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
-for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt rime-selected.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
-  cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
-done
-
 lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 [[ -s "$lua_plugin" ]]
 for plugin in "$app/Contents/Frameworks/rime-plugins"/*; do
@@ -38,12 +31,24 @@ for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/MacOS/InkFlowDictiona
     esac
   done
 done
+if [[ -f "$app/Contents/_CodeSignature/CodeResources" ]]; then codesign --verify --deep --strict "$app"; fi
+echo 'PASS bundle fast: plist, arm64, dylib closure, resource summary and signed structure when present'
+[[ "$mode" == deep ]] || exit 0
+
+cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
+cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
+bash macOS/scripts/prepare-rime.sh build/expected-rime
+diff -qr build/expected-rime "$app/Contents/Resources/Rime"
+bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
+for license in easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt rime-selected.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
+  cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
+done
 source macOS/scripts/swift-test.sh
 build_swift_test engine-tests build/bundle-engine-tests
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 DYLD_LIBRARY_PATH="$app/Contents/Frameworks" build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
-echo 'PASS bundle: arm64, plist, system/bundled dylib and Lua plugin closure, bundled dictionary transcript'
+echo 'PASS bundle deep: rebuilt resources, packaged cache and real bundled-engine transcript'
 
 build_swift_test metadata-tests build/metadata-tests
 build/metadata-tests "$app"

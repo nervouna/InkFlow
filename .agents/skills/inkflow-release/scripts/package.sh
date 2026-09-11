@@ -21,7 +21,7 @@ app="$release_dir/payload/InkFlow.app"
 dmg="$release_dir/InkFlow-$version-$build-arm64.dmg"
 signing=(--force --options runtime --timestamp --sign "$identity")
 verify_app() {
-  local target=$1 expected_id=$2 metadata entitlements
+  local target=$1 expected_id=$2 metadata entitlements expected_entitlements
   codesign --verify --deep --strict --verbose=2 "$target"
   metadata=$(codesign -dvvv "$target" 2>&1)
   printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Unexpected signing team.'
@@ -33,17 +33,30 @@ verify_app() {
   codesign --display --entitlements - --xml "$target" > "$entitlements"
   plutil -lint "$entitlements" >/dev/null
   [[ $(plutil -extract com.apple.security.get-task-allow raw "$entitlements" 2>/dev/null || true) != true ]] || fail 'Debug entitlement in release app.'
+  expected_entitlements=$(mktemp "$release_dir/expected-entitlements.XXXXXX")
+  cp macOS/DeveloperID.entitlements "$expected_entitlements"
+  plutil -convert xml1 "$entitlements" "$expected_entitlements"
+  cmp -s "$expected_entitlements" "$entitlements" || fail 'Unexpected release entitlements.'
+  rm -f "$entitlements" "$expected_entitlements"
 }
 if [[ "$phase" == prepare ]]; then
   [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || fail 'Release output already exists; inspect it before retrying.'
   source_app="$PWD/build/InkFlow.app"
   cmp macOS/Info.plist "$source_app/Contents/Info.plist"
   [[ -x "$source_app/Contents/MacOS/InkFlow" ]] || fail 'Missing built executable.'
+  verified_installer="$PWD/build/release-verification/InkFlowInstaller"
+  verified_icon="$PWD/build/release-verification/AppIcon.icns"
+  installer_receipt="$PWD/build/release-verification/installer.plist"
+  bash macOS/scripts/release-receipt.sh verify "$verified_installer" "$verified_icon" "$installer_receipt"
   bash .agents/skills/inkflow-release/scripts/check-credentials.sh
-  bash macOS/scripts/check-bundle.sh
+  INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast
   mkdir -p "$(dirname "$release_dir")"
   mkdir "$release_dir"
   mkdir "$release_dir/payload"
+  mkdir "$release_dir/verified"
+  cp "$verified_installer" "$release_dir/verified/InkFlowInstaller"
+  cp "$verified_icon" "$release_dir/verified/AppIcon.icns"
+  cp "$installer_receipt" "$release_dir/verified/installer.plist"
   ditto "$source_app" "$app"
   find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
   for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
@@ -57,13 +70,17 @@ if [[ "$phase" == prepare ]]; then
 fi
 [[ -d "$release_dir" && ! -L "$release_dir" && -f "$release_dir/inputmethod-submission.zip" && -d "$app" && ! -L "$app" ]] || fail 'Missing prepared payload; run prepare first or inspect the interrupted attempt.'
 [[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Final DMG already exists; preserve it and inspect/resume notarization.'
+verified_installer="$release_dir/verified/InkFlowInstaller"
+verified_icon="$release_dir/verified/AppIcon.icns"
+installer_receipt="$release_dir/verified/installer.plist"
+bash macOS/scripts/release-receipt.sh verify "$verified_installer" "$verified_icon" "$installer_receipt"
 # Prevent concurrent finish attempts. An interrupted lock requires explicit inspection/removal.
 mkdir "$release_dir/finishing" 2>/dev/null || fail 'Finish already running or interrupted; inspect finishing lock.'
 trap 'rmdir "$release_dir/finishing"' EXIT
 verify_app "$app" io.damao.inputmethod.inkflow
 cmp macOS/Info.plist "$app/Contents/Info.plist"
 xcrun stapler validate "$app"
-bash macOS/scripts/check-bundle.sh "$app"
+INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast "$app"
 bash .agents/skills/inkflow-release/scripts/check-credentials.sh
 scratch=$(mktemp -d "$release_dir/assembly.XXXXXX")
 printf 'Retained assembly: %s\n' "$scratch"
@@ -71,8 +88,9 @@ printf 'Retained assembly: %s\n' "$scratch"
 ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/InkFlow.zip"
 mkdir "$scratch/stage"
 installer="$scratch/stage/InkFlow Installer.app"
-bash macOS/scripts/build-installer.sh "$scratch/InkFlow.zip" "$installer"
+bash macOS/scripts/build-installer.sh "$scratch/InkFlow.zip" "$installer" "$verified_installer" "$verified_icon"
 binary="$installer/Contents/MacOS/InkFlowInstaller"
+bash macOS/scripts/release-receipt.sh verify "$binary" "$installer/Contents/Resources/AppIcon.icns" "$installer_receipt"
 xcrun lipo "$binary" -verify_arch arm64
 otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
   case "$dependency" in

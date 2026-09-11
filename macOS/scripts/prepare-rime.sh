@@ -1,11 +1,39 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-destination=${1:?Usage: prepare-rime.sh DESTINATION}
+requested_destination=${1:?Usage: prepare-rime.sh DESTINATION}
 source macOS/config/english.conf
-mkdir -p "$destination"
-staging=$(mktemp -d "$destination/.english.XXXXXX")
-trap 'rm -rf "$staging"' EXIT
+mkdir -p build/rime-cache
+manifest=$(mktemp "${TMPDIR:-/tmp}/inkflow-rime-inputs.XXXXXX")
+cache_build=""; delivery=""; previous=""; staging=""
+cleanup() {
+  rm -f "$manifest"
+  [[ -z "$cache_build" ]] || rm -rf "$cache_build"
+  [[ -z "$delivery" ]] || rm -rf "$delivery"
+  [[ -z "$previous" ]] || rm -rf "$previous"
+  [[ -z "$staging" ]] || rm -rf "$staging"
+}
+trap cleanup EXIT
+for input_root in Package.swift schemas macOS/config macOS/Data macOS/DictionaryTool macOS/Sources \
+  build/deps/rime-pinyin-simp-* build/deps/rime-easy-en-* build/dictionary-sources; do
+  [[ -e "$input_root" ]] || continue
+  find "$input_root" -type f -print
+done | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done > "$manifest"
+for file in build/deps/emoji.txt macOS/scripts/prepare-rime.sh macOS/scripts/prepare-spelling.sh \
+  macOS/scripts/prepare-chinese.sh macOS/scripts/build-dictionary-generator.sh macOS/scripts/swift-package.sh; do
+  [[ ! -f "$file" ]] || shasum -a 256 "$file" >> "$manifest"
+done
+input_digest=$(shasum -a 256 "$manifest" | awk '{print $1}')
+cache="$PWD/build/rime-cache/$input_digest"
+if [[ ! -f "$cache/complete" || ! -d "$cache/content" ]]; then
+  cache_build=$(mktemp -d "$PWD/build/rime-cache/build.$input_digest.XXXXXX")
+  destination="$cache_build/content"
+  mkdir -p "$destination"
+  staging=$(mktemp -d "$destination/.english.XXXXXX")
+else
+  destination=""
+fi
+if [[ -n "$destination" ]]; then
 # Join observed frequencies and explicit overrides by exact displayed text. Never
 # estimate an unknown word or fall back to the upstream dictionary ordinal weight.
 LC_ALL=C awk -v min_zipf="$ENGLISH_MIN_ZIPF" -v weight_scale="$ENGLISH_WEIGHT_SCALE" \
@@ -105,3 +133,24 @@ cp schemas/opencc/* build/deps/emoji.txt "$destination/opencc/"
 bash macOS/scripts/prepare-chinese.sh "$staging/chinese"
 cp "$staging/chinese/"* "$destination/"
 mv "$staging/easy_en.dict.yaml" "$staging/inkflow_mixed.dict.yaml" "$destination/"
+rm -rf "$staging"
+staging=""
+touch "$cache_build/complete"
+mv "$cache_build" "$cache"
+cache_build=""
+fi
+
+mkdir -p "$(dirname "$requested_destination")"
+delivery=$(mktemp -d "$(dirname "$requested_destination")/.inkflow-rime.XXXXXX")
+ditto "$cache/content" "$delivery"
+if [[ -e "$requested_destination" ]]; then
+  previous=$(mktemp -d "$(dirname "$requested_destination")/.inkflow-rime-previous.XXXXXX")
+  rmdir "$previous"
+  mv "$requested_destination" "$previous"
+fi
+if ! mv "$delivery" "$requested_destination"; then
+  [[ -z "$previous" || -e "$requested_destination" ]] || mv "$previous" "$requested_destination"
+  exit 1
+fi
+delivery=""
+if [[ -n "$previous" ]]; then rm -rf "$previous"; previous=""; fi

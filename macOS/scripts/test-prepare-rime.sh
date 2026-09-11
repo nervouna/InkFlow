@@ -37,8 +37,14 @@ test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' m
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/macOS/config" "$fixture/macOS/Data" "$fixture/schemas" \
+  "$fixture/macOS/DictionaryTool" "$fixture/macOS/Sources" \
   "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
 cp macOS/scripts/prepare-rime.sh macOS/scripts/prepare-spelling.sh "$fixture/macOS/scripts/"
+printf 'fixture package\n' > "$fixture/Package.swift"
+printf 'fixture entry\n' > "$fixture/macOS/DictionaryTool/main.swift"
+printf 'fixture generator implementation\n' > "$fixture/macOS/Sources/DictionaryGenerator.swift"
+printf 'fixture build generator\n' > "$fixture/macOS/scripts/build-dictionary-generator.sh"
+printf 'fixture SwiftPM wrapper\n' > "$fixture/macOS/scripts/swift-package.sh"
 : > "$fixture/macOS/Data/english-technology.tsv"
 # Isolate English policy fixtures from the independently tested Chinese generator.
 # This stub exists only inside this test's temporary repository.
@@ -48,6 +54,9 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p "$1"
 cp build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml "$1/"
+shasum -a 256 Package.swift macOS/DictionaryTool/main.swift macOS/Sources/DictionaryGenerator.swift \
+  macOS/scripts/build-dictionary-generator.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}' \
+  > "$1/dictionary-manifest.json"
 STUB
 cp -R schemas/. "$fixture/schemas/"
 printf '中文\tzhong wen\t1000\n' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
@@ -130,6 +139,19 @@ expect_failure() {
 configure 4.0 250000 100
 : > "$fixture/macOS/config/english-overrides.tsv"
 generate
+[[ -z $(find "$fixture/output" -name '.english.*' -print) ]]
+cache_count=$(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ')
+generate
+[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]]
+receipt=$(cat "$fixture/output/dictionary-manifest.json")
+for changed in macOS/Sources/DictionaryGenerator.swift macOS/DictionaryTool/main.swift macOS/scripts/build-dictionary-generator.sh; do
+  printf '\nchanged closure\n' >> "$fixture/$changed"
+  generate
+  [[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') -eq $((cache_count + 1)) ]]
+  [[ $(cat "$fixture/output/dictionary-manifest.json") != "$receipt" ]]
+  sed -i '' '$d' "$fixture/$changed"
+  cache_count=$((cache_count + 1))
+done
 cat > "$fixture/expected.tsv" <<'DATA'
 email	email	1170000
 Email	Email	1170000

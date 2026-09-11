@@ -6,9 +6,17 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-package-tests.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"
 scripts="$repo/.agents/skills/inkflow-release/scripts"
-mkdir -p "$scripts" "$repo/macOS/scripts" "$repo/build/InkFlow.app/Contents/MacOS" "$fixture/bin"
+mkdir -p "$scripts" "$repo/macOS/scripts" "$repo/macOS/Installer" "$repo/macOS/Shared" \
+  "$repo/build/InkFlow.app/Contents/MacOS" "$repo/build/release-verification" "$fixture/bin"
 cp "$root/.agents/skills/inkflow-release/scripts/"{package,release-config}.sh "$scripts/"
 cp "$root/macOS/Info.plist" "$repo/macOS/Info.plist"
+cp "$root/macOS/DeveloperID.entitlements" "$repo/macOS/DeveloperID.entitlements"
+printf 'fixture package\n' > "$repo/Package.swift"
+printf 'fixture installer source\n' > "$repo/macOS/Installer/AppMain.swift"
+printf 'fixture shared source\n' > "$repo/macOS/Shared/InputSourceManager.swift"
+printf 'fixture swift package script\n' > "$repo/macOS/scripts/swift-package.sh"
+printf 'verified fixture icon\n' > "$repo/build/release-verification/AppIcon.icns"
+printf 'mutable build icon\n' > "$repo/build/AppIcon.icns"
 cp "$root/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
 touch "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 chmod +x "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
@@ -22,16 +30,25 @@ echo credentials >> "$EVENTS"
 exit "${CREDENTIAL_FAILURE:-0}"
 STUB
 cat > "$repo/macOS/scripts/check-bundle.sh" <<'STUB'
-echo bundle >> "$EVENTS"
+[[ "${INKFLOW_SKIP_SWIFTPM_BUILD:-0}" == 1 ]] || exit 88
+echo "bundle:$*" >> "$EVENTS"
 exit "${BUNDLE_FAILURE:-0}"
+STUB
+cat > "$repo/macOS/scripts/build-icon.sh" <<'STUB'
+echo build-icon >> "$EVENTS"
+exit 98
 STUB
 cat > "$repo/macOS/scripts/build-installer.sh" <<'STUB'
 echo build-installer >> "$EVENTS"
+[[ $# == 4 && -x "$3" && -f "$4" ]] || exit 97
 mkdir -p "$2/Contents/MacOS" "$2/Contents/Resources/Payload"
 cp "$1" "$2/Contents/Resources/Payload/InkFlow.zip"
 cp macOS/Info.plist "$2/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string io.damao.inkflow.installer "$2/Contents/Info.plist"
-cat > "$2/Contents/MacOS/InkFlowInstaller" <<'PROBE'
+cp "$3" "$2/Contents/MacOS/InkFlowInstaller"
+cp "$4" "$2/Contents/Resources/AppIcon.icns"
+STUB
+cat > "$repo/build/release-verification/InkFlowInstaller" <<'PROBE'
 #!/bin/bash
 [[ $# == 1 && "$1" == --check-payload ]] || exit 99
 echo check-payload >> "$EVENTS"
@@ -39,7 +56,15 @@ unzip -t "$(dirname "$0")/../Resources/Payload/InkFlow.zip" >/dev/null
 [[ $? == 0 ]] || exit 44
 exit "${PAYLOAD_FAILURE:-0}"
 PROBE
-chmod +x "$2/Contents/MacOS/InkFlowInstaller"
+chmod +x "$repo/build/release-verification/InkFlowInstaller"
+cat > "$repo/macOS/scripts/release-receipt.sh" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+digest=$(shasum -a 256 Package.swift macOS/Info.plist macOS/Installer/AppMain.swift \
+  macOS/Shared/InputSourceManager.swift macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}')
+binary=$(shasum -a 256 "$2" | awk '{print $1}')
+icon=$(shasum -a 256 "$3" | awk '{print $1}')
+[[ "$1" == verify && -f "$4" && "$(sed -n '1p' "$4")" == "$digest" && "$(sed -n '2p' "$4")" == "$binary" && "$(sed -n '3p' "$4")" == "$icon" ]]
 STUB
 cat > "$fixture/bin/codesign" <<'STUB'
 #!/bin/bash
@@ -55,7 +80,13 @@ case "$1" in
     [[ "$last" != *'InkFlow Installer.app' ]] || id=io.damao.inkflow.installer
     printf 'TeamIdentifier=%s\nAuthority=Developer ID Application: Fixture\nIdentifier=%s\n' "${TEAM:-T7976FL2LP}" "$id"
     ;;
-  --display) printf '<?xml version="1.0"?><plist version="1.0"><dict/></plist>\n' ;;
+  --display)
+    if [[ "${UNEXPECTED_ENTITLEMENT:-0}" == 1 ]]; then
+      printf '<?xml version="1.0"?><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>\n'
+    else
+      printf '<?xml version="1.0"?><plist version="1.0"><dict/></plist>\n'
+    fi
+    ;;
   *) echo "sign:$last" >> "$EVENTS" ;;
 esac
 STUB
@@ -95,6 +126,15 @@ else
 fi
 STUB
 chmod +x "$fixture/bin/"*
+chmod +x "$repo/macOS/scripts/release-receipt.sh"
+(
+  cd "$repo"
+  shasum -a 256 Package.swift macOS/Info.plist macOS/Installer/AppMain.swift macOS/Shared/InputSourceManager.swift \
+    macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}' \
+      > build/release-verification/installer.plist
+  shasum -a 256 build/release-verification/InkFlowInstaller | awk '{print $1}' >> build/release-verification/installer.plist
+  shasum -a 256 build/release-verification/AppIcon.icns | awk '{print $1}' >> build/release-verification/installer.plist
+)
 # Prove the volume-content assertions reject an extra root entry.
 mkdir -p "$fixture/invalid-volume/InkFlow Installer.app"
 touch "$fixture/invalid-volume/安装说明.txt" "$fixture/invalid-volume/unexpected.txt"
@@ -122,6 +162,8 @@ reject prepare
 cp "$repo/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
 package prepare
 [[ -f "$output/inputmethod-submission.zip" && ! -e "$dmg" ]]
+[[ $(grep -c '^bundle:--fast' "$EVENTS") == 1 ]]
+[[ $(grep -c '^bundle:--deep' "$EVENTS") == 0 ]]
 if grep -q 'build-installer\|dmg\|staple-validate' "$EVENTS"; then exit 1; fi
 # Nested signing order is preserved.
 sed -n 's/^sign:.*\///p' "$EVENTS" > "$fixture/sign-order"
@@ -132,8 +174,20 @@ reject prepare
 reject finish # Not notarized/stapled, so no assembly.
 [[ -z $(find "$output" -name 'assembly.*' -print) ]]
 touch "$output/payload/InkFlow.app/ticket-fixture"
+verified_icon_sha=$(shasum -a 256 "$output/verified/AppIcon.icns" | awk '{print $1}')
+printf 'tampered build icon\n' > "$repo/build/AppIcon.icns"
+rm "$repo/build/AppIcon.icns"
+for changed in macOS/Installer/AppMain.swift Package.swift macOS/scripts/build-installer.sh; do
+  cp "$repo/$changed" "$fixture/original"
+  printf '\nchanged after prepare\n' >> "$repo/$changed"
+  : > "$EVENTS"
+  reject finish
+  ! grep -q 'sign:\|build-installer\|^dmg$' "$EVENTS"
+  cp "$fixture/original" "$repo/$changed"
+done
 SIGNATURE_FAILURE=inner reject finish
 TEAM=WRONGTEAM reject finish
+UNEXPECTED_ENTITLEMENT=1 reject finish
 plutil -replace CFBundleVersion -string 999 "$output/payload/InkFlow.app/Contents/Info.plist"
 reject finish
 cp "$repo/macOS/Info.plist" "$output/payload/InkFlow.app/Contents/Info.plist"
@@ -156,11 +210,17 @@ rmdir "$output/finishing"
 package finish
 [[ -f "$dmg" ]]
 shasum -c "$fixture/submission.sha"
+[[ $(grep -c '^bundle:--fast' "$EVENTS") == 1 ]]
+[[ $(grep -c '^bundle:--deep' "$EVENTS") == 0 ]]
+! grep -q 'swiftpm\|swift build' "$EVENTS"
+! grep -q 'build-icon' "$EVENTS"
 # The fresh embedded archive contains the post-submission ticket.
 [[ $(grep -c '^Retained assembly: ' "$fixture/result.log") == 1 ]]
 assembly=$(sed -n 's/^Retained assembly: //p' "$fixture/result.log")
 [[ -d "$assembly" ]]
 zip="$assembly/stage/InkFlow Installer.app/Contents/Resources/Payload/InkFlow.zip"
+assembled_icon="$assembly/stage/InkFlow Installer.app/Contents/Resources/AppIcon.icns"
+[[ $(shasum -a 256 "$assembled_icon" | awk '{print $1}') == "$verified_icon_sha" ]]
 unzip -l "$zip" > "$fixture/archive-list"
 grep -q 'InkFlow.app/ticket-fixture' "$fixture/archive-list"
 awk '/staple-validate/{s=NR} /build-installer/{b=NR} /check-payload/{p=NR} /^dmg$/{d=NR} END{exit !(s<b && b<p && p<d)}' "$EVENTS"

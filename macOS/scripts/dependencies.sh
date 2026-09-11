@@ -14,6 +14,21 @@ fetch librime.tar.bz2 11d8dc663c6ec06d5ccb6111ba664a9e7b631b703ac6acd07cffbac664
 fetch pinyin.tar.gz 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf https://codeload.github.com/rime/rime-pinyin-simp/tar.gz/0c6861ef7420ee780270ca6d993d18d4101049d0
 fetch english.tar.gz 59226ae1bb6da00d8808a0094439271225ac4f533d30cf9150ac482383895461 https://codeload.github.com/BlindingDark/rime-easy-en/tar.gz/54a4a07289412efc54134092c0d945f895a71ed3
 fetch emoji.txt 09e29b83ad367ea273e9ab438e572a7621649d93b36924ead28852762d2898b1 https://raw.githubusercontent.com/iDvel/rime-ice/fbb516b2786e4d5444383706d13c31c2e4d10c08/opencc/emoji.txt
+stamp=build/deps/.extracted.sha256
+fingerprint=$(printf '%s\n' \
+  'librime 11d8dc663c6ec06d5ccb6111ba664a9e7b631b703ac6acd07cffbac664021850' \
+  'pinyin 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf' \
+  'english 59226ae1bb6da00d8808a0094439271225ac4f533d30cf9150ac482383895461' | shasum -a 256 | awk '{print $1}')
+outputs_valid=false
+if [[ -f build/deps/dist/lib/librime.1.17.0.dylib && -f build/deps/dist/lib/rime-plugins/librime-lua.dylib ]] && \
+   compgen -G 'build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml' >/dev/null && \
+   compgen -G 'build/deps/rime-easy-en-*/easy_en.dict.yaml' >/dev/null; then outputs_valid=true; fi
+if [[ "$outputs_valid" == true && -f "$stamp" && "$(cat "$stamp")" == "$fingerprint" ]]; then
+  echo 'Dependencies already extracted.'
+  exit 0
+fi
 tar -xjf build/deps/librime.tar.bz2 -C build/deps
 tar -xzf build/deps/pinyin.tar.gz -C build/deps
 tar -xzf build/deps/english.tar.gz -C build/deps
+printf '%s\n' "$fingerprint" > "$stamp.part"
+mv "$stamp.part" "$stamp"

@@ -3,7 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 app="${1:-$PWD/build/InkFlow.app}"
 source macOS/scripts/swift-package.sh
-build_swift_product quality-build-metadata build/quality-build-metadata debug
+if [[ "${INKFLOW_SKIP_SWIFTPM_BUILD:-0}" != 1 ]]; then
+  build_swift_product quality-build-metadata build/quality-build-metadata debug
+fi
+[[ -x build/quality-build-metadata ]] || { echo 'Missing quality metadata tool; run build.sh first.' >&2; exit 1; }
 if [[ "${2:-}" == --verify ]]; then
   build/quality-build-metadata "$PWD" "$app" --verify
 else
