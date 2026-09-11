@@ -1,5 +1,8 @@
 import Foundation
 import CryptoKit
+#if SWIFT_PACKAGE
+import InkFlowCore
+#endif
 
 /// Build-time only: stamps actual working-tree bytes and the resources copied into this bundle.
 @main
@@ -38,14 +41,19 @@ struct QualityBuildMetadataTool {
         let revision = String(decoding: try git(["rev-parse", "HEAD"], root: root), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let dirty = try !git(["status", "--porcelain", "--untracked-files=normal"], root: root).isEmpty
-        let metadata = QualityBuildMetadata(sourceRevision: revision, sourceTreeSHA256: try digest(paths, root: root),
-            sourceDirty: dirty, bundledResourcesSHA256: try digest(files, root: resources), appVersion: version, appBuild: build)
+        let sourceTreeSHA256 = try digest(paths, root: root)
+        let bundledResourcesSHA256 = try digest(files, root: resources)
         if verify {
-            let saved = try QualityJSON.decoder().decode(QualityBuildMetadata.self, from: Data(contentsOf: output))
-            guard saved == metadata else { throw Failure("Quality build metadata does not match current source and bundled resources") }
+            guard try QualityBuildMetadataAccess.matches(Data(contentsOf: output), sourceRevision: revision,
+                sourceTreeSHA256: sourceTreeSHA256, sourceDirty: dirty,
+                bundledResourcesSHA256: bundledResourcesSHA256, appVersion: version, appBuild: build) else {
+                throw Failure("Quality build metadata does not match current source and bundled resources")
+            }
             print("PASS quality build metadata: source revision/content and actual bundled resources")
         } else {
-            try QualityJSON.encoder().encode(metadata).write(to: output, options: .atomic)
+            try QualityBuildMetadataAccess.encoded(sourceRevision: revision, sourceTreeSHA256: sourceTreeSHA256,
+                sourceDirty: dirty, bundledResourcesSHA256: bundledResourcesSHA256,
+                appVersion: version, appBuild: build).write(to: output, options: .atomic)
         }
     }
 

@@ -1,4 +1,7 @@
 import AppKit
+#if SWIFT_PACKAGE
+import CRime
+#endif
 
 struct EngineSnapshot: Equatable {
     var preedit = ""

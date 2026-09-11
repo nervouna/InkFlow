@@ -1,4 +1,10 @@
 import AppKit
+#if SWIFT_PACKAGE
+import InkFlowInputSources
+private let installerBundleID = IFPackageInputIdentity.bundleID
+#else
+private let installerBundleID = IFInputIdentity.bundleID
+#endif
 
 @MainActor protocol IFInstallerLifecycleOperations {
     func terminateOld() async throws
@@ -6,7 +12,7 @@ import AppKit
 
 @MainActor final class IFSystemLifecycle: IFInstallerLifecycleOperations {
     func terminateOld() async throws {
-        let applications = NSRunningApplication.runningApplications(withBundleIdentifier: IFInputIdentity.bundleID)
+        let applications = NSRunningApplication.runningApplications(withBundleIdentifier: installerBundleID)
         for app in applications where !app.isTerminated {
             guard app.terminate() else { throw IFInstallerError.terminationDeclined }
         }

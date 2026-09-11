@@ -1,5 +1,8 @@
 @preconcurrency import InputMethodKit
 import Carbon
+#if SWIFT_PACKAGE
+import InkFlowNative
+#endif
 
 @MainActor
 @objc(InkFlowInputController)

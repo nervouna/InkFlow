@@ -1,0 +1,162 @@
+// swift-tools-version: 6.2
+import Foundation
+import PackageDescription
+
+let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
+let dependencyRoot = "\(packageRoot)/build/deps/dist"
+let rimeLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["-L\(dependencyRoot)/lib"]),
+    .linkedLibrary("rime"),
+]
+let bundledRimeRuntime: [LinkerSetting] = [
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
+]
+let buildRimeRuntime: [LinkerSetting] = [
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(dependencyRoot)/lib"]),
+]
+let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
+let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
+let inkFlowCoreSources = [
+    "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
+    "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
+    "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
+    "Context.swift",
+    "CustomPhrases.swift", "DictionaryCoordinator.swift", "DictionaryGenerator.swift", "DictionaryModels.swift",
+    "DictionarySettings.swift", "DictionarySourceClient.swift", "DictionaryStore.swift", "DictionaryToolBootstrap.swift",
+    "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
+    "DictionaryWorkerRunner.swift", "Engine.swift", "InputController.swift", "InputPreferences.swift",
+    "PackagedCache.swift", "PackagedCacheBootstrap.swift", "QualityRecorder.swift", "QualityRecords.swift",
+    "QualityStore.swift", "Settings.swift", "SmartSettingsView.swift", "StartupDiagnostics.swift",
+]
+let installerCoreSources = [
+    "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
+    "InstallerValidation.swift", "NativeWindow.swift", "ShippedPayload.swift",
+]
+let toolSources = ["PackagedCacheTool.swift", "QualityBuildMetadata.swift", "RegisterInputSource.swift", "ai-statistics.py"]
+
+let package = Package(
+    name: "InkFlow",
+    platforms: [.macOS(.v26)],
+    products: [
+        .executable(name: "InkFlow", targets: ["InkFlowApp"]),
+        .executable(name: "InkFlowDictionaryWorker", targets: ["InkFlowDictionaryWorker"]),
+        .executable(name: "InkFlowInstaller", targets: ["InkFlowInstaller"]),
+        .executable(name: "dictionary-generator", targets: ["DictionaryGeneratorTool"]),
+        .executable(name: "register-input-source", targets: ["RegisterInputSourceTool"]),
+        .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
+        .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
+    ],
+    targets: [
+        .target(
+            name: "CRime",
+            path: "macOS/SwiftPM/CRime",
+            publicHeadersPath: "include",
+            cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])],
+            linkerSettings: rimeLinkerSettings
+        ),
+        .target(
+            name: "InkFlowNative",
+            path: "macOS/SwiftPM/InkFlowNative",
+            publicHeadersPath: "include",
+            cSettings: strictCSettings + [.unsafeFlags(["-fobjc-arc"])],
+            linkerSettings: [.linkedFramework("InputMethodKit")]
+        ),
+        .target(
+            name: "InkFlowRimeWorker",
+            dependencies: ["CRime"],
+            path: "macOS/SwiftPM/InkFlowRimeWorker",
+            publicHeadersPath: "include",
+            cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])]
+        ),
+        .target(
+            name: "InkFlowInputSources",
+            path: "macOS/Shared",
+            sources: ["InputSourceManager.swift", "RegisterInputSourceBootstrap.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: [.linkedFramework("Carbon")]
+        ),
+        .target(
+            name: "InkFlowCore",
+            dependencies: ["CRime", "InkFlowNative"],
+            path: "macOS/Sources",
+            exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
+            sources: inkFlowCoreSources,
+            swiftSettings: strictSwiftSettings + [.unsafeFlags(["-Xcc", "-I\(dependencyRoot)/include"])],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("SwiftUI"),
+                .linkedFramework("InputMethodKit"),
+                .linkedFramework("Carbon"),
+                .linkedLibrary("sqlite3"),
+            ] + rimeLinkerSettings
+        ),
+        .executableTarget(
+            name: "InkFlowApp",
+            dependencies: ["InkFlowCore"],
+            path: "macOS/Sources",
+            exclude: inkFlowCoreSources + ["NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
+            sources: ["main.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: bundledRimeRuntime
+        ),
+        .executableTarget(
+            name: "InkFlowDictionaryWorker",
+            dependencies: ["InkFlowCore", "InkFlowRimeWorker"],
+            path: "macOS/DictionaryWorker",
+            exclude: ["RimeWorker.c", "RimeWorker.h"],
+            sources: ["main.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: bundledRimeRuntime
+        ),
+        .target(
+            name: "InkFlowInstallerCore",
+            dependencies: ["InkFlowInputSources"],
+            path: "macOS/Installer",
+            exclude: ["AppMain.swift", "CoreAPI.md", "Info.plist"],
+            sources: installerCoreSources,
+            swiftSettings: strictSwiftSettings
+        ),
+        .executableTarget(
+            name: "InkFlowInstaller",
+            dependencies: ["InkFlowInstallerCore"],
+            path: "macOS/Installer",
+            exclude: installerCoreSources + ["CoreAPI.md", "Info.plist"],
+            sources: ["AppMain.swift"],
+            swiftSettings: strictSwiftSettings
+        ),
+        .executableTarget(
+            name: "DictionaryGeneratorTool",
+            dependencies: ["InkFlowCore"],
+            path: "macOS/DictionaryTool",
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: buildRimeRuntime
+        ),
+        .executableTarget(
+            name: "RegisterInputSourceTool",
+            dependencies: ["InkFlowInputSources"],
+            path: "macOS/Tools",
+            exclude: toolSources.filter { $0 != "RegisterInputSource.swift" },
+            sources: ["RegisterInputSource.swift"],
+            swiftSettings: strictSwiftSettings
+        ),
+        .executableTarget(
+            name: "QualityBuildMetadataTool",
+            dependencies: ["InkFlowCore"],
+            path: "macOS/Tools",
+            exclude: toolSources.filter { $0 != "QualityBuildMetadata.swift" },
+            sources: ["QualityBuildMetadata.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: buildRimeRuntime
+        ),
+        .executableTarget(
+            name: "PackagedCacheTool",
+            dependencies: ["InkFlowCore", "InkFlowRimeWorker"],
+            path: "macOS/Tools",
+            exclude: toolSources.filter { $0 != "PackagedCacheTool.swift" },
+            sources: ["PackagedCacheTool.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: buildRimeRuntime
+        ),
+    ],
+    swiftLanguageModes: [.v6]
+)

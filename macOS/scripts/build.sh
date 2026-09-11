@@ -14,8 +14,8 @@ cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.
 cp build/deps/dist/lib/rime-plugins/librime-lua.dylib "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
-source macOS/scripts/swift-common.sh
-rime_rpath='@executable_path/../Frameworks' build_swift "$app/Contents/MacOS/InkFlow" "${swift_sources[@]}" macOS/Sources/main.swift
+source macOS/scripts/swift-package.sh
+build_swift_product InkFlow "$app/Contents/MacOS/InkFlow" debug
 bash macOS/scripts/build-dictionary-worker.sh
 bash macOS/scripts/prepare-packaged-cache.sh "$app"
 bash macOS/scripts/quality-metadata.sh "$app"

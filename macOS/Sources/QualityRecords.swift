@@ -476,3 +476,22 @@ enum QualityJSON {
         return formatter
     }
 }
+
+#if SWIFT_PACKAGE
+package enum QualityBuildMetadataAccess {
+    package static func encoded(sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool,
+                                bundledResourcesSHA256: String, appVersion: String, appBuild: String) throws -> Data {
+        try QualityJSON.encoder().encode(QualityBuildMetadata(sourceRevision: sourceRevision,
+            sourceTreeSHA256: sourceTreeSHA256, sourceDirty: sourceDirty,
+            bundledResourcesSHA256: bundledResourcesSHA256, appVersion: appVersion, appBuild: appBuild))
+    }
+
+    package static func matches(_ data: Data, sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool,
+                                bundledResourcesSHA256: String, appVersion: String, appBuild: String) throws -> Bool {
+        try QualityJSON.decoder().decode(QualityBuildMetadata.self, from: data) ==
+            QualityBuildMetadata(sourceRevision: sourceRevision, sourceTreeSHA256: sourceTreeSHA256,
+                sourceDirty: sourceDirty, bundledResourcesSHA256: bundledResourcesSHA256,
+                appVersion: appVersion, appBuild: appBuild)
+    }
+}
+#endif
