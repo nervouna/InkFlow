@@ -25,6 +25,7 @@ if has dictionary-updates || has dictionary-activation; then
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
 fi
 if has quality; then
+  bash macOS/scripts/test-quality-identity.sh
   bash macOS/scripts/test-quality-store.sh
   bash macOS/scripts/test-quality-timing.sh
   bash macOS/scripts/test-quality-metadata.sh

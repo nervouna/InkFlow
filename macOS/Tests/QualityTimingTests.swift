@@ -4,6 +4,12 @@ import SQLite3
 @testable import InkFlowCore
 #endif
 
+private let qualityTimingBuildMetadata = QualityBuildMetadata(sourceRevision: "test",
+    sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
+    bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
+    rankingSourceSHA256: String(repeating: "d", count: 64), rankingResourcesSHA256: String(repeating: "e", count: 64),
+    appVersion: "test", appBuild: "1")
+
 private func expect(_ value: Bool, _ message: String, line: UInt = #line) {
     precondition(value, "FAIL line \(line): \(message)")
 }
@@ -20,7 +26,7 @@ private func near(_ value: Double?, _ expected: Double) -> Bool {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("quality.sqlite3")
-        let store = QualityStore(url: url, engineVersion: "synthetic", buildMetadata: .unknown)
+        let store = QualityStore(url: url, engineVersion: "synthetic", buildMetadata: qualityTimingBuildMetadata)
         let time = Time()
         let recorder = QualityRecorder(store: store, clock: time.clock)
         let revision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))

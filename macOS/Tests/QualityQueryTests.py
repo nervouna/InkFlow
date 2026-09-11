@@ -22,6 +22,9 @@ SCRIPT = ROOT / '.agents/skills/inkflow-quality-analysis/scripts/quality.py'
 ENGINE_DB = ROOT / 'build/quality-evidence/engine-controller.sqlite3'
 SOURCE = ROOT / 'macOS/Sources/QualityStore.swift'
 DDL = dict(re.findall(r'"(\w+)": """\s*(CREATE TABLE .*?)\s*"""', SOURCE.read_text(), re.S))
+DDL['config_revisions'] = re.search(
+    r'schema\["config_revisions"\] = """\s*(CREATE TABLE .*?)\s*"""',
+    SOURCE.read_text(), re.S).group(1)
 STAMP = '2026-09-06T16:00:00.000Z'
 OPS = dict(keypresses=5, pageRequests=1, pageTurns=1, candidateMoves=2, preeditEdits=0)
 
@@ -34,7 +37,7 @@ def empty_db(path):
     db = sqlite3.connect(path)
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA application_id=1229345073')
-    db.execute('PRAGMA user_version=1')
+    db.execute('PRAGMA user_version=2')
     for sql in DDL.values():
         db.execute(sql)
     return db
@@ -46,9 +49,19 @@ def fixture(path):
            build_metadata_json='{}', metric_rule_version=1,
            stats_json=json.dumps(dict(written=21, submitted=30, droppedBusy=2, droppedQueue=3,
                                       droppedOversized=1, errors=1, truncatedEnvelopes=1)))
-    for rid, fp in [('rev1', 'fingerprint-A'), ('rev2', 'fingerprint-A'), ('rev3', 'fingerprint-B')]:
+    identities = {
+        'rev1': ('fingerprint-A', 'ranking-A', 'settings-A', 'measurement-A', 'build-A'),
+        'rev2': ('fingerprint-A', 'ranking-A', 'settings-B', 'measurement-A', 'build-B'),
+        'rev3': ('fingerprint-B', 'ranking-B', 'settings-C', 'measurement-A', 'build-C'),
+    }
+    for rid, values in identities.items():
+        fp, ranking, settings, measurement, build = values
         insert(db, 'config_revisions', id=rid, fingerprint=fp, created_at=STAMP,
-               applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1)
+               applied_config_json=json.dumps({'revision': rid}),
+               build_metadata_json=json.dumps({'sourceRevision': build, 'raw': rid}),
+               engine_version='1.17.0', metric_rule_version=1,
+               ranking_fingerprint=ranking, settings_fingerprint=settings,
+               measurement_fingerprint=measurement, build_identity=build)
 
     def add(cid, *, outcome='committed', regular=1, issued=1, presentation='candidates_requested',
             first=True, index=0, chosen='使', kind='chinese', caret=3, context='', custom=0,
@@ -140,7 +153,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(result['coverage']['compositions'], 21)
         self.assertEqual(result['coverage']['commits'], 16)
         self.assertEqual(result['coverage']['decisions'], 20)
-        group = next(g for g in result['groups'] if g['fingerprint']=='fingerprint-A'
+        group = next(g for g in result['groups'] if g['ranking_fingerprint']=='ranking-A'
+                     and g['measurement_fingerprint']=='measurement-A'
                      and g['text_kind']=='chinese' and g['presentation']=='candidates_requested')
         expected = dict(decisions=17, committed=12, unknown=1, reverted=1, edited=1, cancelled=1,
                         interrupted=1, regular_not_issued=1, valid=10, known_rank=9, unknown_rank=1,
@@ -151,7 +165,8 @@ class QueryTests(unittest.TestCase):
         self.assertAlmostEqual(group['top1_rate'], 1/9)
         self.assertAlmostEqual(group['top1_match_rate'], 1/7)
         self.assertEqual(group['mean_display_rank'], 33/9)
-        ranks = [r for r in result['rank_counts'] if r['fingerprint']=='fingerprint-A'
+        ranks = [r for r in result['rank_counts'] if r['ranking_fingerprint']=='ranking-A'
+                 and r['measurement_fingerprint']=='measurement-A'
                  and r['text_kind']=='chinese' and r['presentation']=='candidates_requested']
         self.assertEqual([(r['display_rank'],r['count']) for r in ranks], [(1,1),(4,8)])
         hidden = next(g for g in result['groups'] if g['presentation']=='not_shown')
@@ -188,6 +203,10 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(filtered['recording_runs']['totals']['droppedQueue'], 3)
         self.assertEqual(self.result('summary','--app', "x' OR 1=1 --")['coverage']['compositions'], 0)
         self.assertEqual(self.result('summary','--config','fingerprint')['coverage']['compositions'], 0)
+        self.assertEqual(self.result('summary','--ranking-config','ranking-A')['coverage']['compositions'], 19)
+        self.assertEqual(self.result('summary','--ranking-config','ranking')['coverage']['compositions'], 0)
+        self.assertEqual(self.result('summary','--config','fingerprint-B')['coverage']['compositions'], 1)
+        self.assertEqual(self.result('summary','--ranking-config','ranking-B')['coverage']['compositions'], 1)
         self.assertEqual(self.result('summary','--since',STAMP)['coverage']['compositions'],21)
         self.assertEqual(self.result('summary','--until',STAMP)['coverage']['compositions'],0)
         self.assertEqual(self.result('summary','--since','2026-09-06T16:00:00.000001Z')['coverage']['compositions'],0)
@@ -196,6 +215,84 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(self.result('summary','--until','2026-09-06T15:59:59.999999Z')['coverage']['compositions'],0)
         self.assertEqual(self.result('summary','--since','2026-09-07T00:00:00+08:00')['coverage']['compositions'],21)
         self.assertIn('does not match',self.run_cli('inspect','a','--kind','emoji',success=False))
+
+    def test_layered_identity_grouping_coverage_and_inspect(self):
+        result = self.result()
+        groups = [g for g in result['groups'] if g['ranking_fingerprint']=='ranking-A'
+                  and g['measurement_fingerprint']=='measurement-A'
+                  and g['text_kind']=='chinese' and g['presentation']=='candidates_requested']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['decisions'], 17)
+        coverage = result['identity_coverage']
+        self.assertEqual(coverage['cohort'], 'filtered_decisions')
+        self.assertEqual(coverage['ranking']['known'], 20)
+        self.assertEqual(coverage['ranking']['unknown'], 0)
+        self.assertEqual(coverage['ranking']['distinct'], 2)
+        self.assertEqual(coverage['build']['distinct'], 3)
+        self.assertEqual(coverage['build']['identities'], [
+            {'identity': 'build-A', 'count': 18},
+            {'identity': 'build-B', 'count': 1},
+            {'identity': 'build-C', 'count': 1},
+        ])
+        inspected = self.result('inspect', 'a')
+        revision = inspected['configurations'][0]
+        self.assertEqual(revision['ranking_fingerprint'], 'ranking-A')
+        self.assertEqual(revision['settings_fingerprint'], 'settings-A')
+        self.assertEqual(revision['measurement_fingerprint'], 'measurement-A')
+        self.assertEqual(revision['build_identity'], 'build-A')
+        self.assertEqual(revision['fingerprint'], 'fingerprint-A')
+        self.assertEqual(revision['applied_config'], {'revision': 'rev1'})
+        self.assertEqual(revision['build_metadata'], {'sourceRevision': 'build-A', 'raw': 'rev1'})
+        self.assertEqual(revision['engine_version'], '1.17.0')
+        self.assertEqual(revision['metric_rule_version'], 1)
+        self.assertEqual(inspected['identity_coverage']['cohort'], 'returned_configuration_revisions')
+
+    def test_unknown_identity_is_separate_and_inspect_preserves_null(self):
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE config_revisions SET ranking_fingerprint=NULL, settings_fingerprint=NULL, "
+                       "measurement_fingerprint=NULL, build_identity=NULL WHERE id='rev3'")
+        result = self.result()
+        unknown = next(g for g in result['groups'] if g['ranking_fingerprint']=='unknown')
+        self.assertEqual(unknown['measurement_fingerprint'], 'unknown')
+        self.assertEqual(unknown['decisions'], 1)
+        self.assertIsNone(unknown['top1_rate'])
+        self.assertEqual(unknown['quality_rate_status'], 'unavailable_unknown_measurement_fingerprint')
+        self.assertEqual(result['coverage']['quality_rate_status'],
+                         'unavailable_across_measurement_fingerprints')
+        self.assertEqual(result['identity_coverage']['ranking']['unknown'], 1)
+        inspected = self.result('inspect', 'r')
+        self.assertIsNone(inspected['configurations'][0]['ranking_fingerprint'])
+        self.assertIsNone(inspected['configurations'][0]['build_identity'])
+
+    def test_measurement_cohorts_never_publish_a_pooled_quality_rate(self):
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE config_revisions SET measurement_fingerprint='measurement-B', "
+                       "metric_rule_version=2 WHERE id='rev2'")
+        result = self.result()
+        self.assertIsNone(result['coverage']['top1_rate'])
+        self.assertIsNone(result['coverage']['top1_match_rate'])
+        self.assertEqual(result['coverage']['quality_rate_status'], 'unavailable_across_measurement_fingerprints')
+        groups = [g for g in result['groups'] if g['ranking_fingerprint']=='ranking-A'
+                  and g['text_kind']=='chinese' and g['presentation']=='candidates_requested']
+        self.assertEqual({g['measurement_fingerprint'] for g in groups}, {'measurement-A','measurement-B'})
+        self.assertTrue(all(g['quality_rate_status']=='available_within_measurement_fingerprint' for g in groups))
+        issues = self.result('ranking-issues', '--min-count', '1')['issues']
+        relevant = [i for i in issues if i['ranking_fingerprint']=='ranking-A' and i['caret']==3
+                    and i['preceding_context']=='' and i['matches_custom_phrase']==0
+                    and i['text_kind']=='chinese' and i['selected_prefix_valid']==1]
+        self.assertEqual(sorted((i['measurement_fingerprint'], i['occurrences']) for i in relevant),
+                         [('measurement-A', 2), ('measurement-B', 1)])
+
+    def test_every_command_reports_identity_coverage_for_its_cohort(self):
+        for command, args in [('summary', ()), ('ranking-issues', ('--min-count','1')),
+                              ('inspect', ('a',)), ('timing', ())]:
+            result = self.result(command, *args)
+            coverage = result['identity_coverage']
+            self.assertIn('cohort', coverage)
+            for layer in ('ranking','settings','measurement','build'):
+                self.assertEqual(set(coverage[layer]), {'known','unknown','distinct','identities'})
+                self.assertEqual(coverage[layer]['known'] + coverage[layer]['unknown'],
+                                 sum(item['count'] for item in coverage[layer]['identities']))
 
     def test_local_calendar_date_and_invalid_arguments(self):
         previous = os.environ.get('TZ')
@@ -219,7 +316,7 @@ class QueryTests(unittest.TestCase):
             self.assertEqual(set(exported[0]), {'path','value'})
         self.assertIn('😀',self.run_cli('inspect','n'))
         self.assertIn('N/A',self.run_cli('summary','--kind','unknown'))
-        self.assertIn('fingerprint-A',self.run_cli('summary'))
+        self.assertIn('ranking-A',self.run_cli('summary'))
 
     def test_empty_missing_schema_and_readonly(self):
         empty = Path(self.temp.name)/'empty.sqlite3'; empty_db(empty).close()
@@ -236,7 +333,8 @@ class QueryTests(unittest.TestCase):
                 connection.execute("DELETE FROM compositions")
         self.result(); self.result('inspect','a')
         self.assertEqual(before,hashlib.sha256(self.db.read_bytes()).hexdigest())
-        for statement in ['PRAGMA user_version=2','DROP TABLE candidate_decisions']:
+        for statement in ['PRAGMA user_version=1','DROP TABLE candidate_decisions',
+                          'ALTER TABLE config_revisions ADD COLUMN foreign_value TEXT']:
             bad=Path(self.temp.name)/('bad'+str(len(statement))+'.sqlite3')
             db=empty_db(bad); db.execute(statement); db.close()
             self.assertIn('incompatible',self.run_cli('summary',db=bad,success=False))
@@ -250,7 +348,8 @@ class QueryTests(unittest.TestCase):
         db.execute("UPDATE candidate_decisions SET first_page_json=json_set(first_page_json,'$.generation',99) WHERE composition_id='b'")
         db.commit()
         result = self.result('ranking-issues','--min-count','1')
-        normal = next(x for x in result['issues'] if x['fingerprint']=='fingerprint-A'
+        normal = next(x for x in result['issues'] if x['ranking_fingerprint']=='ranking-A'
+                      and x['measurement_fingerprint']=='measurement-A'
                       and x['caret']==3 and x['preceding_context']=='' and x['text_kind']=='chinese'
                       and x['matches_custom_phrase']==0)
         self.assertEqual(normal['composition_ids'],['c'])

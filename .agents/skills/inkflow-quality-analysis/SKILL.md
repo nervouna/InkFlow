@@ -34,14 +34,18 @@ statistics, use `macOS/Tools/ai-statistics.py`; read
 [its contract](../../../macOS/AI_STATISTICS.md) before interpreting its rates or
 inspecting the deliberately retained 30-day AI samples.
 
-All commands accept `--db`, `--since`, `--until`, `--app`, `--config`, `--kind` and
-`--format table|json|csv` after the command. Time defaults to all saved history.
-`--config` requires a **full stable fingerprint**, available in every output format;
-a revision UUID or shortened prefix does not match. Dates mean local midnight;
-`--until` is exclusive. Use explicit offsets for timestamp precision.
+All commands accept `--db`, `--since`, `--until`, `--app`, `--config`,
+`--ranking-config`, `--kind` and `--format table|json|csv` after the command. Time
+defaults to all saved history. `--ranking-config` requires an exact ranking
+fingerprint. The compatibility option `--config` still requires the exact legacy
+full fingerprint; its meaning has not changed. Revision UUIDs and shortened
+prefixes do not match. Dates mean local midnight; `--until` is exclusive. Use
+explicit offsets for timestamp precision.
 
-Report the database/time scope, valid and unknown coverage, configuration and
-output-kind groups with the result. Inspect supporting compositions before
+Report the database/time scope, valid and unknown evidence, all four identity
+coverage sections, ranking and measurement groups, and output-kind groups with the
+result. Never combine quality rates across measurement fingerprints; an unknown
+measurement fingerprint is its own unavailable cohort. Inspect supporting compositions before
 attributing a recurring pair to a ranking problem. `insertText` issuance and
 candidate-list requests are recorded facts; they do not prove document acceptance
 or that the user saw a panel. Missing first-page evidence, unknown ranks, candidate

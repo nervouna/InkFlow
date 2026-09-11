@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only queries for InkFlow quality schema / metric rule v1 (stdlib only)."""
+"""Read-only queries for InkFlow quality schema v2 (stdlib only)."""
 import argparse
 from contextlib import closing
 import csv
@@ -13,13 +13,15 @@ DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
 TABLE_COLUMNS = {
     'recording_runs': 'id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code',
-    'config_revisions': 'id fingerprint created_at applied_config_json build_metadata_json engine_version metric_rule_version',
+    'config_revisions': ('id fingerprint created_at applied_config_json build_metadata_json engine_version '
+                         'metric_rule_version ranking_fingerprint settings_fingerprint '
+                         'measurement_fingerprint build_identity'),
     'compositions': 'id run_id started_at ended_at app_bundle_id client_id outcome page_history_truncated dropped_page_count outcome_reason operations_json',
     'commits': 'id composition_id issued_at text kind insertion_issued client_id',
     'candidate_decisions': 'id composition_id config_revision_id commit_id occurred_at sequence trigger outcome selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json page_history_truncated dropped_page_count operations_json regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason',
 }
-GROUP = ('fingerprint', 'text_kind', 'presentation')
-ISSUE_GROUP = ('fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
+GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'text_kind', 'presentation')
+ISSUE_GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
                'preceding_context', 'first_page_top1', 'selected_text', 'text_kind', 'matches_custom_phrase')
 OPERATIONS = {'keypresses': 'keypresses', 'page_requests': 'pageRequests', 'page_turns': 'pageTurns',
               'candidate_moves': 'candidateMoves', 'preedit_edits': 'preeditEdits'}
@@ -78,19 +80,16 @@ def connect(path):
     try:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
-        if (db.execute('PRAGMA user_version').fetchone()[0] != 1
+        if (db.execute('PRAGMA user_version').fetchone()[0] != 2
                 or db.execute('PRAGMA application_id').fetchone()[0] != 0x49465131):
-            raise QueryError('Database is incompatible: expected InkFlow quality schema v1 (IFQ1).')
+            raise QueryError('Database is incompatible: expected InkFlow quality schema v2 (IFQ1).')
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND substr(name,1,7)!='sqlite_'")}
         if tables != set(TABLE_COLUMNS):
             raise QueryError('Database is incompatible: expected the five InkFlow quality tables.')
         for table, columns in TABLE_COLUMNS.items():
             actual = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
-            if not set(columns.split()) <= actual:
-                raise QueryError(f'Database is incompatible: missing columns in {table}.')
-        for table in ('recording_runs', 'config_revisions'):
-            if db.execute(f'SELECT 1 FROM {table} WHERE metric_rule_version != 1 LIMIT 1').fetchone():
-                raise QueryError('Database is incompatible: this query supports metric rule v1 only.')
+            if set(columns.split()) != actual:
+                raise QueryError(f'Database is incompatible: unexpected v2 columns in {table}.')
         db.execute("SELECT json_extract('{\"v\":1}', '$.v')").fetchone()
         return db
     except Exception:
@@ -110,7 +109,9 @@ def filters(args):
                     moment += timedelta(microseconds=1000 - remainder)
                 value = moment.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
             parameters[option] = value
-    for option, condition in [('config', 'r.fingerprint = :config'), ('kind', 'd.text_kind = :kind')]:
+    for option, condition in [('config', 'r.fingerprint = :config'),
+                              ('ranking_config', 'r.ranking_fingerprint = :ranking_config'),
+                              ('kind', 'd.text_kind = :kind')]:
         if (value := getattr(args, option)) is not None:
             decision.append(condition)
             parameters[option] = value
@@ -131,7 +132,11 @@ def ctes(args):
     WITH selected_compositions AS (
         SELECT c.* FROM compositions c WHERE {composition_filter}
     ), base AS (
-        SELECT d.*, r.fingerprint, m.insertion_issued,
+        SELECT d.*, r.fingerprint,
+          COALESCE(r.ranking_fingerprint,'unknown') AS ranking_fingerprint,
+          r.settings_fingerprint,
+          COALESCE(r.measurement_fingerprint,'unknown') AS measurement_fingerprint,
+          r.build_identity, m.insertion_issued,
           json_extract(d.snapshot_json,'$.presentation') AS presentation,
           json_extract(d.snapshot_json,'$.rawInput') AS raw_input,
           json_extract(d.snapshot_json,'$.caret') AS caret,
@@ -190,20 +195,77 @@ def aggregate_sql():
     return ', '.join(fields)
 
 
-def rates(row):
+def rates(row, status=None):
     row['top1_rate'] = row['top1_selected'] / row['known_rank'] if row['known_rank'] else None
     row['top1_match_rate'] = row['top1_matches'] / row['comparable'] if row['comparable'] else None
+    if status is None:
+        status = ('unavailable_unknown_measurement_fingerprint'
+                  if row.get('measurement_fingerprint') == 'unknown'
+                  else 'available_within_measurement_fingerprint')
+    if status != 'available_within_measurement_fingerprint':
+        row['top1_rate'] = None
+        row['top1_match_rate'] = None
+    row['quality_rate_status'] = status
     return row
 
 
 def coverage(db, sql, parameters):
-    result = rates(rows(db, sql + 'SELECT ' + aggregate_sql() + ' FROM observations', parameters)[0])
+    measurement = rows(db, sql + """SELECT COUNT(*) AS total,
+        COUNT(DISTINCT CASE WHEN measurement_fingerprint!='unknown' THEN measurement_fingerprint END) AS known_distinct,
+        COALESCE(SUM(measurement_fingerprint='unknown'),0) AS unknown FROM observations""", parameters)[0]
+    if measurement['total'] == 0:
+        rate_status = 'unavailable_without_measurement_evidence'
+    elif measurement['known_distinct'] == 1 and measurement['unknown'] == 0:
+        rate_status = 'available_within_measurement_fingerprint'
+    elif measurement['known_distinct'] == 0:
+        rate_status = 'unavailable_unknown_measurement_fingerprint'
+    else:
+        rate_status = 'unavailable_across_measurement_fingerprints'
+    result = rates(rows(db, sql + 'SELECT ' + aggregate_sql() + ' FROM observations', parameters)[0],
+                   rate_status)
     result.update(rows(db, sql + """SELECT COUNT(*) AS compositions,
         COALESCE(SUM(page_history_truncated),0) AS truncated_compositions,
         (SELECT COUNT(*) FROM commits WHERE composition_id IN (SELECT id FROM selected_compositions)) AS commits,
         (SELECT COUNT(*) FROM commits WHERE insertion_issued=0 AND composition_id IN
           (SELECT id FROM selected_compositions)) AS commits_not_issued
         FROM selected_compositions""", parameters)[0])
+    return result
+
+
+IDENTITY_LAYERS = {
+    'ranking': 'ranking_fingerprint',
+    'settings': 'settings_fingerprint',
+    'measurement': 'measurement_fingerprint',
+    'build': 'build_identity',
+}
+
+
+def identity_coverage(db, sql, parameters, source, cohort):
+    result = {'cohort': cohort, 'unit': 'decision'}
+    for layer, column in IDENTITY_LAYERS.items():
+        totals = rows(db, sql + f"""SELECT
+            COALESCE(SUM({column} IS NOT NULL AND {column} != 'unknown'),0) AS known,
+            COALESCE(SUM({column} IS NULL OR {column} = 'unknown'),0) AS unknown,
+            COUNT(DISTINCT CASE WHEN {column} IS NOT NULL AND {column} != 'unknown' THEN {column} END) AS distinct_count
+            FROM {source}""", parameters)[0]
+        identities = rows(db, sql + f"""SELECT COALESCE({column},'unknown') AS identity,COUNT(*) AS count
+            FROM {source} GROUP BY COALESCE({column},'unknown') ORDER BY identity""", parameters)
+        totals['distinct'] = totals.pop('distinct_count')
+        result[layer] = dict(**totals, identities=identities)
+    return result
+
+
+def revision_identity_coverage(revisions):
+    result = {'cohort': 'returned_configuration_revisions', 'unit': 'configuration_revision'}
+    for layer, column in IDENTITY_LAYERS.items():
+        counts = {}
+        for revision in revisions:
+            identity = revision[column] if revision[column] not in (None, 'unknown') else 'unknown'
+            counts[identity] = counts.get(identity, 0) + 1
+        identities = [dict(identity=identity, count=count) for identity, count in sorted(counts.items())]
+        result[layer] = dict(known=sum(x['count'] for x in identities if x['identity'] != 'unknown'),
+                             unknown=counts.get('unknown', 0),
+                             distinct=sum(x['identity'] != 'unknown' for x in identities), identities=identities)
     return result
 
 
@@ -216,7 +278,9 @@ def summary(db, args):
     run_counters = ('submitted', 'written', 'droppedQueue', 'droppedOversized', 'droppedDisabled',
                     'droppedBusy', 'droppedInvalid', 'errors', 'truncatedEnvelopes')
     run_sql = ','.join(f"COALESCE(SUM(json_extract(stats_json,'$.{key}')),0) AS {key}" for key in run_counters)
-    return dict(coverage=coverage(db, sql, parameters), groups=[rates(g) for g in groups], rank_counts=ranks,
+    return dict(coverage=coverage(db, sql, parameters),
+                identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'),
+                groups=[rates(g) for g in groups], rank_counts=ranks,
                 recording_runs=dict(scope='whole_db_lifetime_unfiltered',
                     totals=rows(db, 'SELECT COUNT(*) AS runs,' + run_sql + ' FROM recording_runs')[0],
                     statuses=rows(db, 'SELECT status,error_code,COUNT(*) AS runs FROM recording_runs GROUP BY status,error_code')))
@@ -245,7 +309,9 @@ def ranking_issues(db, args):
     """, parameters)
     for issue in issues:
         issue['composition_ids'] = json.loads(issue['composition_ids'])
-    return dict(coverage=coverage(db, sql, parameters), min_count=args.min_count, limit=args.limit,
+    return dict(coverage=coverage(db, sql, parameters),
+                identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'),
+                min_count=args.min_count, limit=args.limit,
                 evidence_ids_per_issue=5, issues=issues)
 
 
@@ -314,7 +380,16 @@ def timing(db, args):
         duration_sql = sql + f",cohort AS (SELECT timing FROM timings WHERE json_extract(timing,'$.endedOffset') {condition})"
         durations[state] = {field: sql_distribution(db, duration_sql, parameters, f"json_extract(timing,'$.{field}')", count, 'seconds')
                             for field in ('postEditWait', 'observedVisibleDuration', 'phaseWait', 'phaseObservedVisibleDuration')}
+    identity_sql = f"""WITH selected_compositions AS (
+            SELECT c.* FROM compositions c WHERE {composition_filter}
+        ), timing_identities AS (
+            SELECT r.ranking_fingerprint,r.settings_fingerprint,r.measurement_fingerprint,r.build_identity
+            FROM candidate_decisions d JOIN selected_compositions c ON c.id=d.composition_id
+            JOIN config_revisions r ON r.id=d.config_revision_id
+        ) """
     return dict(scope='composition_operations_once', coverage=coverage,
+                identity_coverage=identity_coverage(db, identity_sql, parameters, 'timing_identities',
+                                                    'decisions_in_selected_timing_compositions'),
                 key_intervals=dict(scope='retained_samples_only; each stored interval uses the actual preceding key',
                                    all=intervals, by_category_repeat=groups), durations=durations,
                 visibility_observation_interval=sql_distribution(db, sql+',cohort AS (SELECT timing FROM timings)', parameters,
@@ -331,7 +406,8 @@ def inspect(db, args):
     found = db.execute(f'SELECT c.id FROM compositions c WHERE c.id=:id AND {composition_filter}', parameters).fetchone()
     if found is None:
         raise QueryError('Composition exists but does not match the supplied filters.')
-    decisions = rows(db, f'''SELECT d.*,r.fingerprint FROM candidate_decisions d JOIN config_revisions r
+    decisions = rows(db, f'''SELECT d.*,r.fingerprint,r.ranking_fingerprint,r.settings_fingerprint,
+        r.measurement_fingerprint,r.build_identity FROM candidate_decisions d JOIN config_revisions r
         ON r.id=d.config_revision_id WHERE d.composition_id=:id AND {decision_filter} ORDER BY d.sequence''', parameters)
     decoded_decisions = [decode_row(d) for d in decisions]
     revision_ids = {d['config_revision_id'] for d in decisions}
@@ -345,8 +421,10 @@ def inspect(db, args):
             raise QueryError('A recorded page references a missing configuration revision.')
         revisions.append(dict(revision))
     commits = rows(db, 'SELECT * FROM commits WHERE composition_id=:id ORDER BY issued_at,id', parameters)
+    decoded_revisions = [decode_row(r) for r in revisions]
     return dict(composition=decode_row(dict(raw)), decisions=decoded_decisions,
-                commits=commits, configurations=[decode_row(r) for r in revisions],
+                commits=commits, configurations=decoded_revisions,
+                identity_coverage=revision_identity_coverage(revisions),
                 commit_scope='all commits of the matching composition; decisions honor config/kind filters')
 
 
@@ -391,7 +469,8 @@ def parser():
         sub.add_argument('--since', type=timestamp, help='Inclusive composition start: local YYYY-MM-DD or ISO time with offset')
         sub.add_argument('--until', type=timestamp, help='Exclusive composition start boundary; same syntax as --since')
         sub.add_argument('--app', help='Exact app bundle ID')
-        sub.add_argument('--config', help='Exact full stable configuration fingerprint (not revision UUID or prefix)')
+        sub.add_argument('--config', help='Exact legacy full fingerprint (not revision UUID or prefix)')
+        sub.add_argument('--ranking-config', help='Exact ranking fingerprint (not revision UUID or prefix)')
         sub.add_argument('--kind', choices=KINDS, help='Decision text kind, not translator source')
         sub.add_argument('--format', choices=('table', 'json', 'csv'), default='table')
     return result
@@ -407,7 +486,8 @@ def main(argv=None):
             db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
             result = {'summary': summary, 'ranking-issues': ranking_issues, 'inspect': inspect, 'timing': timing}[args.command](db, args)
         result = dict(command=args.command, filters={k: str(v) if isinstance(v, Path) else v
-                      for k, v in vars(args).items() if k in ('db','since','until','app','config','kind')}, **result)
+                      for k, v in vars(args).items()
+                      if k in ('db','since','until','app','config','ranking_config','kind')}, **result)
         render(result, args.format)
         return 0
     except SystemExit as error:

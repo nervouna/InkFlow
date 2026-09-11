@@ -7,7 +7,13 @@ build/ai-pronunciation-tests
 build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-learning.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
-shared="${1:-$PWD/build/test-shared}"
+if [[ $# -eq 0 ]]; then
+  shared="$user_dir/fresh-shared"
+  bash macOS/scripts/prepare-rime.sh "$shared"
+else
+  shared="$1"
+fi
+[[ -s "$shared/inkflow_pinyin.custom.yaml" ]] || { echo 'Missing active-schema AI patch' >&2; exit 1; }
 build/ai-adoption-learning-tests "$shared" "$user_dir" write
 build/ai-adoption-learning-tests "$shared" "$user_dir" read
 manager="$PWD/build/deps/dist/bin/rime_dict_manager"
@@ -24,3 +30,4 @@ awk -F '\t' '
 ' "$user_dir/learned.txt"
 echo 'PASS canonical userdb export: correct full codes only; exact adoption counts; no raw typo/abbreviation'
 echo 'PASS ordinary learning: immediate Backspace undoes commits before/after AI callbacks; retained commit learns once'
+echo 'PASS fresh AI learning deployment: active schema patch, new shared data, userdb write/restart/read'

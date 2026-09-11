@@ -8,7 +8,7 @@ trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/build"
 cp macOS/scripts/test.sh "$fixture/macOS/scripts/"
 export INKFLOW_RUNNER_LOG="$fixture/commands.log"
-for script in dependencies prepare-rime test-quality-store test-quality-timing test-quality-metadata \
+for script in dependencies prepare-rime test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
   test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
   test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning; do
@@ -53,7 +53,7 @@ expect 'test-prepare-rime '
 run dictionary-generator
 expect 'dependencies ' 'test-dictionary-generator '
 run quality
-expect 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'test-quality-capture ' 'test-quality-query --require-engine'
+expect 'test-quality-identity ' 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'test-quality-capture ' 'test-quality-query --require-engine'
 run ai
 expect 'dependencies ' 'prepare-rime build/test-shared' 'test-ai-suggestions ' 'test-ai-statistics ' \
   'test-ai-statistics-query ' 'test-ai-runtime ' 'test-ai-learning '
@@ -84,7 +84,7 @@ expect 'test-dictionary-updates '
 run dictionary-activation
 expect 'dependencies ' 'test-dictionary-activation ' 'test-serving-startup '
 run
-expect 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'dependencies ' \
+expect 'test-quality-identity ' 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'dependencies ' \
   'test-prepare-rime ' 'test-dictionary-generator ' 'prepare-rime build/test-shared' \
   'test-ai-suggestions ' 'test-ai-statistics ' 'test-ai-statistics-query ' 'test-ai-runtime ' 'test-ai-learning ' \
   'test-quality-capture ' 'test-quality-query --require-engine' \

@@ -1,0 +1,8 @@
+# Repository-relative files whose bytes directly implement offline candidate generation and ranking.
+macOS/Sources/CandidatePresentation.swift
+macOS/Sources/Context.swift
+macOS/Sources/CustomPhrases.swift
+macOS/Sources/Engine.swift
+macOS/Sources/InputPreferences.swift
+macOS/Sources/InputRankingContext.swift
+macOS/Sources/InputControllerCore.swift

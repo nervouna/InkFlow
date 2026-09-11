@@ -1,37 +1,24 @@
 @preconcurrency import InputMethodKit
 
-/// The controller owns input and candidate state; this boundary only renders it.
-/// Tests replace windows while retaining the normal per-event refresh lifecycle.
 @MainActor
-protocol AIInputPresentation: AnyObject {
-    var candidatesVisible: Bool { get }
+protocol AISuggestionPresentation: AnyObject {
     var suggestionVisible: Bool { get }
-    func refreshCandidates(_ candidates: [String], highlight: Int)
-    func hideCandidates()
     func presentSuggestion(_ text: String) -> Bool
     func hideSuggestion()
 }
 
+/// Test endpoints may implement both isolated presentation boundaries.
 @MainActor
-final class NativeAIInputPresentation: AIInputPresentation {
+protocol AIInputPresentation: CandidatePresentation, AISuggestionPresentation {}
+
+@MainActor
+final class NativeAIInputPresentation: AISuggestionPresentation {
     private weak var panel: IMKCandidates?
     private var suggestion: AISuggestionPanel?
 
     init(panel: IMKCandidates) { self.panel = panel }
 
-    var candidatesVisible: Bool { panel?.isVisible() ?? false }
     var suggestionVisible: Bool { suggestion?.isVisible ?? false }
-
-    func refreshCandidates(_ candidates: [String], highlight: Int) {
-        guard let panel else { return }
-        panel.update()
-        guard !candidates.isEmpty else { panel.hide(); return }
-        let index = min(max(0, highlight), candidates.count - 1)
-        panel.selectCandidate(withIdentifier: panel.candidateStringIdentifier(candidates[index]))
-        panel.show(kIMKLocateCandidatesBelowHint)
-    }
-
-    func hideCandidates() { panel?.hide() }
     func hideSuggestion() { suggestion?.hide() }
 
     func presentSuggestion(_ text: String) -> Bool {

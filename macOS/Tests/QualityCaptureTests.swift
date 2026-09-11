@@ -6,6 +6,12 @@ import InkFlowNativeTestSupport
 import InkFlowTestSupport
 #endif
 
+let qualityCaptureBuildMetadata = QualityBuildMetadata(sourceRevision: "test",
+    sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
+    bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
+    rankingSourceSHA256: String(repeating: "d", count: 64), rankingResourcesSHA256: String(repeating: "e", count: 64),
+    appVersion: "test", appBuild: "1")
+
 @MainActor
 struct CaptureDatabase {
     let url: URL
@@ -52,7 +58,7 @@ struct QualityCaptureTests {
         defer { try? files.removeItem(at: scratch) }
         let db = CaptureDatabase(url: output.appendingPathComponent("engine-controller.sqlite3"))
         if files.fileExists(atPath: db.url.path) { try files.removeItem(at: db.url) }
-        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: .unknown)
+        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
         try IFEngine.start(shared: shared, user: scratch.appendingPathComponent("rime").path)
         IFStubHeadlessControllerFramework()
         let isolated = IsolatedSettings()
@@ -64,12 +70,12 @@ struct QualityCaptureTests {
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
-        let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: .unknown)
+        let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
         await pagingSettings(pagingStore, pagingDB)
         await pagingStore.close()
         let syntheticDB = CaptureDatabase(url: output.appendingPathComponent("recorder-synthetic.sqlite3"))
         if files.fileExists(atPath: syntheticDB.url.path) { try files.removeItem(at: syntheticDB.url) }
-        let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: .unknown)
+        let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: qualityCaptureBuildMetadata)
         await synthetic(syntheticStore, syntheticDB)
         await syntheticStore.close()
         await store.close()
@@ -630,7 +636,7 @@ struct QualityCaptureTests {
                 try settings.settings.saveCustomPhrase(code: "zq\(String(repeating: "a", count: index / 26))\(Character(UnicodeScalar(97 + index % 26)!))", text: "短语\(index)")
             }
             let store = enabled ? QualityStore(url: scratch.appendingPathComponent("equivalence.sqlite3"),
-                engineVersion: IFEngine.version, buildMetadata: .unknown) : nil
+                engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata) : nil
             var transcript: [String] = []
             do {
                 let client = RecordingClient(document: "准备午")
@@ -659,7 +665,7 @@ struct QualityCaptureTests {
         let gate = DispatchSemaphore(value: 0)
         let entered = DispatchSemaphore(value: 0)
         let store = QualityStore(url: scratch.appendingPathComponent("stalled.sqlite3"), engineVersion: IFEngine.version,
-            buildMetadata: .unknown, hooks: QualityStoreHooks(beforeOpen: { entered.signal(); gate.wait() }))
+            buildMetadata: qualityCaptureBuildMetadata, hooks: QualityStoreHooks(beforeOpen: { entered.signal(); gate.wait() }))
         check(entered.wait(timeout: .now() + 5) == .success)
         try IFEngine.start(shared: shared, user: scratch.appendingPathComponent("stalled-rime").path)
         let settings = IsolatedSettings()

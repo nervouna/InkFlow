@@ -1,0 +1,5 @@
+# AI adoption learning observes properties but emits no candidates. Keep its
+# integration separate so AI-only changes do not alter the offline ranking inputs.
+patch:
+  engine/translators/+:
+    - lua_translator@*inkflow_ai_learning

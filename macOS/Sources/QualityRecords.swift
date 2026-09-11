@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// Values captured in memory. JSON and fingerprinting belong to the store's worker.
 struct QualityBuildMetadata: Codable, Equatable, Sendable {
@@ -6,11 +7,115 @@ struct QualityBuildMetadata: Codable, Equatable, Sendable {
     var sourceTreeSHA256: String
     var sourceDirty: Bool?
     var bundledResourcesSHA256: String
+    /// Complete unsigned .app payload, excluding this metadata file and later signing/notarization envelopes.
+    /// The legacy resources digest remains for compatibility.
+    var bundleSHA256: String = "unknown"
+    var rankingSourceSHA256: String = "unknown"
+    var rankingResourcesSHA256: String = "unknown"
     var appVersion: String
     var appBuild: String
 
     static let unknown = QualityBuildMetadata(sourceRevision: "unknown", sourceTreeSHA256: "unknown",
         sourceDirty: nil, bundledResourcesSHA256: "unknown", appVersion: "unknown", appBuild: "unknown")
+
+    private enum CodingKeys: String, CodingKey {
+        case sourceRevision, sourceTreeSHA256, sourceDirty, bundledResourcesSHA256, bundleSHA256
+        case rankingSourceSHA256, rankingResourcesSHA256, appVersion, appBuild
+    }
+
+    init(sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool?, bundledResourcesSHA256: String,
+         bundleSHA256: String = "unknown", rankingSourceSHA256: String = "unknown",
+         rankingResourcesSHA256: String = "unknown", appVersion: String, appBuild: String) {
+        self.sourceRevision = sourceRevision
+        self.sourceTreeSHA256 = sourceTreeSHA256
+        self.sourceDirty = sourceDirty
+        self.bundledResourcesSHA256 = bundledResourcesSHA256
+        self.bundleSHA256 = bundleSHA256
+        self.rankingSourceSHA256 = rankingSourceSHA256
+        self.rankingResourcesSHA256 = rankingResourcesSHA256
+        self.appVersion = appVersion
+        self.appBuild = appBuild
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        sourceRevision = try values.decode(String.self, forKey: .sourceRevision)
+        sourceTreeSHA256 = try values.decode(String.self, forKey: .sourceTreeSHA256)
+        sourceDirty = try values.decodeIfPresent(Bool.self, forKey: .sourceDirty)
+        bundledResourcesSHA256 = try values.decode(String.self, forKey: .bundledResourcesSHA256)
+        bundleSHA256 = try values.decodeIfPresent(String.self, forKey: .bundleSHA256) ?? "unknown"
+        rankingSourceSHA256 = try values.decodeIfPresent(String.self, forKey: .rankingSourceSHA256) ?? "unknown"
+        rankingResourcesSHA256 = try values.decodeIfPresent(String.self, forKey: .rankingResourcesSHA256) ?? "unknown"
+        appVersion = try values.decode(String.self, forKey: .appVersion)
+        appBuild = try values.decode(String.self, forKey: .appBuild)
+    }
+}
+
+struct QualityFingerprints: Equatable, Sendable {
+    let ranking: String
+    let settings: String
+    let measurement: String
+    let buildIdentity: String
+
+    static func make(configuration: QualityAppliedConfiguration, build: QualityBuildMetadata,
+                     engineVersion: String, databaseSchemaVersion: Int, metricRuleVersion: Int,
+                     collectionRuleVersion: Int) throws -> Self {
+        try requireDigest(build.rankingSourceSHA256, name: "ranking source")
+        try requireDigest(build.rankingResourcesSHA256, name: "ranking resources")
+        try requireDigest(build.sourceTreeSHA256, name: "source tree")
+        try requireDigest(build.bundledResourcesSHA256, name: "bundled resources")
+        try requireDigest(build.bundleSHA256, name: "bundle")
+        guard !build.sourceRevision.isEmpty, build.sourceRevision != "unknown",
+              build.sourceDirty != nil, !build.appVersion.isEmpty, build.appVersion != "unknown",
+              !build.appBuild.isEmpty, build.appBuild != "unknown" else {
+            throw QualityIdentityError.missing("build metadata")
+        }
+        guard !engineVersion.isEmpty, engineVersion != "unknown" else { throw QualityIdentityError.missing("engine version") }
+        let rankingConfiguration = RankingConfiguration(candidateCount: configuration.candidateCount,
+            customPhrases: configuration.customPhrases.map { .init(code: $0.code, text: $0.text) },
+            schemaID: configuration.schemaID, asciiMode: configuration.asciiMode,
+            inputOptions: configuration.inputOptions)
+        return Self(
+            ranking: try digest(RankingIdentity(engineVersion: engineVersion,
+                sourceSHA256: build.rankingSourceSHA256, resourcesSHA256: build.rankingResourcesSHA256,
+                configuration: rankingConfiguration)),
+            settings: try digest(configuration),
+            measurement: try digest(MeasurementIdentity(databaseSchemaVersion: databaseSchemaVersion,
+                metricRuleVersion: metricRuleVersion, collectionRuleVersion: collectionRuleVersion)),
+            buildIdentity: try digest(build))
+    }
+
+    private struct RankingPhrase: Codable { let code: String; let text: String }
+    private struct RankingConfiguration: Codable {
+        let candidateCount: Int
+        let customPhrases: [RankingPhrase]
+        let schemaID: String
+        let asciiMode: Bool
+        let inputOptions: [String: Bool]?
+    }
+    private struct RankingIdentity: Codable {
+        let engineVersion: String
+        let sourceSHA256: String
+        let resourcesSHA256: String
+        let configuration: RankingConfiguration
+    }
+    private struct MeasurementIdentity: Codable {
+        let databaseSchemaVersion: Int
+        let metricRuleVersion: Int
+        let collectionRuleVersion: Int
+    }
+    private static func requireDigest(_ value: String, name: String) throws {
+        guard value.count == 64, value.allSatisfy({ $0.isHexDigit && !$0.isUppercase }) else {
+            throw QualityIdentityError.missing(name)
+        }
+    }
+    private static func digest<T: Encodable>(_ value: T) throws -> String {
+        SHA256.hash(data: try QualityJSON.encoder().encode(value)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+enum QualityIdentityError: Error, Equatable {
+    case missing(String)
 }
 
 struct QualityPhrase: Codable, Equatable, Sendable {
@@ -387,6 +492,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
 }
 
 enum QualityLimits {
+    static let databaseSchemaVersion = 2
     static let envelopeBytes = 64 * 1024
     static let configurationBytes = 256 * 1024
     static let bufferedBytes = 8 * 1024 * 1024
@@ -394,6 +500,7 @@ enum QualityLimits {
     static let batchEnvelopes = 16
     static let flushInterval: TimeInterval = 1
     static let metricRuleVersion = 1
+    static let collectionRuleVersion = 1
     static let keySamples = 256
     static let visibilityObservationInterval: TimeInterval = 0.1
 }
@@ -480,18 +587,14 @@ enum QualityJSON {
 #if SWIFT_PACKAGE
 package enum QualityBuildMetadataAccess {
     package static func encoded(sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool,
-                                bundledResourcesSHA256: String, appVersion: String, appBuild: String) throws -> Data {
+                                bundledResourcesSHA256: String, bundleSHA256: String,
+                                rankingSourceSHA256: String, rankingResourcesSHA256: String,
+                                appVersion: String, appBuild: String) throws -> Data {
         try QualityJSON.encoder().encode(QualityBuildMetadata(sourceRevision: sourceRevision,
             sourceTreeSHA256: sourceTreeSHA256, sourceDirty: sourceDirty,
-            bundledResourcesSHA256: bundledResourcesSHA256, appVersion: appVersion, appBuild: appBuild))
-    }
-
-    package static func matches(_ data: Data, sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool,
-                                bundledResourcesSHA256: String, appVersion: String, appBuild: String) throws -> Bool {
-        try QualityJSON.decoder().decode(QualityBuildMetadata.self, from: data) ==
-            QualityBuildMetadata(sourceRevision: sourceRevision, sourceTreeSHA256: sourceTreeSHA256,
-                sourceDirty: sourceDirty, bundledResourcesSHA256: bundledResourcesSHA256,
-                appVersion: appVersion, appBuild: appBuild)
+            bundledResourcesSHA256: bundledResourcesSHA256, bundleSHA256: bundleSHA256,
+            rankingSourceSHA256: rankingSourceSHA256, rankingResourcesSHA256: rankingResourcesSHA256,
+            appVersion: appVersion, appBuild: appBuild))
     }
 }
 #endif
