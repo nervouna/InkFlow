@@ -1,6 +1,6 @@
 # macOS development
 
-The application, settings interface, registration tool, and test scenarios are written in Swift. The shell build uses Swift 6 language mode, warnings as errors, and an explicit `arm64-apple-macosx26.0` deployment target. Use Xcode command-line tools with the macOS 26 SDK and support for Swift's `isolated deinit` (Swift 6.2 or newer).
+The application, settings interface, registration tool, and test scenarios are written in Swift. Root SwiftPM products share the production modules and use Swift 6 language mode, warnings as errors, macOS 26, and arm64. Shell entry points keep their existing interfaces and use the ignored `build/swiftpm` scratch directory. Use Xcode command-line tools with the macOS 26 SDK and support for Swift's `isolated deinit` (Swift 6.2 or newer).
 
 ## Source boundaries
 
@@ -29,6 +29,37 @@ Each engine coalesces requested phrases and page size until its composition is i
 
 The TSV starts with `# no comment` so literal phrases beginning with `#` are supported. This header and parsing behavior are defined by [librime 1.17.0's TSV reader](https://github.com/rime/librime/blob/1.17.0/src/rime/dict/tsv.cc). Decreasing positive row weights preserve insertion order within each code. Codes are normalized lowercase ASCII letters; controls and multiline text are rejected before persistence or TSV generation. Filesystem/configuration failures appear in Personalization and logs without phrase contents. Failed temporary-file cleanup is retained for retry. A process crash during the synchronous load can leave a temporary TSV in the data directory; it is not authoritative storage and is not reused on subsequent loads.
 
+## Workflows
+
+### Install a released version
+
+For stable personal use, download the latest DMG from the [GitHub Releases page](https://github.com/nervouna/InkFlow/releases/latest), open `InkFlow Installer.app`, and choose Install and Enable. Do not build the source tree or run repository tests for this path. After installation, confirm the displayed version and select InkFlow Pinyin from the input menu; real typing remains user-owned acceptance.
+
+### Try the current development version
+
+Select and run the affected `test.sh` groups, create a fresh staged bundle with `build.sh`, run the repeatable fast bundle checks, then install with Developer ID signing:
+
+```sh
+bash macOS/scripts/test.sh GROUP ...
+bash macOS/scripts/build.sh
+bash macOS/scripts/check-bundle.sh --fast
+bash macOS/scripts/install.sh --developer-id
+```
+
+Choose groups from `bash macOS/scripts/test.sh --help` using behavior, callers, shared configuration, and resources. Set `INKFLOW_SIGN_IDENTITY` to the already verified Developer ID Application certificate SHA-1 with team `T7976FL2LP`; `install.sh` verifies the resulting team and bundle ID. Confirm the installed path and active process before user-owned typing acceptance. `install.sh --debug` is only for development debugging, never for a trial build or release evidence. The install script does not run tests or build automatically.
+
+### Publish a release
+
+Run release verification from an isolated linked worktree at the clean release-candidate commit:
+
+```sh
+bash macOS/scripts/release-verification.sh --from vPREVIOUS
+```
+
+This single entry builds a fresh bundle, runs the complete non-GUI core profile once, selects Settings/candidate/controller GUI, Installer core/window, and release-helper/package fixtures from the changed paths since the previous stable tag, and runs one deep bundle check. It also freezes the verified Installer executable and icon for packaging. GUI gates require a logged-in, unlocked desktop. Do not duplicate those checks in `package.sh`: prepare and finish use fast structural bundle checks and the verified release receipt.
+
+Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) for Developer ID signing, exact Team ID and entitlement checks, notarization, stapling, Gatekeeper assessment, final DMG inspection, downloaded-asset checksum verification, and publication. Missing or failed required gates block release. Automated checks and packaging do not establish installed-input-method typing acceptance.
+
 ## Verification
 
 ### Daily development
@@ -37,7 +68,7 @@ For development, commits, and local merges, run affected unit tests plus necessa
 
 Do not run full regression or complete GUI suites by default. Changes to native windows, candidate panels, focus, or input interactions still require targeted GUI/native interaction verification. Use existing focused scripts or supported harness options, such as the Input-page check below; if no focused entry point covers the change, use the smallest existing suite that does. Respect build/resource prerequisites and do not rely on stale application or worker binaries. Broaden checks when failures or uncertain impact justify it.
 
-Report checks run, their scope, and missing, failed, or skipped relevant checks. Passing scoped checks establishes development verification only; it does not establish readiness for formal installation or release. An unavailable GUI session leaves the affected GUI behavior unverified.
+Report checks run, their scope, and missing, failed, or skipped relevant checks. Passing scoped checks establishes development verification only; it does not establish Developer ID trial or release readiness. An unavailable GUI session leaves affected GUI behavior unverified.
 
 AI input suggestions are split between `AISettings.swift` / `AIChatCompletions.swift` (BYOK settings and compatible transport), `AIContext.swift` (bounded document access), `AISuggestionCoordinator.swift` (debounce and stale-result checks), and `AISuggestionPanel.swift` (passive AppKit presentation). `InputController.swift` owns client lifecycle and Tab delivery. Engine request identity includes raw input, caret and selected prefix, excluding candidate pages, highlights and display preedit. Controller-authored display range changes retain the input deadline; externally changed client ranges invalidate it. Full document context is captured only at dispatch, response validation and acceptance, never by the 100 ms position tracker.
 
@@ -48,26 +79,6 @@ AI input suggestions are split between `AISettings.swift` / `AIChatCompletions.s
 For explicitly authorized paid verification, run `bash macOS/scripts/test-ai-live.sh /absolute/path/to/ignored/.env` for transport fixtures or `bash macOS/scripts/test-ai-native.sh --live /absolute/path/to/ignored/.env` for one complete production API-to-panel-to-Tab fixture. The file must be untracked and Git-ignored and contain `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`; the parser treats it as data and never executes shell contents. Live fixtures require official DeepSeek and `deepseek-v4-flash`, use synthetic text only, and never print credentials. No retries or benchmarks are implicit.
 
 Real typing acceptance remains separate: configure and enable smart prediction, pause with candidates visible, browse pages, accept with Tab, and compare ordinary space/digit/click behavior in the user's text editor and browser. Verify composition edits, moving the insertion point, input-source switching, service failure and disabling the feature while a request is pending. Build and native harness results do not establish this user-owned acceptance.
-
-### Before formal installation or release
-
-A formal installation replaces the input method used day to day, regardless of Debug or Developer ID signing. Temporary installations specifically for diagnosis do not establish formal acceptance. `install.sh` does not enforce the test gate; the caller must complete it before formal installation.
-
-Run the following full verification sequence from the repository root before formal installation or release. The GUI checks require a logged-in, unlocked macOS desktop session and the runner's existing Accessibility access; their bounded public accessibility initialization does not change system settings.
-
-```sh
-bash macOS/scripts/build.sh
-bash macOS/scripts/test.sh
-bash macOS/scripts/check-bundle.sh
-bash macOS/scripts/test-controller-initialization.sh
-bash macOS/scripts/test-serving-startup.sh --native
-bash macOS/scripts/test-settings-ui.sh
-bash macOS/scripts/test-installer-window.sh
-bash macOS/scripts/check-installer-core.sh
-bash .agents/skills/inkflow-release/scripts/test.sh
-```
-
-For GUI-evidence recording and reuse, follow the same-machine, source-tree and environment requirements in [the release skill](../.agents/skills/inkflow-release/SKILL.md#2-verify-the-release-contents). A successful `gui-verification.sh check` may replace rerunning the two GUI suites above; missing or invalid evidence requires a fresh recording. Full non-GUI checks must still run for formal installation or release. Releases additionally require all release-skill checks, including signing, notarization, and final artifact verification. Do not proceed with missing or failed required checks. Real installed-input-method typing acceptance remains a separate user-owned step.
 
 ### Test coverage and focused entry points
 
@@ -120,7 +131,7 @@ For interactive UI inspection, `bash macOS/scripts/test-settings-ui.sh --hold` l
 
 `bash macOS/scripts/test-settings-ui.sh --input-only --dump-accessibility` checks the compact Input page through native fuzzy/radio/popup actions, mutual exclusion, disabled mapping preservation and error display, then exits before unrelated pane scenarios.
 
-Bundle verification checks the runtime controller name, metadata, icons, resources, arm64 architecture, and system/bundled dynamic-library closure. These checks do not establish installed-IME typing acceptance, signing, or behavior on an older macOS host.
+`check-bundle.sh --fast [app]` checks plist metadata, arm64 architecture, dynamic-library closure, resource summaries, and signed structure when present. It is safe to repeat during development installation and packaging. `check-bundle.sh --deep [app]` additionally regenerates resources and runs the real bundled-engine transcript; release verification runs it once for the candidate bundle. Neither mode establishes installed-IME typing acceptance, signing, or behavior on an older macOS host.
 
 ## Native installer packaging
 
@@ -128,8 +139,8 @@ Bundle verification checks the runtime controller name, metadata, icons, resourc
 and registration CLI with `bash macOS/scripts/check-installer-core.sh`. The full
 regression includes isolated termination and installer transaction/state tests.
 `test-installer-window.sh` exercises an isolated native window with fake backends;
-it needs an unlocked desktop and never operates the daily input source. Formal GUI
-evidence now requires this suite as well as controller initialization and Settings.
+it needs an unlocked desktop and never operates the installed input source. The release
+path matrix selects this suite for Installer-related changes.
 
 `bash macOS/scripts/build-installer.sh /absolute/path/to/InkFlow.zip /new/output.app`
 compiles the installer and copies version/build from `macOS/Info.plist` without
@@ -139,13 +150,14 @@ to check extraction of the embedded ZIP and app metadata, print payload version/
 then clean up temporary files. Signature and notarization checks remain separate release QA. This read-only probe does not use TIS or start
 the input method. Local signed, unnotarized fixtures do not prove release trust.
 
-The release helper uses `package.sh prepare` then `package.sh finish`. Between them,
+The release helper consumes the verified Installer executable/icon receipt produced by
+`release-verification.sh`, then uses `package.sh prepare` and `package.sh finish`. Between them,
 explicitly submit the retained input-method ZIP through the existing notary wrapper,
 wait for acceptance, and staple/validate the input-method app. Finish creates a fresh
-ZIP of that app, builds/signs the installer, checks arm64 and system dependency
+ZIP of that app, assembles/signs the installer from the verified snapshot, checks arm64 and system dependency
 closure, runs its actual `--check-payload`, and creates a DMG containing only the
-installer and Chinese instructions. `check-bundle.sh [app]` checks either the normal
-build or an explicitly supplied payload with the existing resource/engine checks.
+installer and Chinese instructions. Packaging uses `check-bundle.sh --fast [app]`;
+the release candidate's resource rebuild and engine transcript have already run once.
 The final DMG requires its own external notarization and stapling. See the
 [release workflow](../.agents/skills/inkflow-release/SKILL.md) for commands and recovery.
 
@@ -153,5 +165,5 @@ Release acceptance additionally requires trusted downloaded/quarantined DMG laun
 extraction of the inner app with its ticket intact and independent signature/stapler
 assessment, clean-user installation and old-version upgrade, and actual client typing.
 Builds, fixture tests and the read-only payload probe establish none of those runtime
-outcomes. Do not run native GUI suites on a locked screen or replace daily installation
-acceptance with a temporary diagnostic installation.
+outcomes. Do not run native GUI suites on a locked screen or replace user-owned
+installed-version typing acceptance with a temporary diagnostic installation.

@@ -8,7 +8,7 @@ case "$mode" in
   --developer-id)
     identity="${INKFLOW_SIGN_IDENTITY:?Set INKFLOW_SIGN_IDENTITY to the verified Developer ID certificate SHA1 (OU T7976FL2LP)}"
     signing=(--options runtime --timestamp --sign "$identity"); entitlements=macOS/DeveloperID.entitlements ;;
-  *) echo 'Usage: install.sh --debug | --developer-id' >&2; exit 2 ;;
+  *) echo 'Usage: install.sh --developer-id | --debug (development debugging only)' >&2; exit 2 ;;
 esac
 [[ -x "$app/Contents/MacOS/InkFlow" ]] || { echo 'Run macOS/scripts/build.sh first.' >&2; exit 1; }
 # For Developer ID, the caller must verify the certificate OU before selecting it.

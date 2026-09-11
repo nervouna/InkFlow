@@ -6,9 +6,13 @@
 
 ## 安装与启用
 
-1. 从 [下载页面](https://github.com/nervouna/InkFlow/releases/latest) 下载并打开 `.dmg` 文件。
+稳定自用请直接安装已发布版本，不需要下载源码、构建或运行测试：
+
+1. 从 [最新版本下载页面](https://github.com/nervouna/InkFlow/releases/latest) 下载并打开 `.dmg` 文件。
 2. 双击「墨流安装器」，点按「安装并启用」，按系统提示完成确认。
 3. 安装完成后，从菜单栏输入菜单选择「墨流拼音」。
+
+源码开发、Developer ID 试用和正式发布流程见 [macOS 开发说明](macOS/DEVELOPMENT.md#workflows)。
 
 ## 日常输入
 

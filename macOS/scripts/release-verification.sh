@@ -27,12 +27,16 @@ add_gate() {
 classify() {
   local file=$1
   case "$file" in
+    Package.swift) add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer; add_gate release-tools ;;
     macOS/Info.plist) add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer; add_gate release-tools ;;
+    macOS/Sources/InputPreferences.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
     macOS/Sources/Settings.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
     macOS/Sources/SmartSettingsView.swift|macOS/Sources/DictionarySettings.swift|macOS/Sources/DictionaryModels.swift|macOS/Sources/DictionaryStore.swift|macOS/Tests/Settings*|macOS/Tests/DictionarySettingsUI*|macOS/scripts/test-settings-ui.sh)
       add_gate settings-gui ;;
     macOS/Sources/*Candidate*|macOS/Sources/InputController.swift|macOS/Sources/AIInputPresentation.swift|macOS/Sources/AISettings.swift|macOS/Sources/AISuggestionPanel.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/Engine.swift|macOS/Sources/NativeCandidates.*|macOS/Tests/AIControllerNativeTests.swift|macOS/Tests/ControllerInitializationTests.swift|macOS/scripts/test-ai-native.sh|macOS/scripts/test-controller-initialization.sh)
       add_gate candidate-controller-gui ;;
+    macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
+      add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer ;;
     macOS/Installer/*|macOS/Shared/InputSourceManager.swift|macOS/Shared/RegisterInputSourceBootstrap.swift|macOS/Tests/Installer*|macOS/scripts/build-installer.sh|macOS/scripts/check-installer-core.sh|macOS/scripts/test-installer-*)
       add_gate installer ;;
     .agents/skills/inkflow-release/*|macOS/DeveloperID.entitlements|macOS/scripts/check-bundle.sh|macOS/scripts/quality-metadata.sh|macOS/Tools/QualityBuildMetadata.swift)
@@ -64,7 +68,8 @@ release_commit=$(git rev-parse HEAD)
 
 echo "Release verification range: $from..HEAD"
 bash macOS/scripts/build.sh
-bash macOS/scripts/test.sh
+core_groups=(quality ai preparation dictionary-generator deployment engine controller settings dictionary-updates dictionary-activation termination)
+bash macOS/scripts/test.sh "${core_groups[@]}"
 bash macOS/scripts/test-workflow.sh
 bash macOS/scripts/check-bundle.sh --deep
 for gate in "${gates[@]:2}"; do

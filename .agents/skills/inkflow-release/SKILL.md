@@ -1,6 +1,6 @@
 ---
 name: inkflow-release
-description: Publish an InkFlow macOS release from main with a confirmed semantic version, full verification, Developer ID signing, notarization, and a downloadable GitHub Release DMG. Also use to resume an interrupted release; not for routine local installation.
+description: Publish an InkFlow macOS release from a clean main candidate with conditional verification, Developer ID signing, notarization, and a downloadable GitHub Release DMG. Also use to resume an interrupted release; not for routine local installation.
 ---
 
 # InkFlow release
@@ -33,33 +33,23 @@ Use the elevation policy above for Keychain/signing/network checks if the agent 
 
 ## 1. Preflight and version confirmation
 
-- Inspect worktrees and use the existing `main` checkout. Require a clean worktree and index, with no merge/rebase in progress. Do not switch another worktree's branch, stash changes or reset history automatically.
+- Inspect worktrees and require a clean `main` with no merge/rebase in progress. Create an isolated linked worktree at that commit using detached HEAD; do not switch another worktree's branch, stash changes, reset history, or maintain a release branch. Run build, verification, packaging, and tagging in this isolated worktree.
 - Verify `origin` identifies the intended GitHub repository using `git remote get-url origin` and `gh repo view`. Set `repo` to that verified `OWNER/REPO` and use `--repo "$repo"` on all release commands. Check `gh auth status`, then `git fetch origin --tags`. Stop on divergent history or conflicting tags. Fast-forward a behind-only `main`; local commits ahead of origin are part of the release and must be reviewed.
 - Run `bash .agents/skills/inkflow-release/scripts/check-credentials.sh` before the version bump/build. It validates the configured Developer ID Application identity, the exact certificate's subject OU `T7976FL2LP`, and Apple authentication through the configured Keychain profile. Packaging repeats this check before creating output. Missing/invalid credentials block packaging, not inspection.
 - Read `CFBundleShortVersionString` and `CFBundleVersion` from `macOS/Info.plist`. Show the current values and proposed major/minor/patch results; ask the user to choose 大版本升级 / 新增功能 / Bugfix. Reuse an explicit choice in this release request. Major resets minor and patch; minor resets patch; patch increments alone. Build increments once, independently. Do not infer a 1.0 graduation from a 0.x version.
 - Identify and record the previous published stable release tag for release-note generation. Verify it is an ancestor of the proposed release commit.
 - Check the proposed tag and Release do not already exist locally or remotely before changing files. Existing release state routes to recovery below, not another version bump.
-- Run `bash .agents/skills/inkflow-release/scripts/bump-version.sh TYPE`, where TYPE is the confirmed `major`, `minor` or `patch`. Review the diff. Set `version`, `build`, and `tag="v$version"` from the updated plist, and record the starting commit in `build/release-notes.md` with the selected version/build and subsequent verification results. This ignored local record is for recovery, not a second version source.
+- Run `bash .agents/skills/inkflow-release/scripts/bump-version.sh TYPE`, where TYPE is the confirmed `major`, `minor` or `patch`. Review the diff. Set `version`, `build`, and `tag="v$version"` from the updated plist, and record the starting commit in `build/release-notes.md` with the selected version/build and subsequent verification results. Stage only `macOS/Info.plist`, commit it as `chore(release): $tag (build $build)`, and record that detached clean commit as `release_commit`. This ignored local record is for recovery, not a second version source. Verification and package receipts bind this commit; do not amend it after verification.
 
 ## 2. Verify the release contents
 
-Reuse only GUI evidence. Before a release, on the same Mac with an unlocked desktop, run `bash .agents/skills/inkflow-release/scripts/gui-verification.sh record`. It captures the current non-ignored files as a Git tree using a temporary index, builds a fresh app and runs all three GUI suites. Only complete success with the same before/after tree writes `build/gui-verification/passed.tree` alongside the logs. Uncommitted files are allowed; the real index and branch are untouched, and no commit is created. A failed rerun invalidates the previous record. Existing ad-hoc logs are not automatically promoted to passing evidence.
-
-For release, run `bash .agents/skills/inkflow-release/scripts/gui-verification.sh check`. It compares the recorded tree with a fresh working-tree snapshot, including staged and untracked inputs, permits only `CFBundleShortVersionString` and `CFBundleVersion` differences, and rejects other changes. Committing identical files does not invalidate the record. Missing or invalid evidence blocks release: run `record` while the desktop is available, never silently skip GUI tests. Keep records local to this checkout; rerun after OS/toolchain/dependency environment changes, Git object pruning, or when continuity is uncertain. This is a same-machine, nearby-release reuse rule, not a portable test cache. The release's separate clean-main requirement still applies before starting a new release.
-
-Move any existing `build/InkFlow.app` to a unique backup under `build/` before building to prevent stale bundle contents. Preserve dependency caches. Run these sequentially, retaining exit status and logs under `build/`:
-
-Before testing, stage only `macOS/Info.plist`, record `git write-tree` in the local recovery record, and require `git diff --exit-code` to pass. This fixes the source snapshot the package must represent.
-
 ```sh
-bash macOS/scripts/build.sh
-bash macOS/scripts/test.sh
-bash macOS/scripts/check-bundle.sh
-bash .agents/skills/inkflow-release/scripts/gui-verification.sh check
-bash .agents/skills/inkflow-release/scripts/test.sh
+bash macOS/scripts/release-verification.sh --from "$previous_tag"
 ```
 
-Also run any checks subsequently added to `macOS/DEVELOPMENT.md`; only the three GUI suites above may reuse evidence. Rebuild and rerun all other checks, including version/build and regenerated quality metadata validation. Confirm the version/build match the user's selected bump; the GUI checker validates their format, not the selected increment. Signing, notarization and final artifact/download checks always run on this release's new bytes. Do not proceed with skipped/failed required checks. Automated checks do not establish real installed-IME typing acceptance; that remains user-owned and is reported separately.
+This is the single release-verification entry. It requires the isolated worktree and clean `release_commit`, builds the application, runs the complete non-GUI core profile once, and runs one deep bundle check. From the previous stable tag to `HEAD`, it conditionally selects Settings/candidate/controller GUI, Installer core/window, and release-helper/package fixtures. Triggered GUI checks require a logged-in, unlocked desktop; do not replace missing evidence with an unrelated prior log. It then freezes the verified Installer executable and icon with a commit/input/artifact receipt for packaging.
+
+Confirm version/build match the selected bump. Do not separately repeat the core profile, deep bundle check, or package fixtures: packaging performs repeatable fast structural checks against the exact candidate. Signing, notarization, Gatekeeper, and downloaded-asset checks still run on the release bytes below. Automated checks do not establish real installed-IME typing acceptance; report that separately as user-owned.
 
 ## 3. Sign, package and notarize
 
@@ -97,8 +87,8 @@ bash .agents/skills/inkflow-release/scripts/package.sh finish
 
 Finish requires the stapled input method, matching source plist, Developer ID team
 `T7976FL2LP`, strict signature, and the existing inner bundle checks. It creates a
-fresh ZIP containing the stapled app as a signed data resource, then builds and
-signs `assembly.XXXXXX/stage/InkFlow Installer.app`. It checks installer arm64 and
+fresh ZIP containing the stapled app as a signed data resource, then assembles and
+signs `assembly.XXXXXX/stage/InkFlow Installer.app` from the verified executable and icon. It checks installer arm64 and
 system-only dynamic dependencies, outer identity/version/signature and executes
 the installer's actual `--check-payload` extraction/structure probe before creating
 the final DMG. The probe reports payload version/build; it does not validate trust.
@@ -140,19 +130,15 @@ acceptance separately, as required in `macOS/DEVELOPMENT.md`.
 
 After stapling and verification, generate `SHA256SUMS` inside `release_dir` with `shasum -a 256` using the DMG basename. Freeze these bytes for upload; do not rebuild/re-sign after this point.
 
-## 4. Commit and tag
+## 4. Tag the verified commit
 
-Review `git diff`, `git diff --cached` and `git status`; only the intended staged plist version change should remain. Recheck the built plist matches it, `git diff --exit-code` passes and `git write-tree` still equals the pre-test tree. Require the release commit's tree to equal that recorded tree. Do not sweep unrelated changes into the release.
+Review `git diff`, `git diff --cached` and `git status`; the isolated worktree and index must still be clean at `release_commit`. Recheck the built plist and package receipt match it. Do not amend the verified commit or sweep unrelated changes into the release.
 
 ```sh
-git add macOS/Info.plist
-git diff --cached --check
-# Inspect the staged diff and compare git write-tree to the pre-test record.
-git commit -m "chore(release): $tag (build $build)"
 git tag -a "$tag" -m "InkFlow $version (build $build)"
 ```
 
-Before tagging, require a clean worktree and the recorded tree match. Record the release commit SHA. Fetch origin again; require `origin/main` to be an ancestor of this commit, and `main` and the tag to point to this commit. If main advanced incompatibly, stop; do not force push, rebase or retag to hide it.
+Before tagging, require the clean worktree and recorded commit match. Fetch origin again; require `origin/main` to be an ancestor of `release_commit`, and the tag to point to that commit. If main advanced incompatibly, stop; do not force push, rebase or retag to hide it.
 
 ## 5. Publish the checked bytes
 
@@ -167,7 +153,7 @@ Treat this output as evidence to review, not text to publish. Inspect both secti
 The GitHub title already supplies the version. Keep stable installation and update steps in the README and link to them instead of repeating them. Add `运行要求` or an `升级提示` section only when platform requirements, installation, compatibility, migration or user-data behavior changed. Do not routinely mention signing, notarization or checksum commands in the notes; the verified assets and `SHA256SUMS` carry that evidence. End with the README link and `https://github.com/$repo/compare/$previous_tag...$tag`. Keep the internal recovery record separate. Do not expose local paths, credentials or notarization logs in the notes.
 
 ```sh
-git push --atomic origin main "refs/tags/$tag"
+git push --atomic origin "$release_commit:refs/heads/main" "refs/tags/$tag"
 gh release create "$tag" --repo "$repo" --verify-tag --draft --title "InkFlow $version" --notes-file "$notes_file"
 gh release upload "$tag" "$dmg" "$release_dir/SHA256SUMS" --repo "$repo"
 ```
@@ -185,10 +171,10 @@ Verify `isDraft` is false, both assets exist, and `git ls-remote origin` resolve
 
 Stop on the first failed gate and report the last successful step, version/build, commit/tag, output path and submission ID where available. Keep the failed attempt's files and logs; do not bump again just to retry.
 
-- Before commit: preserve the plist change and reuse the same version. Rerun only invalidated checks. `package.sh prepare` refuses an existing output directory. If prepare failed before a usable submission ZIP, inspect and move that failed directory to a unique backup before retrying the same version. After payload submission, retain the ZIP/app and resume its existing ID, then staple the app and run `finish`. A failed finish leaves a unique `assembly.XXXXXX`; rerun finish after resolving the failure, without deleting earlier assemblies. A process crash may leave `finishing/`: establish that no packager is running before removing this empty lock. Finish refuses any existing final DMG, including unknown output. If only final notarization or stapling failed, reuse the same DMG and submission ID instead of packaging again.
-- After commit/tag: verify they match the recorded source and package before resuming. Do not create duplicate commits or move tags.
+- Before the release commit: preserve the plist change and reuse the same version; do not package uncommitted bytes.
+- After the release commit: verify it matches the recorded source and package before resuming. Rerun only invalidated checks. `package.sh prepare` refuses an existing output directory. If prepare failed before a usable submission ZIP, inspect and move that failed directory to a unique backup before retrying the same version. After payload submission, retain the ZIP/app and resume its existing ID, then staple the app and run `finish`. A failed finish leaves a unique `assembly.XXXXXX`; rerun finish after resolving the failure, without deleting earlier assemblies. A process crash may leave `finishing/`: establish that no packager is running before removing this empty lock. Finish refuses any existing final DMG, including unknown output. If only final notarization or stapling failed, reuse the same DMG and submission ID instead of packaging again. Do not create duplicate commits or move tags.
 - After an uncertain push/create/upload/publish response: inspect remote state first. Reuse a matching draft and upload only missing assets. A mismatching existing asset or tag is a blocker; do not use `--clobber` or overwrite a published version. If already published and identical, report success.
-- If source/artifact provenance cannot be recovered, stop and explain the gap instead of certifying old bytes. Never silently omit full verification or notarization.
+- If source/artifact provenance cannot be recovered, stop and explain the gap instead of certifying old bytes. Never silently omit required release verification or notarization.
 
 ## Primary command references
 

@@ -30,4 +30,16 @@ expect "$output" core bundle-deep release-tools
 output=$(plan macOS/Info.plist)
 expect "$output" core bundle-deep settings-gui candidate-controller-gui installer release-tools
 [[ $(sort <<< "$output" | uniq -d | wc -l | tr -d ' ') == 0 ]]
+output=$(plan Package.swift)
+expect "$output" core bundle-deep settings-gui candidate-controller-gui installer release-tools
+[[ $(sort <<< "$output" | uniq -d | wc -l | tr -d ' ') == 0 ]]
+output=$(plan macOS/Sources/InputPreferences.swift)
+expect "$output" core bundle-deep settings-gui candidate-controller-gui
+reject "$output" installer release-tools
+output=$(plan macOS/Tests/NativeTestSupport.m macOS/Tests/include/NativeTestSupport.h)
+expect "$output" core bundle-deep settings-gui candidate-controller-gui installer
+reject "$output" release-tools
+[[ $(sort <<< "$output" | uniq -d | wc -l | tr -d ' ') == 0 ]]
+grep -Fq 'core_groups=(quality ai preparation dictionary-generator deployment engine controller settings dictionary-updates dictionary-activation termination)' macOS/scripts/release-verification.sh
+! grep -Fxq 'bash macOS/scripts/test.sh' macOS/scripts/release-verification.sh
 echo 'PASS release verification matrix: core/deep always, scoped GUI/installer/release-tool gates, docs ignored'

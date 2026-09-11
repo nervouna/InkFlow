@@ -8,7 +8,7 @@ cp macOS/scripts/release-receipt.sh macOS/scripts/build-installer.sh "$fixture/r
 (
   cd "$fixture/repo"
   git add macOS/scripts/release-receipt.sh macOS/scripts/build-installer.sh
-  git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'fixture receipt scripts'
+  git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'fixture receipt scripts'
   mkdir -p build/receipt-fixture
   printf verified > build/receipt-fixture/installer; chmod +x build/receipt-fixture/installer
   printf verified-icon > build/receipt-fixture/AppIcon.icns

@@ -5,6 +5,6 @@
 3. Preserve offline Rime as baseline. Optional AI, downloads, telemetry, and recovery must not block or corrupt it; keep network, disk, SQLite/JSON, and long preparation off the key-event path.
 4. Candidate/dictionary consumers share one reproducible generated-data contract with explicit admission, ranking, deduplication, and source priority. Missing evidence is `unknown`, never zero or success.
 5. Telemetry must not change ranking or input. Multi-stage/module/network features retain correlation IDs, stages, timing, and skip/cancel/failure reasons while suppressing repeats. Log no secrets or user content; store only minimal, bounded local data with explicit retention; keep AI default-off.
-6. Distinguish first install, update, temporary diagnosis, formal daily-use installation, and release; record visible typing only after user confirmation.
+6. Distinguish released-DMG installation, Developer ID development trial, Debug diagnosis, and release; record visible typing only after user confirmation.
 7. Keep auxiliary worktrees under the main checkout's ignored `.worktrees/<name>/`. Test the exact prospective integration tree and remove only proven task-owned artifacts.
 8. Follow [macOS/DEVELOPMENT.md](macOS/DEVELOPMENT.md#verification) for verification selection, prerequisites, and evidence boundaries.
