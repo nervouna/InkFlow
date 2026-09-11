@@ -23,6 +23,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     var secureInput: () -> Bool = { IsSecureEventInputEnabled() }
     var candidatePresentation: (any CandidatePresentation)?
     var aiPresentation: (any AISuggestionPresentation)?
+    var statusPresentation: (any InputStatusPresenting)? = nil
     let ai: IFInputControllerAI
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
@@ -41,7 +42,8 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
           aiStatisticsStore: AIStatisticsStore? = nil,
           smartService: any AISuggestionServing = AIChatCompletionsClient(),
           secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
-          presentation: (any AIInputPresentation)? = nil) {
+          presentation: (any AIInputPresentation)? = nil,
+          statusPresentation: (any InputStatusPresenting)? = nil) {
         injectedQualityStore = qualityStore
         self.qualityClock = qualityClock
         self.settings = settings
@@ -50,11 +52,13 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         self.secureInput = secureInput
         candidatePresentation = presentation
         aiPresentation = presentation
+        self.statusPresentation = statusPresentation
         super.init(server: server, delegate: delegate, client: inputClient)
         configure(server: server)
     }
 
     private func configure(server: IMKServer?) {
+        if statusPresentation == nil, server != nil { statusPresentation = NativeInputStatusPresentation() }
         engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
         if candidatePresentation == nil, let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
@@ -82,8 +86,10 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         ai.teardown()
+        statusPresentation?.hide()
         candidatePresentation = nil
         aiPresentation = nil
+        statusPresentation = nil
         panel = nil
     }
 
@@ -94,17 +100,26 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             let menu = NSMenu(title: "InkFlow")
             menu.autoenablesItems = false
             let ascii = engine?.requestedASCIIMode ?? false
-            menu.addItem(withTitle: (ascii ? "切换到中文输入" : "切换到英文输入") + "（左 Shift）",
-                         action: #selector(toggleInputMode(_:)), keyEquivalent: "").target = self
-            let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: "")
+            let mode = menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
+                                    action: #selector(toggleInputMode(_:)), keyEquivalent: "⇧")
+            mode.target = self
+            mode.keyEquivalentModifierMask = []
+            mode.allowsAutomaticKeyEquivalentLocalization = false
+            mode.indentationLevel = 0
+            let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: ".")
             punctuation.target = self
+            punctuation.keyEquivalentModifierMask = .control
+            punctuation.indentationLevel = 0
             punctuation.state = settings.inputPreferences[.englishPunctuation] ? .on : .off
-            let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: "")
+            let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: "f")
             traditional.target = self
+            traditional.keyEquivalentModifierMask = .control
+            traditional.indentationLevel = 0
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
             menu.addItem(.separator())
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
             ai.addMenuItem(to: menu, target: self, action: #selector(toggleSmartPrediction(_:)))
+            for item in menu.items where !item.isSeparatorItem { item.indentationLevel = 0 }
             result = menu
         }
         return result
@@ -212,7 +227,10 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     nonisolated override func deactivateServer(_ sender: Any!) {
         let span = IFStartupDiagnostics.shared.begin(.deactivation, source: .client)
         defer { IFStartupDiagnostics.shared.end(span) }
-        MainActor.assumeIsolated { ai.deactivateEntered() }
+        MainActor.assumeIsolated {
+            ai.deactivateEntered()
+            statusPresentation?.hide()
+        }
         commitComposition(sender)
         MainActor.assumeIsolated { ai.deactivateCommitted() }
         super.deactivateServer(sender)
@@ -222,6 +240,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     nonisolated override func hidePalettes() {
         MainActor.assumeIsolated {
             ai.invalidate(.hidePalettes)
+            statusPresentation?.hide()
             observeQualityVisibility()
             candidatePresentation?.hideCandidates()
             observeQualityVisibility()
@@ -231,6 +250,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     @objc private func workspaceChanged(_ notification: Notification) {
         ai.invalidate(.workspaceChanged)
+        statusPresentation?.hide()
         observeQualityVisibility()
     }
 

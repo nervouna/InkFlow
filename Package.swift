@@ -21,7 +21,7 @@ let inkFlowCoreSources = [
     "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
     "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
-    "InputControllerCore.swift", "InputRankingContext.swift",
+    "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
     "CustomPhrases.swift", "DictionaryCoordinator.swift", "DictionaryGenerator.swift", "DictionaryModels.swift",
     "DictionarySettings.swift", "DictionarySourceClient.swift", "DictionaryStore.swift", "DictionaryToolBootstrap.swift",
     "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",

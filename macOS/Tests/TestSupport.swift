@@ -13,10 +13,11 @@ package func check(_ condition: @autoclosure () -> Bool, _ message: String = "",
 }
 
 @MainActor
-package func keyEvent(_ code: UInt16, _ text: String, _ flags: NSEvent.ModifierFlags = []) -> NSEvent {
+package func keyEvent(_ code: UInt16, _ text: String, _ flags: NSEvent.ModifierFlags = [],
+                      repeated: Bool = false) -> NSEvent {
     NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
                     windowNumber: 0, context: nil, characters: text, charactersIgnoringModifiers: text,
-                    isARepeat: false, keyCode: code)!
+                    isARepeat: repeated, keyCode: code)!
 }
 
 @MainActor
@@ -71,6 +72,8 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var substringResponse: ((NSRange) -> (String?, NSRange))?
     package var lengthReads = 0
     package var reportedLength: Int?
+    package var caretRect = NSRect.zero
+    package var attributeIndexes: [Int] = []
 
     package init(document: String? = nil) {
         self.document = document
@@ -106,7 +109,11 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
     package func characterIndex(for point: NSPoint, tracking mappingMode: IMKLocationToOffsetMappingMode,
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>!) -> Int { NSNotFound }
-    package func attributes(forCharacterIndex index: Int, lineHeightRectangle lineRect: UnsafeMutablePointer<NSRect>!) -> [AnyHashable: Any]! { [:] }
+    package func attributes(forCharacterIndex index: Int, lineHeightRectangle lineRect: UnsafeMutablePointer<NSRect>!) -> [AnyHashable: Any]! {
+        attributeIndexes.append(index)
+        lineRect?.pointee = caretRect
+        return [:]
+    }
     package func validAttributesForMarkedText() -> [Any]! { [] }
     package func overrideKeyboard(withKeyboardNamed name: String!) {}
     package func selectMode(_ identifier: String!) {}

@@ -5,6 +5,18 @@ import InkFlowNativeTestSupport
 import InkFlowTestSupport
 #endif
 
+@MainActor
+private final class RecordingInputStatusPresentation: InputStatusPresenting {
+    private(set) var records: [(InputStatus, ObjectIdentifier?, Int)] = []
+    private(set) var hideCount = 0
+
+    func present(_ status: InputStatus, client: IMKTextInput?, characterIndex: Int) {
+        records.append((status, client.map { ObjectIdentifier($0 as AnyObject) }, characterIndex))
+    }
+
+    func hide() { hideCount += 1 }
+}
+
 @main
 struct ControllerTests {
     @MainActor static func main() throws {
@@ -17,6 +29,8 @@ struct ControllerTests {
         runCases(settings: isolated.settings)
         inputSettings(settings: isolated.settings)
         leftShiftSwitching(settings: isolated.settings)
+        controlShortcuts(settings: isolated.settings)
+        statusPanelPositioning()
         outsideCompositionClick(settings: isolated.settings)
         rawProtection(settings: isolated.settings)
         try customPhrases(settings: isolated.settings)
@@ -45,13 +59,25 @@ struct ControllerTests {
         check(other.engine!.inputPreferences?[.traditional] == true && !other.engine!.asciiMode,
               "Traditional and punctuation are global; ASCII remains per session")
         let menu = controller.menu()!
-        guard let modeItem = menu.items.first(where: { $0.title == "切换到中文输入（左 Shift）" }) else {
+        guard let modeItem = menu.items.first(where: { $0.title == "切换到中文输入" }) else {
             check(false, "Input menu must expose the mode toggle")
             return
         }
-        check(modeItem.keyEquivalent.isEmpty, "A modifier-only shortcut must be shown in the menu title")
-        check(menu.items.first { $0.title == "英文标点" }?.state == .on)
-        check(menu.items.first { $0.title == "繁体输入" }?.state == .on)
+        let punctuationItem = menu.items.first { $0.title == "英文标点" }!
+        let traditionalItem = menu.items.first { $0.title == "繁体输入" }!
+        check(modeItem.keyEquivalent == "⇧" && modeItem.keyEquivalentModifierMask.isEmpty &&
+              !modeItem.allowsAutomaticKeyEquivalentLocalization,
+              "Modifier-only left Shift must use a separate right-side annotation")
+        check(traditionalItem.keyEquivalent == "f" && traditionalItem.keyEquivalentModifierMask == .control,
+              "Traditional toggle must expose Control-F in the native shortcut column")
+        check(punctuationItem.keyEquivalent == "." && punctuationItem.keyEquivalentModifierMask == .control,
+              "Punctuation toggle must expose Control-period in the native shortcut column")
+        check(menu.items.filter { !$0.isSeparatorItem }.allSatisfy { $0.indentationLevel == 0 },
+              "Every menu item must stay at the menu's root indentation level")
+        check(menu.index(of: punctuationItem) < menu.index(of: traditionalItem),
+              "Adding shortcut annotations must preserve the existing state-item order")
+        check(punctuationItem.state == .on)
+        check(traditionalItem.state == .on)
         client.mutations.removeAll()
         check(controller.handle(keyEvent(49, " "), client: client))
         check(client.mutations == ["insert:互联网"] && engine.asciiMode)
@@ -74,8 +100,10 @@ struct ControllerTests {
 
     @MainActor static func leftShiftSwitching(settings: IFSettings) {
         let client = RecordingClient(document: "")
+        let status = RecordingInputStatusPresentation()
         let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
-            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
+            statusPresentation: status)!
         let engine = controller.engine!
         let masks = NSEvent.EventTypeMask(rawValue: UInt64(controller.recognizedEvents(client)))
         check(masks.contains(.keyDown) && masks.contains(.flagsChanged),
@@ -85,6 +113,11 @@ struct ControllerTests {
         check(!engine.requestedASCIIMode, "Left Shift press arms without switching early")
         check(controller.handle(modifierEvent(56), client: client))
         check(engine.asciiMode, "A standalone left Shift press-release toggles English mode")
+        check(status.records.map(\.0) == [.english] && status.records[0].1 == ObjectIdentifier(client) &&
+              status.records[0].2 == 0,
+              "Left Shift must present the resulting English state for the active client")
+        controller.hidePalettes()
+        check(status.hideCount == 1, "Hiding input palettes must immediately dismiss status feedback")
 
         check(!controller.handle(modifierEvent(60, .shift), client: client))
         check(!controller.handle(modifierEvent(60), client: client))
@@ -112,10 +145,91 @@ struct ControllerTests {
         check(controller.handle(modifierEvent(56), client: client))
         check(engine.requestedASCIIMode && !engine.asciiMode && engine.snapshot() == composing,
               "Left Shift defers mode changes until the current composition finishes")
+        check(status.records.map(\.0) == [.english, .english] && status.records[1].2 == composing.cursor,
+              "Deferred left Shift must present the requested state at the active composition cursor")
         check(controller.handle(keyEvent(49, " "), client: client))
         check(client.document == "你好" && engine.asciiMode,
               "Deferred left Shift commits the old composition once before switching: \(String(describing: client.document)), ascii=\(engine.asciiMode)")
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(modifierEvent(56), client: client))
+        check(!engine.asciiMode && status.records.map(\.0) == [.english, .english, .chinese] &&
+              status.records[2].2 == 0,
+              "Left Shift must also present the resulting Chinese state at the idle insertion point")
         print("PASS left Shift switching: recognized events, left-only toggle, right/modified/legacy exclusions, deferred composition")
+    }
+
+    @MainActor static func controlShortcuts(settings: IFSettings) {
+        settings.setInputOption(.traditional, enabled: false)
+        settings.setInputOption(.englishPunctuation, enabled: false)
+        let client = RecordingClient(document: "")
+        let status = RecordingInputStatusPresentation()
+        let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
+            statusPresentation: status)!
+
+        for letter in "ni" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        let composing = controller.engine!.snapshot()
+        check(controller.handle(keyEvent(3, "f", .control), client: client))
+        check(settings.inputPreferences[.traditional] && controller.engine?.inputPreferences?[.traditional] == false &&
+              controller.engine?.snapshot() == composing,
+              "Control-F must be consumed and defer application of the requested traditional state while composing")
+        check(status.records.map(\.0) == [.traditional] && status.records[0].2 == composing.cursor,
+              "Control-F must present the requested traditional state at the composition cursor")
+        check(controller.handle(keyEvent(3, "f", .control, repeated: true), client: client))
+        check(settings.inputPreferences[.traditional] && status.records.map(\.0) == [.traditional],
+              "A repeated Control-F event must be consumed without toggling or presenting again")
+
+        check(controller.handle(keyEvent(47, ".", .control), client: client))
+        check(settings.inputPreferences[.englishPunctuation] && controller.engine?.inputPreferences?[.englishPunctuation] == false &&
+              controller.engine?.snapshot() == composing,
+              "Control-period must be consumed and defer application of the requested punctuation state while composing")
+        check(status.records.map(\.0) == [.traditional, .englishPunctuation] && status.records[1].2 == composing.cursor,
+              "Control-period must present the requested punctuation state at the composition cursor")
+        let requestedMenu = controller.menu()!
+        check(requestedMenu.items.first { $0.title == "繁体输入" }?.state == .on &&
+              requestedMenu.items.first { $0.title == "英文标点" }?.state == .on,
+              "Menu state must follow the requested shortcut state while engine application is deferred")
+        check(controller.handle(keyEvent(53, ""), client: client))
+        check(controller.engine?.inputPreferences?[.traditional] == true &&
+              controller.engine?.inputPreferences?[.englishPunctuation] == true,
+              "Deferred Control shortcut states must apply when composition becomes idle")
+
+        check(!controller.handle(keyEvent(3, "f", [.control, .shift]), client: client))
+        check(!controller.handle(keyEvent(47, ".", [.control, .option]), client: client))
+        check(settings.inputPreferences[.traditional] && settings.inputPreferences[.englishPunctuation],
+              "Control shortcuts with additional modifiers must pass through without changing state")
+
+        check(controller.handle(keyEvent(3, "f", [.control, .capsLock]), client: client))
+        check(controller.handle(keyEvent(47, ".", [.control, .capsLock]), client: client))
+        check(!settings.inputPreferences[.traditional] && !settings.inputPreferences[.englishPunctuation] &&
+              status.records.map(\.0) == [.traditional, .englishPunctuation, .simplified, .chinesePunctuation],
+              "Caps Lock must not prevent exact Control shortcuts from toggling to the resulting states")
+
+        print("PASS Control shortcuts: consumed exact chords, synchronized requested settings and status presentation, rejected extra modifiers")
+    }
+
+    @MainActor static func statusPanelPositioning() {
+        let screen = NSRect(x: 0, y: 0, width: 600, height: 400)
+        let size = NSSize(width: 100, height: 40)
+        check(InputStatusPanel.position(caretRect: NSRect(x: 250, y: 180, width: 2, height: 20),
+                                        panelSize: size, screens: [screen]) ==
+              NSRect(x: 201, y: 208, width: 100, height: 40),
+              "Status panel must center above the insertion caret")
+        check(InputStatusPanel.position(caretRect: NSRect(x: 2, y: 360, width: 2, height: 20),
+                                        panelSize: size, screens: [screen]) ==
+              NSRect(x: 0, y: 312, width: 100, height: 40),
+              "Status panel must fall below the caret and clamp to the visible screen when above does not fit")
+        check(InputStatusPanel.position(caretRect: .zero, panelSize: size, screens: [screen]) == nil,
+              "Invalid caret geometry must suppress status presentation")
+        let client = RecordingClient()
+        client.caretRect = NSRect(x: 80, y: 90, width: 1, height: 18)
+        check(NativeInputStatusPresentation.caretRect(for: client, characterIndex: 4) == client.caretRect &&
+              client.attributeIndexes == [4],
+              "Caret resolution must query the controller-provided composition cursor index")
+        client.caretRect = .zero
+        check(NativeInputStatusPresentation.caretRect(for: client, characterIndex: 0) == nil,
+              "Caret resolution must reject an invalid client rectangle")
+        print("PASS status panel positioning: above-caret placement, visible-screen fallback and invalid-caret suppression")
     }
 
     @MainActor static func outsideCompositionClick(settings: IFSettings) {

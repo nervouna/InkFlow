@@ -88,7 +88,7 @@ impact_classify() {
       impact_rule "$path" 'production AI headless contracts; native harness remains explicit' ai-headless ;;
     macOS/scripts/test-ai-runtime.sh)
       impact_rule "$path" 'AI runtime runner' ai-runtime ;;
-    macOS/Sources/InputController.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/CandidatePresentation.swift|macOS/Sources/NativeCandidates.*)
+    macOS/Sources/InputController.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputStatusPanel.swift|macOS/Sources/InputStatusPresentation.swift|macOS/Sources/CandidatePresentation.swift|macOS/Sources/NativeCandidates.*)
       impact_rule "$path" 'input event routing and exact-once delivery' engine-basic controller ai-headless quality-capture-query
       impact_manual_add manual-input ;;
     macOS/Sources/InputRankingContext.swift|macOS/Sources/Context.swift)

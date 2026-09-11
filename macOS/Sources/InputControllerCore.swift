@@ -32,7 +32,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         return false
     }
 
-    private func handleModeShift(_ event: NSEvent, capturedAt: TimeInterval) -> Bool {
+    private func handleModeShift(_ event: NSEvent, client: IMKTextInput?, capturedAt: TimeInterval) -> Bool {
         guard event.type == .flagsChanged else {
             leftShiftArmed = false
             return false
@@ -47,8 +47,35 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         }
         let shouldToggle = leftShiftArmed
         leftShiftArmed = false
-        if shouldToggle { _ = engine?.toggleASCIIMode(capturedAt: capturedAt) }
-        return shouldToggle
+        guard shouldToggle else { return false }
+        if let engine, engine.toggleASCIIMode(capturedAt: capturedAt) {
+            let state = engine.snapshot()
+            statusPresentation?.present(engine.requestedASCIIMode ? .english : .chinese, client: client,
+                                        characterIndex: state.preedit.isEmpty ? 0 : state.cursor)
+        }
+        return true
+    }
+
+    private func handleControlShortcut(_ event: NSEvent, client: IMKTextInput?) -> Bool {
+        let shortcutFlags = event.modifierFlags.intersection([.shift, .control, .option, .command, .function])
+        guard event.type == .keyDown, shortcutFlags == .control else { return false }
+        if event.isARepeat { return event.keyCode == UInt16(kVK_ANSI_F) || event.keyCode == UInt16(kVK_ANSI_Period) }
+        let status: InputStatus
+        switch event.keyCode {
+        case UInt16(kVK_ANSI_F):
+            let enabled = !settings.inputPreferences[.traditional]
+            settings.setInputOption(.traditional, enabled: enabled)
+            status = enabled ? .traditional : .simplified
+        case UInt16(kVK_ANSI_Period):
+            let enabled = !settings.inputPreferences[.englishPunctuation]
+            settings.setInputOption(.englishPunctuation, enabled: enabled)
+            status = enabled ? .englishPunctuation : .chinesePunctuation
+        default:
+            return false
+        }
+        let state = engine?.snapshot() ?? EngineSnapshot()
+        statusPresentation?.present(status, client: client, characterIndex: state.preedit.isEmpty ? 0 : state.cursor)
+        return true
     }
 
     override func applySettings() {
@@ -120,11 +147,14 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             if let callbackEvent, callbackEvent.type == .flagsChanged {
                 associateQualityClient(callbackClient as? IMKTextInput)
                 engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
-                return handleModeShift(callbackEvent, capturedAt: entered)
+                return handleModeShift(callbackEvent, client: callbackClient as? IMKTextInput, capturedAt: entered)
             }
             leftShiftArmed = false
             observeQualityVisibility(at: entered)
             ai.validate()
+            if let callbackEvent, handleControlShortcut(callbackEvent, client: callbackClient as? IMKTextInput) {
+                return true
+            }
             if let callbackEvent, callbackEvent.type == .keyDown, callbackEvent.keyCode == 48,
                callbackEvent.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
                ai.acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) { return true }
