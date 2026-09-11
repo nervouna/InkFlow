@@ -70,7 +70,7 @@ for invalid in --unit unknown ''; do
 done
 if run all settings; then exit 1; else status=$?; fi
 [[ $status == 2 && ! -s "$INKFLOW_RUNNER_LOG" ]]
-for group in all dictionary-worker dictionary-updates dictionary-activation; do
+for group in all dictionary-worker dictionary-updates dictionary-activation termination; do
   if run "$group"; then echo 'FAIL: missing worker accepted' >&2; exit 1; fi
   [[ ! -s "$INKFLOW_RUNNER_LOG" ]]
   grep -q 'Run build.sh first.' "$fixture/output.log"

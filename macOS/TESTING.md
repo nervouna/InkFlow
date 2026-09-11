@@ -45,7 +45,7 @@ bash macOS/scripts/test.sh dictionary-source
 | `quality` | `quality-identity`, `quality-store`, `quality-timing`, `quality-metadata`, `quality-capture-query` |
 | `dictionary-updates` | `dictionary-source`, `dictionary-store`, `dictionary-worker` |
 
-Other units are `preparation`, `dictionary-generator`, `deployment`, `controller`, `settings`, `dictionary-activation` (including serving startup), `startup-diagnostics`, `termination`, `installer-core`, `runner`, and `workflow`. Unknown groups fail before resource preparation. `dictionary-source` prepares source fixtures without an app/worker; `dictionary-store` uses synthetic resources and a fixed fingerprint. `dictionary-worker` and `dictionary-activation` require a current app built with `build.sh`.
+Other units are `preparation`, `dictionary-generator`, `deployment`, `controller`, `settings`, `dictionary-activation` (including serving startup), `startup-diagnostics`, `termination`, `installer-core`, `runner`, and `workflow`. Unknown groups fail before resource preparation. `dictionary-source` prepares source fixtures without an app/worker; `dictionary-store` uses synthetic resources and a fixed fingerprint. `dictionary-worker`, `dictionary-activation` and `termination` require a current app built with `build.sh`; termination uses its bundled Rime resources.
 
 Engine behavior units and Controller receive separate temporary writable roots, removed on exit. Their settings are isolated. Shared Rime preparation runs once per `test.sh` invocation; adoption learning intentionally retains its separate fresh deployment, and restart/recovery scenarios share state only inside their own test. Capture and its dependent query stay one unit to avoid stale evidence.
 

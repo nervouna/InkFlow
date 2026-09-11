@@ -145,6 +145,14 @@ change macOS/Sources/DictionaryStore.swift
 plan --run
 grep -Fxq 'build ' "$INKFLOW_AFFECTED_LOG"
 [[ $(head -n 1 "$INKFLOW_AFFECTED_LOG") == 'build ' ]]
+for path in macOS/Tests/TerminationTests.swift macOS/scripts/test-termination.sh; do
+  new_case
+  change "$path"
+  plan --run
+  has 'Units: termination'
+  [[ $(head -n 1 "$INKFLOW_AFFECTED_LOG") == 'build ' ]]
+  grep -Fxq 'test termination' "$INKFLOW_AFFECTED_LOG"
+done
 new_case
 change macOS/scripts/build.sh
 plan --run

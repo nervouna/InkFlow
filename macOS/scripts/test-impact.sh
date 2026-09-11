@@ -133,8 +133,10 @@ impact_classify() {
       impact_release_tools=true ;;
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
-    macOS/Sources/ApplicationLifecycle.swift|macOS/Tests/TerminationTests.swift|macOS/scripts/test-termination.sh)
+    macOS/Sources/ApplicationLifecycle.swift)
       impact_rule "$path" 'shutdown and cancellation' termination ai-headless dictionary-activation ;;
+    macOS/Tests/TerminationTests.swift|macOS/scripts/test-termination.sh)
+      impact_rule "$path" 'termination subprocess modes using bundled Rime' termination ;;
     macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/main.swift)
       impact_rule "$path" 'application startup and service integration' dictionary-activation startup-diagnostics controller ai-headless
       impact_manual_add manual-input manual-settings ;;

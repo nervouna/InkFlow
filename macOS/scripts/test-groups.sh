@@ -27,7 +27,7 @@ expand_test_groups() {
 test_units_need_app() {
   local unit
   for unit in "${test_units[@]}"; do
-    case "$unit" in dictionary-worker|dictionary-activation) return 0 ;; esac
+    case "$unit" in dictionary-worker|dictionary-activation|termination) return 0 ;; esac
   done
   return 1
 }

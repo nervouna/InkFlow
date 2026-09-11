@@ -29,7 +29,14 @@ import InkFlowTestSupport
         coordinator.retry() // A real owned detached factory is in flight when termination begins.
         let storeURL = root.appendingPathComponent("quality.sqlite3")
         if mode == "disabled" { try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true) }
-        let store = QualityStore(url: storeURL, engineVersion: "test", buildMetadata: .unknown)
+        // Success mode flushes a real pending composition; its synthetic build
+        // identity must satisfy the same persistence contract as production.
+        let metadata = QualityBuildMetadata(sourceRevision: "termination-fixture",
+            sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
+            bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
+            rankingSourceSHA256: String(repeating: "d", count: 64), rankingResourcesSHA256: String(repeating: "e", count: 64),
+            appVersion: "test", appBuild: "1")
+        let store = QualityStore(url: storeURL, engineVersion: "test", buildMetadata: metadata)
         var engine: IFEngine?
         if mode == "success" {
             try IFEngine.start(shared: CommandLine.arguments[3], user: root.appendingPathComponent("rime-user").path, qualityStore: store)
@@ -55,7 +62,7 @@ import InkFlowTestSupport
             closeAttempts += 1
             if mode == "store-failure" && closeAttempts == 1 { record("store-failed"); return false }
             let closed = await store.close()
-            check(closed, "Unavailable recording with no pending data must allow termination")
+            check(closed, "Termination must close the fixture store in mode \(mode): \(store.statistics())")
             record("store-close")
             return closed
         }, didTerminate: { record("will-terminate") })

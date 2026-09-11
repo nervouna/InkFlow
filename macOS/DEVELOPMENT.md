@@ -114,7 +114,7 @@ bash macOS/scripts/test-test-runner.sh # Isolated test-runner regression checks
 | `settings` | Settings logic, with librime compilation dependencies; no built app or test dictionaries required |
 | `dictionary-updates` | Source/store/worker scenarios; only worker needs a current app; source/store can run independently |
 | `dictionary-activation` | Native activation/recovery; run `build.sh` first for a current app and generated dictionary sources |
-| `termination` | Graceful input-method shutdown and timeout handling |
+| `termination` | Graceful input-method shutdown and timeout handling using bundled Rime; run `build.sh` first |
 | `installer-core` | Transactional installation, validation, rollback, and state reporting |
 
 `test.sh` accepts explicit groups; `test-affected.sh` derives a plan from Git changes using the shared impact rules. The worker existence check does not prove build freshness; affected execution builds first when required. The full suite also includes startup diagnostics, runner regressions and workflow fixtures. GUI, Keychain and paid live checks remain separate.
