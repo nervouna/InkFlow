@@ -56,7 +56,7 @@ Run release verification from an isolated linked worktree at the clean release-c
 bash macOS/scripts/release-verification.sh --from vPREVIOUS
 ```
 
-This single entry builds a fresh bundle, runs the complete non-GUI core profile once, selects Settings/candidate/controller GUI, Installer core/window, and release-helper/package fixtures from the changed paths since the previous stable tag, and runs one deep bundle check. It also freezes the verified Installer executable and icon for packaging. GUI gates require a logged-in, unlocked desktop. Do not duplicate those checks in `package.sh`: prepare and finish use fast structural bundle checks and the verified release receipt.
+This single entry builds a fresh bundle, runs `test.sh all` once (including Installer core and workflow fixtures), runs one deep bundle check, and selects applicable release-helper fixtures. It uses the shared impact mapping to print pending human input/settings/installation checks; it does not launch GUI suites. It also freezes the verified Installer executable and icon for packaging. Do not duplicate those checks in `package.sh`: prepare and finish use fast structural bundle checks and the verified release receipt.
 
 Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) for Developer ID signing, exact Team ID and entitlement checks, notarization, stapling, Gatekeeper assessment, final DMG inspection, downloaded-asset checksum verification, and publication. Missing or failed required gates block release. Automated checks and packaging do not establish installed-input-method typing acceptance.
 
@@ -66,13 +66,13 @@ Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) fo
 
 For development, commits, and local merges, run affected unit tests plus necessary related-module and integration checks. Select checks using behavior, callers, shared configuration, and resources, not only changed filenames. Build affected targets and verify the bundle when build inputs or packaged resources change. Documentation-only changes require scoped review and `git diff --check`, not application tests.
 
-Do not run full regression or complete GUI suites by default. Changes to native windows, candidate panels, focus, or input interactions still require targeted GUI/native interaction verification. Use existing focused scripts or supported harness options, such as the Input-page check below; if no focused entry point covers the change, use the smallest existing suite that does. Respect build/resource prerequisites and do not rely on stale application or worker binaries. Broaden checks when failures or uncertain impact justify it.
+Start with `bash macOS/scripts/test-affected.sh` to inspect the Git-based plan; add `--from REF` to include committed changes and `--run` to execute it. See [TESTING.md](TESTING.md) for the coverage responsibility table, subgroups and fallback rules. Run the affected logic and necessary integration checks; do not run full regression or GUI suites by default. Hand off actual typing, focus, candidate-window experience and cross-App interaction to the user with a short change-specific checklist. Existing GUI scripts remain explicit diagnostic tools. Respect build/resource prerequisites and broaden checks only when new changes, failures or uncertain impact justify it.
 
-Report checks run, their scope, and missing, failed, or skipped relevant checks. Passing scoped checks establishes development verification only; it does not establish Developer ID trial or release readiness. An unavailable GUI session leaves affected GUI behavior unverified.
+Report checks run, their scope, and missing, failed, or skipped relevant checks. Passing scoped checks establishes development verification only; it does not establish Developer ID trial or release readiness. Unperformed human checks remain pending, regardless of headless/native harness results.
 
 AI input suggestions are split between `AISettings.swift` / `AIChatCompletions.swift` (BYOK settings and compatible transport), `AIContext.swift` (bounded document access), `AISuggestionCoordinator.swift` (debounce and stale-result checks), and `AISuggestionPanel.swift` (passive AppKit presentation). `InputController.swift` owns client lifecycle and Tab delivery. Engine request identity includes raw input, caret and selected prefix, excluding candidate pages, highlights and display preedit. Controller-authored display range changes retain the input deadline; externally changed client ranges invalidate it. Full document context is captured only at dispatch, response validation and acceptance, never by the 100 ms position tracker.
 
-`bash macOS/scripts/test-ai-runtime.sh` tests real 0.5-second debounce timing, changed display ranges during navigation, late services that ignore cancellation, repeated compositions, context and configuration invalidation, secure/foreign marks, UTF-16 boundaries, and reentrant document reads. It uses in-memory credentials, synthetic context and an injected service. The `ai` group in `test.sh` includes this suite plus transport, settings, statistics and adoption-learning tests.
+`bash macOS/scripts/test-ai-runtime.sh` tests real 0.5-second debounce timing, changed display ranges during navigation, late services that ignore cancellation, repeated compositions, context and configuration invalidation, secure/foreign marks, UTF-16 boundaries, and reentrant document reads. It uses in-memory credentials, synthetic context and an injected service. The `ai` group in `test.sh` includes this suite plus transport, settings, statistics, adoption-learning and headless production-chain tests.
 
 `bash macOS/scripts/test-ai-native.sh` requires a logged-in GUI session. Its separate app uses real Rime, IMK candidate windows and the production controller with a recording document client; the existing framework-initialization/client-lookup shim supplies the synthetic client because IMK normally requires its own cross-process proxy. It checks passive window geometry/focus, ordinary space/digit/click selection, partial composition prefixes, exact-once Tab, delivery leases under synchronous client reentry, and stale lifecycle events. It neither registers an input source nor changes production preferences or Keychain entries. The script requires a final acceptance marker as well as a successful exit code.
 
@@ -105,19 +105,19 @@ bash macOS/scripts/test-test-runner.sh # Isolated test-runner regression checks
 | Group | Coverage and prerequisites |
 | --- | --- |
 | `quality` | Store, metadata, engine capture, then query tests against freshly captured evidence |
-| `ai` | Suggestion transport, statistics, runtime coordination and adoption learning, with dependencies and prepared Rime test data |
+| `ai` | Transport, statistics, runtime, adoption learning and headless integration; see the subgroups in TESTING.md |
 | `preparation` | Rime preparation policy fixtures |
 | `dictionary-generator` | Dictionary generation, with dependency preparation |
 | `deployment` | Deployment scenarios, with dependencies and test dictionaries |
 | `engine` | Engine scenarios, with dependencies and test dictionaries |
 | `controller` | Headless controller scenarios, with dependencies and test dictionaries |
 | `settings` | Settings logic, with librime compilation dependencies; no built app or test dictionaries required |
-| `dictionary-updates` | Update/worker scenarios; run `build.sh` first for a current app and generated dictionary sources |
+| `dictionary-updates` | Source/store/worker scenarios; only worker needs a current app; source/store can run independently |
 | `dictionary-activation` | Native activation/recovery; run `build.sh` first for a current app and generated dictionary sources |
 | `termination` | Graceful input-method shutdown and timeout handling |
 | `installer-core` | Transactional installation, validation, rollback, and state reporting |
 
-Group selection does not infer affected modules from Git changes. The worker existence check does not prove build freshness; rebuild when its source or resource inputs have changed. GUI suites remain separate.
+`test.sh` accepts explicit groups; `test-affected.sh` derives a plan from Git changes using the shared impact rules. The worker existence check does not prove build freshness; affected execution builds first when required. The full suite also includes startup diagnostics, runner regressions and workflow fixtures. GUI, Keychain and paid live checks remain separate.
 
 The test scenarios are Swift executables. `Tests/NativeTestSupport.m` contains the small Objective-C runtime/exception helper needed to inspect native font rendering and accessibility objects, and to intercept framework initialization/teardown and supplied-client lookup in the headless controller test. Swift controllers always run their real initializers. Settings tests use isolated defaults suites; the production initializer test overrides only its process-local argument domain.
 
@@ -139,8 +139,9 @@ For interactive UI inspection, `bash macOS/scripts/test-settings-ui.sh --hold` l
 and registration CLI with `bash macOS/scripts/check-installer-core.sh`. The full
 regression includes isolated termination and installer transaction/state tests.
 `test-installer-window.sh` exercises an isolated native window with fake backends;
-it needs an unlocked desktop and never operates the installed input source. The release
-path matrix selects this suite for Installer-related changes.
+it needs an unlocked desktop and never operates the installed input source. Run it
+only as an explicit diagnostic. Installer changes produce a human installation/upgrade
+checklist through the shared impact mapping.
 
 `bash macOS/scripts/build-installer.sh /absolute/path/to/InkFlow.zip /new/output.app`
 compiles the installer and copies version/build from `macOS/Info.plist` without
@@ -161,9 +162,12 @@ the release candidate's resource rebuild and engine transcript have already run 
 The final DMG requires its own external notarization and stapling. See the
 [release workflow](../.agents/skills/inkflow-release/SKILL.md) for commands and recovery.
 
-Release acceptance additionally requires trusted downloaded/quarantined DMG launch,
-extraction of the inner app with its ticket intact and independent signature/stapler
-assessment, clean-user installation and old-version upgrade, and actual client typing.
-Builds, fixture tests and the read-only payload probe establish none of those runtime
-outcomes. Do not run native GUI suites on a locked screen or replace user-owned
+Release artifact checks include extraction of the inner app with its ticket intact
+and independent signature/stapler assessment. When installation or interaction changes,
+human acceptance covers downloaded/quarantined DMG launch, installation/upgrade and
+actual client typing as relevant. Record version, scope, result and commit in the existing
+`build/release-notes.md`; the release skill checks these results before public publication.
+Changed behavior or delivery artifacts invalidate earlier acceptance. Internal-only
+changes do not mechanically require typing. Builds, fixture tests and the read-only
+payload probe establish none of those runtime outcomes. Do not run native GUI suites on a locked screen or replace user-owned
 installed-version typing acceptance with a temporary diagnostic installation.

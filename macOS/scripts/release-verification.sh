@@ -18,31 +18,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-declare -a gates=(core bundle-deep)
-add_gate() {
-  local candidate=$1 existing
-  for existing in "${gates[@]}"; do [[ "$existing" == "$candidate" ]] && return; done
-  gates+=("$candidate")
-}
+source macOS/scripts/test-groups.sh
+source macOS/scripts/test-impact.sh
+impact_reset
 classify() {
-  local file=$1
-  case "$file" in
-    Package.swift) add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer; add_gate release-tools ;;
-    macOS/Info.plist) add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer; add_gate release-tools ;;
-    macOS/Sources/InputPreferences.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
-    macOS/Sources/Settings.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
-    macOS/Sources/AI*.swift) add_gate candidate-controller-gui ;;
-    macOS/Sources/SmartSettingsView.swift|macOS/Sources/DictionarySettings.swift|macOS/Sources/DictionaryModels.swift|macOS/Sources/DictionaryStore.swift|macOS/Tests/Settings*|macOS/Tests/DictionarySettingsUI*|macOS/scripts/test-settings-ui.sh)
-      add_gate settings-gui ;;
-    macOS/Sources/*Candidate*|macOS/Sources/InputController.swift|macOS/Sources/AIInputPresentation.swift|macOS/Sources/AISettings.swift|macOS/Sources/AISuggestionPanel.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/Engine.swift|macOS/Sources/NativeCandidates.*|macOS/Tests/AIControllerNativeTests.swift|macOS/Tests/ControllerInitializationTests.swift|macOS/scripts/test-ai-native.sh|macOS/scripts/test-controller-initialization.sh)
-      add_gate candidate-controller-gui ;;
-    macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
-      add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer ;;
-    macOS/Installer/*|macOS/Shared/InputSourceManager.swift|macOS/Shared/RegisterInputSourceBootstrap.swift|macOS/Tests/Installer*|macOS/scripts/build-installer.sh|macOS/scripts/check-installer-core.sh|macOS/scripts/test-installer-*)
-      add_gate installer ;;
-    .agents/skills/inkflow-release/*|macOS/DeveloperID.entitlements|macOS/scripts/check-bundle.sh|macOS/scripts/quality-metadata.sh|macOS/scripts/verify-developer-id.sh|macOS/Tools/QualityBuildMetadata.swift)
-      add_gate release-tools ;;
-  esac
+  if [[ -z "$changed_file" && -n "$from" ]]; then impact_classify_git "$1" "$from"
+  else impact_classify "$1"
+  fi
 }
 
 if [[ -n "$changed_file" ]]; then
@@ -55,10 +37,15 @@ else
     done < <(git tag --merged HEAD --sort=-version:refname)
   fi
   [[ -n "$from" ]] || { echo 'No stable release tag is an ancestor of HEAD.' >&2; exit 1; }
+  from=$(git rev-parse --verify --end-of-options "$from^{commit}" 2>/dev/null) || { echo 'Unknown release baseline.' >&2; exit 2; }
   git merge-base --is-ancestor "$from" HEAD || { echo "$from is not an ancestor of HEAD." >&2; exit 1; }
-  while IFS= read -r file; do classify "$file"; done < <(git diff --name-only "$from..HEAD")
+  while IFS= read -r -d '' file; do classify "$file"; done < <(git diff --no-renames --name-only -z "$from..HEAD")
 fi
 
+gates=(core bundle-deep)
+if $impact_release_tools; then gates+=(release-tools); fi
+automated_gates=("${gates[@]}")
+gates+=("${impact_manual[@]}")
 if [[ "$plan_only" == true ]]; then printf '%s\n' "${gates[@]}"; exit 0; fi
 [[ -z "$changed_file" ]] || { echo '--changed-paths is only valid with --plan-only.' >&2; exit 2; }
 [[ -z $(git status --porcelain --untracked-files=normal) ]] || { echo 'Release verification requires a clean commit.' >&2; exit 1; }
@@ -69,24 +56,10 @@ release_commit=$(git rev-parse HEAD)
 
 echo "Release verification range: $from..HEAD"
 bash macOS/scripts/build.sh
-core_groups=(quality ai preparation dictionary-generator deployment engine controller settings dictionary-updates dictionary-activation termination)
-bash macOS/scripts/test.sh "${core_groups[@]}"
-bash macOS/scripts/test-workflow.sh
+bash macOS/scripts/test.sh all
 bash macOS/scripts/check-bundle.sh --deep
-for gate in "${gates[@]:2}"; do
-  case "$gate" in
-    settings-gui) bash macOS/scripts/test-settings-ui.sh ;;
-    candidate-controller-gui)
-      bash macOS/scripts/test-controller-initialization.sh
-      bash macOS/scripts/test-ai-native.sh
-      ;;
-    installer)
-      bash macOS/scripts/test-installer-core.sh
-      bash macOS/scripts/test-installer-window.sh
-      ;;
-    release-tools) bash .agents/skills/inkflow-release/scripts/test.sh ;;
-  esac
-done
+if $impact_release_tools; then bash .agents/skills/inkflow-release/scripts/test.sh; fi
+
 [[ "$(git rev-parse HEAD)" == "$release_commit" && -z $(git status --porcelain --untracked-files=normal) ]] || {
   echo 'Release source changed during verification.' >&2; exit 1;
 }
@@ -100,4 +73,8 @@ cp build/AppIcon.icns "$receipt_dir/AppIcon.icns"
   echo 'Release source changed while building the verified installer.' >&2; exit 1;
 }
 bash macOS/scripts/release-receipt.sh create "$receipt_dir/InkFlowInstaller" "$receipt_dir/AppIcon.icns" "$receipt_dir/installer.plist"
-printf 'PASS release verification: %s\n' "${gates[*]}"
+printf 'PASS automated release verification: %s\n' "${automated_gates[*]}"
+for item in "${impact_manual[@]}"; do
+  printf 'Manual acceptance pending: %s: %s\n' "$item" "$(impact_manual_description "$item")"
+done
+echo 'Automated verification is not release acceptance; the release skill checks required user confirmation before publication.'

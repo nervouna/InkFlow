@@ -11,7 +11,7 @@ for script in dependencies prepare-rime test-quality-identity test-quality-store
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
   test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
   test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
-  test-startup-diagnostics test-test-runner test-workflow; do
+  test-startup-diagnostics test-test-runner test-test-affected test-workflow; do
   cat > "$fixture/macOS/scripts/$script.sh" <<'STUB'
 #!/bin/bash
 set -euo pipefail
@@ -82,8 +82,18 @@ run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
-for required in test-ai-headless test-startup-diagnostics test-test-runner test-workflow; do
+for required in test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
+  test-quality-capture test-quality-query test-ai-suggestions test-ai-runtime test-ai-statistics \
+  test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
+  test-dictionary-activation test-serving-startup test-startup-diagnostics test-termination \
+  test-installer-core test-test-runner test-test-affected test-workflow; do
   [[ $(grep -c "^$required " "$INKFLOW_RUNNER_LOG") == 1 ]]
+done
+for required in 'run deployment-tests ' 'run engine-tests --basic' 'run engine-tests --options' \
+  'run engine-tests --english' 'run engine-tests --context' 'run engine-tests --custom-phrases' \
+  'run controller-tests ' 'run settings-tests ' \
+  'test-dictionary-updates --source' 'test-dictionary-updates --store' 'test-dictionary-updates --worker'; do
+  [[ $(grep -Fxc "$required" "$INKFLOW_RUNNER_LOG") == 1 ]]
 done
 [[ $(grep -c '^prepare-rime ' "$INKFLOW_RUNNER_LOG") == 1 ]]
 ! grep -E 'gui|keychain|--live' "$INKFLOW_RUNNER_LOG"

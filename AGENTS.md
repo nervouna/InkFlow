@@ -8,3 +8,4 @@
 6. Distinguish released-DMG installation, Developer ID development trial, Debug diagnosis, and release; record visible typing only after user confirmation.
 7. Keep auxiliary worktrees under the main checkout's ignored `.worktrees/<name>/`. Test the exact prospective integration tree and remove only proven task-owned artifacts.
 8. Follow [macOS/DEVELOPMENT.md](macOS/DEVELOPMENT.md#verification) for verification selection, prerequisites, and evidence boundaries.
+9. Use `test-affected.sh` and [macOS/TESTING.md](macOS/TESTING.md) for focused daily checks; extend impact rules when dependencies change. Actual typing, focus and cross-App interaction are user-owned acceptance. GUI harnesses are explicit diagnostics, not default daily/release gates. Report pending human checks; release publication requires confirmed results for affected interactions.

@@ -64,7 +64,9 @@ for unit in "${test_units[@]}"; do
     dictionary-activation)
       bash macOS/scripts/test-dictionary-activation.sh
       bash macOS/scripts/test-serving-startup.sh ;;
-    runner) bash macOS/scripts/test-test-runner.sh ;;
+    runner)
+      bash macOS/scripts/test-test-runner.sh
+      bash macOS/scripts/test-test-affected.sh ;;
     workflow) bash macOS/scripts/test-workflow.sh ;;
     *) bash "macOS/scripts/test-$unit.sh" ;;
   esac
