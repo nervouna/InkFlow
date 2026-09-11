@@ -12,6 +12,7 @@ struct ControllerTests {
         runCases(settings: isolated.settings)
         inputSettings(settings: isolated.settings)
         leftShiftSwitching(settings: isolated.settings)
+        outsideCompositionClick(settings: isolated.settings)
         rawProtection(settings: isolated.settings)
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
@@ -106,6 +107,33 @@ struct ControllerTests {
         check(client.document == "你好" && engine.asciiMode,
               "Deferred left Shift commits the old composition once before switching: \(String(describing: client.document)), ascii=\(engine.asciiMode)")
         print("PASS left Shift switching: recognized events, left-only toggle, right/modified/legacy exclusions, deferred composition")
+    }
+
+    @MainActor static func outsideCompositionClick(settings: IFSettings) {
+        let client = RecordingClient(document: "前")
+        let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        for letter in "nihao" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        let originalMark = client.markedRange()
+        var tracking = ObjCBool(true)
+        check(!IFSendMouseDown(controller, 0, client, &tracking))
+        check(!tracking.boolValue && client.document == "前你好" && client.markedRange().location == NSNotFound,
+              "Clicking outside the marked range must commit once and leave click handling to the client")
+        check(client.insertions.count == 1 && client.insertions[0].markedRange == originalMark,
+              "The outside click must commit at the original marked range exactly once")
+
+        client.selection = NSRange(location: 0, length: 0)
+        for letter in "wo" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        check(controller.handle(keyEvent(49, " "), client: client))
+        check(client.document == "我前你好", "Input after the click must start at the client's new insertion point")
+
+        for letter in "ni" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        let insideMark = client.markedRange(), before = client.document
+        tracking = true
+        check(!IFSendMouseDown(controller, UInt(insideMark.location), client, &tracking))
+        check(!tracking.boolValue && client.document == before && client.markedRange() == insideMark,
+              "Clicking inside the marked range must preserve the active composition")
+        print("PASS native IMKMouseHandling callback: outside commit, original-range insertion, subsequent clicked input, inside preservation")
     }
 
     @MainActor static func rawProtection(settings: IFSettings) {

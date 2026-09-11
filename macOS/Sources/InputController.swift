@@ -159,6 +159,25 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .flagsChanged).rawValue)
     }
 
+    nonisolated override func mouseDown(onCharacterIndex index: Int, coordinate point: NSPoint,
+                                        withModifier flags: Int,
+                                        continueTracking keepTracking: UnsafeMutablePointer<ObjCBool>!,
+                                        client sender: Any!) -> Bool {
+        keepTracking?.pointee = false
+        nonisolated(unsafe) let callbackClient = sender
+        let shouldCommit = MainActor.assumeIsolated {
+            leftShiftArmed = false
+            guard !acceptingAI, ownsMarkedText, index >= 0, index != NSNotFound,
+                  let activeClient = callbackClient as? IMKTextInput else { return false }
+            let markedRange = activeClient.markedRange()
+            guard markedRange.location >= 0, markedRange.location != NSNotFound, markedRange.length > 0,
+                  markedRange.location <= Int.max - markedRange.length else { return false }
+            return index < markedRange.location || index >= markedRange.location + markedRange.length
+        }
+        if shouldCommit { commitComposition(callbackClient) }
+        return false
+    }
+
     nonisolated override func showPreferences(_ sender: Any!) {
         // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }

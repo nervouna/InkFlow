@@ -32,6 +32,11 @@ void IFStubHeadlessControllerFramework(void) {
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(client)),(IMP)suppliedTestClient);
 }
 
+BOOL IFSendMouseDown(IMKInputController *controller, NSUInteger index, id<IMKTextInput> client, BOOL *keepTracking) {
+    return [controller mouseDownOnCharacterIndex:index coordinate:NSZeroPoint withModifier:0
+                                continueTracking:keepTracking client:client];
+}
+
 NSFont *IFNativeCandidateFont(IMKCandidates *panel) {
     // Test-only private inspection requires Objective-C exception handling.
     @try {
