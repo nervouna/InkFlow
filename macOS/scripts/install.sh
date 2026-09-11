@@ -10,8 +10,10 @@ case "$mode" in
     signing=(--options runtime --timestamp --sign "$identity"); entitlements=macOS/DeveloperID.entitlements ;;
   *) echo 'Usage: install.sh --developer-id | --debug (development debugging only)' >&2; exit 2 ;;
 esac
+if [[ "$mode" == --developer-id ]]; then
+  bash macOS/scripts/verify-developer-id.sh "$identity" T7976FL2LP
+fi
 [[ -x "$app/Contents/MacOS/InkFlow" ]] || { echo 'Run macOS/scripts/build.sh first.' >&2; exit 1; }
-# For Developer ID, the caller must verify the certificate OU before selecting it.
 [[ -s "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" ]] || { echo 'Missing Lua plugin; rebuild InkFlow first.' >&2; exit 1; }
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
@@ -19,9 +21,10 @@ codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
 codesign --force "${signing[@]}" "$app/Contents/MacOS/InkFlowDictionaryWorker"
 codesign --force "${signing[@]}" --entitlements "$entitlements" "$app"
 codesign --verify --deep --strict "$app"
-metadata=$(codesign -dv "$app" 2>&1)
+metadata=$(codesign -dvvv "$app" 2>&1)
 if [[ "$mode" == --developer-id ]]; then
   [[ "$metadata" == *'TeamIdentifier=T7976FL2LP'* ]] || { echo 'Unexpected signing team.' >&2; exit 1; }
+  [[ "$metadata" == *'Authority=Developer ID Application:'* ]] || { echo 'Expected Developer ID Application signature.' >&2; exit 1; }
 fi
 [[ "$metadata" == *'Identifier=io.damao.inputmethod.inkflow'* ]] || { echo 'Unexpected bundle identifier.' >&2; exit 1; }
 target="$HOME/Library/Input Methods/InkFlow.app"

@@ -75,8 +75,9 @@ if INKFLOW_RELEASE_CONFIG="$fixture/invalid.plist" bash -c 'source "$1"; load_re
 
 # Use an isolated repository-shaped fixture; never access signing credentials.
 scripts="$fixture/repo/.agents/skills/inkflow-release/scripts"
-mkdir -p "$scripts" "$fixture/repo/macOS" "$fixture/repo/build/InkFlow.app/Contents/MacOS"
+mkdir -p "$scripts" "$fixture/repo/macOS/scripts" "$fixture/repo/build/InkFlow.app/Contents/MacOS"
 cp "$root/.agents/skills/inkflow-release/scripts/"{package,release-config,check-credentials}.sh "$scripts/"
+cp "$root/macOS/scripts/verify-developer-id.sh" "$fixture/repo/macOS/scripts/"
 export INKFLOW_RELEASE_CONFIG="$fixture/missing.plist" INKFLOW_NOTARY_PROFILE=fixture-profile
 cp "$root/macOS/Info.plist" "$fixture/repo/macOS/Info.plist"
 cp "$root/macOS/Info.plist" "$fixture/repo/build/InkFlow.app/Contents/Info.plist"

@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-verification.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
-changed="$fixture/changed"
-plan() { printf '%s\n' "$@" > "$changed"; bash macOS/scripts/release-verification.sh --plan-only --changed-paths "$changed"; }
+changed_file="$fixture/changed"
+plan() { printf '%s\n' "$@" > "$changed_file"; bash macOS/scripts/release-verification.sh --plan-only --changed-paths "$changed_file"; }
 expect() {
   local output=$1; shift
   for gate in "$@"; do grep -Fxq "$gate" <<< "$output" || { echo "Missing gate: $gate" >&2; exit 1; }; done
@@ -27,6 +27,8 @@ output=$(plan macOS/Installer/InstallerCoordinator.swift macOS/Shared/InputSourc
 expect "$output" core bundle-deep installer
 output=$(plan .agents/skills/inkflow-release/scripts/package.sh macOS/DeveloperID.entitlements)
 expect "$output" core bundle-deep release-tools
+output=$(plan macOS/scripts/verify-developer-id.sh)
+expect "$output" core bundle-deep release-tools
 output=$(plan macOS/Info.plist)
 expect "$output" core bundle-deep settings-gui candidate-controller-gui installer release-tools
 [[ $(sort <<< "$output" | uniq -d | wc -l | tr -d ' ') == 0 ]]
@@ -36,6 +38,11 @@ expect "$output" core bundle-deep settings-gui candidate-controller-gui installe
 output=$(plan macOS/Sources/InputPreferences.swift)
 expect "$output" core bundle-deep settings-gui candidate-controller-gui
 reject "$output" installer release-tools
+for changed_path in macOS/Sources/AISuggestionCoordinator.swift macOS/Sources/AIContext.swift macOS/Sources/AIStatistics.swift; do
+  output=$(plan "$changed_path")
+  expect "$output" core bundle-deep candidate-controller-gui
+  [[ $(sort <<< "$output" | uniq -d | wc -l | tr -d ' ') == 0 ]]
+done
 output=$(plan macOS/Tests/NativeTestSupport.m macOS/Tests/include/NativeTestSupport.h)
 expect "$output" core bundle-deep settings-gui candidate-controller-gui installer
 reject "$output" release-tools

@@ -31,6 +31,7 @@ classify() {
     macOS/Info.plist) add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer; add_gate release-tools ;;
     macOS/Sources/InputPreferences.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
     macOS/Sources/Settings.swift) add_gate settings-gui; add_gate candidate-controller-gui ;;
+    macOS/Sources/AI*.swift) add_gate candidate-controller-gui ;;
     macOS/Sources/SmartSettingsView.swift|macOS/Sources/DictionarySettings.swift|macOS/Sources/DictionaryModels.swift|macOS/Sources/DictionaryStore.swift|macOS/Tests/Settings*|macOS/Tests/DictionarySettingsUI*|macOS/scripts/test-settings-ui.sh)
       add_gate settings-gui ;;
     macOS/Sources/*Candidate*|macOS/Sources/InputController.swift|macOS/Sources/AIInputPresentation.swift|macOS/Sources/AISettings.swift|macOS/Sources/AISuggestionPanel.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/Engine.swift|macOS/Sources/NativeCandidates.*|macOS/Tests/AIControllerNativeTests.swift|macOS/Tests/ControllerInitializationTests.swift|macOS/scripts/test-ai-native.sh|macOS/scripts/test-controller-initialization.sh)
@@ -39,7 +40,7 @@ classify() {
       add_gate settings-gui; add_gate candidate-controller-gui; add_gate installer ;;
     macOS/Installer/*|macOS/Shared/InputSourceManager.swift|macOS/Shared/RegisterInputSourceBootstrap.swift|macOS/Tests/Installer*|macOS/scripts/build-installer.sh|macOS/scripts/check-installer-core.sh|macOS/scripts/test-installer-*)
       add_gate installer ;;
-    .agents/skills/inkflow-release/*|macOS/DeveloperID.entitlements|macOS/scripts/check-bundle.sh|macOS/scripts/quality-metadata.sh|macOS/Tools/QualityBuildMetadata.swift)
+    .agents/skills/inkflow-release/*|macOS/DeveloperID.entitlements|macOS/scripts/check-bundle.sh|macOS/scripts/quality-metadata.sh|macOS/scripts/verify-developer-id.sh|macOS/Tools/QualityBuildMetadata.swift)
       add_gate release-tools ;;
   esac
 }
