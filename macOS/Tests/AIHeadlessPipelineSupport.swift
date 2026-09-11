@@ -1,23 +1,27 @@
 import AppKit
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowTestSupport
+#endif
 
 /// Only the window endpoint is simulated. Candidate data arrives exclusively from
 /// the production controller's refresh after real per-key Rime processing.
 @MainActor
-final class HeadlessAIInputPresentation: AIInputPresentation {
-    private(set) var candidates: [String] = []
-    private(set) var highlight = 0
-    private(set) var candidatesVisible = false
-    private(set) var suggestion: String?
-    private(set) var refreshCount = 0
-    private(set) var showCount = 0
-    private(set) var hideCount = 0
-    let showDelay: Duration
+package final class HeadlessAIInputPresentation: AIInputPresentation {
+    package private(set) var candidates: [String] = []
+    package private(set) var highlight = 0
+    package private(set) var candidatesVisible = false
+    package private(set) var suggestion: String?
+    package private(set) var refreshCount = 0
+    package private(set) var showCount = 0
+    package private(set) var hideCount = 0
+    package let showDelay: Duration
     private var showTask: Task<Void, Never>?
-    var suggestionVisible: Bool { suggestion != nil }
+    package var suggestionVisible: Bool { suggestion != nil }
 
-    init(showDelay: Duration = .zero) { self.showDelay = showDelay }
+    package init(showDelay: Duration = .zero) { self.showDelay = showDelay }
 
-    func refreshCandidates(_ candidates: [String], highlight: Int) {
+    package func refreshCandidates(_ candidates: [String], highlight: Int) {
         refreshCount += 1
         self.candidates = candidates
         self.highlight = highlight
@@ -33,29 +37,29 @@ final class HeadlessAIInputPresentation: AIInputPresentation {
         }
     }
 
-    func hideCandidates() {
+    package func hideCandidates() {
         hideCount += 1
         showTask?.cancel(); showTask = nil
         candidatesVisible = false
         hideSuggestion()
     }
 
-    func presentSuggestion(_ text: String) -> Bool {
+    package func presentSuggestion(_ text: String) -> Bool {
         guard candidatesVisible, !candidates.isEmpty else { return false }
         suggestion = text
         return true
     }
 
-    func hideSuggestion() { suggestion = nil }
+    package func hideSuggestion() { suggestion = nil }
 }
 
-struct AIHeadlessCase: Sendable {
-    let name: String
-    let pinyin: String
-    let stub: String
-    let required: [String]
+package struct AIHeadlessCase: Sendable {
+    package let name: String
+    package let pinyin: String
+    package let stub: String
+    package let required: [String]
 
-    static let effects: [Self] = [
+    package static let effects: [Self] = [
         .init(name: "short", pinyin: "nihao", stub: "你好", required: ["你好"]),
         .init(name: "long", pinyin: "wozhengzaiceshishurufadezhinengyucegongneng",
               stub: "我正在测试输入法的智能预测功能", required: ["测试", "输入法", "智能", "预测"]),
@@ -67,44 +71,44 @@ struct AIHeadlessCase: Sendable {
 }
 
 /// Observation wraps the actual service; live mode never substitutes a stub result.
-actor AIHeadlessService: AISuggestionServing {
-    struct Call: Sendable {
-        let input: AISuggestionInput
-        let started: ContinuousClock.Instant
+package actor AIHeadlessService: AISuggestionServing {
+    package struct Call: Sendable {
+        package let input: AISuggestionInput
+        package let started: ContinuousClock.Instant
     }
     private let live: Bool
     private let response: String
     private let client = AIChatCompletionsClient()
     private var calls: [Call] = []
 
-    init(live: Bool = false, response: String = "你好") { self.live = live; self.response = response }
+    package init(live: Bool = false, response: String = "你好") { self.live = live; self.response = response }
 
-    func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String {
+    package func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String {
         calls.append(Call(input: input, started: .now))
         if live { return try await client.suggest(input: input, configuration: configuration) }
         return response
     }
 
-    func captured() -> [Call] { calls }
+    package func captured() -> [Call] { calls }
 }
 
 /// Physical ANSI key codes, real modifiers and monotonic event timestamps. Events
 /// are delivered to handle(_:client:), never to IFEngine.key or a coordinator hook.
 @MainActor
-enum AIHeadlessKeyboard {
+package enum AIHeadlessKeyboard {
     static let letters: [Character: UInt16] = [
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9,
         "b": 11, "q": 12, "w": 13, "e": 14, "r": 15, "y": 16, "t": 17,
         "o": 31, "u": 32, "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46
     ]
 
-    static func event(_ code: UInt16, _ text: String = "", flags: NSEvent.ModifierFlags = [], repeated: Bool = false) -> NSEvent {
+    package static func event(_ code: UInt16, _ text: String = "", flags: NSEvent.ModifierFlags = [], repeated: Bool = false) -> NSEvent {
         NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags,
             timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: 0, context: nil,
             characters: text, charactersIgnoringModifiers: text.lowercased(), isARepeat: repeated, keyCode: code)!
     }
 
-    static func type(_ text: String, into controller: InkFlowInputController, client: RecordingClient) async -> ContinuousClock.Instant {
+    package static func type(_ text: String, into controller: InkFlowInputController, client: RecordingClient) async -> ContinuousClock.Instant {
         var lastKey = ContinuousClock.now
         for character in text {
             let lower = Character(String(character).lowercased())

@@ -1,6 +1,9 @@
 import Foundation
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+#endif
 
-enum AILiveConfiguration {
+package enum AILiveConfiguration {
     private enum FixtureError: Error { case invalidInput }
 
     private static func git(_ arguments: [String], in directory: URL) throws -> (Int32, Data) {
@@ -16,7 +19,7 @@ enum AILiveConfiguration {
         return (process.terminationStatus, data)
     }
 
-    static func loadConfiguration(path: String) throws -> AISuggestionConfiguration {
+    package static func loadConfiguration(path: String) throws -> AISuggestionConfiguration {
         let file = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
         let directory = file.deletingLastPathComponent()
         guard try git(["check-ignore", "--quiet", "--", file.path], in: directory).0 == 0,

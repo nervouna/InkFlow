@@ -33,6 +33,69 @@ let installerCoreSources = [
     "InstallerValidation.swift", "NativeWindow.swift", "ShippedPayload.swift",
 ]
 let toolSources = ["PackagedCacheTool.swift", "QualityBuildMetadata.swift", "RegisterInputSource.swift", "ai-statistics.py"]
+let testSwiftSources = [
+    "AIAdoptionLearningTests.swift", "AIControllerNativeTests.swift", "AICredentialTests.swift",
+    "AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AIHeadlessPipelineTests.swift",
+    "AILiveConfiguration.swift", "AILiveTests.swift", "AIPronunciationTests.swift", "AIRuntimeTestSupport.swift",
+    "AIRuntimeTests.swift", "AIStatisticsTestSupport.swift", "AIStatisticsTests.swift", "AISuggestionTests.swift",
+    "ControllerInitializationTests.swift", "ControllerTests.swift", "DeploymentTests.swift",
+    "DictionaryActivationTests.swift", "DictionaryGeneratorTests.swift", "DictionarySettingsUITests.swift",
+    "DictionaryUpdateTests.swift", "DictionaryWorkerFixture.swift", "EngineTests.swift", "InstallerCoreTests.swift",
+    "InstallerWindowTests.swift", "MetadataTests.swift", "QualityCaptureTests.swift",
+    "QualityControllerTimingTests.swift", "QualityStoreTests.swift", "QualityTimingTests.swift",
+    "ServingStartupTests.swift", "SettingsTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift",
+    "TerminationTests.swift", "TestSupport.swift",
+]
+let testAuxiliarySources = [
+    "AIStatisticsQueryTests.py", "NativeTestSupport.m", "QualityQueryTests.py", "ServingStartupHarness.plist", "include",
+]
+let standardTestDependencies: [Target.Dependency] = [
+    "InkFlowCore", "InkFlowTestSupport", "InkFlowNativeTestSupport",
+]
+func executableTestTarget(_ name: String, sources: [String],
+                          dependencies: [Target.Dependency]? = nil,
+                          linkerSettings: [LinkerSetting] = buildRimeRuntime) -> Target {
+    .executableTarget(
+        name: name,
+        dependencies: dependencies ?? standardTestDependencies,
+        path: "macOS/Tests",
+        exclude: testSwiftSources.filter { !sources.contains($0) } + testAuxiliarySources,
+        sources: sources,
+        swiftSettings: strictSwiftSettings,
+        linkerSettings: linkerSettings
+    )
+}
+
+let executableTestProducts: [(String, String)] = [
+    ("ai-adoption-learning-tests", "AIAdoptionLearningTests"),
+    ("ai-credential-tests", "AICredentialTests"),
+    ("ai-headless-tests", "AIHeadlessTests"),
+    ("ai-live-tests", "AILiveTests"),
+    ("ai-native-tests", "AINativeTests"),
+    ("ai-pronunciation-tests", "AIPronunciationTests"),
+    ("ai-runtime-tests", "AIRuntimeTests"),
+    ("ai-statistics-tests", "AIStatisticsTests"),
+    ("ai-suggestion-tests", "AISuggestionTests"),
+    ("controller-initialization-tests", "ControllerInitializationTests"),
+    ("controller-tests", "ControllerTests"),
+    ("deployment-tests", "DeploymentTests"),
+    ("dictionary-activation-tests", "DictionaryActivationTests"),
+    ("dictionary-generator-tests", "DictionaryGeneratorTests"),
+    ("dictionary-update-tests", "DictionaryUpdateTests"),
+    ("dictionary-worker-fixture", "DictionaryWorkerFixture"),
+    ("engine-tests", "EngineTests"),
+    ("installer-core-tests", "InstallerCoreTests"),
+    ("installer-window-tests", "InstallerWindowTests"),
+    ("metadata-tests", "MetadataTests"),
+    ("quality-capture-tests", "QualityCaptureTests"),
+    ("quality-store-tests", "QualityStoreTests"),
+    ("quality-timing-tests", "QualityTimingTests"),
+    ("serving-startup-tests", "ServingStartupTests"),
+    ("settings-tests", "SettingsTests"),
+    ("settings-ui-tests", "SettingsUITests"),
+    ("startup-diagnostics-tests", "StartupDiagnosticsTests"),
+    ("termination-tests", "TerminationTests"),
+]
 
 let package = Package(
     name: "InkFlow",
@@ -45,7 +108,7 @@ let package = Package(
         .executable(name: "register-input-source", targets: ["RegisterInputSourceTool"]),
         .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
         .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
-    ],
+    ] + executableTestProducts.map { .executable(name: $0.0, targets: [$0.1]) },
     targets: [
         .target(
             name: "CRime",
@@ -157,6 +220,73 @@ let package = Package(
             swiftSettings: strictSwiftSettings,
             linkerSettings: buildRimeRuntime
         ),
+        .target(
+            name: "InkFlowNativeTestSupport",
+            path: "macOS/Tests",
+            exclude: testSwiftSources + testAuxiliarySources.filter { $0 != "NativeTestSupport.m" && $0 != "include" },
+            sources: ["NativeTestSupport.m"],
+            publicHeadersPath: "include",
+            cSettings: strictCSettings + [.unsafeFlags(["-fobjc-arc"])],
+            linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("InputMethodKit")]
+        ),
+        .target(
+            name: "InkFlowTestSupport",
+            dependencies: ["InkFlowCore"],
+            path: "macOS/Tests",
+            exclude: testSwiftSources.filter { $0 != "TestSupport.swift" } + testAuxiliarySources,
+            sources: ["TestSupport.swift"],
+            swiftSettings: strictSwiftSettings
+        ),
+        .target(
+            name: "InkFlowAITestSupport",
+            dependencies: ["InkFlowCore", "InkFlowTestSupport"],
+            path: "macOS/Tests",
+            exclude: testSwiftSources.filter {
+                !["AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AILiveConfiguration.swift",
+                  "AIRuntimeTestSupport.swift", "AIStatisticsTestSupport.swift"].contains($0)
+            } + testAuxiliarySources,
+            sources: ["AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AILiveConfiguration.swift",
+                      "AIRuntimeTestSupport.swift", "AIStatisticsTestSupport.swift"],
+            swiftSettings: strictSwiftSettings,
+            linkerSettings: [.linkedLibrary("sqlite3")]
+        ),
+        executableTestTarget("AIAdoptionLearningTests", sources: ["AIAdoptionLearningTests.swift"]),
+        executableTestTarget("AICredentialTests", sources: ["AICredentialTests.swift"]),
+        executableTestTarget("AIHeadlessTests", sources: ["AIHeadlessPipelineTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("AILiveTests", sources: ["AILiveTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("AINativeTests", sources: ["AIControllerNativeTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("AIPronunciationTests", sources: ["AIPronunciationTests.swift"]),
+        executableTestTarget("AIRuntimeTests", sources: ["AIRuntimeTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("AIStatisticsTests", sources: ["AIStatisticsTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("AISuggestionTests", sources: ["AISuggestionTests.swift"],
+            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
+        executableTestTarget("ControllerInitializationTests", sources: ["ControllerInitializationTests.swift"]),
+        executableTestTarget("ControllerTests", sources: ["ControllerTests.swift"]),
+        executableTestTarget("DeploymentTests", sources: ["DeploymentTests.swift"]),
+        executableTestTarget("DictionaryActivationTests", sources: ["DictionaryActivationTests.swift"]),
+        executableTestTarget("DictionaryGeneratorTests", sources: ["DictionaryGeneratorTests.swift"]),
+        executableTestTarget("DictionaryUpdateTests", sources: ["DictionaryUpdateTests.swift"]),
+        executableTestTarget("DictionaryWorkerFixture", sources: ["DictionaryWorkerFixture.swift"]),
+        executableTestTarget("EngineTests", sources: ["EngineTests.swift"]),
+        executableTestTarget("InstallerCoreTests", sources: ["InstallerCoreTests.swift"],
+            dependencies: ["InkFlowInstallerCore", "InkFlowInputSources"], linkerSettings: []),
+        executableTestTarget("InstallerWindowTests", sources: ["InstallerWindowTests.swift"],
+            dependencies: ["InkFlowInstallerCore", "InkFlowInputSources"], linkerSettings: []),
+        executableTestTarget("MetadataTests", sources: ["MetadataTests.swift"]),
+        executableTestTarget("QualityCaptureTests",
+            sources: ["QualityCaptureTests.swift", "QualityControllerTimingTests.swift"]),
+        executableTestTarget("QualityStoreTests", sources: ["QualityStoreTests.swift"]),
+        executableTestTarget("QualityTimingTests", sources: ["QualityTimingTests.swift"]),
+        executableTestTarget("ServingStartupTests", sources: ["ServingStartupTests.swift"]),
+        executableTestTarget("SettingsTests", sources: ["SettingsTests.swift"]),
+        executableTestTarget("SettingsUITests", sources: ["SettingsUITests.swift", "DictionarySettingsUITests.swift"]),
+        executableTestTarget("StartupDiagnosticsTests", sources: ["StartupDiagnosticsTests.swift"]),
+        executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
     ],
     swiftLanguageModes: [.v6]
 )

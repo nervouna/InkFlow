@@ -5,8 +5,8 @@ cd "$(dirname "$0")/../.."
 mkdir -p build
 run_dir=$(mktemp -d "$PWD/build/serving-startup-run.XXXXXX")
 echo "Startup evidence: $run_dir/run.log"
-source macOS/scripts/swift-common.sh
-build_swift_test build/serving-startup-tests macOS/Tests/ServingStartupTests.swift 2>&1 | tee "$run_dir/compile.log"
+source macOS/scripts/swift-test.sh
+build_swift_test serving-startup-tests build/serving-startup-tests 2>&1 | tee "$run_dir/compile.log"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-serving-startup.XXXXXX")
 trap 'chmod -R u+w "$scratch"; rm -rf "$scratch"' EXIT
 echo "Temporary user root: $scratch"

@@ -1,5 +1,10 @@
 import InputMethodKit
 import SQLite3
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowNativeTestSupport
+import InkFlowTestSupport
+#endif
 
 @MainActor
 struct CaptureDatabase {

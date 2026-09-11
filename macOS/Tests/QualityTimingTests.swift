@@ -1,5 +1,8 @@
 import Foundation
 import SQLite3
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+#endif
 
 private func expect(_ value: Bool, _ message: String, line: UInt = #line) {
     precondition(value, "FAIL line \(line): \(message)")

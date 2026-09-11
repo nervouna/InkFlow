@@ -38,13 +38,12 @@ for binary in "$app/Contents/MacOS/InkFlow" "$app/Contents/MacOS/InkFlowDictiona
     esac
   done
 done
-source macOS/scripts/swift-common.sh
-rime_library="$app/Contents/Frameworks/librime.1.dylib" rime_rpath="$app/Contents/Frameworks" \
-  build_swift_test build/bundle-engine-tests macOS/Tests/EngineTests.swift
+source macOS/scripts/swift-test.sh
+build_swift_test engine-tests build/bundle-engine-tests
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
-build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
+DYLD_LIBRARY_PATH="$app/Contents/Frameworks" build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
 echo 'PASS bundle: arm64, plist, system/bundled dylib and Lua plugin closure, bundled dictionary transcript'
 
-build_swift_test build/metadata-tests macOS/Tests/MetadataTests.swift
+build_swift_test metadata-tests build/metadata-tests
 build/metadata-tests "$app"

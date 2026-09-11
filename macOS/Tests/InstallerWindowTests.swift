@@ -1,5 +1,18 @@
 import AppKit
 import Darwin
+#if SWIFT_PACKAGE
+@testable import InkFlowInstallerCore
+@testable import InkFlowInputSources
+private typealias TestInputSourceOperations = IFPackageInputSourceOperations
+private typealias TestInputSource = IFPackageInputSource
+private typealias TestInputRoster = IFPackageInputRoster
+private typealias TestInputIdentity = IFPackageInputIdentity
+#else
+private typealias TestInputSourceOperations = IFInputSourceOperations
+private typealias TestInputSource = IFInputSource
+private typealias TestInputRoster = IFInputRoster
+private typealias TestInputIdentity = IFInputIdentity
+#endif
 
 private let testApp = IFAppVersion(version: "0.2.0", build: "3")
 private func expect(_ condition: Bool, _ message: String) throws {
@@ -29,7 +42,7 @@ private actor WindowFiles: IFInstallerFileOperations {
     func clean() { cancels += 1 }
     func counts() -> (Int, Int, Int) { (prepares, commits, cancels) }
 }
-@MainActor private final class WindowSources: IFInputSourceOperations {
+@MainActor private final class WindowSources: TestInputSourceOperations {
     var registered = true
     var parentEnabled = true
     var childEnabled = true
@@ -37,10 +50,19 @@ private actor WindowFiles: IFInstallerFileOperations {
     var registerError = false
     var selected = "ascii"
     var registrations = 0
-    func snapshot() -> IFInputRoster {
-        let parent = IFInputSource(id: IFInputIdentity.bundleID, bundleID: IFInputIdentity.bundleID, name: "InkFlow", enabled: parentEnabled, selectable: false, keyboardMode: false, ascii: false)
-        let child = IFInputSource(id: IFInputIdentity.modeID, bundleID: IFInputIdentity.bundleID, name: "墨流拼音", enabled: childEnabled, selectable: true, keyboardMode: true, ascii: false)
-        let ascii = IFInputSource(id: "ascii", bundleID: "system", name: "ABC", enabled: true, selectable: true, keyboardMode: false, ascii: true)
+    func snapshot() -> TestInputRoster {
+#if SWIFT_PACKAGE
+        let parent = TestInputSource(id: TestInputIdentity.bundleID, bundleID: TestInputIdentity.bundleID,
+            name: "InkFlow", enabled: parentEnabled, selectable: false, ascii: false)
+        let child = TestInputSource(id: TestInputIdentity.modeID, bundleID: TestInputIdentity.bundleID,
+            name: "墨流拼音", enabled: childEnabled, selectable: true, ascii: false)
+        let ascii = TestInputSource(id: "ascii", bundleID: "system", name: "ABC", enabled: true,
+            selectable: true, ascii: true)
+#else
+        let parent = TestInputSource(id: TestInputIdentity.bundleID, bundleID: TestInputIdentity.bundleID, name: "InkFlow", enabled: parentEnabled, selectable: false, keyboardMode: false, ascii: false)
+        let child = TestInputSource(id: TestInputIdentity.modeID, bundleID: TestInputIdentity.bundleID, name: "墨流拼音", enabled: childEnabled, selectable: true, keyboardMode: true, ascii: false)
+        let ascii = TestInputSource(id: "ascii", bundleID: "system", name: "ABC", enabled: true, selectable: true, keyboardMode: false, ascii: true)
+#endif
         let all = registered ? [parent, child] : []
         return .init(installed: all, enabled: [ascii] + all.filter(\.enabled), selectedID: selected)
     }
@@ -51,7 +73,7 @@ private actor WindowFiles: IFInstallerFileOperations {
     }
     func enable(_ id: String) {
         if refusal { return }
-        if id == IFInputIdentity.bundleID { parentEnabled = true } else { childEnabled = true }
+        if id == TestInputIdentity.bundleID { parentEnabled = true } else { childEnabled = true }
     }
     func select(_ id: String) { selected = id }
 }

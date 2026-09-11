@@ -1,12 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source macOS/scripts/swift-common.sh
-xcrun swiftc -swift-version 6 -warnings-as-errors -parse-as-library \
-  -module-cache-path build/swift-module-cache macOS/Sources/InputPreferences.swift \
-  macOS/Sources/AIPronunciation.swift macOS/Tests/AIPronunciationTests.swift -o build/ai-pronunciation-tests
+source macOS/scripts/swift-test.sh
+build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests
 build/ai-pronunciation-tests
-build_swift_test build/ai-adoption-learning-tests macOS/Tests/AIAdoptionLearningTests.swift
+build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-learning.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 shared="${1:-$PWD/build/test-shared}"

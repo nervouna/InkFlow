@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source macOS/scripts/swift-common.sh
-build_swift_test build/termination-tests macOS/Tests/TerminationTests.swift
+source macOS/scripts/swift-test.sh
+build_swift_test termination-tests build/termination-tests
 termination_root=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-termination.XXXXXX")
 trap 'rm -rf "$termination_root"' EXIT
 probe="$termination_root/Termination Probe.app"

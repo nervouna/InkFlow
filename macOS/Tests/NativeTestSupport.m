@@ -1,4 +1,4 @@
-#import "NativeTestSupport.h"
+#import "include/NativeTestSupport.h"
 #import <objc/runtime.h>
 
 // Test-only inspection of the actual dictionary sent to the input-source menu host.

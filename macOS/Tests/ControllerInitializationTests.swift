@@ -1,5 +1,10 @@
 import InputMethodKit
 import Carbon
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowNativeTestSupport
+import InkFlowTestSupport
+#endif
 
 @main
 struct ControllerInitializationTests {

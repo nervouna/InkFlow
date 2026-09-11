@@ -21,14 +21,14 @@ if [[ "$name" == "${INKFLOW_RUNNER_FAIL:-}" ]]; then exit 17; fi
 STUB
   chmod +x "$fixture/macOS/scripts/$script.sh"
 done
-cat > "$fixture/macOS/scripts/swift-common.sh" <<'STUB'
+cat > "$fixture/macOS/scripts/swift-test.sh" <<'STUB'
 build_swift_test() {
-  echo "build $(basename "$1")" >> "$INKFLOW_RUNNER_LOG"
-  cat > "$1" <<'PROGRAM'
+  echo "build $1 $(basename "$2")" >> "$INKFLOW_RUNNER_LOG"
+  cat > "$2" <<'PROGRAM'
 #!/bin/bash
 echo "run $(basename "$0")" >> "$INKFLOW_RUNNER_LOG"
 PROGRAM
-  chmod +x "$1"
+  chmod +x "$2"
 }
 STUB
 
@@ -42,12 +42,12 @@ expect() {
 }
 
 run settings
-expect 'dependencies ' 'build settings-tests' 'run settings-tests'
+expect 'dependencies ' 'build settings-tests settings-tests' 'run settings-tests'
 run controller engine controller
 expect 'dependencies ' 'prepare-rime build/test-shared' \
-  'build engine-tests' 'run engine-tests' 'build controller-tests' 'run controller-tests'
+  'build engine-tests engine-tests' 'run engine-tests' 'build controller-tests controller-tests' 'run controller-tests'
 run deployment
-expect 'dependencies ' 'prepare-rime build/test-shared' 'build deployment-tests' 'run deployment-tests'
+expect 'dependencies ' 'prepare-rime build/test-shared' 'build deployment-tests deployment-tests' 'run deployment-tests'
 run preparation
 expect 'test-prepare-rime '
 run dictionary-generator
@@ -88,8 +88,8 @@ expect 'test-quality-store ' 'test-quality-timing ' 'test-quality-metadata ' 'de
   'test-prepare-rime ' 'test-dictionary-generator ' 'prepare-rime build/test-shared' \
   'test-ai-suggestions ' 'test-ai-statistics ' 'test-ai-statistics-query ' 'test-ai-runtime ' 'test-ai-learning ' \
   'test-quality-capture ' 'test-quality-query --require-engine' \
-  'build deployment-tests' 'run deployment-tests' 'build engine-tests' 'run engine-tests' \
-  'build controller-tests' 'run controller-tests' 'build settings-tests' 'run settings-tests' \
+  'build deployment-tests deployment-tests' 'run deployment-tests' 'build engine-tests engine-tests' 'run engine-tests' \
+  'build controller-tests controller-tests' 'run controller-tests' 'build settings-tests settings-tests' 'run settings-tests' \
   'test-dictionary-updates ' 'test-dictionary-activation ' 'test-serving-startup ' 'test-termination ' 'test-installer-core '
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all

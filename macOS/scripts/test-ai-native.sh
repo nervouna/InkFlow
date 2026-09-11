@@ -18,8 +18,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>
 PLIST
-source macOS/scripts/swift-common.sh
-build_swift_test "$app/Contents/MacOS/AINativeHarness" macOS/Tests/AIDiagnosticTestSupport.swift macOS/Tests/AIRuntimeTestSupport.swift macOS/Tests/AILiveConfiguration.swift macOS/Tests/AIControllerNativeTests.swift 2>&1 | tee "$run_dir/compile.log"
+source macOS/scripts/swift-test.sh
+build_swift_test ai-native-tests "$app/Contents/MacOS/AINativeHarness" 2>&1 | tee "$run_dir/compile.log"
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-native.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 echo "Temporary user root: $user_dir"

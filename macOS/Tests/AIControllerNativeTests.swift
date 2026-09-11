@@ -1,5 +1,11 @@
 import AppKit
 @preconcurrency import InputMethodKit
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowAITestSupport
+import InkFlowNativeTestSupport
+import InkFlowTestSupport
+#endif
 
 private final class NativeAITrace: @unchecked Sendable {
     let run = UUID()

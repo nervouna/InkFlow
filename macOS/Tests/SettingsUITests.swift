@@ -1,6 +1,11 @@
 import InputMethodKit
 import SwiftUI
 import ApplicationServices
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowNativeTestSupport
+import InkFlowTestSupport
+#endif
 
 @main
 struct SettingsUITests {

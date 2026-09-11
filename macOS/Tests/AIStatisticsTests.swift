@@ -1,5 +1,9 @@
 import Foundation
 import SQLite3
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowAITestSupport
+#endif
 
 @main
 struct AIStatisticsTests {

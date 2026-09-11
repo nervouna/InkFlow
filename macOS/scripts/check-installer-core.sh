@@ -1,14 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-mkdir -p build/installer-core
-sources=(macOS/Shared/InputSourceManager.swift macOS/Installer/Installer*.swift macOS/Installer/ShippedPayload.swift macOS/Installer/NativeWindow.swift)
-xcrun swiftc -swift-version 6 -warnings-as-errors -target arm64-apple-macosx26.0 \
-  -module-cache-path build/installer-core/module-cache -parse-as-library -emit-library \
-  "${sources[@]}" -framework Foundation -framework AppKit -framework Carbon \
-  -o build/installer-core/libInstallerCore.dylib
-xcrun swiftc -swift-version 6 -warnings-as-errors -target arm64-apple-macosx26.0 \
-  -module-cache-path build/installer-core/module-cache macOS/Shared/InputSourceManager.swift \
-  macOS/Tools/RegisterInputSource.swift -framework Foundation -framework Carbon \
-  -o build/installer-core/register-input-source
+source macOS/scripts/swift-package.sh
+build_swift_product InkFlowInstaller build/installer-core/InkFlowInstaller debug
+build_swift_product register-input-source build/installer-core/register-input-source debug
 printf 'PASS production installer core and register CLI compile (not executed)\n'

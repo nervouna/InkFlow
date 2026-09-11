@@ -1,5 +1,10 @@
 import AppKit
 import InputMethodKit
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowAITestSupport
+import InkFlowTestSupport
+#endif
 
 @MainActor
 private final class RuntimeFixture {

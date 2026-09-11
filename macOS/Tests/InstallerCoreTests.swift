@@ -1,4 +1,17 @@
 import Foundation
+#if SWIFT_PACKAGE
+@testable import InkFlowInstallerCore
+@testable import InkFlowInputSources
+private typealias TestInputSourceOperations = IFPackageInputSourceOperations
+private typealias TestInputSource = IFPackageInputSource
+private typealias TestInputRoster = IFPackageInputRoster
+private typealias TestInputIdentity = IFPackageInputIdentity
+#else
+private typealias TestInputSourceOperations = IFInputSourceOperations
+private typealias TestInputSource = IFInputSource
+private typealias TestInputRoster = IFInputRoster
+private typealias TestInputIdentity = IFInputIdentity
+#endif
 
 private func check(_ value: Bool, _ message: String) throws {
     if !value { throw IFInstallerError.invalid("TEST: \(message)") }
@@ -18,19 +31,25 @@ private actor Files: IFInstallerFileOperations {
     var stops = 0
     func terminateOld() throws { stops += 1; if let error { throw error } }
 }
-@MainActor private final class Sources: IFInputSourceOperations {
+@MainActor private final class Sources: TestInputSourceOperations {
     var registered = false
     var enabled: Set<String> = []
     var selected = ""
     var calls: [String] = []
     var failure = ""
     var refuses = false
-    func source(_ id: String) -> IFInputSource {
-        .init(id: id, bundleID: IFInputIdentity.bundleID, name: "Any localized name", enabled: enabled.contains(id), selectable: true, keyboardMode: true, ascii: false)
+    func source(_ id: String) -> TestInputSource {
+#if SWIFT_PACKAGE
+        .init(id: id, bundleID: TestInputIdentity.bundleID, name: "Any localized name",
+              enabled: enabled.contains(id), selectable: true, ascii: false)
+#else
+        .init(id: id, bundleID: TestInputIdentity.bundleID, name: "Any localized name",
+              enabled: enabled.contains(id), selectable: true, keyboardMode: true, ascii: false)
+#endif
     }
-    func snapshot() throws -> IFInputRoster {
+    func snapshot() throws -> TestInputRoster {
         if failure == "snapshot" { throw IFInputError.api("snapshot", -50) }
-        let all = registered ? [source(IFInputIdentity.bundleID), source(IFInputIdentity.modeID)] : []
+        let all = registered ? [source(TestInputIdentity.bundleID), source(TestInputIdentity.modeID)] : []
         return .init(installed: all, enabled: all.filter(\.enabled), selectedID: selected)
     }
     func record(_ operation: String) throws {

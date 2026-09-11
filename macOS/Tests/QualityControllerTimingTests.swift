@@ -1,4 +1,8 @@
 import InputMethodKit
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+import InkFlowTestSupport
+#endif
 
 @MainActor private final class ControllerTime {
     var now: TimeInterval = 100

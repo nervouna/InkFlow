@@ -37,7 +37,7 @@ if has dictionary-generator; then bash macOS/scripts/test-dictionary-generator.s
 if has ai || has deployment || has engine || has controller; then
   bash macOS/scripts/prepare-rime.sh build/test-shared
 fi
-source macOS/scripts/swift-common.sh
+source macOS/scripts/swift-test.sh
 if has ai; then
   bash macOS/scripts/test-ai-suggestions.sh
   bash macOS/scripts/test-ai-statistics.sh
@@ -50,7 +50,7 @@ if has quality; then
   bash macOS/scripts/test-quality-query.sh --require-engine
 fi
 if has deployment; then
-  build_swift_test build/deployment-tests macOS/Tests/DeploymentTests.swift
+  build_swift_test deployment-tests build/deployment-tests
   build/deployment-tests "$PWD/build/test-shared" "$PWD"/build/deps/rime-easy-en-*/easy_en.dict.yaml
 fi
 if has engine || has controller; then
@@ -58,15 +58,15 @@ if has engine || has controller; then
   trap 'rm -rf "$user_dir"' EXIT
 fi
 if has engine; then
-  build_swift_test build/engine-tests macOS/Tests/EngineTests.swift
+  build_swift_test engine-tests build/engine-tests
   build/engine-tests "$PWD/build/test-shared" "$user_dir"
 fi
 if has controller; then
-  build_swift_test build/controller-tests macOS/Tests/ControllerTests.swift
+  build_swift_test controller-tests build/controller-tests
   build/controller-tests "$PWD/build/test-shared" "$user_dir"
 fi
 if has settings; then
-  build_swift_test build/settings-tests macOS/Tests/SettingsTests.swift
+  build_swift_test settings-tests build/settings-tests
   build/settings-tests
 fi
 if has dictionary-updates; then bash macOS/scripts/test-dictionary-updates.sh; fi

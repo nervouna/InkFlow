@@ -13,8 +13,8 @@ plutil -remove ComponentInputModeDict "$app/Contents/Info.plist"
 plutil -remove TISInputSourceID "$app/Contents/Info.plist"
 plutil -remove InputMethodConnectionName "$app/Contents/Info.plist"
 plutil -remove InputMethodServerControllerClass "$app/Contents/Info.plist"
-source macOS/scripts/swift-common.sh
-build_swift_test "$app/Contents/MacOS/SettingsHarness" macOS/Tests/SettingsUITests.swift macOS/Tests/DictionarySettingsUITests.swift
+source macOS/scripts/swift-test.sh
+build_swift_test settings-ui-tests "$app/Contents/MacOS/SettingsHarness"
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-settings-ui.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 "$app/Contents/MacOS/SettingsHarness" "$PWD/build/InkFlow.app/Contents/Resources/Rime" "$user_dir" "$@" | tee "$user_dir/output.log"

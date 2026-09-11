@@ -1,5 +1,8 @@
 import Foundation
 import Darwin
+#if SWIFT_PACKAGE
+@testable import InkFlowCore
+#endif
 
 @main struct WorkerFixture {
     static func main() throws {
