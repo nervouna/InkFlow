@@ -204,7 +204,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             return false
         }
         if event.modifierFlags.contains(.shift) {
-            leftShiftArmed = event.modifierFlags.intersection([.control, .option, .command]).isEmpty
+            leftShiftArmed = event.modifierFlags.intersection([.control, .option, .command, .function]).isEmpty
             return leftShiftArmed
         }
         let shouldToggle = leftShiftArmed

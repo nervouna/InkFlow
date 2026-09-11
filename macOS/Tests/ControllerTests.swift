@@ -85,6 +85,10 @@ struct ControllerTests {
         check(!controller.handle(modifierEvent(60), client: client))
         check(engine.asciiMode, "Right Shift does not toggle input mode")
 
+        check(!controller.handle(modifierEvent(56, [.shift, .function]), client: client))
+        check(!controller.handle(modifierEvent(56, .function), client: client))
+        check(engine.asciiMode, "Function-modified left Shift does not toggle input mode")
+
         check(!controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
         check(engine.asciiMode, "The replaced Control-Shift-Space shortcut no longer toggles")
 
