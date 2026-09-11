@@ -37,6 +37,15 @@ final class IFEngine {
         }
     }
     var requestedASCIIMode: Bool { savedASCII }
+    @discardableResult
+    func toggleASCIIMode(capturedAt: TimeInterval? = nil) -> Bool {
+        guard available else { return false }
+        defer { Self.signalIdle() }
+        return qualityOperation(.toggle(false), capturedAt: capturedAt) {
+            asciiMode = !requestedASCIIMode
+            return true
+        }
+    }
     /// Keep the lease until every native client callback returns, including nested run loops.
     func beginDelivery() { deliveryDepth += 1 }
     func endDelivery() { deliveryDepth = max(0, deliveryDepth - 1); Self.signalIdle() }
@@ -454,12 +463,6 @@ final class IFEngine {
         defer { qualityEventTime = nil }
         defer { Self.signalIdle() }
         let flags = event.modifierFlags
-        if event.keyCode == 49, flags.contains([.control, .shift]), flags.intersection([.command, .option]).isEmpty {
-            return qualityOperation(.toggle(event.isARepeat)) {
-                asciiMode = !savedASCII
-                return true
-            }
-        }
         guard flags.intersection([.command, .control, .option]).isEmpty else { return qualityOperation(.key(-1, 0, event.isARepeat)) { false } }
         let key: Int32
         switch event.keyCode {

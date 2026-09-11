@@ -265,7 +265,8 @@ struct QualityCaptureTests {
             case "forced": check(!control.handle(keyEvent(0, "a", .command), client: client))
             default:
                 let before = control.engine!.snapshot()
-                check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+                check(control.handle(modifierEvent(56, .shift), client: client))
+                check(control.handle(modifierEvent(56), client: client))
                 check(control.engine!.snapshot() == before && !control.engine!.asciiMode && control.engine!.requestedASCIIMode)
                 check(!client.mutations.contains { $0.hasPrefix("insert:") }, "Deferred toggle must not insert text")
                 await store.flush()
@@ -293,7 +294,8 @@ struct QualityCaptureTests {
             let control = controller(settings, client, store)
             input("nihao", control, client)
             let before = control.engine!.snapshot(), count = db.decisions().count
-            check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+            check(control.handle(modifierEvent(56, .shift), client: client))
+            check(control.handle(modifierEvent(56), client: client))
             check(control.engine!.snapshot() == before && !client.mutations.contains { $0.hasPrefix("insert:") })
             await store.flush()
             check(db.decisions().count == count)
@@ -398,7 +400,8 @@ struct QualityCaptureTests {
             let countBeforeIdle = db.rows("SELECT * FROM compositions").count
             check(!control.handle(keyEvent(0, "a", .command), client: client))
             check(!control.handle(keyEvent(123, ""), client: client))
-            check(control.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+            check(control.handle(modifierEvent(56, .shift), client: client))
+            check(control.handle(modifierEvent(56), client: client))
             check(!control.handle(keyEvent(0, "a"), client: client))
             await store.flush()
             check(db.rows("SELECT * FROM compositions").count == countBeforeIdle, "Idle passthrough keys do not become per-key records")
@@ -629,7 +632,8 @@ struct QualityCaptureTests {
                 let control = controller(settings.settings, client, store)
                 let events = "can".map { keyEvent(0, String($0)) } + [keyEvent(125, ""), keyEvent(49, " ")] +
                     "nihao".map { keyEvent(0, String($0)) } + [keyEvent(121, ""), keyEvent(18, "1"), keyEvent(36, "\r")] +
-                    "nihao".map { keyEvent(0, String($0)) } + [keyEvent(43, ","), keyEvent(49, " ", [.control, .shift]), keyEvent(0, "a")]
+                    "nihao".map { keyEvent(0, String($0)) } +
+                    [keyEvent(43, ","), modifierEvent(56, .shift), modifierEvent(56), keyEvent(0, "a")]
                 for event in events {
                     let handled = control.handle(event, client: client)
                     transcript.append("\(handled)|\(control.engine!.snapshot())|\(client.document ?? "nil")|\(client.mutations)|\(client.requests)")

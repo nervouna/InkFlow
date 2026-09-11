@@ -160,7 +160,9 @@ struct EngineTests {
         engine.clear(); configure(engine, defaults)
         type(engine, "nihao")
         let composing = engine.snapshot()
-        engine.event(keyEvent(49, " ", [.control, .shift]))
+        check(!engine.event(keyEvent(49, " ", [.control, .shift])) && !engine.requestedASCIIMode,
+              "The replaced Control-Shift-Space shortcut must pass through")
+        engine.asciiMode = true
         check(engine.requestedASCIIMode && !engine.asciiMode && engine.snapshot() == composing && engine.takeCommit().isEmpty)
         engine.key(32); check(engine.takeCommit() == "你好")
         check(!engine.key(97) && engine.asciiMode, "ASCII starts only after the old composition finishes")
@@ -172,7 +174,8 @@ struct EngineTests {
         engine.clear()
         let protectedPreferences = defaults.setting(.cornerQuotes, to: true)
         configure(engine, protectedPreferences)
-        check(engine.event(keyEvent(49, " ", [.control, .shift])) && engine.asciiMode)
+        engine.asciiMode = true
+        check(engine.asciiMode)
         for protected in ["user_id", "C++", "https://example.com/api/v1?x=1#top", "/Users/damao/InkFlow/config.yml", "v1.2.3-beta+4"] {
             var passthrough = ""
             for character in protected {
@@ -185,7 +188,8 @@ struct EngineTests {
             check(Array(passthrough.utf8) == Array(protected.utf8), "ASCII mode must preserve bytes for \(protected)")
         }
         check(engine.inputPreferences == protectedPreferences, "ASCII mode must not overwrite saved Chinese punctuation")
-        check(engine.event(keyEvent(49, " ", [.control, .shift])) && !engine.asciiMode)
+        engine.asciiMode = false
+        check(!engine.asciiMode)
         check(contains(engine, "nihao", "你好"), "Leaving ASCII mode restores Chinese candidates")
         engine.clear()
         check(engine.key(123)); check(engine.takeCommit() == "「", "Leaving ASCII mode restores saved Chinese punctuation")
@@ -614,7 +618,7 @@ struct EngineTests {
             }
         }
         // Explicit ASCII mode is character passthrough, not dictionary admission.
-        check(engine.event(keyEvent(49, " ", [.control, .shift])))
+        engine.asciiMode = true
         for letter in "women compute Haiti".utf16 { check(!engine.key(Int32(letter))) }
         check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
         print("PASS English admission: women admitted after Chinese; low-frequency screenshot words and compute absent from exact/prefix/case/all pages, edits, re-entry, mixed boundaries; explicit ASCII unaffected")
@@ -715,8 +719,7 @@ struct EngineTests {
         type(engine, "hzidao")
         engine.select(0)
         check(engine.takeCommit() == "知道" && engine.snapshot().preedit.isEmpty)
-        let toggle = keyEvent(49, " ", [.control, .shift])
-        check(engine.event(toggle))
+        engine.asciiMode = true
         for code in "nnihao".utf16 { check(!engine.key(Int32(code))) }
         check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         print("PASS spelling correction: 12 typo phrases, normal spelling/boundaries, editable preedit, selection, cancel, ASCII passthrough")
@@ -789,11 +792,10 @@ struct EngineTests {
             fresh.setConfiguration(candidateCount: 3, customPhrases: [changed])
             type(fresh, "dz"); check(fresh.snapshot().candidates.first == "更新地址")
         }
-        let toggle = keyEvent(49, " ", [.control, .shift])
-        check(a.event(toggle))
+        a.asciiMode = true
         a.setConfiguration(candidateCount: 9, customPhrases: [])
         check(!a.key(97), "Schema reload must preserve ASCII mode")
-        check(a.event(toggle))
+        a.asciiMode = false
         type(a, "dz")
         check(!a.snapshot().candidates.contains("更新地址") && !a.snapshot().candidates.contains("地址戊"))
         a.clear()
@@ -842,9 +844,8 @@ struct EngineTests {
         second = a.snapshot().candidates; check(second.count == 5)
         a.event(keyEvent(23, "5")); check(a.takeCommit() == second[4])
         type(a, "nihao"); a.key(32); check(a.takeCommit() == "你好")
-        let toggle = keyEvent(49, " ", [.control, .shift])
-        check(a.event(toggle)); check(!a.key(97))
-        check(a.event(toggle)); type(a, "nihao"); a.commit(); check(a.takeCommit() == "你好")
+        a.asciiMode = true; check(!a.key(97))
+        a.asciiMode = false; type(a, "nihao"); a.commit(); check(a.takeCommit() == "你好")
         check(!a.event(keyEvent(0, "a", .command)))
         a.clear(); type(a, "shi"); let before = a.snapshot()
         a.setCandidateCount(9); check(a.snapshot() == before && a.takeCommit().isEmpty)
@@ -912,7 +913,7 @@ struct EngineTests {
             check(engine.snapshot().page == 1)
             engine.key(0xff55); check(engine.snapshot().candidates == first)
             engine.key(0xff1b); check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
-            check(engine.event(keyEvent(49, " ", [.control, .shift])))
+            engine.asciiMode = true
             for key in "nihao".utf8 { check(!engine.key(Int32(key))) }
             check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
         }
@@ -1123,8 +1124,7 @@ struct EngineTests {
             check(engine.snapshot().candidates.first == expected, "Preserve Pinyin priority for \(input): \(engine.snapshot().candidates)")
             engine.clear()
         }
-        let toggle = keyEvent(49, " ", [.control, .shift])
-        check(engine.event(toggle))
+        engine.asciiMode = true
         for letter in "hello".utf16 { check(!engine.key(Int32(letter))) }
         check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
         print("PASS English candidates: common words, case, prefix completion, paging/digit/space selection, edit/cancel, Chinese priority, ASCII passthrough")
@@ -1138,13 +1138,12 @@ struct EngineTests {
             ("_", "——", 27, true), (",", "，", 43, false), (".", "。", 47, false), (";", "；", 41, false),
             (":", "：", 41, true), ("!", "！", 18, true), ("?", "？", 44, true), ("(", "（", 25, true), (")", "）", 29, true)
         ]
-        let toggle = keyEvent(49, " ", [.control, .shift])
         for (input, expected, code, shifted) in cases {
             let engine = IFEngine()!
             let key = keyEvent(code, input, shifted ? .shift : [])
             check(engine.event(key)); check(engine.takeCommit() == expected)
             check(engine.snapshot().preedit.isEmpty)
-            check(engine.event(toggle)); check(!engine.event(key)); check(engine.takeCommit().isEmpty)
+            engine.asciiMode = true; check(!engine.event(key)); check(engine.takeCommit().isEmpty)
         }
         for (input, expected) in [("\"\"\"\"", "“”“”"), ("''''", "‘’‘’"), ("\"'\"'", "“‘”’")] {
             let engine = IFEngine()!
@@ -1152,7 +1151,7 @@ struct EngineTests {
                 check(engine.event(keyEvent(39, String(quote), quote == "\"" ? .shift : [])))
                 check(engine.takeCommit() == String(output)); check(engine.snapshot().preedit.isEmpty)
             }
-            check(engine.event(toggle))
+            engine.asciiMode = true
             check(!engine.event(keyEvent(39, "\"", .shift)))
             check(!engine.event(keyEvent(39, "'"))); check(engine.takeCommit().isEmpty)
         }

@@ -29,6 +29,7 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     private let smartDiagnosticSession = UUID()
     private var smartGateReason: AIDiagnosticReason?
     private var statisticsAppBundleID: String?
+    private var leftShiftArmed = false
 
     private func configureSmartSuggestions() {
         smartSuggestions = AISuggestionCoordinator(settings: settings.smart, service: smartService,
@@ -132,9 +133,8 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
             let menu = NSMenu(title: "InkFlow")
             menu.autoenablesItems = false
             let ascii = engine?.requestedASCIIMode ?? false
-            let inputMode = menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
-                                         action: #selector(toggleInputMode(_:)), keyEquivalent: " ")
-            inputMode.keyEquivalentModifierMask = [.control, .shift]
+            let inputMode = menu.addItem(withTitle: (ascii ? "切换到中文输入" : "切换到英文输入") + "（左 Shift）",
+                                         action: #selector(toggleInputMode(_:)), keyEquivalent: "")
             inputMode.target = self
             let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: "")
             punctuation.target = self
@@ -155,6 +155,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         return result
     }
 
+    nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
+        Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .flagsChanged).rawValue)
+    }
+
     nonisolated override func showPreferences(_ sender: Any!) {
         // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }
@@ -169,6 +173,25 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
 
     @objc nonisolated func toggleInputMode(_ sender: Any?) {
         MainActor.assumeIsolated { engine?.asciiMode = !(engine?.requestedASCIIMode ?? false) }
+    }
+
+    private func handleModeShift(_ event: NSEvent, capturedAt: TimeInterval) -> Bool {
+        guard event.type == .flagsChanged else {
+            leftShiftArmed = false
+            return false
+        }
+        guard event.keyCode == UInt16(kVK_Shift) else {
+            leftShiftArmed = false
+            return false
+        }
+        if event.modifierFlags.contains(.shift) {
+            leftShiftArmed = event.modifierFlags.intersection([.control, .option, .command]).isEmpty
+            return leftShiftArmed
+        }
+        let shouldToggle = leftShiftArmed
+        leftShiftArmed = false
+        if shouldToggle { _ = engine?.toggleASCIIMode(capturedAt: capturedAt) }
+        return shouldToggle
     }
 
     @objc nonisolated func toggleEnglishPunctuation(_ sender: Any?) {
@@ -297,8 +320,14 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
-            guard !acceptingAI else { return false }
+            guard !acceptingAI else { leftShiftArmed = false; return false }
             let entered = qualityClock.monotonic()
+            if let callbackEvent, callbackEvent.type == .flagsChanged {
+                associateQualityClient(callbackClient as? IMKTextInput)
+                engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
+                return handleModeShift(callbackEvent, capturedAt: entered)
+            }
+            leftShiftArmed = false
             observeQualityVisibility(at: entered)
             smartSuggestions?.validate()
             if let callbackEvent, acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) { return true }
@@ -370,7 +399,10 @@ final class InkFlowInputController: IMKInputController, @unchecked Sendable {
     nonisolated override func deactivateServer(_ sender: Any!) {
         let span = IFStartupDiagnostics.shared.begin(.deactivation, source: .client)
         defer { IFStartupDiagnostics.shared.end(span) }
-        MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateEntered, session: smartDiagnosticSession) }
+        MainActor.assumeIsolated {
+            leftShiftArmed = false
+            AIDiagnostics.emit(.deactivateEntered, session: smartDiagnosticSession)
+        }
         commitComposition(sender)
         MainActor.assumeIsolated { AIDiagnostics.emit(.deactivateCommitted, session: smartDiagnosticSession) }
         super.deactivateServer(sender)

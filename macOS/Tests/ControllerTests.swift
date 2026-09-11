@@ -11,6 +11,7 @@ struct ControllerTests {
         contextReading()
         runCases(settings: isolated.settings)
         inputSettings(settings: isolated.settings)
+        leftShiftSwitching(settings: isolated.settings)
         rawProtection(settings: isolated.settings)
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
@@ -38,12 +39,11 @@ struct ControllerTests {
         check(other.engine!.inputPreferences?[.traditional] == true && !other.engine!.asciiMode,
               "Traditional and punctuation are global; ASCII remains per session")
         let menu = controller.menu()!
-        guard let modeItem = menu.items.first(where: { $0.title == "切换到中文输入" }) else {
+        guard let modeItem = menu.items.first(where: { $0.title == "切换到中文输入（左 Shift）" }) else {
             check(false, "Input menu must expose the mode toggle")
             return
         }
-        check(modeItem.keyEquivalent == " " && modeItem.keyEquivalentModifierMask == [.control, .shift],
-              "Input menu must display the existing Control-Shift-Space shortcut")
+        check(modeItem.keyEquivalent.isEmpty, "A modifier-only shortcut must be shown in the menu title")
         check(menu.items.first { $0.title == "英文标点" }?.state == .on)
         check(menu.items.first { $0.title == "繁体输入" }?.state == .on)
         client.mutations.removeAll()
@@ -54,7 +54,8 @@ struct ControllerTests {
         for letter in "hulianwang" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
         check(engine.snapshot().candidates.first == "互聯網")
         client.mutations.removeAll()
-        check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(modifierEvent(56), client: client))
         check(client.mutations.allSatisfy { !$0.hasPrefix("insert:") } && !engine.asciiMode)
         check(controller.handle(keyEvent(53, ""), client: client))
         check(engine.asciiMode)
@@ -63,6 +64,48 @@ struct ControllerTests {
         settings.setInputOption(.englishPunctuation, enabled: false)
         check(controller.menu()!.items.first { $0.title == "繁体输入" }?.state == .off)
         print("PASS controller input preferences: menu/UI global synchronization, session ASCII scope, deferred menu and shortcut, one old commit and cancellation")
+    }
+
+    @MainActor static func leftShiftSwitching(settings: IFSettings) {
+        let client = RecordingClient(document: "")
+        let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+        let engine = controller.engine!
+        let masks = NSEvent.EventTypeMask(rawValue: UInt64(controller.recognizedEvents(client)))
+        check(masks.contains(.keyDown) && masks.contains(.flagsChanged),
+              "Input controller must request key-down and modifier-change events")
+
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(!engine.requestedASCIIMode, "Left Shift press arms without switching early")
+        check(controller.handle(modifierEvent(56), client: client))
+        check(engine.asciiMode, "A standalone left Shift press-release toggles English mode")
+
+        check(!controller.handle(modifierEvent(60, .shift), client: client))
+        check(!controller.handle(modifierEvent(60), client: client))
+        check(engine.asciiMode, "Right Shift does not toggle input mode")
+
+        check(!controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+        check(engine.asciiMode, "The replaced Control-Shift-Space shortcut no longer toggles")
+
+        controller.toggleInputMode(nil)
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(keyEvent(0, "A", .shift), client: client))
+        check(!controller.handle(modifierEvent(56), client: client))
+        check(!engine.requestedASCIIMode && engine.qualitySnapshot().rawInput == "A",
+              "Left Shift used as a letter modifier preserves uppercase input without toggling")
+        engine.clear()
+        controller.refresh(client)
+
+        for letter in "nihao" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
+        let composing = engine.snapshot()
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(modifierEvent(56), client: client))
+        check(engine.requestedASCIIMode && !engine.asciiMode && engine.snapshot() == composing,
+              "Left Shift defers mode changes until the current composition finishes")
+        check(controller.handle(keyEvent(49, " "), client: client))
+        check(client.document == "你好" && engine.asciiMode,
+              "Deferred left Shift commits the old composition once before switching: \(String(describing: client.document)), ascii=\(engine.asciiMode)")
+        print("PASS left Shift switching: recognized events, left-only toggle, right/modified/legacy exclusions, deferred composition")
     }
 
     @MainActor static func rawProtection(settings: IFSettings) {
@@ -282,7 +325,8 @@ struct ControllerTests {
             case "shortcut": check(!controller.handle(keyEvent(0, "a", .command), client: client))
             case "toggle":
                 let before = controller.engine!.snapshot()
-                check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+                check(controller.handle(modifierEvent(56, .shift), client: client))
+                check(controller.handle(modifierEvent(56), client: client))
                 check(controller.engine!.snapshot() == before && controller.candidates(nil) as! [String] == candidates)
                 check(client.document == "准备午can" && !client.mutations.contains { $0.hasPrefix("insert:") },
                       "A deferred mode toggle preserves the context-ranked composition")
@@ -330,10 +374,12 @@ struct ControllerTests {
         let client = RecordingClient()
         check(!controller.handle(keyEvent(123, ""), client: client)); check(client.mutations.isEmpty)
         check(!controller.handle(keyEvent(0, "a", .command), client: client)); check(client.mutations.isEmpty)
-        check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client)); check(client.mutations.isEmpty)
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(modifierEvent(56), client: client)); check(client.mutations.isEmpty)
         check(!controller.handle(keyEvent(0, "a"), client: client))
         controller.commitComposition(client); controller.deactivateServer(client); check(client.mutations.isEmpty)
-        check(controller.handle(keyEvent(49, " ", [.control, .shift]), client: client))
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(modifierEvent(56), client: client))
         check(controller.handle(keyEvent(45, "n"), client: client)); check(client.mutations == ["mark:n"])
         check(controller.handle(keyEvent(53, ""), client: client)); check(client.mutations == ["mark:n", "mark:"])
         controller.commitComposition(client); controller.deactivateServer(client); check(client.mutations.count == 2)
