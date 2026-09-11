@@ -7,56 +7,58 @@ import InkFlowTestSupport
 @main
 struct EngineTests {
     @MainActor static func main() throws {
-        check(CommandLine.arguments.count == 3 || CommandLine.arguments.last == "--input-settings-only")
-        let shared = CommandLine.arguments[1], user = CommandLine.arguments[2]
-        if CommandLine.arguments.last == "--input-settings-only" {
-            try IFEngine.start(shared: shared, user: user)
-            try inputSettings(user: user)
-            IFEngine.stop()
-            return
+        let arguments = CommandLine.arguments
+        let modes = ["--basic", "--options", "--english", "--context", "--custom-phrases", "--input-settings-only"]
+        check(arguments.count == 3 || (arguments.count == 4 && modes.contains(arguments[3])), "Unknown engine scenario")
+        let shared = arguments[1], user = arguments[2]
+        let mode = arguments.count == 3 ? "all" : arguments[3]
+        func selected(_ name: String) -> Bool { mode == "all" || mode == "--\(name)" || (name == "options" && mode == "--input-settings-only") }
+        if selected("basic") {
+            do {
+                try IFEngine.start(shared: "/nonexistent/inkflow", user: user)
+                check(false, "Missing resources must fail")
+            } catch { check(!(error as NSError).localizedDescription.isEmpty) }
+            try missingEnglishResources(shared: shared, user: user)
+            try missingEmojiResources(shared: shared, user: user)
         }
-        do {
-            try IFEngine.start(shared: "/nonexistent/inkflow", user: user)
-            check(false, "Missing resources must fail")
-        } catch { check(!(error as NSError).localizedDescription.isEmpty) }
-        try missingEnglishResources(shared: shared, user: user)
-        try missingEmojiResources(shared: shared, user: user)
         try IFEngine.start(shared: shared, user: user)
-        try inputSettings(user: user)
+        if selected("options") { try inputSettings(user: user) }
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
-        chineseDictionaryCoverage()
-        try domainVocabulary()
-        englishAdmission()
-        conservativeChinesePrefixes()
-        mixedEnglishCandidates()
-        englishCandidates()
-        englishFeatureCoexistence()
-        contextCustomPhrasePriority()
-        spellingCorrection()
-        try runCases()
-        try rankingRules()
-        try customPhrases(user: user)
-        let isolated = IsolatedSettings()
-        defer { isolated.cleanup() }
-        try isolated.settings.saveCustomPhrase(code: "dz", text: "重启后的地址")
-        IFEngine.stop()
-        try IFEngine.start(shared: shared, user: user)
-        do {
-            let restored = IFSettings(defaults: isolated.defaults)
-            let engine = IFEngine()!
-            engine.setConfiguration(candidateCount: 5, customPhrases: restored.customPhrases)
-            type(engine, "dz")
-            check(engine.snapshot().candidates.first == "重启后的地址")
+        if selected("basic") { chineseDictionaryCoverage(); try runCases() }
+        if selected("english") {
+            try domainVocabulary()
+            englishAdmission()
+            conservativeChinesePrefixes()
+            mixedEnglishCandidates()
+            englishCandidates()
+            englishFeatureCoexistence()
+            spellingCorrection()
         }
-        IFEngine.stop()
+        if selected("context") { contextReranking(); contextCustomPhrasePriority(); try rankingRules() }
+        if selected("custom-phrases") {
+            try customPhrases(user: user)
+            let isolated = IsolatedSettings()
+            defer { isolated.cleanup() }
+            try isolated.settings.saveCustomPhrase(code: "dz", text: "重启后的地址")
+            IFEngine.stop()
+            try IFEngine.start(shared: shared, user: user)
+            do {
+                let restored = IFSettings(defaults: isolated.defaults)
+                let engine = IFEngine()!
+                engine.setConfiguration(candidateCount: 5, customPhrases: restored.customPhrases)
+                type(engine, "dz")
+                check(engine.snapshot().candidates.first == "重启后的地址")
+            }
+            IFEngine.stop()
+        } else { IFEngine.stop() }
         let schemaAfter = try Data(contentsOf: schemaURL)
         check(schemaAfter == schemaBefore)
         let files = try FileManager.default.contentsOfDirectory(atPath: user)
         check(files.contains("pinyin_simp.userdb"), "Keep the original Chinese user dictionary")
         check(!files.contains("inkflow_mixed.userdb") && !files.contains("easy_en.userdb"),
               "Supplemental translators must not create replacement user dictionaries")
-        print("PASS engine: Chinese, sessions, edit, cancel, paging, number/space selection, English toggle, shortcut passthrough, deferred 3/9 paging, digit 9, existing/new session isolation, UTF-16 cursor")
+        print("PASS engine: \(mode)")
     }
 
     @MainActor static func inputSettings(user: String) throws {
@@ -870,7 +872,6 @@ struct EngineTests {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation()
         emojiCandidates()
-        contextReranking()
     }
 
     @MainActor static func emojiCandidates() {

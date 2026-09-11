@@ -50,18 +50,38 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
 @main struct DictionaryUpdateTests {
     static func main() async throws {
         let arguments = CommandLine.arguments
+        let modes = ["--source", "--store", "--worker"]
+        check(arguments.count == 3 || (arguments.count == 4 && modes.contains(arguments[3])), "Unknown dictionary scenario")
+        let mode = arguments.count == 3 ? "all" : arguments[3]
         let root = URL(fileURLWithPath: arguments[1]).standardizedFileURL.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let repository = URL(fileURLWithPath: arguments[2])
-        let runtime = IFDictionaryRuntime.bundled(helper: repository.appendingPathComponent("build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"))
-        let fingerprint = try runtime.fingerprint()
-        try await networkTests(repository)
-        try storeTests(root: root, runtime: runtime, fingerprint: fingerprint)
-        try cleanupTests(root: root, fingerprint: fingerprint)
-        try await runnerFailures(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
-        try workerSuccess(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
-        try workerNativeFailures(root: root, runtime: runtime)
-        print("PASS dictionary updates: all focused backend tests")
+        if mode == "all" || mode == "--source" { try await networkTests(repository) }
+        if mode == "all" || mode == "--store" {
+            let resources = root.appendingPathComponent("synthetic-resources")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+            let dictionary = Data("---\nname: pinyin_simp\n...\n你好\tni hao\t1\n".utf8)
+            let hash = IFDictionaryHash.sha256(dictionary)
+            let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: IFDictionaryCatalog.recipeVersion,
+                contentVersion: "r\(IFDictionaryCatalog.recipeVersion)-" + hash, entryCount: 1,
+                contentSHA256: hash, dictionarySHA256: hash, correctionsSHA256: hash,
+                sources: IFDictionaryCatalog.sources.map { spec in var receipt = spec.pinnedReceipt; receipt.recordCount = 1; return receipt }, calibrations: [])
+            try dictionary.write(to: resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
+            try manifest.encoded().write(to: resources.appendingPathComponent(IFDictionaryManifest.filename))
+            let runtime = IFDictionaryRuntime(resources: resources, helper: resources.appendingPathComponent("unused"), libraries: [])
+            let fingerprint = String(repeating: "a", count: 64)
+            try storeTests(root: root, runtime: runtime, fingerprint: fingerprint)
+            try cleanupTests(root: root, fingerprint: fingerprint)
+        }
+        if mode == "all" || mode == "--worker" {
+            let runtime = IFDictionaryRuntime.bundled(helper: repository.appendingPathComponent("build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"))
+            let fingerprint = try runtime.fingerprint()
+            try runtimeFingerprintTests(root: root, runtime: runtime)
+            try await runnerFailures(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
+            try workerSuccess(root: root, runtime: runtime, repository: repository, fingerprint: fingerprint)
+            try workerNativeFailures(root: root, runtime: runtime)
+        }
+        print("PASS dictionary updates: \(mode)")
     }
     static func networkTests(_ repository: URL) async throws {
         let baseline = IFDictionaryCatalog.sources.map(\.pinnedReceipt)
@@ -169,6 +189,12 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         let cache = try store.resolve(second, fingerprint: fingerprint).cache!
         try Data("corrupt".utf8).write(to: cache.appendingPathComponent("pinyin_simp.table.bin"))
         fails("prepared-checksum") { _ = try store.resolve(second, fingerprint: fingerprint) }
+        let replacement = try fixture(store: store, runtime: runtime, fingerprint: fingerprint, versionCharacter: "2")
+        check(replacement.directory != second.directory, "Fresh artifact cannot collide with corrupt same-content cache")
+        _ = try store.resolve(replacement, fingerprint: fingerprint)
+        print("PASS store: begin/confirm/failure/interruption/fallback, same-content observations, safe paths, cache/fingerprint integrity, diagnostic-free atomic state")
+    }
+    static func runtimeFingerprintTests(root: URL, runtime: IFDictionaryRuntime) throws {
         let fingerprintRoot = root.appendingPathComponent("runtime")
         try FileManager.default.copyItem(at: runtime.resources, to: fingerprintRoot)
         let changedRuntime = IFDictionaryRuntime(resources: fingerprintRoot, helper: runtime.helper, libraries: runtime.libraries)
@@ -177,10 +203,6 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         check(try changedRuntime.fingerprint() == before, "Chinese content separate from runtime fingerprint")
         try Data("changed corrections".utf8).write(to: fingerprintRoot.appendingPathComponent(IFDictionaryCatalog.correctionsFilename))
         check(try changedRuntime.fingerprint() != before, "Corrections invalidate runtime")
-        let replacement = try fixture(store: store, runtime: runtime, fingerprint: fingerprint, versionCharacter: "2")
-        check(replacement.directory != second.directory, "Fresh artifact cannot collide with corrupt same-content cache")
-        _ = try store.resolve(replacement, fingerprint: fingerprint)
-        print("PASS store: begin/confirm/failure/interruption/fallback, same-content observations, safe paths, cache/fingerprint integrity, diagnostic-free atomic state")
     }
     static func cleanupTests(root: URL, fingerprint: String) throws {
         let user = root.appendingPathComponent("cleanup-user")
