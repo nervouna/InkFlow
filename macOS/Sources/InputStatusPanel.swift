@@ -76,6 +76,8 @@ final class InputStatusPanel {
         panel.setFrame(frame, display: true)
         if !panel.isVisible { panel.orderFrontRegardless() }
         dismissTimer?.invalidate()
+        dismissTimer = nil
+        guard !status.persistent else { return }
         let timer = Timer(timeInterval: 0.9, repeats: false) { [weak self] _ in
             MainActor.assumeIsolated { self?.hide() }
         }

@@ -52,6 +52,31 @@ end
 
 function M.init(env)
   env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
+    if name == "inkflow_voice_lexicon" then
+      if context:get_property(name) == "" then return end
+      -- The Swift caller waits past the native undo window before reading: releasing
+      -- a temporary UserDictionary commits any shared pending transaction. Never
+      -- call this transport directly from a key callback or retain its raw pointer.
+      local ok, result = with_memory(env, function(memory)
+        if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
+        -- Empty predictive prefix caps accepted rows in native LookupWords. Deleted
+        -- records may still be scanned; this is a bounded view, not a time guarantee.
+        local iterator = memory.user_dict:lookup_words("", true, 512)
+        local rows, bytes = {"ok"}, 3
+        for entry in iterator:iter() do
+          local text, code = entry.text, entry.custom_code
+          if text and code and not text:find("[%c]") and code:match("^[a-z ]+$") then
+            local row = text .. "\t" .. code .. "\t" .. tostring(entry.commit_count)
+            if bytes + #row + 1 > 65536 then break end
+            rows[#rows + 1] = row
+            bytes = bytes + #row + 1
+          end
+        end
+        return table.concat(rows, "\n") .. "\n"
+      end)
+      context:set_property("inkflow_voice_lexicon_result", ok and result or "unknown")
+      return
+    end
     if name == "inkflow_ai_readings" then
       local input, text = context:get_property(name):match("^([^\t]*)\t([^\t\r\n]+)$")
       if input and text then

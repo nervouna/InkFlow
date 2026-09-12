@@ -16,6 +16,7 @@ struct EngineSnapshot: Equatable {
 @MainActor
 final class IFEngine {
     static let api = rime_get_api()!
+    static let voiceLexicon = VoiceLexiconStore()
     private(set) static var ready = false
     private static var generation: UInt64 = 0
     private final class WeakSession {
@@ -60,11 +61,12 @@ final class IFEngine {
         }
     }
     static func signalIdle() {
-        guard idleHandler != nil, !idleScheduled else { return }
+        guard !idleScheduled else { return }
         idleScheduled = true
         Task { @MainActor in
             idleScheduled = false
             idleHandler?()
+            voiceLexicon.prepareIfNeeded()
         }
     }
     private static var userDirectory = ""
@@ -201,10 +203,13 @@ final class IFEngine {
                 try engine.restoreSession(afterCreate: { try fault(.sessionCreated(index)) })
             }
         } catch { stop(); throw error }
+        voiceLexicon.markDirty()
+        signalIdle()
         started = true
     }
 
     static func stop() {
+        voiceLexicon.reset()
         for recorder in qualityRecorders { recorder.value?.interrupt(reason: "engine_stopped") }
         qualityRecorders = []
         // Invalidate every object before finalize; a stale deinit can never destroy a reused native ID.
@@ -247,6 +252,8 @@ final class IFEngine {
         guard Self.ready else { return nil }
         do { try restoreSession() } catch { detachSession(); return nil }
         Self.instances[ObjectIdentifier(self)] = WeakSession(self)
+        Self.voiceLexicon.markDirty()
+        Self.signalIdle()
     }
 
     private func restoreSession(afterCreate: () throws -> Void = {}) throws {
@@ -305,6 +312,8 @@ final class IFEngine {
             return moveHighlight(key == 0xff54 ? 1 : -1, key: key)
         }
         let handled = Self.api.pointee.process_key(session, key, modifiers) != 0
+        // Rime can undo learning while leaving Backspace unhandled for the client.
+        if key == 0xff08 || key == 0xffff { Self.voiceLexicon.markDirty() }
         updateOrdering()
         return handled
     }
@@ -593,6 +602,7 @@ final class IFEngine {
         var commit = RimeCommit()
         commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout.size(ofValue: commit.data_size))
         guard Self.api.pointee.get_commit(session, &commit) != 0 else { return "" }
+        Self.voiceLexicon.nativeCommit()
         defer { _ = Self.api.pointee.free_commit(&commit) }
         return Self.string(commit.text)
     }

@@ -21,6 +21,8 @@ Core coverage means explicit behavior, boundary and failure-path assertions. Thi
 
 No unique assertions are removed by the initial restructuring. Similar inputs across Engine, Controller and AI headless tests retain different responsibilities. Before removing a future duplicate, identify the retained assertion that proves the same contract; share fixture inputs, never a common expected-result algorithm.
 
+Voice coverage is split into `voice-session` (serial correction/fallback/cancellation), `apple-voice` (synthetic audio feed and ASR range contract), `voice-lexicon` plus `ai-learning` (bounded learned views and native undo preservation), and `voice-controller` (fake recognition through the real controller initializer, target identity, UTF-16 marks, reentrant cancellation and exact-once insertion). These tests do not request microphone permission or contact DeepSeek. Authorize microphone access once in Settings; later launches prepare recognition automatically. Manually accept right-Shift hold/double-tap input in a native editor, browser and same-app field switches. Unknown lexicon readiness blocks voice start while preserving ordinary typing.
+
 ## Daily use
 
 ```sh

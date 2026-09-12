@@ -10,7 +10,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     private var leftShiftArmed = false
 
     nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .flagsChanged).rawValue)
+        Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .keyUp, .flagsChanged).rawValue)
     }
 
     nonisolated override func mouseDown(onCharacterIndex index: Int, coordinate point: NSPoint,
@@ -20,6 +20,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         keepTracking?.pointee = false
         nonisolated(unsafe) let callbackClient = sender
         let shouldCommit = MainActor.assumeIsolated {
+            voice.cancel(.editing)
             leftShiftArmed = false
             guard !ai.isAccepting, ownsMarkedText, index >= 0, index != NSNotFound,
                   let activeClient = callbackClient as? IMKTextInput else { return false }
@@ -102,6 +103,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     override func refresh(_ client: IMKTextInput?) {
+        guard !voice.blocksRime else { return }
         observeQualityVisibility()
         ai.beginRefresh(client: client)
         defer { ai.endRefresh() }
@@ -144,7 +146,16 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
+            if let event = callbackEvent, event.type == .flagsChanged {
+                VoiceDiagnostics.modifierArrival(keyCode: event.keyCode, flags: event.modifierFlags.rawValue)
+            }
+            if voice.isDelivering {
+                return callbackEvent.map { voice.handle($0, client: callbackClient as? IMKTextInput) } ?? false
+            }
             guard !ai.isAccepting else { leftShiftArmed = false; return false }
+            if let callbackEvent, voice.handle(callbackEvent, client: callbackClient as? IMKTextInput) {
+                leftShiftArmed = false; return true
+            }
             let entered = qualityClock.monotonic()
             if let callbackEvent, callbackEvent.type == .flagsChanged {
                 associateQualityClient(callbackClient as? IMKTextInput)
@@ -188,7 +199,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     nonisolated override func candidateSelected(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !ai.isAccepting, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !voice.blocksRime, !ai.isAccepting, !updating, let text, let index = strings.firstIndex(of: text) else { return }
             let entered = qualityClock.monotonic()
             associateQualityClient(client())
             observeQualityVisibility(at: entered)
@@ -201,7 +212,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     nonisolated override func candidateSelectionChanged(_ candidate: NSAttributedString!) {
         let text = candidate?.string
         MainActor.assumeIsolated {
-            guard !ai.isAccepting, !updating, let text, let index = strings.firstIndex(of: text) else { return }
+            guard !voice.blocksRime, !ai.isAccepting, !updating, let text, let index = strings.firstIndex(of: text) else { return }
             observeQualityVisibility()
             engine?.highlight(index)
             refresh(client())
@@ -211,6 +222,10 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     nonisolated override func commitComposition(_ sender: Any!) {
         nonisolated(unsafe) let callbackClient = sender
         MainActor.assumeIsolated {
+            if voice.blocksRime {
+                voice.clientRequestedCommit(callbackClient as? IMKTextInput)
+                return
+            }
             guard !ai.isAccepting else { return }
             let entered = qualityClock.monotonic()
             ai.invalidate(.commit)

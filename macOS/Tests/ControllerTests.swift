@@ -120,8 +120,8 @@ struct ControllerTests {
         controller.hidePalettes()
         check(status.hideCount == 1, "Hiding input palettes must immediately dismiss status feedback")
 
-        check(!controller.handle(modifierEvent(60, .shift), client: client))
-        check(!controller.handle(modifierEvent(60), client: client))
+        check(controller.handle(modifierEvent(60, .shift), client: client))
+        check(controller.handle(modifierEvent(60), client: client))
         check(engine.asciiMode, "Right Shift does not toggle input mode")
 
         check(!controller.handle(modifierEvent(56, [.shift, .function]), client: client))

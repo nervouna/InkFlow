@@ -60,13 +60,22 @@ impact_classify() {
       impact_rule "$path" 'input options and controller application' settings engine-options controller
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift|macOS/Tests/SettingsUITests.swift)
-      impact_rule "$path" 'settings controls and input preferences' settings engine-options controller ai-transport ai-runtime ai-headless
+      impact_rule "$path" 'settings controls and input preferences' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       [[ $path != macOS/Sources/* ]] || impact_manual_add manual-settings manual-input ;;
+    macOS/Sources/AppleVoiceRecognizer.swift|macOS/Tests/AppleVoiceRecognizerTests.swift|macOS/scripts/test-apple-voice.sh)
+      impact_rule "$path" 'Apple voice capture and ASR lifecycle' apple-voice voice-session voice-lexicon voice-controller ;;
+    macOS/Sources/InputControllerVoice.swift|macOS/Sources/VoiceSettings.swift|macOS/Sources/VoiceSettingsView.swift|macOS/Tests/VoiceControllerTests.swift|macOS/scripts/test-voice-controller.sh)
+      impact_rule "$path" 'voice target ownership, preparation and independent settings' voice-controller settings
+      [[ $path != macOS/Sources/* ]] || impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/VoiceSession.swift|macOS/Sources/VoiceCorrectionClient.swift|macOS/Tests/VoiceSessionTests.swift|macOS/scripts/test-voice-session.sh)
+      impact_rule "$path" 'voice session and transport contracts' voice-session voice-controller ;;
+    macOS/Sources/VoiceLexicon.swift|macOS/Tests/VoiceLexiconTests.swift|macOS/scripts/test-voice-lexicon.sh)
+      impact_rule "$path" 'bounded voice lexicon and native learning preservation' voice-lexicon ai-learning ;;
     macOS/Sources/AISettings.swift)
-      impact_rule "$path" 'AI configuration, invalidation and headless application' ai-transport ai-runtime ai-headless
+      impact_rule "$path" 'AI configuration, invalidation and headless application' voice-session ai-transport ai-runtime ai-headless
       impact_manual_add manual-settings manual-input ;;
     macOS/Sources/AIChatCompletions.swift|macOS/Tests/AISuggestionTests.swift|macOS/scripts/test-ai-suggestions.sh)
-      impact_rule "$path" 'AI transport contracts' ai-transport ;;
+      impact_rule "$path" 'AI transport contracts' voice-session ai-transport ;;
     macOS/Tests/AIStatisticsTestSupport.swift)
       impact_rule "$path" 'shared AI transport/runtime/statistics fixtures' ai-transport ai-runtime ai-statistics ;;
     macOS/Sources/AIStatistics.swift|macOS/Sources/AIStatisticsStore.swift)
@@ -89,7 +98,7 @@ impact_classify() {
     macOS/scripts/test-ai-runtime.sh)
       impact_rule "$path" 'AI runtime runner' ai-runtime ;;
     macOS/Sources/InputController.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputStatusPanel.swift|macOS/Sources/InputStatusPresentation.swift|macOS/Sources/CandidatePresentation.swift|macOS/Sources/NativeCandidates.*)
-      impact_rule "$path" 'input event routing and exact-once delivery' engine-basic controller ai-headless quality-capture-query
+      impact_rule "$path" 'input event routing and exact-once delivery' engine-basic controller voice-controller ai-headless quality-capture-query
       impact_manual_add manual-input ;;
     macOS/Sources/InputRankingContext.swift|macOS/Sources/Context.swift)
       impact_rule "$path" 'context ranking and controller capture' engine-context controller
@@ -113,6 +122,10 @@ impact_classify() {
       impact_rule "$path" 'generated dictionary contract and deployment' dictionary-generator deployment engine dictionary-worker dictionary-activation
       impact_bundle=true
       case "$path" in macOS/Sources/*|macOS/DictionaryTool/*) impact_manual_add manual-input ;; esac ;;
+    schemas/lua/inkflow_ai_learning.lua)
+      impact_rule "$path" 'native learning bridge and schema consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-worker dictionary-activation
+      impact_bundle=true
+      impact_manual_add manual-input ;;
     macOS/Sources/PackagedCache*|macOS/Tools/PackagedCacheTool.swift|macOS/scripts/prepare-*.sh|macOS/Data/*|macOS/config/*|macOS/Resources/*|schemas/*|config/*|Data/*|*.yaml|*.yml)
       impact_rule "$path" 'schema/generated resources and deployment consumers' preparation dictionary-generator deployment engine dictionary-worker dictionary-activation
       impact_bundle=true
@@ -149,6 +162,7 @@ impact_classify() {
     macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
       impact_rule "$path" 'native support consumers' controller ai-headless quality-capture-query dictionary-activation ;;
     macOS/Tests/TestSupport.swift)
+      impact_add voice-controller
       impact_rule "$path" 'shared Swift assertions/settings isolation: all consumers'
       impact_all=true ;;
     macOS/Tests/EngineTests.swift) impact_rule "$path" 'engine scenario collection' engine ;;

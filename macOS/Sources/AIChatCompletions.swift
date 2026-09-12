@@ -69,7 +69,7 @@ struct AIChatCompletionsClient: AISuggestionServing {
                      requestedModel: configuration.model.contains(configuration.apiKey) && !configuration.apiKey.isEmpty ? "unknown" : AIConfigurationSnapshot.identifier(configuration.model),
                      maxTokens: 256, stream: false, thinkingDisabled: thinkingDisabled(configuration))
     }
-    private static func thinkingDisabled(_ configuration: AISuggestionConfiguration) -> Bool {
+    static func thinkingDisabled(_ configuration: AISuggestionConfiguration) -> Bool {
         let components = URLComponents(string: configuration.baseURL)
         return components?.host?.lowercased() == "api.deepseek.com" && components?.scheme?.lowercased() == "https" &&
             ["deepseek-v4-flash", "deepseek-v4-pro"].contains(configuration.model.lowercased())
@@ -91,7 +91,7 @@ struct AIChatCompletionsClient: AISuggestionServing {
         self.session = session ?? Self.defaultSession
     }
 
-    static func makeRequest(input: AISuggestionInput, configuration: AISuggestionConfiguration) throws -> URLRequest {
+    static func completionURL(configuration: AISuggestionConfiguration) throws -> URL {
         guard configuration.isComplete,
               var components = URLComponents(string: configuration.baseURL),
               ["https", "http"].contains(components.scheme?.lowercased() ?? ""),
@@ -103,6 +103,11 @@ struct AIChatCompletionsClient: AISuggestionServing {
         if !path.hasSuffix("/chat/completions") { path += "/chat/completions" }
         components.path = path
         guard let url = components.url else { throw AIServiceError.invalidConfiguration }
+        return url
+    }
+
+    static func makeRequest(input: AISuggestionInput, configuration: AISuggestionConfiguration) throws -> URLRequest {
+        let url = try completionURL(configuration: configuration)
         let inputJSON = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
         var body: [String: Any] = ["model": configuration.model, "stream": false, "max_tokens": 256,
             "messages": [["role": "system", "content": promptTemplate], ["role": "user", "content": inputJSON]]]
