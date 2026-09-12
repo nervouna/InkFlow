@@ -512,6 +512,8 @@ struct SettingsUITests {
             let thunder = elements.filter { $0["id"] as? String == "settings.thunderMode" }
             check(thunder.count == 1 && String(describing: thunder[0]["value"]!) == "0",
                   "Thunder mode must expose one accessible, default-off toggle")
+            check(thunder.first?["label"] as? String == "庆祝模式",
+                  "Celebration mode must expose its product name as the accessible label")
             let contentFrame = window.convertToScreen(window.contentLayoutRect)
             let defaults = ["settings.direction": "水平", "settings.count": "5", "settings.fontSize": "14"]
             for control in controls {

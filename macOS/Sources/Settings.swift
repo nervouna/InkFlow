@@ -212,7 +212,7 @@ struct SettingsView: View {
                 ForEach(IFSettings.fontSizes, id: \.self) { Text(String($0)).tag($0) }
             }
             .accessibilityIdentifier("settings.fontSize")
-            Toggle("雷霆模式", isOn: $settings.thunderMode)
+            Toggle("庆祝模式", isOn: $settings.thunderMode)
                 .help("每次输入和上屏时在光标处绽放彩花")
                 .accessibilityIdentifier("settings.thunderMode")
         }
