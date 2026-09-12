@@ -1,5 +1,21 @@
 import AppKit
 
+enum InputStatusLayout {
+    static let fontSize: CGFloat = 10
+    static let padding: CGFloat = 4
+
+    static func panelSize(for fittingSize: NSSize) -> NSSize {
+        let inset = padding * 2
+        return NSSize(width: ceil(fittingSize.width + inset), height: ceil(fittingSize.height + inset))
+    }
+
+    static func contentFrame(in panelSize: NSSize) -> NSRect {
+        let inset = padding * 2
+        return NSRect(x: padding, y: padding,
+                      width: max(0, panelSize.width - inset), height: max(0, panelSize.height - inset))
+    }
+}
+
 @MainActor
 private final class InputStatusWindow: NSPanel {
     override var canBecomeKey: Bool { false }
@@ -15,11 +31,11 @@ final class InputStatusPanel {
 
     init() {
         label = NSTextField(labelWithString: "")
-        label.font = .systemFont(ofSize: 14, weight: .semibold)
+        label.font = .systemFont(ofSize: InputStatusLayout.fontSize, weight: .semibold)
         label.textColor = .labelColor
         label.alignment = .center
 
-        let size = NSSize(width: 72, height: 34)
+        let size = InputStatusLayout.panelSize(for: label.fittingSize)
         panel = InputStatusWindow(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -50,9 +66,9 @@ final class InputStatusPanel {
               screens: [NSRect] = NSScreen.screens.map(\.visibleFrame)) {
         label.stringValue = status.title
         panel.setAccessibilityValue(status.title)
-        let size = NSSize(width: max(72, ceil(label.fittingSize.width) + 28), height: 34)
+        let size = InputStatusLayout.panelSize(for: label.fittingSize)
         panel.setContentSize(size)
-        label.frame = NSRect(x: 12, y: 7, width: size.width - 24, height: 20)
+        label.frame = InputStatusLayout.contentFrame(in: size)
         guard let frame = Self.position(caretRect: caretRect, panelSize: size, screens: screens) else {
             hide()
             return

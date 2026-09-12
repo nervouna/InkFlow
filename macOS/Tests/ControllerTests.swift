@@ -223,6 +223,16 @@ struct ControllerTests {
     }
 
     @MainActor static func statusPanelPositioning() {
+        check(InputStatusLayout.fontSize == 10 && InputStatusLayout.padding == 4,
+              "Status panel typography and padding must match the compact UI specification")
+        check(InputStatusLayout.panelSize(for: NSSize(width: 20.25, height: 11.5)) ==
+              NSSize(width: 29, height: 20) &&
+              InputStatusLayout.panelSize(for: NSSize(width: 40.25, height: 15.5)) ==
+              NSSize(width: 49, height: 24),
+              "Status panel width and height must adapt to the measured label size")
+        check(InputStatusLayout.contentFrame(in: NSSize(width: 29, height: 20)) ==
+              NSRect(x: 4, y: 4, width: 21, height: 12),
+              "Status panel must apply four points of padding on every edge")
         let screen = NSRect(x: 0, y: 0, width: 600, height: 400)
         let size = NSSize(width: 100, height: 40)
         check(InputStatusPanel.position(caretRect: NSRect(x: 250, y: 180, width: 2, height: 20),
