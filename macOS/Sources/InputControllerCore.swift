@@ -136,7 +136,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             if !commit.isEmpty {
                 thunderPresentation?.burst(.commit, client: client, characterIndex: 0)
             } else if state.preedit.count > previousPreeditCount {
-                thunderPresentation?.burst(.preedit, client: client, characterIndex: state.cursor)
+                thunderPresentation?.burst(.preedit, client: client, characterIndex: max(state.cursor - 1, 0))
             }
         }
         deliveredPreedit = state.preedit

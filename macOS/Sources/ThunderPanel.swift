@@ -7,10 +7,16 @@ private final class ThunderWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
+@MainActor
+protocol ThunderPanelPresenting: AnyObject {
+    func burst(_ burst: ThunderBurst, at caretRect: NSRect)
+    func hide()
+}
+
 /// A reusable, click-through screen overlay. Each input action adds only a
 /// handful of Core Animation layers; no window or view is created per keypress.
 @MainActor
-final class ThunderPanel {
+final class ThunderPanel: ThunderPanelPresenting {
     private let panel: ThunderWindow
     private let canvas: CALayer
     private var dismissTimer: Timer?
@@ -39,8 +45,11 @@ final class ThunderPanel {
         panel.contentView = view
     }
 
-    func burst(_ burst: ThunderBurst, at caretRect: NSRect,
-               screens: [NSRect] = NSScreen.screens.map(\.frame)) {
+    func burst(_ burst: ThunderBurst, at caretRect: NSRect) {
+        self.burst(burst, at: caretRect, screens: NSScreen.screens.map(\.frame))
+    }
+
+    private func burst(_ burst: ThunderBurst, at caretRect: NSRect, screens: [NSRect]) {
         guard let screen = Self.screen(for: caretRect, screens: screens) else {
             hide()
             return

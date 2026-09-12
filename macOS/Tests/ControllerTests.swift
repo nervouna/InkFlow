@@ -29,6 +29,18 @@ private final class RecordingThunderPresentation: ThunderPresenting {
     func hide() { hideCount += 1 }
 }
 
+@MainActor
+private final class RecordingThunderPanel: ThunderPanelPresenting {
+    private(set) var bursts: [ThunderBurst] = []
+    private(set) var hideCount = 0
+
+    func burst(_ burst: ThunderBurst, at caretRect: NSRect) {
+        bursts.append(burst)
+    }
+
+    func hide() { hideCount += 1 }
+}
+
 @main
 struct ControllerTests {
     @MainActor static func main() throws {
@@ -277,6 +289,14 @@ struct ControllerTests {
         reducedMotion.burst(.commit, client: reducedMotionClient, characterIndex: 0)
         check(reducedMotionClient.attributeIndexes.isEmpty,
               "Reduce Motion must suppress decorative work before querying caret geometry")
+        let thunderPanel = RecordingThunderPanel()
+        let uninterrupted = NativeThunderPresentation(reduceMotion: { false }, panelFactory: { thunderPanel })
+        reducedMotionClient.caretRect = NSRect(x: 80, y: 90, width: 1, height: 18)
+        uninterrupted.burst(.commit, client: reducedMotionClient, characterIndex: 0)
+        reducedMotionClient.caretRect = .zero
+        uninterrupted.burst(.preedit, client: reducedMotionClient, characterIndex: 0)
+        check(thunderPanel.bursts == [.commit] && thunderPanel.hideCount == 0,
+              "A failed caret lookup must not interrupt particles already in flight")
         print("PASS status panel positioning: above-caret placement, visible-screen fallback and invalid-caret suppression")
     }
 
@@ -293,8 +313,8 @@ struct ControllerTests {
         settings.thunderMode = true
         check(controller.handle(keyEvent(34, "i"), client: client))
         check(thunder.records.map(\.0) == [.preedit] && thunder.records[0].1 == ObjectIdentifier(client) &&
-              thunder.records[0].2 == 2,
-              "Adding preedit text must burst once at the composition cursor")
+              thunder.records[0].2 == 1,
+              "Adding preedit text must query the last valid character before the composition cursor")
         check(controller.handle(keyEvent(51, "\u{8}"), client: client))
         check(thunder.records.count == 1, "Deleting preedit text must not burst")
         check(controller.handle(keyEvent(0, "a"), client: client))

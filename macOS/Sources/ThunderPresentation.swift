@@ -16,22 +16,27 @@ protocol ThunderPresenting: AnyObject {
 @MainActor
 final class NativeThunderPresentation: ThunderPresenting {
     private let reduceMotion: () -> Bool
-    private var panel: ThunderPanel?
+    private let panelFactory: () -> any ThunderPanelPresenting
+    private var panel: (any ThunderPanelPresenting)?
 
     init(reduceMotion: @escaping () -> Bool = {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-    }) {
+    }, panelFactory: @escaping () -> any ThunderPanelPresenting = { ThunderPanel() }) {
         self.reduceMotion = reduceMotion
+        self.panelFactory = panelFactory
     }
 
     func burst(_ burst: ThunderBurst, client: IMKTextInput?, characterIndex: Int) {
-        guard !reduceMotion(), let client,
-              let caretRect = NativeInputStatusPresentation.caretRect(for: client,
-                                                                      characterIndex: characterIndex) else {
+        guard !reduceMotion() else {
             hide()
             return
         }
-        if panel == nil { panel = ThunderPanel() }
+        guard let client,
+              let caretRect = NativeInputStatusPresentation.caretRect(for: client,
+                                                                      characterIndex: characterIndex) else {
+            return
+        }
+        if panel == nil { panel = panelFactory() }
         panel?.burst(burst, at: caretRect)
     }
 
