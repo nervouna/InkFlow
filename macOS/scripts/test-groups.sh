@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shared canonical order and expansion. Sourcing this file performs no preparation.
-test_all_units=(quality-identity quality-store quality-timing quality-metadata quality-capture-query ai-transport ai-runtime ai-statistics ai-learning ai-headless preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings dictionary-source dictionary-store dictionary-worker dictionary-activation startup-diagnostics termination installer-core runner workflow)
+test_all_units=(quality-identity quality-store quality-timing quality-metadata quality-capture-query voice-session apple-voice voice-lexicon voice-controller ai-transport ai-runtime ai-statistics ai-learning ai-headless preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings dictionary-source dictionary-store dictionary-worker dictionary-activation startup-diagnostics termination installer-core runner workflow)
 expand_test_groups() {
   test_units=()
   local requested=' ' group unit expanded

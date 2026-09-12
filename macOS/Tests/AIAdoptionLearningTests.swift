@@ -6,15 +6,18 @@ import InkFlowTestSupport
 
 @main
 struct AIAdoptionLearningTests {
-    @MainActor static func main() throws {
+    @MainActor static func main() async throws {
         let shared = CommandLine.arguments[1], user = CommandLine.arguments[2]
         let writing = CommandLine.arguments[3] == "write"
+        let readsDuringUndo = CommandLine.arguments.count < 5 || CommandLine.arguments[4] != "no-voice-read"
         let bootstrap = ContinuousClock.now
         try IFEngine.start(shared: shared, user: user)
         print("TRACE AI learning bootstrap: \(bootstrap.duration(to: .now))")
         defer { IFEngine.stop() }
         let engine = IFEngine()!
         engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: .init())
+        let initialVoice = engine.readVoiceLexicon(generation: 1, revision: 1)
+        check(initialVoice.availability == .available, "Bundled Lua supports bounded user dictionary lookup")
         let words = [("xingmoliang", "星墨量"), ("xingmolan", "星墨蓝"), ("xingmohai", "星墨海"), ("xingmohao", "星墨好")]
         func candidates(_ input: String) -> [String] {
             engine.clear(); type(engine, input)
@@ -33,6 +36,12 @@ struct AIAdoptionLearningTests {
             func ordinaryCommit(_ input: String, expected: String, undo: Bool) {
                 engine.clear(); type(engine, input); engine.key(32)
                 check(engine.takeCommit() == expected)
+                if readsDuringUndo {
+                    for _ in 0..<3 {
+                        let view = engine.readVoiceLexicon(generation: 1, revision: 2)
+                        check(view.availability == .unknown, "Snapshot requests never touch Rime during its undo window")
+                    }
+                }
                 engine.key(undo ? 0xff08 : 0xff09)
             }
             // With AI never requested, its bridge must not change ordinary undo.
@@ -68,6 +77,14 @@ struct AIAdoptionLearningTests {
             guard let existing = before.dropFirst().first(where: { $0.count == 2 }) else { fatalError("Missing existing-word fixture") }
             check(engine.learnAIAdoption(input: .init(rawInput: "zhangwei", caret: 8, selectedPrefix: ""), text: existing))
             check(candidates("zhangwei").first == existing, "Existing-word adoption improves preference")
+            try await Task.sleep(for: .milliseconds(4100))
+            let voice = engine.readVoiceLexicon(generation: 1, revision: 3)
+            check(voice.entries.contains { $0.text == "星墨海" && $0.code == "xing mo hai " && $0.commits == 1 },
+                  "Voice reads the ordinary learned entry and canonical code")
+            check(VoiceAlternativeReranker.select([["星莫海", "星墨海"]], snapshot: voice) == "星墨海",
+                  "Existing learning changes eligible voice alternatives without an LLM")
+            check(VoiceAlternativeReranker.select([["星莫海", "星墨海"]], snapshot: initialVoice) == "星莫海",
+                  "Same alternatives preserve Apple order before learning")
             try existing.write(toFile: user + "/expected-existing.txt", atomically: true, encoding: .utf8)
             // Ordinary undo must also survive prior lookup/adoption callbacks.
             ordinaryCommit("zaijian", expected: "再见", undo: true)
@@ -80,6 +97,16 @@ struct AIAdoptionLearningTests {
             check(files.contains("pinyin_simp.userdb"))
             check(!files.contains(where: { $0.hasSuffix(".userdb") && $0 != "pinyin_simp.userdb" }), "Only existing userdb")
         }
+        engine.clear()
+        IFEngine.signalIdle()
+        try await Task.sleep(for: .milliseconds(4400))
+        check(IFEngine.voiceLexicon.snapshot.availability == .available, "Deferred idle preparation publishes view")
+        check(IFEngine.voiceLexicon.snapshot.entries.contains { $0.text == "星墨海" }, "Deferred view includes existing learning")
+        let generation = IFEngine.voiceLexicon.snapshot.generation
+        IFEngine.stop()
+        check(IFEngine.voiceLexicon.snapshot.availability == .unknown && IFEngine.voiceLexicon.snapshot.entries.isEmpty,
+              "Teardown clears all learned content")
+        check(IFEngine.voiceLexicon.snapshot.generation != generation, "Teardown invalidates snapshot generation")
         print("PASS AI learning \(writing ? "write" : "restart"): novel words, preference, abbreviated/incomplete/typo, prefix, ambiguity")
     }
 }

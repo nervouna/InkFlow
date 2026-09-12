@@ -71,6 +71,8 @@
 	<true/>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>墨流使用麦克风在本机将语音转换为文字。</string>
 	<key>TISIconIsTemplate</key>
 	<true/>
 	<key>TISInputSourceID</key>

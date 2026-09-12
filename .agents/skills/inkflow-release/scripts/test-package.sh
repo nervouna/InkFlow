@@ -84,8 +84,11 @@ case "$1" in
   --display)
     if [[ "${UNEXPECTED_ENTITLEMENT:-0}" == 1 ]]; then
       printf '<?xml version="1.0"?><plist version="1.0"><dict><key>com.apple.security.app-sandbox</key><true/></dict></plist>\n'
-    else
+    elif [[ "${MISSING_ENTITLEMENT:-0}" == 1 ]]; then
       printf '<?xml version="1.0"?><plist version="1.0"><dict/></plist>\n'
+    else
+      # Both application signatures use this file in the production package script.
+      cat macOS/DeveloperID.entitlements
     fi
     ;;
   *) echo "sign:$last" >> "$EVENTS" ;;
@@ -199,6 +202,7 @@ done
 SIGNATURE_FAILURE=inner reject finish
 TEAM=WRONGTEAM reject finish
 UNEXPECTED_ENTITLEMENT=1 reject finish
+MISSING_ENTITLEMENT=1 reject finish
 plutil -replace CFBundleVersion -string 999 "$output/payload/InkFlow.app/Contents/Info.plist"
 reject finish
 cp "$repo/macOS/Info.plist" "$output/payload/InkFlow.app/Contents/Info.plist"

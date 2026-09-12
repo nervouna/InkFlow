@@ -63,8 +63,10 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var onMutation: (() -> Void)?
     package var testBundleID: String? = "inkflow.recording-client"
     package var testClientID: String? = "inkflow.recording-client"
+    package var testIdentifierProvider: (() -> String?)?
     package var document: String?
     package var selection = NSRange(location: NSNotFound, length: 0)
+    package var reportedSelection: NSRange?
     package var mark = NSRange(location: NSNotFound, length: 0)
     package var contextAvailable = true
     package var updatesActualRange = true
@@ -74,6 +76,8 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var reportedLength: Int?
     package var caretRect = NSRect.zero
     package var attributeIndexes: [Int] = []
+    package var allowsExplicitMarkedReplacement = false
+    package var onAttributes: (() -> Void)?
 
     package init(document: String? = nil) {
         self.document = document
@@ -96,14 +100,14 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         insertionCallback?()
     }
     package func setMarkedText(_ string: Any!, selectionRange: NSRange, replacementRange: NSRange) {
-        check(replacementRange == NSRange(location: NSNotFound, length: 0))
+        check(allowsExplicitMarkedReplacement || replacementRange == NSRange(location: NSNotFound, length: 0))
         let text = string as! String
         check(selectionRange.location <= text.utf16.count)
         mutations.append("mark:\(text)")
         onMutation?()
-        replace(text, marked: true, cursor: selectionRange)
+        replace(text, marked: true, cursor: selectionRange, requested: replacementRange)
     }
-    package func selectedRange() -> NSRange { selection }
+    package func selectedRange() -> NSRange { reportedSelection ?? selection }
     package func markedRange() -> NSRange { mark }
     package func attributedSubstring(from range: NSRange) -> NSAttributedString! { nil }
     package func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
@@ -111,6 +115,7 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>!) -> Int { NSNotFound }
     package func attributes(forCharacterIndex index: Int, lineHeightRectangle lineRect: UnsafeMutablePointer<NSRect>!) -> [AnyHashable: Any]! {
         attributeIndexes.append(index)
+        onAttributes?()
         lineRect?.pointee = caretRect
         return [:]
     }
@@ -121,7 +126,10 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package func bundleIdentifier() -> String! { testBundleID }
     package func windowLevel() -> CGWindowLevel { 0 }
     package func supportsProperty(_ property: TSMDocumentPropertyTag) -> Bool { false }
-    package func uniqueClientIdentifierString() -> String! { testClientID }
+    package func uniqueClientIdentifierString() -> String! {
+        if let testIdentifierProvider { return testIdentifierProvider() }
+        return testClientID
+    }
     package func string(from range: NSRange, actualRange: NSRangePointer!) -> String! {
         requests.append(range)
         guard contextAvailable else { return nil }

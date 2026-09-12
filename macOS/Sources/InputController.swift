@@ -27,12 +27,14 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     var thunderPresentation: (any ThunderPresenting)? = nil
     var deliveredPreedit = ""
     let ai: IFInputControllerAI
+    let voice: IFInputControllerVoice
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         settings = MainActor.assumeIsolated { .sharedSettings }
         settingsWindow = MainActor.assumeIsolated { .sharedController }
         qualityClock = MainActor.assumeIsolated { QualityClock() }
         ai = MainActor.assumeIsolated { IFInputControllerAI(statisticsStore: Self.statisticsStore) }
+        voice = MainActor.assumeIsolated { IFInputControllerVoice() }
         super.init(server: server, delegate: delegate, client: inputClient)
         nonisolated(unsafe) let callbackServer = server
         MainActor.assumeIsolated { configure(server: callbackServer) }
@@ -52,6 +54,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         self.settings = settings
         self.settingsWindow = settingsWindow
         ai = IFInputControllerAI(statisticsStore: aiStatisticsStore, service: smartService)
+        voice = IFInputControllerVoice()
         self.secureInput = secureInput
         candidatePresentation = presentation
         aiPresentation = presentation
@@ -74,6 +77,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             }
         }
         ai.configure(self)
+        voice.configure(self)
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(engineChanged(_:)),
                                                name: .engineAvailabilityDidChange, object: nil)
@@ -91,6 +95,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         ai.teardown()
+        voice.cancel(.deactivated)
         statusPresentation?.hide()
         thunderPresentation?.hide()
         candidatePresentation = nil
@@ -185,6 +190,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func settingsChanged(_ notification: Notification) {
+        voice.cancel(.settingsChanged)
         applySettings()
         if !settings.thunderMode { thunderPresentation?.hide() }
         if let engine, !engine.snapshot().preedit.isEmpty, let client = client() {
@@ -193,6 +199,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func engineChanged(_ notification: Notification) {
+        voice.cancel(.engineChanged)
         ai.invalidate(.engineChanged)
         if engine == nil, IFEngine.ready { engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock) }
         applySettings()
@@ -238,15 +245,18 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func activateServer(_ sender: Any!) {
+        MainActor.assumeIsolated { voice.controllerActivated() }
         let span = IFStartupDiagnostics.shared.begin(.activation, source: .client)
         super.activateServer(sender)
         IFStartupDiagnostics.shared.end(span, MainActor.assumeIsolated { IFEngine.ready } ? .ready : .skipped)
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
+        nonisolated(unsafe) let callbackClient = sender
         let span = IFStartupDiagnostics.shared.begin(.deactivation, source: .client)
         defer { IFStartupDiagnostics.shared.end(span) }
         MainActor.assumeIsolated {
+            voice.controllerDeactivated(callbackClient as? IMKTextInput)
             ai.deactivateEntered()
             statusPresentation?.hide()
             thunderPresentation?.hide()
@@ -259,6 +269,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     nonisolated override func hidePalettes() {
         MainActor.assumeIsolated {
+            voice.cancel(.deactivated)
             ai.invalidate(.hidePalettes)
             statusPresentation?.hide()
             thunderPresentation?.hide()
@@ -270,6 +281,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func workspaceChanged(_ notification: Notification) {
+        voice.cancel(.targetChanged)
         ai.invalidate(.workspaceChanged)
         statusPresentation?.hide()
         thunderPresentation?.hide()
@@ -277,6 +289,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     @objc private func smartSettingsChanged(_ notification: Notification) {
+        voice.cancel(.settingsChanged)
         ai.settingsChanged()
     }
 

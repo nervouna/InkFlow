@@ -17,18 +17,28 @@ final class IFSettings: ObservableObject {
         // Persisted preferences can never select this credential store.
         let isolated = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["IFIsolatedAICredentials"] as? Bool == true
         let credentials: any AICredentialStore = isolated ? MemoryAICredentialStore() : KeychainAICredentialStore()
-        return IFSettings(defaults: .standard, aiCredentials: credentials)
+        let service: any VoiceRecognitionServing
+        if let mode = VoiceRecognitionFixture.configured { service = VoiceRecognitionFixture(mode: mode) }
+        else { service = AppleVoiceRecognizer() }
+        let settings = IFSettings(defaults: .standard, aiCredentials: credentials, voiceService: service)
+        if !isolated {
+            Task(priority: .utility) { await settings.voice.prepareIfAuthorized() }
+        }
+        return settings
     }()
     static let candidateCounts = Array(3...9)
     static let fontSizes = [14, 16, 18, 24, 36]
     private let defaults: UserDefaults
     let smart: IFSmartSettings
+    let voice: VoicePreparation
     private(set) var customPhrases: [CustomPhrase] = []
     private(set) var customPhrasesLoadError: String?
     @Published var inputSettingsError: String?
 
-    init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore()) {
+    init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
+         voiceService: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
         self.defaults = defaults
+        voice = VoicePreparation(service: voiceService)
         smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
         guard let stored = defaults.object(forKey: "customPhrases") else { return }
         do {
@@ -100,6 +110,10 @@ final class IFSettings: ObservableObject {
         get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "thunderMode") }
     }
+    var voicePolishEnabled: Bool {
+        get { integer(for: "voicePolishEnabled", allowed: [0, 1], fallback: 0) != 0 }
+        set { set(newValue ? 1 : 0, for: "voicePolishEnabled") }
+    }
 
     private func inputValue(_ option: InputOption) -> Bool {
         integer(for: "input.\(option.rawValue)", allowed: [0, 1], fallback: option.defaultValue ? 1 : 0) != 0
@@ -145,7 +159,8 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
     case input = "输入"
     case personalization = "个性化"
-    case smart = "智能"
+    case smart = "AI 服务"
+    case voice = "语音"
     case dictionaries = "词库"
     case about = "关于"
     var id: Self { self }
@@ -155,6 +170,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .input: "keyboard"
         case .personalization: "person.crop.circle"
         case .smart: "sparkles"
+        case .voice: "mic"
         case .dictionaries: "books.vertical"
         case .about: "info.circle"
         }
@@ -188,6 +204,7 @@ struct SettingsView: View {
                 else if section == .input { input }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
                 else if section == .smart { SmartSettingsView(smart: settings.smart) }
+                else if section == .voice { VoiceSettingsView(settings: settings, smart: settings.smart) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }

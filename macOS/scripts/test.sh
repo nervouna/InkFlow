@@ -16,7 +16,7 @@ fi
 needs_shared=false
 needs_dependencies=false
 for unit in "${test_units[@]}"; do
-  case "$unit" in quality-capture-query|ai-headless|deployment|engine-*|controller) needs_shared=true ;; esac
+  case "$unit" in quality-capture-query|ai-headless|deployment|engine-*|controller|voice-controller) needs_shared=true ;; esac
   case "$unit" in preparation|runner|workflow|installer-core) ;; *) needs_dependencies=true ;; esac
 done
 if $needs_shared || $needs_dependencies; then macOS/scripts/dependencies.sh; fi
@@ -40,6 +40,8 @@ for unit in "${test_units[@]}"; do
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
+    apple-voice) bash macOS/scripts/test-apple-voice.sh ;;
+    voice-session) bash macOS/scripts/test-voice-session.sh ;;
     ai-transport) bash macOS/scripts/test-ai-suggestions.sh ;;
     ai-statistics)
       bash macOS/scripts/test-ai-statistics.sh

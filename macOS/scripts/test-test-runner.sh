@@ -10,7 +10,7 @@ export INKFLOW_RUNNER_LOG="$fixture/commands.log"
 for script in dependencies prepare-rime test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
   test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
-  test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
+  test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
   test-startup-diagnostics test-test-runner test-test-affected test-workflow; do
   cat > "$fixture/macOS/scripts/$script.sh" <<'STUB'
 #!/bin/bash
@@ -56,6 +56,10 @@ run engine engine-options
 [[ $(grep -c '^run engine-tests ' "$INKFLOW_RUNNER_LOG") == 5 ]]
 run ai-learning
 expect 'dependencies ' 'test-ai-learning '
+run voice-lexicon voice-lexicon
+expect 'dependencies ' 'test-voice-lexicon '
+run voice-controller
+expect 'dependencies ' 'prepare-rime build/test-shared' 'test-voice-controller '
 run quality-capture-query
 expect 'dependencies ' 'prepare-rime build/test-shared' 'test-quality-capture --prepared REPO/build/test-shared' 'test-quality-query --require-engine'
 run dictionary-source dictionary-store
@@ -83,7 +87,7 @@ cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
 for required in test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
-  test-quality-capture test-quality-query test-ai-suggestions test-ai-runtime test-ai-statistics \
+  test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
   test-dictionary-activation test-serving-startup test-startup-diagnostics test-termination \
   test-installer-core test-test-runner test-test-affected test-workflow; do

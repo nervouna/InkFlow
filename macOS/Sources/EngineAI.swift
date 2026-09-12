@@ -34,7 +34,9 @@ extension IFEngine {
         var result = [CChar](repeating: 0, count: 16)
         let read = api.get_property(session, "inkflow_ai_learning_result", &result, result.count)
         api.set_property(session, "inkflow_ai_learning_result", "")
-        return read != 0 && String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == "ok"
+        let learned = read != 0 && String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == "ok"
+        if learned { Self.voiceLexicon.markDirty(); Self.signalIdle() }
+        return learned
     }
 
     func allowsAIRecommendation(input: AIInputIdentity, text: String) -> Bool {

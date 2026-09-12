@@ -14,11 +14,14 @@ else
   shared="$1"
 fi
 [[ -s "$shared/inkflow_pinyin.custom.yaml" ]] || { echo 'Missing active-schema AI patch' >&2; exit 1; }
-build/ai-adoption-learning-tests "$shared" "$user_dir" write
-build/ai-adoption-learning-tests "$shared" "$user_dir" read
 manager="$PWD/build/deps/dist/bin/rime_dict_manager"
 export DYLD_LIBRARY_PATH="$PWD/build/deps/dist/lib"
-(cd "$user_dir" && "$manager" -e pinyin_simp learned.txt)
+for mode in no-voice-read voice-read; do
+fixture_user="$user_dir/$mode"
+mkdir -p "$fixture_user"
+build/ai-adoption-learning-tests "$shared" "$fixture_user" write "$mode"
+build/ai-adoption-learning-tests "$shared" "$fixture_user" read "$mode"
+(cd "$fixture_user" && "$manager" -e pinyin_simp learned.txt)
 awk -F '\t' '
   $1 == "你好" || $1 == "再见" { exit 1 }
   $1 == "测试" { if ($2 != "ce shi" || $3 != 1) exit 1; ordinary++ }
@@ -27,7 +30,11 @@ awk -F '\t' '
   $1 == "星墨海" { if ($2 != "xing mo hai" || $3 != 1) exit 1; found++ }
   $1 == "星墨好" { if ($2 != "xing mo hao" || $3 != 1) exit 1; found++ }
   END { if (found != 4 || ordinary != 1) exit 1 }
-' "$user_dir/learned.txt"
+' "$fixture_user/learned.txt"
+awk -F '\t' '!/^#/ && NF == 3 { print }' "$fixture_user/learned.txt" | LC_ALL=C sort > "$fixture_user/canonical.txt"
+done
+cmp "$user_dir/no-voice-read/canonical.txt" "$user_dir/voice-read/canonical.txt"
+echo 'PASS voice native reads: identical export with/without attempted reads during undo; actual reads deferred until safe'
 echo 'PASS canonical userdb export: correct full codes only; exact adoption counts; no raw typo/abbreviation'
 echo 'PASS ordinary learning: immediate Backspace undoes commits before/after AI callbacks; retained commit learns once'
 echo 'PASS fresh AI learning deployment: active schema patch, new shared data, userdb write/restart/read'

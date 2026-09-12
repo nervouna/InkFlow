@@ -20,7 +20,7 @@ let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
     "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
-    "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
+    "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLexicon.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
     "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
     "ThunderPanel.swift", "ThunderPresentation.swift",
     "CustomPhrases.swift", "DictionaryCoordinator.swift", "DictionaryGenerator.swift", "DictionaryModels.swift",
@@ -46,7 +46,7 @@ let testSwiftSources = [
     "InstallerWindowTests.swift", "MetadataTests.swift", "QualityCaptureTests.swift",
     "QualityControllerTimingTests.swift", "QualityIdentityTests.swift", "QualityStoreTests.swift", "QualityTimingTests.swift",
     "ServingStartupTests.swift", "SettingsTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift",
-    "TerminationTests.swift", "TestSupport.swift",
+    "TerminationTests.swift", "TestSupport.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceLexiconTests.swift", "VoiceControllerTests.swift",
 ]
 let testAuxiliarySources = [
     "AIStatisticsQueryTests.py", "NativeTestSupport.m", "QualityQueryTests.py", "ServingStartupHarness.plist", "include",
@@ -98,6 +98,10 @@ let executableTestProducts: [(String, String)] = [
     ("settings-ui-tests", "SettingsUITests"),
     ("startup-diagnostics-tests", "StartupDiagnosticsTests"),
     ("termination-tests", "TerminationTests"),
+    ("voice-session-tests", "VoiceSessionTests"),
+    ("apple-voice-tests", "AppleVoiceRecognizerTests"),
+    ("voice-lexicon-tests", "VoiceLexiconTests"),
+    ("voice-controller-tests", "VoiceControllerTests"),
 ]
 
 let package = Package(
@@ -291,6 +295,10 @@ let package = Package(
         executableTestTarget("SettingsTests", sources: ["SettingsTests.swift"]),
         executableTestTarget("SettingsUITests", sources: ["SettingsUITests.swift", "DictionarySettingsUITests.swift"]),
         executableTestTarget("StartupDiagnosticsTests", sources: ["StartupDiagnosticsTests.swift"]),
+        executableTestTarget("AppleVoiceRecognizerTests", sources: ["AppleVoiceRecognizerTests.swift"]),
+        executableTestTarget("VoiceSessionTests", sources: ["VoiceSessionTests.swift"]),
+        executableTestTarget("VoiceLexiconTests", sources: ["VoiceLexiconTests.swift"]),
+        executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
     ],
     swiftLanguageModes: [.v6]

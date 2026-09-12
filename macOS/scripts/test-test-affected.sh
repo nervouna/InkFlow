@@ -118,6 +118,18 @@ git -C "$case_root" -c user.name=Fixture -c user.email=fixture@example.invalid c
 change macOS/Sources/InputPreferences.swift
 plan --from HEAD~1
 has 'ai-statistics'; has 'engine-options'; has 'macOS/Sources/AIStatistics.swift'
+new_case
+change macOS/Sources/VoiceLexicon.swift
+plan
+has 'voice-lexicon'; has 'ai-learning'; not_has 'dictionary-worker'
+new_case
+change schemas/lua/inkflow_ai_learning.lua
+plan
+has 'voice-lexicon'; has 'ai-learning'; has 'deployment'
+new_case
+change macOS/Sources/InputControllerVoice.swift
+plan
+has 'voice-controller'; has 'settings'; has 'manual-input'; not_has 'dictionary-worker'
 for path in InputControllerCore InputControllerAI EngineAI ThunderPanel ThunderPresentation; do
   new_case
   change "macOS/Sources/$path.swift"

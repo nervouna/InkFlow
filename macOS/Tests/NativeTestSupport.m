@@ -29,6 +29,7 @@ static void ignoreServerDeactivation(id object, SEL selector, id sender) {
 void IFStubHeadlessControllerFramework(void) {
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(initWithServer:delegate:client:)),(IMP)initializeWithoutServer);
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(deactivateServer:)),(IMP)ignoreServerDeactivation);
+    method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(activateServer:)),(IMP)ignoreServerDeactivation);
     method_setImplementation(class_getInstanceMethod(IMKInputController.class,@selector(client)),(IMP)suppliedTestClient);
 }
 
