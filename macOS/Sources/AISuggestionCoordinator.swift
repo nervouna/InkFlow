@@ -18,7 +18,7 @@ final class AISuggestionCoordinator {
     private let allows: (AIInputIdentity, String) -> Bool
     private let visible: () -> Bool
     private let hide: () -> Void
-    private let delay: Duration
+    private let delay: Duration?
     private let diagnosticSession: UUID
     private let statisticsStore: AIStatisticsStore?
     private let statisticsAssociation: () -> AIStatisticsAssociation
@@ -37,7 +37,7 @@ final class AISuggestionCoordinator {
     private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(settings: IFSmartSettings, service: any AISuggestionServing,
-         delay: Duration = .milliseconds(500), diagnosticSession: UUID = UUID(),
+         delay: Duration? = nil, diagnosticSession: UUID = UUID(),
          statisticsStore: AIStatisticsStore? = nil,
          statisticsAssociation: @escaping () -> AIStatisticsAssociation = { .init() },
          statisticsNow: @escaping () -> AIStatisticsStamp = { .now },
@@ -135,7 +135,7 @@ final class AISuggestionCoordinator {
             }
         }
         tracker = timer; RunLoop.main.add(timer, forMode: .common)
-        let service = service, delay = delay
+        let service = service, delay = delay ?? .milliseconds(settings.triggerDelayMS)
         request = Task { [weak self] in
           await AIDiagnostics.$session.withValue(diagnosticSession) {
            await AIDiagnostics.$attempt.withValue(attempt) {

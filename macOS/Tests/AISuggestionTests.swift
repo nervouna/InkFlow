@@ -37,10 +37,22 @@ struct AISuggestionTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         let keys = MemoryAICredentialStore()
         let settings = IFSmartSettings(defaults: defaults, credentials: keys)
+        expect(settings.triggerDelayMS == 500, "Existing and fresh settings default to 500ms")
+        settings.triggerDelayMS = 1200
+        expect(IFSmartSettings(defaults: defaults, credentials: keys).triggerDelayMS == 1200,
+               "Trigger delay survives settings reload")
+        settings.triggerDelayMS = -1
+        expect(settings.triggerDelayMS == 100, "Trigger delay cannot be negative or below its supported range")
+        settings.triggerDelayMS = Int.max
+        expect(settings.triggerDelayMS == 5000, "Trigger delay has a bounded maximum")
+        defaults.set(-20, forKey: "aiTriggerDelayMS")
+        expect(IFSmartSettings(defaults: defaults, credentials: keys).triggerDelayMS == 500,
+               "Invalid persisted delay falls back to the default")
         expect(!settings.isEnabled && !settings.isAvailable, "AI must start off and incomplete")
         settings.isEnabled = true
         expect(!settings.isEnabled, "Incomplete settings cannot enable AI")
         try settings.save(baseURL: " not a URL ", apiKey: " fixture-key ", model: " fixture-model ")
+        expect(settings.triggerDelayMS == 5000, "Saving service credentials preserves the trigger delay")
         expect(settings.isAvailable, "Completeness requires only three nonempty values")
         expect(settings.configuration.baseURL == "not a URL", "Normalize surrounding whitespace")
         settings.isEnabled = true

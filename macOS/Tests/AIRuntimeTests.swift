@@ -64,6 +64,7 @@ struct AIRuntimeTests {
         try await AIDiagnostics.$observe.withValue({ diagnostics.append($0) }) {
             contextChecks()
             try await debounceChecks()
+            try await configuredDelayChecks()
             try await invalidationChecks()
             try await reentrantChecks()
             try await statisticsChecks()
@@ -190,6 +191,24 @@ struct AIRuntimeTests {
         let shorter = AISurroundingContext.read(bounded, anchor: anchor)!
         verify(shorter.precedingText == "😀" && shorter.followingText == "😀", "Shorter returned Unicode text remains useful context")
         print("PASS AI context: both sides/end bounds, advisory length fallback, missing/secure/foreign/moved clients and character-safe limits")
+    }
+
+    @MainActor static func configuredDelayChecks() async throws {
+        let fixture = try RuntimeFixture(); defer { fixture.stop() }
+        fixture.isolated.settings.smart.triggerDelayMS = 1000
+        fixture.coordinator.synchronize()
+        await wait(0.60)
+        verify(await fixture.service.count() == 0 && fixture.reads == 0,
+               "Configured delay defers requests and context capture beyond the old 500ms deadline")
+        await wait(0.50)
+        verify(await fixture.service.count() == 1, "Request starts after the configured delay")
+        await fixture.service.resolve(0)
+        fixture.isolated.settings.smart.triggerDelayMS = 100
+        fixture.coordinator.invalidate(reason: .settingsChanged)
+        fixture.coordinator.synchronize()
+        await wait(0.25)
+        verify(await fixture.service.count() == 2, "Existing coordinator reads updated delay for its next attempt")
+        await fixture.service.resolve(1)
     }
 
     @MainActor static func debounceChecks() async throws {

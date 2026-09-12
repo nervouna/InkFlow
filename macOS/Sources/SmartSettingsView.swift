@@ -20,6 +20,13 @@ struct SmartSettingsView: View {
             Toggle("智能预测", isOn: $smart.isEnabled)
                 .disabled(!smart.isAvailable)
                 .accessibilityIdentifier("smart.enabled")
+            Stepper(value: $smart.triggerDelayMS, in: IFSmartSettings.triggerDelayRangeMS, step: 100) {
+                LabeledContent("推荐触发时延", value: "\(smart.triggerDelayMS) ms")
+            }
+            .accessibilityIdentifier("smart.triggerDelay")
+            Text("停止输入后等待多久再请求 AI 推荐。默认 500ms，修改后自动保存并生效。")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             TextField("Base URL", text: $baseURL, prompt: Text("服务的 API 基础地址"))
                 .accessibilityIdentifier("smart.baseURL")
             SecureField("API Key", text: $apiKey, prompt: Text("粘贴 API Key"))

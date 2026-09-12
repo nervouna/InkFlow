@@ -93,16 +93,21 @@ final class KeychainAICredentialStore: AICredentialStore {
 
 @MainActor
 final class IFSmartSettings: ObservableObject {
+    static let defaultTriggerDelayMS = 500
+    static let triggerDelayRangeMS = 100...5000
     private let defaults: UserDefaults
     private let credentials: any AICredentialStore
     @Published private(set) var configuration: AISuggestionConfiguration
     @Published private var enabled: Bool
+    @Published private var storedTriggerDelayMS: Int
     @Published private(set) var credentialError: String?
     @Published private(set) var requestError: String?
 
     init(defaults: UserDefaults, credentials: any AICredentialStore) {
         self.defaults = defaults
         self.credentials = credentials
+        let delay = defaults.integer(forKey: "aiTriggerDelayMS")
+        storedTriggerDelayMS = Self.triggerDelayRangeMS.contains(delay) ? delay : Self.defaultTriggerDelayMS
         var key = ""
         do { key = try credentials.read() }
         catch {
@@ -117,6 +122,17 @@ final class IFSmartSettings: ObservableObject {
     }
 
     var isAvailable: Bool { configuration.isComplete }
+    var triggerDelayMS: Int {
+        get { storedTriggerDelayMS }
+        set {
+            let value = min(max(newValue, Self.triggerDelayRangeMS.lowerBound), Self.triggerDelayRangeMS.upperBound)
+            guard value != storedTriggerDelayMS else { return }
+            storedTriggerDelayMS = value
+            defaults.set(value, forKey: "aiTriggerDelayMS")
+            changed()
+        }
+    }
+
     var isEnabled: Bool {
         get { enabled && isAvailable }
         set {
