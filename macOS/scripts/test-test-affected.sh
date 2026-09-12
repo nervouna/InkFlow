@@ -118,7 +118,7 @@ git -C "$case_root" -c user.name=Fixture -c user.email=fixture@example.invalid c
 change macOS/Sources/InputPreferences.swift
 plan --from HEAD~1
 has 'ai-statistics'; has 'engine-options'; has 'macOS/Sources/AIStatistics.swift'
-for path in InputControllerCore InputControllerAI EngineAI; do
+for path in InputControllerCore InputControllerAI EngineAI ThunderPanel ThunderPresentation; do
   new_case
   change "macOS/Sources/$path.swift"
   plan

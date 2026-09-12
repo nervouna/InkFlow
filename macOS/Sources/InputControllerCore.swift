@@ -102,6 +102,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     override func refresh(_ client: IMKTextInput?) {
+        let previousPreeditCount = deliveredPreedit.count
         observeQualityVisibility()
         ai.beginRefresh(client: client)
         defer { ai.endRefresh() }
@@ -131,6 +132,14 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             client?.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
         }
+        if settings.thunderMode {
+            if !commit.isEmpty {
+                thunderPresentation?.burst(.commit, client: client, characterIndex: 0)
+            } else if state.preedit.count > previousPreeditCount {
+                thunderPresentation?.burst(.preedit, client: client, characterIndex: state.cursor)
+            }
+        }
+        deliveredPreedit = state.preedit
         strings = state.candidates
         applySettings()
         updating = true

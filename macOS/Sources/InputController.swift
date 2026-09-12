@@ -24,6 +24,8 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     var candidatePresentation: (any CandidatePresentation)?
     var aiPresentation: (any AISuggestionPresentation)?
     var statusPresentation: (any InputStatusPresenting)? = nil
+    var thunderPresentation: (any ThunderPresenting)? = nil
+    var deliveredPreedit = ""
     let ai: IFInputControllerAI
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
@@ -43,7 +45,8 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
           smartService: any AISuggestionServing = AIChatCompletionsClient(),
           secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
           presentation: (any AIInputPresentation)? = nil,
-          statusPresentation: (any InputStatusPresenting)? = nil) {
+          statusPresentation: (any InputStatusPresenting)? = nil,
+          thunderPresentation: (any ThunderPresenting)? = nil) {
         injectedQualityStore = qualityStore
         self.qualityClock = qualityClock
         self.settings = settings
@@ -53,12 +56,14 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         candidatePresentation = presentation
         aiPresentation = presentation
         self.statusPresentation = statusPresentation
+        self.thunderPresentation = thunderPresentation
         super.init(server: server, delegate: delegate, client: inputClient)
         configure(server: server)
     }
 
     private func configure(server: IMKServer?) {
         if statusPresentation == nil, server != nil { statusPresentation = NativeInputStatusPresentation() }
+        if thunderPresentation == nil, server != nil { thunderPresentation = NativeThunderPresentation() }
         engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
         if candidatePresentation == nil, let server {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
@@ -87,9 +92,11 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         ai.teardown()
         statusPresentation?.hide()
+        thunderPresentation?.hide()
         candidatePresentation = nil
         aiPresentation = nil
         statusPresentation = nil
+        thunderPresentation = nil
         panel = nil
     }
 
@@ -179,6 +186,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     @objc private func settingsChanged(_ notification: Notification) {
         applySettings()
+        if !settings.thunderMode { thunderPresentation?.hide() }
         if let engine, !engine.snapshot().preedit.isEmpty, let client = client() {
             refresh(client)
         }
@@ -241,6 +249,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         MainActor.assumeIsolated {
             ai.deactivateEntered()
             statusPresentation?.hide()
+            thunderPresentation?.hide()
         }
         commitComposition(sender)
         MainActor.assumeIsolated { ai.deactivateCommitted() }
@@ -252,6 +261,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         MainActor.assumeIsolated {
             ai.invalidate(.hidePalettes)
             statusPresentation?.hide()
+            thunderPresentation?.hide()
             observeQualityVisibility()
             candidatePresentation?.hideCandidates()
             observeQualityVisibility()
@@ -262,6 +272,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     @objc private func workspaceChanged(_ notification: Notification) {
         ai.invalidate(.workspaceChanged)
         statusPresentation?.hide()
+        thunderPresentation?.hide()
         observeQualityVisibility()
     }
 

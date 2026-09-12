@@ -17,6 +17,18 @@ private final class RecordingInputStatusPresentation: InputStatusPresenting {
     func hide() { hideCount += 1 }
 }
 
+@MainActor
+private final class RecordingThunderPresentation: ThunderPresenting {
+    private(set) var records: [(ThunderBurst, ObjectIdentifier?, Int)] = []
+    private(set) var hideCount = 0
+
+    func burst(_ burst: ThunderBurst, client: IMKTextInput?, characterIndex: Int) {
+        records.append((burst, client.map { ObjectIdentifier($0 as AnyObject) }, characterIndex))
+    }
+
+    func hide() { hideCount += 1 }
+}
+
 @main
 struct ControllerTests {
     @MainActor static func main() throws {
@@ -30,6 +42,7 @@ struct ControllerTests {
         inputSettings(settings: isolated.settings)
         leftShiftSwitching(settings: isolated.settings)
         controlShortcuts(settings: isolated.settings)
+        thunderMode(settings: isolated.settings)
         statusPanelPositioning()
         outsideCompositionClick(settings: isolated.settings)
         rawProtection(settings: isolated.settings)
@@ -253,7 +266,51 @@ struct ControllerTests {
         client.caretRect = .zero
         check(NativeInputStatusPresentation.caretRect(for: client, characterIndex: 0) == nil,
               "Caret resolution must reject an invalid client rectangle")
+        let leftScreen = NSRect(x: -600, y: 0, width: 600, height: 400)
+        check(ThunderPanel.screen(for: NSRect(x: -120, y: 90, width: 1, height: 18),
+                                  screens: [screen, leftScreen]) == leftScreen,
+              "Thunder overlay must select the screen containing the caret")
+        check(ThunderPanel.screen(for: .zero, screens: [screen]) == nil,
+              "Thunder overlay must reject invalid caret geometry")
+        let reducedMotionClient = RecordingClient()
+        let reducedMotion = NativeThunderPresentation(reduceMotion: { true })
+        reducedMotion.burst(.commit, client: reducedMotionClient, characterIndex: 0)
+        check(reducedMotionClient.attributeIndexes.isEmpty,
+              "Reduce Motion must suppress decorative work before querying caret geometry")
         print("PASS status panel positioning: above-caret placement, visible-screen fallback and invalid-caret suppression")
+    }
+
+    @MainActor static func thunderMode(settings: IFSettings) {
+        settings.thunderMode = false
+        let client = RecordingClient(document: "")
+        let thunder = RecordingThunderPresentation()
+        let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
+            thunderPresentation: thunder)!
+
+        check(controller.handle(keyEvent(45, "n"), client: client))
+        check(thunder.records.isEmpty, "Thunder mode must remain inert by default")
+        settings.thunderMode = true
+        check(controller.handle(keyEvent(34, "i"), client: client))
+        check(thunder.records.map(\.0) == [.preedit] && thunder.records[0].1 == ObjectIdentifier(client) &&
+              thunder.records[0].2 == 2,
+              "Adding preedit text must burst once at the composition cursor")
+        check(controller.handle(keyEvent(51, "\u{8}"), client: client))
+        check(thunder.records.count == 1, "Deleting preedit text must not burst")
+        check(controller.handle(keyEvent(0, "a"), client: client))
+        check(thunder.records.map(\.0) == [.preedit, .preedit])
+        check(controller.handle(keyEvent(49, " "), client: client))
+        check(thunder.records.map(\.0) == [.preedit, .preedit, .commit] && thunder.records.last?.2 == 0,
+              "A non-empty insertion must emit one stronger commit burst at the resulting caret")
+        check(controller.handle(keyEvent(39, "\"", .shift), client: client))
+        check(thunder.records.map(\.0).suffix(2) == [.commit, .commit],
+              "Direct punctuation insertion must count as text reaching the client")
+
+        settings.thunderMode = false
+        check(controller.handle(keyEvent(45, "n"), client: client))
+        check(thunder.records.count == 4, "Disabling Thunder mode must take effect immediately")
+        settings.thunderMode = false
+        print("PASS Thunder mode triggers: default-off, preedit growth and commit bursts, deletion suppression, live disable")
     }
 
     @MainActor static func outsideCompositionClick(settings: IFSettings) {

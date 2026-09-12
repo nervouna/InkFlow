@@ -96,6 +96,10 @@ final class IFSettings: ObservableObject {
         get { integer(for: "vertical", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "vertical") }
     }
+    var thunderMode: Bool {
+        get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
+        set { set(newValue ? 1 : 0, for: "thunderMode") }
+    }
 
     private func inputValue(_ option: InputOption) -> Bool {
         integer(for: "input.\(option.rawValue)", allowed: [0, 1], fallback: option.defaultValue ? 1 : 0) != 0
@@ -208,6 +212,9 @@ struct SettingsView: View {
                 ForEach(IFSettings.fontSizes, id: \.self) { Text(String($0)).tag($0) }
             }
             .accessibilityIdentifier("settings.fontSize")
+            Toggle("雷霆模式", isOn: $settings.thunderMode)
+                .help("每次输入和上屏时在光标处绽放彩花")
+                .accessibilityIdentifier("settings.thunderMode")
         }
         .formStyle(.grouped)
         .accessibilityIdentifier("settings.appearance")

@@ -22,6 +22,7 @@ let inkFlowCoreSources = [
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
     "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
     "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
+    "ThunderPanel.swift", "ThunderPresentation.swift",
     "CustomPhrases.swift", "DictionaryCoordinator.swift", "DictionaryGenerator.swift", "DictionaryModels.swift",
     "DictionarySettings.swift", "DictionarySourceClient.swift", "DictionaryStore.swift", "DictionaryToolBootstrap.swift",
     "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
@@ -152,6 +153,7 @@ let package = Package(
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("InputMethodKit"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("QuartzCore"),
                 .linkedLibrary("sqlite3"),
             ] + rimeLinkerSettings
         ),

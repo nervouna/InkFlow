@@ -509,6 +509,9 @@ struct SettingsUITests {
             let elements = IFAccessibilityTree(window)
             let controls = elements.filter { ["settings.direction", "settings.count", "settings.fontSize"].contains($0["id"] as? String ?? "") }
             check(controls.count == 3, "All SwiftUI pickers must be accessible")
+            let thunder = elements.filter { $0["id"] as? String == "settings.thunderMode" }
+            check(thunder.count == 1 && String(describing: thunder[0]["value"]!) == "0",
+                  "Thunder mode must expose one accessible, default-off toggle")
             let contentFrame = window.convertToScreen(window.contentLayoutRect)
             let defaults = ["settings.direction": "水平", "settings.count": "5", "settings.fontSize": "14"]
             for control in controls {
@@ -525,7 +528,7 @@ struct SettingsUITests {
             }, "Native sidebar must extend behind the traffic lights")
         }
         window.setFrame(initialFrame, display: true)
-        print("PASS settings layout: full-height SwiftUI sidebar behind traffic lights, three native pickers/defaults accessible, controls within content layout at minimum/enlarged sizes")
+        print("PASS settings layout: full-height SwiftUI sidebar behind traffic lights, three native pickers and Thunder toggle accessible, controls within content layout")
     }
 
     @MainActor static func waitForFocus(_ window: NSWindow) {
