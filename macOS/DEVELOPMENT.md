@@ -56,9 +56,9 @@ Run release verification from an isolated linked worktree at the clean release-c
 bash macOS/scripts/release-verification.sh --from vPREVIOUS
 ```
 
-This single entry builds a fresh bundle, runs `test.sh all` once (including Installer core and workflow fixtures), runs one deep bundle check, and selects applicable release-helper fixtures. It uses the shared impact mapping to print pending human input/settings/installation checks; it does not launch GUI suites. It also freezes the verified Installer executable and icon for packaging. Do not duplicate those checks in `package.sh`: prepare and finish use fast structural bundle checks and the verified release receipt.
+This single entry builds a fresh bundle, runs `test.sh all` once (including Installer core and workflow fixtures), runs one deep bundle check, and selects applicable release-helper fixtures. Entering the release workflow assumes affected input and Settings GUI interaction has already been manually accepted, so release verification does not print or block on those checks. It prints only a change-based installation/upgrade check when delivery behavior is affected and does not launch GUI suites. It also freezes the verified Installer executable and icon for packaging. Do not duplicate those checks in `package.sh`: prepare and finish use fast structural bundle checks and the verified release receipt.
 
-Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) for Developer ID signing, exact Team ID and entitlement checks, notarization, stapling, Gatekeeper assessment, final DMG inspection, downloaded-asset checksum verification, and publication. Missing or failed required gates block release. Automated checks and packaging do not establish installed-input-method typing acceptance.
+Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) for Developer ID signing, exact Team ID and entitlement checks, notarization, stapling, Gatekeeper assessment, final DMG inspection, downloaded-asset checksum verification, and publication. Missing or failed required gates block release. When selected by delivery changes, installation/upgrade acceptance remains a separate human result and can block publication.
 
 ## Verification
 
@@ -163,11 +163,12 @@ The final DMG requires its own external notarization and stapling. See the
 [release workflow](../.agents/skills/inkflow-release/SKILL.md) for commands and recovery.
 
 Release artifact checks include extraction of the inner app with its ticket intact
-and independent signature/stapler assessment. When installation or interaction changes,
-human acceptance covers downloaded/quarantined DMG launch, installation/upgrade and
-actual client typing as relevant. Record version, scope, result and commit in the existing
-`build/release-notes.md`; the release skill checks these results before public publication.
-Changed behavior or delivery artifacts invalidate earlier acceptance. Internal-only
-changes do not mechanically require typing. Builds, fixture tests and the read-only
-payload probe establish none of those runtime outcomes. Do not run native GUI suites on a locked screen or replace user-owned
-installed-version typing acceptance with a temporary diagnostic installation.
+and independent signature/stapler assessment. Entering the release workflow assumes
+affected input and Settings interaction has already been accepted; those results are not
+recorded as pending release gates. When installation or delivery changes, human acceptance
+covers downloaded/quarantined DMG launch, installation/upgrade and installed application
+state. Record version, scope, result and commit in the existing `build/release-notes.md`;
+the release skill checks this result before public publication. Changed delivery behavior
+or artifacts invalidate earlier installation acceptance. Builds, fixture tests and the
+read-only payload probe do not establish that runtime outcome. Do not run native GUI suites
+on a locked screen or replace user-owned installation acceptance with a temporary diagnostic installation.

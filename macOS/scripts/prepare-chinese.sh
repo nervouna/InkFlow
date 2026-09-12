@@ -1,9 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-destination=${1:?Usage: prepare-chinese.sh DESTINATION}
+mode=generate
+case "${1:-}" in
+  --sources-only) mode=sources-only; destination="" ;;
+  "") echo 'Usage: prepare-chinese.sh DESTINATION | --sources-only' >&2; exit 2 ;;
+  *) destination=$1 ;;
+esac
 bash macOS/scripts/build-dictionary-generator.sh
-mkdir -p build/dictionary-sources "$destination"
+mkdir -p build/dictionary-sources
 legacy=(build/deps/rime-pinyin-simp-*/pinyin_simp.dict.yaml)
 [[ ${#legacy[@]} == 1 && -s "${legacy[0]}" ]] || { echo 'Expected one pinned legacy dictionary' >&2; exit 1; }
 staging=$(mktemp -d build/.chinese.XXXXXX)
@@ -20,6 +25,8 @@ while IFS=$'\t' read -r identifier sha bytes url; do
   fi
   printf '%s  %s\n' "$sha" "$source_file" | shasum -a 256 -c - > /dev/null
 done < "$staging/sources.tsv"
+[[ "$mode" == generate ]] || exit 0
+mkdir -p "$destination"
 # Cache is only a build optimization. Every raw input is verified above and the key
 # includes the executable, exact legacy bytes and local correction rules.
 shasum -a 256 build/dictionary-generator build/dictionary-sources/*.yaml "${legacy[0]}" \

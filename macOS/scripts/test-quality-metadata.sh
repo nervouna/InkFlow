@@ -5,7 +5,8 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-quality-metadata.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repository"
 app="$fixture/Fixture.app"
-mkdir -p "$repo/macOS/Quality" "$repo/macOS/Sources" "$app/Contents/Resources/Rime" "$app/Contents/MacOS"
+mkdir -p "$repo/macOS/Quality" "$repo/macOS/Sources" "$app/Contents/Resources/Rime" \
+  "$app/Contents/MacOS" "$app/Contents/Frameworks/rime-plugins"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 printf 'offline candidate behavior\n' > "$repo/macOS/Sources/Engine.swift"
 printf 'offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
@@ -19,6 +20,11 @@ printf 'macOS/Sources/Engine.swift\nmacOS/Sources/InputRankingContext.swift\nmac
 printf 'Rime/ranking.yaml\n' > "$repo/macOS/Quality/ranking-resources.txt"
 printf 'actual bundled ranking content\n' > "$app/Contents/Resources/Rime/ranking.yaml"
 cp /usr/bin/true "$app/Contents/MacOS/InkFlow"
+printf 'int inkflow_fixture(void) { return 1; }\n' > "$fixture/nested.c"
+xcrun clang -arch arm64 -dynamiclib -install_name @rpath/librime.1.dylib \
+  "$fixture/nested.c" -o "$app/Contents/Frameworks/librime.1.dylib"
+xcrun clang -arch arm64 -dynamiclib -install_name @rpath/librime-lua.dylib \
+  "$fixture/nested.c" -o "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 chmod +x "$app/Contents/MacOS/InkFlow"
 git -C "$repo" init -q
 git -C "$repo" config user.name 'InkFlow Tests'
@@ -31,12 +37,82 @@ build_swift_product quality-build-metadata build/quality-build-metadata release
 build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
 build/quality-build-metadata "$repo" "$app" --verify
-codesign --force --sign - "$app"
-build/quality-build-metadata "$repo" "$app" --verify
+# The linker-produced ad-hoc signature and a later runtime re-sign use the same
+# code bytes but leave a different canonicalized Mach-O layout when stripped.
+lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
+cp "$lua_plugin" "$fixture/linker-signed.dylib"
+codesign --remove-signature "$fixture/linker-signed.dylib"
+linker_canonical=$(shasum -a 256 "$fixture/linker-signed.dylib" | awk '{print $1}')
+for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" \
+  "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlow"; do
+  codesign --force --options runtime --timestamp=none --sign - "$binary"
+done
+codesign --force --options runtime --timestamp=none --sign - "$app"
+codesign --verify --deep --strict "$app"
+cp "$lua_plugin" "$fixture/runtime-signed.dylib"
+codesign --remove-signature "$fixture/runtime-signed.dylib"
+runtime_canonical=$(shasum -a 256 "$fixture/runtime-signed.dylib" | awk '{print $1}')
+[[ "$linker_canonical" != "$runtime_canonical" ]] || {
+  echo 'FAIL: nested re-sign did not reproduce canonicalized Mach-O layout drift' >&2
+  exit 1
+}
+if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/re-signed-ordinary.log" 2>&1; then
+  echo 'FAIL: ordinary verification accepted re-signed nested Mach-O bytes' >&2
+  exit 1
+fi
+build/quality-build-metadata "$repo" "$app" --verify-signed
+
+# Signed verification ignores only the signing-sensitive bundle digest. Every
+# other recorded provenance field remains mandatory and exact.
+cp "$app/Contents/Resources/QualityBuild.json" "$fixture/signed.json"
+reject_signed_metadata() {
+  local label=$1
+  if build/quality-build-metadata "$repo" "$app" --verify-signed > "$fixture/signed-$label.log" 2>&1; then
+    echo "FAIL: signed verification accepted $label metadata" >&2
+    exit 1
+  fi
+  cp "$fixture/signed.json" "$app/Contents/Resources/QualityBuild.json"
+}
+for field in sourceRevision sourceTreeSHA256 sourceDirty bundledResourcesSHA256 \
+  rankingSourceSHA256 rankingResourcesSHA256 appVersion appBuild; do
+  case "$field" in
+    sourceDirty) plutil -replace "$field" -bool true "$app/Contents/Resources/QualityBuild.json" ;;
+    *) plutil -replace "$field" -string mismatched "$app/Contents/Resources/QualityBuild.json" ;;
+  esac
+  reject_signed_metadata "mismatched-$field"
+done
+for kind in integer string null missing; do
+  case "$kind" in
+    integer) plutil -replace sourceDirty -integer 0 "$app/Contents/Resources/QualityBuild.json" ;;
+    string) plutil -replace sourceDirty -string false "$app/Contents/Resources/QualityBuild.json" ;;
+    null) plutil -replace sourceDirty -json null "$app/Contents/Resources/QualityBuild.json" ;;
+    missing) plutil -remove sourceDirty "$app/Contents/Resources/QualityBuild.json" ;;
+  esac
+  reject_signed_metadata "sourceDirty-$kind"
+done
+for kind in integer null missing; do
+  case "$kind" in
+    integer) plutil -replace bundleSHA256 -integer 0 "$app/Contents/Resources/QualityBuild.json" ;;
+    null) plutil -replace bundleSHA256 -json null "$app/Contents/Resources/QualityBuild.json" ;;
+    missing) plutil -remove bundleSHA256 "$app/Contents/Resources/QualityBuild.json" ;;
+  esac
+  reject_signed_metadata "bundleSHA256-$kind"
+done
+plutil -insert unexpected -string value "$app/Contents/Resources/QualityBuild.json"
+reject_signed_metadata extra-key
+printf '{' > "$app/Contents/Resources/QualityBuild.json"
+reject_signed_metadata malformed-json
 printf 'simulated stapled notarization ticket\n' > "$app/Contents/CodeResources"
-build/quality-build-metadata "$repo" "$app" --verify
+build/quality-build-metadata "$repo" "$app" --verify-signed
 build/quality-build-metadata "$repo" "$app"
-cmp "$fixture/first.json" "$app/Contents/Resources/QualityBuild.json"
+for field in sourceRevision sourceTreeSHA256 sourceDirty bundledResourcesSHA256 \
+  rankingSourceSHA256 rankingResourcesSHA256 appVersion appBuild; do
+  [[ "$(plutil -extract "$field" raw "$fixture/first.json")" == \
+     "$(plutil -extract "$field" raw "$app/Contents/Resources/QualityBuild.json")" ]]
+done
+cp "$app/Contents/Resources/QualityBuild.json" "$fixture/current-layout.json"
+build/quality-build-metadata "$repo" "$app"
+cmp "$fixture/current-layout.json" "$app/Contents/Resources/QualityBuild.json"
 source_hash=$(plutil -extract sourceTreeSHA256 raw "$fixture/first.json")
 ranking_source=$(plutil -extract rankingSourceSHA256 raw "$fixture/first.json")
 ranking_resources=$(plutil -extract rankingResourcesSHA256 raw "$fixture/first.json")

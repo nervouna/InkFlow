@@ -45,7 +45,11 @@ fi
 gates=(core bundle-deep)
 if $impact_release_tools; then gates+=(release-tools); fi
 automated_gates=("${gates[@]}")
-gates+=("${impact_manual[@]}")
+release_manual=()
+for item in "${impact_manual[@]}"; do
+  [[ "$item" != manual-install ]] || release_manual+=("$item")
+done
+gates+=("${release_manual[@]}")
 if [[ "$plan_only" == true ]]; then printf '%s\n' "${gates[@]}"; exit 0; fi
 [[ -z "$changed_file" ]] || { echo '--changed-paths is only valid with --plan-only.' >&2; exit 2; }
 [[ -z $(git status --porcelain --untracked-files=normal) ]] || { echo 'Release verification requires a clean commit.' >&2; exit 1; }
@@ -74,7 +78,7 @@ cp build/AppIcon.icns "$receipt_dir/AppIcon.icns"
 }
 bash macOS/scripts/release-receipt.sh create "$receipt_dir/InkFlowInstaller" "$receipt_dir/AppIcon.icns" "$receipt_dir/installer.plist"
 printf 'PASS automated release verification: %s\n' "${automated_gates[*]}"
-for item in "${impact_manual[@]}"; do
+for item in "${release_manual[@]}"; do
   printf 'Manual acceptance pending: %s: %s\n' "$item" "$(impact_manual_description "$item")"
 done
-echo 'Automated verification is not release acceptance; the release skill checks required user confirmation before publication.'
+echo 'GUI interaction is preaccepted on entry; installation acceptance remains separate and is required before publication when selected.'
