@@ -68,8 +68,9 @@ struct ControllerTests {
         check(modeItem.keyEquivalent == "⇧" && modeItem.keyEquivalentModifierMask.isEmpty &&
               !modeItem.allowsAutomaticKeyEquivalentLocalization,
               "Modifier-only left Shift must use a separate right-side annotation")
-        check(traditionalItem.keyEquivalent == "f" && traditionalItem.keyEquivalentModifierMask == .control,
-              "Traditional toggle must expose Control-F in the native shortcut column")
+        check(traditionalItem.keyEquivalent == "f" &&
+              traditionalItem.keyEquivalentModifierMask == [.control, .shift],
+              "Traditional toggle must expose Control-Shift-F in the native shortcut column")
         check(punctuationItem.keyEquivalent == "." && punctuationItem.keyEquivalentModifierMask == .control,
               "Punctuation toggle must expose Control-period in the native shortcut column")
         check(menu.items.filter { !$0.isSeparatorItem }.allSatisfy { $0.indentationLevel == 0 },
@@ -167,17 +168,20 @@ struct ControllerTests {
             settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
             statusPresentation: status)!
 
+        check(!controller.handle(keyEvent(3, "f", .control), client: client) &&
+              !settings.inputPreferences[.traditional] && status.records.isEmpty,
+              "Control-F must pass through without toggling or presenting status")
         for letter in "ni" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
         let composing = controller.engine!.snapshot()
-        check(controller.handle(keyEvent(3, "f", .control), client: client))
+        check(controller.handle(keyEvent(3, "f", [.control, .shift]), client: client))
         check(settings.inputPreferences[.traditional] && controller.engine?.inputPreferences?[.traditional] == false &&
               controller.engine?.snapshot() == composing,
-              "Control-F must be consumed and defer application of the requested traditional state while composing")
+              "Control-Shift-F must be consumed and defer the requested traditional state while composing")
         check(status.records.map(\.0) == [.traditional] && status.records[0].2 == composing.cursor,
-              "Control-F must present the requested traditional state at the composition cursor")
-        check(controller.handle(keyEvent(3, "f", .control, repeated: true), client: client))
+              "Control-Shift-F must present the requested traditional state at the composition cursor")
+        check(controller.handle(keyEvent(3, "f", [.control, .shift], repeated: true), client: client))
         check(settings.inputPreferences[.traditional] && status.records.map(\.0) == [.traditional],
-              "A repeated Control-F event must be consumed without toggling or presenting again")
+              "A repeated Control-Shift-F event must be consumed without toggling or presenting again")
 
         check(controller.handle(keyEvent(47, ".", .control), client: client))
         check(settings.inputPreferences[.englishPunctuation] && controller.engine?.inputPreferences?[.englishPunctuation] == false &&
@@ -194,12 +198,12 @@ struct ControllerTests {
               controller.engine?.inputPreferences?[.englishPunctuation] == true,
               "Deferred Control shortcut states must apply when composition becomes idle")
 
-        check(!controller.handle(keyEvent(3, "f", [.control, .shift]), client: client))
+        check(!controller.handle(keyEvent(3, "f", [.control, .shift, .option]), client: client))
         check(!controller.handle(keyEvent(47, ".", [.control, .option]), client: client))
         check(settings.inputPreferences[.traditional] && settings.inputPreferences[.englishPunctuation],
               "Control shortcuts with additional modifiers must pass through without changing state")
 
-        check(controller.handle(keyEvent(3, "f", [.control, .capsLock]), client: client))
+        check(controller.handle(keyEvent(3, "f", [.control, .shift, .capsLock]), client: client))
         check(controller.handle(keyEvent(47, ".", [.control, .capsLock]), client: client))
         check(!settings.inputPreferences[.traditional] && !settings.inputPreferences[.englishPunctuation] &&
               status.records.map(\.0) == [.traditional, .englishPunctuation, .simplified, .chinesePunctuation],

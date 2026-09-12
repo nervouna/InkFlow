@@ -113,7 +113,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             punctuation.state = settings.inputPreferences[.englishPunctuation] ? .on : .off
             let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: "f")
             traditional.target = self
-            traditional.keyEquivalentModifierMask = .control
+            traditional.keyEquivalentModifierMask = [.control, .shift]
             traditional.indentationLevel = 0
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
             menu.addItem(.separator())

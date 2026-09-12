@@ -58,8 +58,15 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
 
     private func handleControlShortcut(_ event: NSEvent, client: IMKTextInput?) -> Bool {
         let shortcutFlags = event.modifierFlags.intersection([.shift, .control, .option, .command, .function])
-        guard event.type == .keyDown, shortcutFlags == .control else { return false }
-        if event.isARepeat { return event.keyCode == UInt16(kVK_ANSI_F) || event.keyCode == UInt16(kVK_ANSI_Period) }
+        guard event.type == .keyDown else { return false }
+        let requiredFlags: NSEvent.ModifierFlags
+        switch event.keyCode {
+        case UInt16(kVK_ANSI_F): requiredFlags = [.control, .shift]
+        case UInt16(kVK_ANSI_Period): requiredFlags = .control
+        default: return false
+        }
+        guard shortcutFlags == requiredFlags else { return false }
+        if event.isARepeat { return true }
         switch event.keyCode {
         case UInt16(kVK_ANSI_F):
             toggleInputOption(.traditional, enabledStatus: .traditional,
