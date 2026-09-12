@@ -207,4 +207,5 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   expect_rejected
 )
 echo 'PASS: GUI evidence permits only version/build changes and requires complete local passing records'
+bash "$root/.agents/skills/inkflow-release/scripts/test-release-runner.sh"
 bash "$root/.agents/skills/inkflow-release/scripts/test-package.sh"

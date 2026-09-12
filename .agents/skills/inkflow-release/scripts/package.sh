@@ -66,7 +66,7 @@ if [[ "$phase" == prepare ]]; then
   verify_app "$app" io.damao.inputmethod.inkflow
   INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$release_dir/inputmethod-submission.zip"
-  printf 'Submit externally: %s\nThen staple/validate: %s\nThen run package.sh finish.\n' "$release_dir/inputmethod-submission.zip" "$app"
+  printf 'Prepare complete. Finalize build/public-release-notes.md, then run:\nbash .agents/skills/inkflow-release/scripts/release-runner.sh continue\n'
   exit 0
 fi
 [[ -d "$release_dir" && ! -L "$release_dir" && -f "$release_dir/inputmethod-submission.zip" && -d "$app" && ! -L "$app" ]] || fail 'Missing prepared payload; run prepare first or inspect the interrupted attempt.'
