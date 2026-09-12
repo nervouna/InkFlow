@@ -347,6 +347,22 @@ struct ControllerTests {
         check(thunder.records.map(\.0).suffix(2) == [.commit, .commit],
               "Direct punctuation insertion must count as text reaching the client")
 
+        let lifecycleClient = RecordingClient(document: "")
+        let lifecyclePanel = RecordingThunderPanel()
+        var lifecycleDeferred: [@MainActor () -> Void] = []
+        let lifecycleThunder = NativeThunderPresentation(reduceMotion: { false },
+            scheduleAfterClientLayout: { lifecycleDeferred.append($0) }, panelFactory: { lifecyclePanel })
+        let lifecycleController = InkFlowInputController(server: nil, delegate: nil, client: lifecycleClient,
+            settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
+            thunderPresentation: lifecycleThunder)!
+        check(lifecycleController.handle(keyEvent(45, "n"), client: lifecycleClient))
+        let preeditBursts = lifecyclePanel.bursts.count
+        lifecycleController.deactivateServer(lifecycleClient)
+        check(lifecycleDeferred.count == 1, "Deactivation commit must exercise the deferred presentation path")
+        lifecycleDeferred.removeFirst()()
+        check(lifecyclePanel.bursts.count == preeditBursts,
+              "Deactivation must cancel commit feedback scheduled by its forced composition commit")
+
         settings.thunderMode = false
         check(controller.handle(keyEvent(45, "n"), client: client))
         check(thunder.records.count == 4, "Disabling Thunder mode must take effect immediately")
