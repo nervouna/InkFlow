@@ -163,6 +163,13 @@ reject prepare
 cp "$repo/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
 package prepare
 [[ -f "$output/inputmethod-submission.zip" && ! -e "$dmg" ]]
+[[ $(grep -Fxc 'bash .agents/skills/inkflow-release/scripts/release-runner.sh continue' "$fixture/result.log") == 1 ]]
+grep -Fq 'Finalize build/public-release-notes.md' "$fixture/result.log"
+if grep -Fq 'Submit externally:' "$fixture/result.log" ||
+   grep -Fq 'staple/validate' "$fixture/result.log" ||
+   grep -Fq 'package.sh finish' "$fixture/result.log"; then
+  echo 'Prepare printed legacy split release instructions.' >&2; exit 1
+fi
 [[ $(grep -Fxc 'bundle:--fast' "$EVENTS") == 1 ]]
 [[ $(grep -c '^bundle:--fast --signed ' "$EVENTS") == 1 ]]
 [[ $(grep -c '^bundle:--deep' "$EVENTS") == 0 ]]
