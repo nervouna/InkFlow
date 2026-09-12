@@ -60,21 +60,16 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         let shortcutFlags = event.modifierFlags.intersection([.shift, .control, .option, .command, .function])
         guard event.type == .keyDown, shortcutFlags == .control else { return false }
         if event.isARepeat { return event.keyCode == UInt16(kVK_ANSI_F) || event.keyCode == UInt16(kVK_ANSI_Period) }
-        let status: InputStatus
         switch event.keyCode {
         case UInt16(kVK_ANSI_F):
-            let enabled = !settings.inputPreferences[.traditional]
-            settings.setInputOption(.traditional, enabled: enabled)
-            status = enabled ? .traditional : .simplified
+            toggleInputOption(.traditional, enabledStatus: .traditional,
+                              disabledStatus: .simplified, client: client)
         case UInt16(kVK_ANSI_Period):
-            let enabled = !settings.inputPreferences[.englishPunctuation]
-            settings.setInputOption(.englishPunctuation, enabled: enabled)
-            status = enabled ? .englishPunctuation : .chinesePunctuation
+            toggleInputOption(.englishPunctuation, enabledStatus: .englishPunctuation,
+                              disabledStatus: .chinesePunctuation, client: client)
         default:
             return false
         }
-        let state = engine?.snapshot() ?? EngineSnapshot()
-        statusPresentation?.present(status, client: client, characterIndex: state.preedit.isEmpty ? 0 : state.cursor)
         return true
     }
 

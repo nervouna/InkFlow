@@ -140,14 +140,25 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     @objc nonisolated func toggleEnglishPunctuation(_ sender: Any?) {
         MainActor.assumeIsolated {
-            settings.setInputOption(.englishPunctuation, enabled: !settings.inputPreferences[.englishPunctuation])
+            toggleInputOption(.englishPunctuation, enabledStatus: .englishPunctuation,
+                              disabledStatus: .chinesePunctuation, client: client())
         }
     }
 
     @objc nonisolated func toggleTraditional(_ sender: Any?) {
         MainActor.assumeIsolated {
-            settings.setInputOption(.traditional, enabled: !settings.inputPreferences[.traditional])
+            toggleInputOption(.traditional, enabledStatus: .traditional,
+                              disabledStatus: .simplified, client: client())
         }
+    }
+
+    func toggleInputOption(_ option: InputOption, enabledStatus: InputStatus,
+                           disabledStatus: InputStatus, client: IMKTextInput?) {
+        let enabled = !settings.inputPreferences[option]
+        settings.setInputOption(option, enabled: enabled)
+        let state = engine?.snapshot() ?? EngineSnapshot()
+        statusPresentation?.present(enabled ? enabledStatus : disabledStatus, client: client,
+                                    characterIndex: state.preedit.isEmpty ? 0 : state.cursor)
     }
 
     func applySettings() {}

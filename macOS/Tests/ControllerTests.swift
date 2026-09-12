@@ -205,6 +205,16 @@ struct ControllerTests {
               status.records.map(\.0) == [.traditional, .englishPunctuation, .simplified, .chinesePunctuation],
               "Caps Lock must not prevent exact Control shortcuts from toggling to the resulting states")
 
+        controller.toggleTraditional(nil)
+        controller.toggleEnglishPunctuation(nil)
+        check(status.records.suffix(2).map(\.0) == [.traditional, .englishPunctuation] &&
+              status.records.suffix(2).allSatisfy {
+                  $0.1 == ObjectIdentifier(client) && $0.2 == 0
+              },
+              "Menu-dispatched Control shortcuts must present their resulting states at the active caret")
+        settings.setInputOption(.traditional, enabled: false)
+        settings.setInputOption(.englishPunctuation, enabled: false)
+
         print("PASS Control shortcuts: consumed exact chords, synchronized requested settings and status presentation, rejected extra modifiers")
     }
 
