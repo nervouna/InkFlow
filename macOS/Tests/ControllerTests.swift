@@ -293,24 +293,21 @@ struct ControllerTests {
               "Reduce Motion must suppress decorative work before querying caret geometry")
         let thunderPanel = RecordingThunderPanel()
         var deferred: [@MainActor () -> Void] = []
-        var documentSelectionRequests = 0
         let uninterrupted = NativeThunderPresentation(reduceMotion: { false },
-            scheduleAfterClientLayout: { deferred.append($0) }, commitCaretRect: { _ in
-                documentSelectionRequests += 1
-                return NSRect(x: 80, y: 90, width: 1, height: 18)
-            }, panelFactory: { thunderPanel })
+            scheduleAfterClientLayout: { deferred.append($0) }, panelFactory: { thunderPanel })
         let commitClient = RecordingClient(document: "你好")
         commitClient.caretRect = NSRect(x: 20, y: 90, width: 1, height: 18)
         uninterrupted.burst(.commit, client: commitClient, characterIndex: 0)
         check(thunderPanel.bursts.isEmpty && commitClient.attributeIndexes.isEmpty && deferred.count == 1,
               "Commit feedback must wait for the client to finish its text layout")
+        commitClient.caretRect = NSRect(x: 80, y: 90, width: 1, height: 18)
         deferred.removeFirst()()
         reducedMotionClient.caretRect = .zero
         uninterrupted.burst(.preedit, client: reducedMotionClient, characterIndex: 0)
         check(thunderPanel.bursts == [.commit] && thunderPanel.caretRects == [NSRect(x: 80, y: 90, width: 1, height: 18)] &&
-              documentSelectionRequests == 1 && commitClient.attributeIndexes.isEmpty &&
+              commitClient.attributeIndexes == [0] &&
               thunderPanel.hideCount == 0,
-              "Commit feedback must use the document-relative selection and a later failed lookup must not interrupt it")
+              "Commit feedback must use the post-layout current selection and a later failed lookup must not interrupt it")
         let cancelledPanel = RecordingThunderPanel()
         var cancelledDeferred: [@MainActor () -> Void] = []
         let cancelled = NativeThunderPresentation(reduceMotion: { false },
