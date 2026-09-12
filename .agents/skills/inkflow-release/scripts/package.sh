@@ -64,6 +64,7 @@ if [[ "$phase" == prepare ]]; then
   done
   codesign "${signing[@]}" --entitlements macOS/DeveloperID.entitlements "$app"
   verify_app "$app" io.damao.inputmethod.inkflow
+  INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$release_dir/inputmethod-submission.zip"
   printf 'Submit externally: %s\nThen staple/validate: %s\nThen run package.sh finish.\n' "$release_dir/inputmethod-submission.zip" "$app"
   exit 0
@@ -80,7 +81,7 @@ trap 'rmdir "$release_dir/finishing"' EXIT
 verify_app "$app" io.damao.inputmethod.inkflow
 cmp macOS/Info.plist "$app/Contents/Info.plist"
 xcrun stapler validate "$app"
-INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast "$app"
+INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
 bash .agents/skills/inkflow-release/scripts/check-credentials.sh
 scratch=$(mktemp -d "$release_dir/assembly.XXXXXX")
 printf 'Retained assembly: %s\n' "$scratch"

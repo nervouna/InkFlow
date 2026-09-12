@@ -32,6 +32,7 @@ STUB
 cat > "$repo/macOS/scripts/check-bundle.sh" <<'STUB'
 [[ "${INKFLOW_SKIP_SWIFTPM_BUILD:-0}" == 1 ]] || exit 88
 echo "bundle:$*" >> "$EVENTS"
+if [[ " $* " == *' --signed '* ]]; then exit "${SIGNED_BUNDLE_FAILURE:-${BUNDLE_FAILURE:-0}}"; fi
 exit "${BUNDLE_FAILURE:-0}"
 STUB
 cat > "$repo/macOS/scripts/build-icon.sh" <<'STUB'
@@ -162,9 +163,12 @@ reject prepare
 cp "$repo/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
 package prepare
 [[ -f "$output/inputmethod-submission.zip" && ! -e "$dmg" ]]
-[[ $(grep -c '^bundle:--fast' "$EVENTS") == 1 ]]
+[[ $(grep -Fxc 'bundle:--fast' "$EVENTS") == 1 ]]
+[[ $(grep -c '^bundle:--fast --signed ' "$EVENTS") == 1 ]]
 [[ $(grep -c '^bundle:--deep' "$EVENTS") == 0 ]]
 if grep -q 'build-installer\|dmg\|staple-validate' "$EVENTS"; then exit 1; fi
+# Signed provenance runs only after the nested payload and outer app signatures verify.
+awk '/^sign:.*InkFlow.app$/{s=NR} /^verify:.*payload\/InkFlow.app$/{v=NR} /^bundle:--fast --signed /{b=NR} END{exit !(s<v && v<b)}' "$EVENTS"
 # Nested signing order is preserved.
 sed -n 's/^sign:.*\///p' "$EVENTS" > "$fixture/sign-order"
 printf '%s\n' librime-lua.dylib librime.1.dylib InkFlowDictionaryWorker InkFlow.app > "$fixture/expected"
@@ -210,7 +214,8 @@ rmdir "$output/finishing"
 package finish
 [[ -f "$dmg" ]]
 shasum -c "$fixture/submission.sha"
-[[ $(grep -c '^bundle:--fast' "$EVENTS") == 1 ]]
+[[ $(grep -Fxc 'bundle:--fast' "$EVENTS") == 0 ]]
+[[ $(grep -c '^bundle:--fast --signed ' "$EVENTS") == 1 ]]
 [[ $(grep -c '^bundle:--deep' "$EVENTS") == 0 ]]
 ! grep -q 'swiftpm\|swift build' "$EVENTS"
 ! grep -q 'build-icon' "$EVENTS"

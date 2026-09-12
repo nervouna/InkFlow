@@ -2,10 +2,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mode=deep
-if [[ "${1:-}" == --fast || "${1:-}" == --deep ]]; then mode=${1#--}; shift; fi
-[[ $# -le 1 ]] || { echo "Usage: check-bundle.sh [--fast|--deep] [app]" >&2; exit 2; }
+metadata_option=--verify
+while [[ "${1:-}" == --fast || "${1:-}" == --deep || "${1:-}" == --signed ]]; do
+  case "$1" in
+    --fast|--deep) mode=${1#--} ;;
+    --signed) metadata_option=--verify-signed ;;
+  esac
+  shift
+done
+[[ $# -le 1 ]] || { echo "Usage: check-bundle.sh [--fast|--deep] [--signed] [app]" >&2; exit 2; }
 app="${1:-$PWD/build/InkFlow.app}"
-bash macOS/scripts/quality-metadata.sh "$app" --verify
+bash macOS/scripts/quality-metadata.sh "$app" "$metadata_option"
 plutil -lint "$app/Contents/Info.plist"
 [[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]
 [[ "$(plutil -extract TISInputSourceID raw "$app/Contents/Info.plist")" == io.damao.inputmethod.inkflow ]]

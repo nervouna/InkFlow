@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 macOS/scripts/dependencies.sh
+# Download and verify the generator-declared dictionary inputs before freezing the
+# build identity. They remain part of the snapshot, so later changes still fail.
+bash macOS/scripts/prepare-chinese.sh --sources-only
 source macOS/scripts/swift-package.sh
 build_swift_product quality-build-metadata build/quality-build-metadata debug
 build_snapshot=$(build/quality-build-metadata "$PWD" --build-snapshot)

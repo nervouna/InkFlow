@@ -16,7 +16,7 @@ struct QualityBuildMetadataTool {
     }
 
     private static func run() throws {
-        guard CommandLine.arguments.count >= 3 else { throw Failure("Usage: quality-build-metadata <repository> <app> [--verify] | <repository> --build-snapshot") }
+        guard CommandLine.arguments.count >= 3 else { throw Failure("Usage: quality-build-metadata <repository> <app> [--verify|--verify-signed] | <repository> --build-snapshot") }
         let root = URL(fileURLWithPath: CommandLine.arguments[1]).standardizedFileURL
         let identity = try buildIdentity(root: root)
         if CommandLine.arguments.count == 3 && CommandLine.arguments[2] == "--build-snapshot" {
@@ -27,8 +27,10 @@ struct QualityBuildMetadataTool {
         let app = URL(fileURLWithPath: CommandLine.arguments[2]).standardizedFileURL
         let resources = app.appendingPathComponent("Contents/Resources")
         let output = resources.appendingPathComponent("QualityBuild.json")
-        let verify = CommandLine.arguments.count == 4
-        guard !verify || CommandLine.arguments[3] == "--verify" else { throw Failure("Unknown metadata option") }
+        let option = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : nil
+        guard option == nil || option == "--verify" || option == "--verify-signed" else { throw Failure("Unknown metadata option") }
+        let verify = option != nil
+        let signedVerification = option == "--verify-signed"
         let resourceFiles = try regularFiles(root: resources, excluding: [output])
         let bundleFiles = try regularFiles(root: app, excluding: [output], excludingCodeSignatureArtifacts: true)
         let rankingSources = try manifest(root.appendingPathComponent("macOS/Quality/ranking-sources.txt"), root: root,
@@ -38,17 +40,65 @@ struct QualityBuildMetadataTool {
         let info = try PropertyListSerialization.propertyList(from: Data(contentsOf: app.appendingPathComponent("Contents/Info.plist")), format: nil)
         guard let info = info as? [String: Any], let version = info["CFBundleShortVersionString"] as? String,
               let build = info["CFBundleVersion"] as? String else { throw Failure("Missing app version/build") }
+        let bundleSHA256 = signedVerification ? "ignored-for-signed-verification"
+            : try digest(bundleFiles, root: app, canonicalizingCodeSignatures: true)
         let metadata = try QualityBuildMetadataAccess.encoded(sourceRevision: identity.revision, sourceTreeSHA256: identity.digest,
             sourceDirty: identity.dirty, bundledResourcesSHA256: try digest(resourceFiles, root: resources),
-            bundleSHA256: try digest(bundleFiles, root: app, canonicalizingCodeSignatures: true),
+            bundleSHA256: bundleSHA256,
             rankingSourceSHA256: try digest(rankingSources, root: root),
             rankingResourcesSHA256: try digest(rankingResources, root: resources), appVersion: version, appBuild: build)
         if verify {
             let saved = try Data(contentsOf: output)
-            guard saved == metadata else { throw Failure("Quality build metadata does not match current source and bundled resources") }
-            print("PASS quality build metadata: full build and audited ranking inputs")
+            let matches = signedVerification ? try matchesExceptBundleSHA256(saved: saved, expected: metadata) : saved == metadata
+            guard matches else { throw Failure("Quality build metadata does not match current source and bundled resources") }
+            if signedVerification {
+                print("PASS signed quality build metadata: source, resources, ranking inputs, version and build")
+            } else {
+                print("PASS quality build metadata: full build and audited ranking inputs")
+            }
         } else {
             try metadata.write(to: output, options: .atomic)
+        }
+    }
+
+    /// Developer ID re-signing can change Mach-O layout beyond the signature blob
+    /// that codesign removes. Signature integrity is checked by the release caller;
+    /// this mode retains every recorded provenance comparison except bundleSHA256.
+    private static func matchesExceptBundleSHA256(saved: Data, expected: Data) throws -> Bool {
+        let keys: Set<String> = ["sourceRevision", "sourceTreeSHA256", "sourceDirty",
+            "bundledResourcesSHA256", "bundleSHA256", "rankingSourceSHA256",
+            "rankingResourcesSHA256", "appVersion", "appBuild"]
+        guard let savedObject = try JSONSerialization.jsonObject(with: saved) as? [String: Any],
+              let expectedObject = try JSONSerialization.jsonObject(with: expected) as? [String: Any],
+              Set(savedObject.keys) == keys, Set(expectedObject.keys) == keys else {
+            throw Failure("Invalid quality build metadata")
+        }
+        let decoder = JSONDecoder()
+        let savedMetadata = try decoder.decode(StrictMetadata.self, from: saved)
+        let expectedMetadata = try decoder.decode(StrictMetadata.self, from: expected)
+        return savedMetadata.matchesProvenance(of: expectedMetadata)
+    }
+
+    private struct StrictMetadata: Decodable {
+        let sourceRevision: String
+        let sourceTreeSHA256: String
+        let sourceDirty: Bool
+        let bundledResourcesSHA256: String
+        let bundleSHA256: String
+        let rankingSourceSHA256: String
+        let rankingResourcesSHA256: String
+        let appVersion: String
+        let appBuild: String
+
+        func matchesProvenance(of other: Self) -> Bool {
+            sourceRevision == other.sourceRevision
+                && sourceTreeSHA256 == other.sourceTreeSHA256
+                && sourceDirty == other.sourceDirty
+                && bundledResourcesSHA256 == other.bundledResourcesSHA256
+                && rankingSourceSHA256 == other.rankingSourceSHA256
+                && rankingResourcesSHA256 == other.rankingResourcesSHA256
+                && appVersion == other.appVersion
+                && appBuild == other.appBuild
         }
     }
 

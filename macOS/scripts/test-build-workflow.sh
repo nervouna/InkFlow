@@ -14,7 +14,17 @@ printf input > "$repo/macOS/Sources/input"
 printf entry > "$repo/macOS/DictionaryTool/main.swift"
 printf old > "$repo/build/InkFlow.app/Contents/sentinel"
 touch "$repo/build/deps/dist/lib/librime.1.17.0.dylib" "$repo/build/deps/dist/lib/rime-plugins/librime-lua.dylib"
-for name in dependencies prepare-rime prepare-packaged-cache; do printf '#!/bin/bash\nexit 0\n' > "$repo/macOS/scripts/$name.sh"; done
+for name in dependencies prepare-packaged-cache; do printf '#!/bin/bash\nexit 0\n' > "$repo/macOS/scripts/$name.sh"; done
+cat > "$repo/macOS/scripts/prepare-chinese.sh" <<'STUB'
+#!/bin/bash
+[[ "${1:-}" == --sources-only ]] || exit 2
+mkdir -p build/dictionary-sources
+printf 'pinned dictionary source\n' > build/dictionary-sources/fresh.yaml
+STUB
+cat > "$repo/macOS/scripts/prepare-rime.sh" <<'STUB'
+#!/bin/bash
+bash macOS/scripts/prepare-chinese.sh --sources-only
+STUB
 printf 'generator script\n' > "$repo/macOS/scripts/build-dictionary-generator.sh"
 cat > "$repo/macOS/scripts/quality-metadata.sh" <<'STUB'
 #!/bin/bash
@@ -36,8 +46,12 @@ build_swift_product() {
     cat > "$2" <<'TOOL'
 #!/bin/bash
 [[ "$2" == --build-snapshot ]] || exit 0
-printf 'fixture clean '; shasum -a 256 macOS/Sources/input macOS/DictionaryTool/main.swift \
-  macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh | shasum -a 256 | awk '{print $1}'
+printf 'fixture clean '
+{
+  shasum -a 256 macOS/Sources/input macOS/DictionaryTool/main.swift \
+    macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh
+  find build/dictionary-sources -type f -print 2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done
+} | shasum -a 256 | awk '{print $1}'
 TOOL
     chmod +x "$2"; return
   fi
@@ -61,8 +75,10 @@ chmod +x "$repo/macOS/scripts/"*.sh
   cp "$fixture/quality-wrapper" macOS/scripts/quality-metadata.sh
   if SKIP_METADATA=1 bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
   [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]]
+  rm -rf build/dictionary-sources
   bash macOS/scripts/build.sh >/dev/null
+  [[ -s build/dictionary-sources/fresh.yaml ]]
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]]
   [[ -z $(find build -maxdepth 1 -name 'app-stage.*' -print) ]]
 )
-echo 'PASS build workflow: staging assembly, drift rejection, old-bundle preservation and fresh replacement'
+echo 'PASS build workflow: cold source bootstrap, staging assembly, drift rejection, old-bundle preservation and fresh replacement'
