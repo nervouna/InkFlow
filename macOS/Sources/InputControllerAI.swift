@@ -148,6 +148,9 @@ final class IFInputControllerAI {
         adoption.statistics?.record(.insertionReturned,
             at: .init(utc: controller.qualityClock.utc(), monotonic: controller.qualityClock.monotonic()))
         AIDiagnostics.emit(.insertionReturned, attempt: adoption.attempt, session: diagnosticSession)
+        if controller.settings.thunderMode {
+            controller.thunderPresentation?.burst(.commit, client: eventClient, characterIndex: 0)
+        }
         controller.refresh(eventClient)
         return true
     }

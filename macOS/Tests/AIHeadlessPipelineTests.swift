@@ -7,6 +7,17 @@ import InkFlowNativeTestSupport
 import InkFlowTestSupport
 #endif
 
+@MainActor
+private final class HeadlessThunderPresentation: ThunderPresenting {
+    private(set) var bursts: [ThunderBurst] = []
+
+    func burst(_ burst: ThunderBurst, client: IMKTextInput?, characterIndex: Int) {
+        bursts.append(burst)
+    }
+
+    func hide() {}
+}
+
 @main
 struct AIHeadlessPipelineTests {
     static let preceding = "输入法开发记录😀："
@@ -21,14 +32,16 @@ struct AIHeadlessPipelineTests {
     }
 
     @MainActor static func fixture(settings: IFSettings, service: any AISuggestionServing,
-                                   delay: Duration = .zero, secure: @escaping () -> Bool = { false }) ->
+                                   delay: Duration = .zero, secure: @escaping () -> Bool = { false },
+                                   thunderPresentation: (any ThunderPresenting)? = nil) ->
         (InkFlowInputController, RecordingClient, HeadlessAIInputPresentation) {
         let client = RecordingClient(document: preceding + following)
         client.selection = NSRange(location: preceding.utf16.count, length: 0)
         let endpoint = HeadlessAIInputPresentation(showDelay: delay)
         let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
             settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
-            smartService: service, secureInput: secure, presentation: endpoint)!
+            smartService: service, secureInput: secure, presentation: endpoint,
+            thunderPresentation: thunderPresentation)!
         check(controller.panel == nil, "Headless mode allocates no IMK candidate windows")
         return (controller, client, endpoint)
     }
@@ -62,6 +75,7 @@ struct AIHeadlessPipelineTests {
             }
             for value in AIHeadlessCase.effects { try await effect(value, settings: settings, live: live) }
             if !live {
+                try await celebrationAdoption(settings)
                 try await ordinaryControls(settings)
                 try await adoptionLearning(settings)
                 try await profiles(settings)
@@ -76,6 +90,35 @@ struct AIHeadlessPipelineTests {
             print("FAIL headless AI pipeline: \((error as? AIServiceError)?.localizedDescription ?? "isolated setup failed")")
             exit(1)
         }
+    }
+
+    @MainActor static func celebrationAdoption(_ settings: IFSettings) async throws {
+        let service = AIHeadlessService(response: "你好")
+        let thunder = HeadlessThunderPresentation()
+        settings.thunderMode = true
+        defer { settings.thunderMode = false }
+        let (controller, client, endpoint) = fixture(settings: settings, service: service,
+                                                     thunderPresentation: thunder)
+        _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
+        await until { endpoint.suggestionVisible }
+        client.onMutation = {
+            check(!thunder.bursts.contains(.commit), "AI text must reach the editor before celebration feedback")
+        }
+        check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
+        client.onMutation = nil
+        check(thunder.bursts.filter { $0 == .commit } == [.commit],
+              "AI Tab adoption must emit exactly one commit celebration")
+
+        settings.thunderMode = false
+        let disabledService = AIHeadlessService(response: "你好")
+        let disabledThunder = HeadlessThunderPresentation()
+        let (disabledController, disabledClient, disabledEndpoint) = fixture(settings: settings,
+            service: disabledService, thunderPresentation: disabledThunder)
+        _ = await AIHeadlessKeyboard.type("nihao", into: disabledController, client: disabledClient)
+        await until { disabledEndpoint.suggestionVisible }
+        check(disabledController.handle(AIHeadlessKeyboard.event(48, "\t"), client: disabledClient))
+        check(disabledThunder.bursts.isEmpty, "AI Tab adoption must remain undecorated when Celebration mode is off")
+        print("PASS headless AI Celebration adoption: post-insertion exact-once commit and disabled suppression")
     }
 
     @MainActor static func effect(_ value: AIHeadlessCase, settings: IFSettings, live: Bool) async throws {
