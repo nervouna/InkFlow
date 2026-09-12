@@ -16,13 +16,18 @@ protocol ThunderPresenting: AnyObject {
 @MainActor
 final class NativeThunderPresentation: ThunderPresenting {
     private let reduceMotion: () -> Bool
+    private let scheduleAfterClientLayout: (@escaping @MainActor () -> Void) -> Void
     private let panelFactory: () -> any ThunderPanelPresenting
     private var panel: (any ThunderPanelPresenting)?
+    private var presentationGeneration = 0
 
     init(reduceMotion: @escaping () -> Bool = {
         NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }, scheduleAfterClientLayout: @escaping (@escaping @MainActor () -> Void) -> Void = { action in
+        RunLoop.main.perform { MainActor.assumeIsolated { action() } }
     }, panelFactory: @escaping () -> any ThunderPanelPresenting = { ThunderPanel() }) {
         self.reduceMotion = reduceMotion
+        self.scheduleAfterClientLayout = scheduleAfterClientLayout
         self.panelFactory = panelFactory
     }
 
@@ -31,14 +36,28 @@ final class NativeThunderPresentation: ThunderPresenting {
             hide()
             return
         }
-        guard let client,
-              let caretRect = NativeInputStatusPresentation.caretRect(for: client,
-                                                                      characterIndex: characterIndex) else {
+        guard let client else { return }
+        if burst == .commit {
+            let generation = presentationGeneration
+            scheduleAfterClientLayout { [weak self, weak client] in
+                guard let self, self.presentationGeneration == generation else { return }
+                self.present(burst, client: client, characterIndex: characterIndex)
+            }
             return
         }
+        present(burst, client: client, characterIndex: characterIndex)
+    }
+
+    private func present(_ burst: ThunderBurst, client: IMKTextInput?, characterIndex: Int) {
+        guard let client,
+              let caretRect = NativeInputStatusPresentation.caretRect(for: client,
+                                                                      characterIndex: characterIndex) else { return }
         if panel == nil { panel = panelFactory() }
         panel?.burst(burst, at: caretRect)
     }
 
-    func hide() { panel?.hide() }
+    func hide() {
+        presentationGeneration += 1
+        panel?.hide()
+    }
 }

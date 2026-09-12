@@ -32,10 +32,12 @@ private final class RecordingThunderPresentation: ThunderPresenting {
 @MainActor
 private final class RecordingThunderPanel: ThunderPanelPresenting {
     private(set) var bursts: [ThunderBurst] = []
+    private(set) var caretRects: [NSRect] = []
     private(set) var hideCount = 0
 
     func burst(_ burst: ThunderBurst, at caretRect: NSRect) {
         bursts.append(burst)
+        caretRects.append(caretRect)
     }
 
     func hide() { hideCount += 1 }
@@ -290,13 +292,30 @@ struct ControllerTests {
         check(reducedMotionClient.attributeIndexes.isEmpty,
               "Reduce Motion must suppress decorative work before querying caret geometry")
         let thunderPanel = RecordingThunderPanel()
-        let uninterrupted = NativeThunderPresentation(reduceMotion: { false }, panelFactory: { thunderPanel })
-        reducedMotionClient.caretRect = NSRect(x: 80, y: 90, width: 1, height: 18)
+        var deferred: [@MainActor () -> Void] = []
+        let uninterrupted = NativeThunderPresentation(reduceMotion: { false },
+            scheduleAfterClientLayout: { deferred.append($0) }, panelFactory: { thunderPanel })
+        reducedMotionClient.caretRect = NSRect(x: 20, y: 90, width: 1, height: 18)
         uninterrupted.burst(.commit, client: reducedMotionClient, characterIndex: 0)
+        check(thunderPanel.bursts.isEmpty && reducedMotionClient.attributeIndexes.isEmpty && deferred.count == 1,
+              "Commit feedback must wait for the client to finish its text layout")
+        reducedMotionClient.caretRect = NSRect(x: 80, y: 90, width: 1, height: 18)
+        deferred.removeFirst()()
         reducedMotionClient.caretRect = .zero
         uninterrupted.burst(.preedit, client: reducedMotionClient, characterIndex: 0)
-        check(thunderPanel.bursts == [.commit] && thunderPanel.hideCount == 0,
-              "A failed caret lookup must not interrupt particles already in flight")
+        check(thunderPanel.bursts == [.commit] && thunderPanel.caretRects == [NSRect(x: 80, y: 90, width: 1, height: 18)] &&
+              thunderPanel.hideCount == 0,
+              "Commit feedback must use the post-layout caret and a later failed lookup must not interrupt it")
+        let cancelledPanel = RecordingThunderPanel()
+        var cancelledDeferred: [@MainActor () -> Void] = []
+        let cancelled = NativeThunderPresentation(reduceMotion: { false },
+            scheduleAfterClientLayout: { cancelledDeferred.append($0) }, panelFactory: { cancelledPanel })
+        reducedMotionClient.caretRect = NSRect(x: 100, y: 90, width: 1, height: 18)
+        cancelled.burst(.commit, client: reducedMotionClient, characterIndex: 0)
+        cancelled.hide()
+        cancelledDeferred.removeFirst()()
+        check(cancelledPanel.bursts.isEmpty,
+              "Hiding feedback must cancel a commit burst that is still waiting for client layout")
         print("PASS status panel positioning: above-caret placement, visible-screen fallback and invalid-caret suppression")
     }
 
@@ -321,7 +340,7 @@ struct ControllerTests {
         check(thunder.records.map(\.0) == [.preedit, .preedit])
         check(controller.handle(keyEvent(49, " "), client: client))
         check(thunder.records.map(\.0) == [.preedit, .preedit, .commit] && thunder.records.last?.2 == 0,
-              "A non-empty insertion must emit one stronger commit burst at the resulting caret")
+              "A composition commit must request the post-layout current selection")
         check(controller.handle(keyEvent(39, "\"", .shift), client: client))
         check(thunder.records.map(\.0).suffix(2) == [.commit, .commit],
               "Direct punctuation insertion must count as text reaching the client")
