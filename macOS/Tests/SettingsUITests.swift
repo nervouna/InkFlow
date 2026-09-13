@@ -42,7 +42,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "更新", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)
@@ -115,6 +115,7 @@ struct SettingsUITests {
         checkLayout(window)
         checkCustomPhrasesLayout(window, settings: settings)
         checkInputLayout(window, settings: settings)
+        checkUpdateSettings(window, settings: settings)
         checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
@@ -172,6 +173,48 @@ struct SettingsUITests {
             while window.isVisible { drainEvents(seconds: 0.25) }
         }
         window.close()
+    }
+
+    @MainActor static func checkUpdateSettings(_ window: NSWindow, settings: IFSettings) {
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .updates))
+        window.setContentSize(NSSize(width: 700, height: 380))
+        drainEvents()
+        checkMinimumSize(window)
+        check(window.title == "更新")
+
+        func control(_ identifier: String) -> [String: Any] {
+            let matches = IFAccessibilityTree(window).filter { $0["id"] as? String == identifier }
+            check(matches.count == 1, "One native Update control: \(identifier)")
+            return matches[0]
+        }
+        func press(_ identifier: String) {
+            let action = Process()
+            action.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+            action.arguments = ["--press-accessibility", String(ProcessInfo.processInfo.processIdentifier), identifier]
+            try! action.run()
+            let deadline = Date().addingTimeInterval(5)
+            while action.isRunning && Date() < deadline { drainEvents(seconds: 0.02) }
+            if action.isRunning { action.terminate(); check(false, "Native Update action timed out: \(identifier)") }
+            check(action.terminationStatus == 0, "Native Update action: \(identifier)")
+            drainEvents()
+        }
+
+        let checkToggle = control("settings.updates.check")
+        let downloadToggle = control("settings.updates.download")
+        check(checkToggle["role"] as? String == "AXCheckBox" && checkToggle["value"] as? Int == 0)
+        check(downloadToggle["role"] as? String == "AXCheckBox" && downloadToggle["enabled"] as? Bool == false)
+        press("settings.updates.check")
+        check(settings.automaticUpdateChecksEnabled && control("settings.updates.download")["enabled"] as? Bool == true)
+        press("settings.updates.download")
+        check(settings.automaticUpdateDownloadsEnabled)
+        press("settings.updates.check")
+        check(!settings.automaticUpdateChecksEnabled && settings.automaticUpdateDownloadsEnabled
+              && control("settings.updates.download")["enabled"] as? Bool == false,
+              "Disabling checks preserves the user's automatic-download choice")
+        settings.automaticUpdateDownloadsEnabled = false
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
+        drainEvents()
+        print("PASS update settings layout: two native toggles, default-off state, dependency, actions and persistence")
     }
 
     @MainActor static func checkInputLayout(_ window: NSWindow, settings: IFSettings) {

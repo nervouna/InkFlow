@@ -104,6 +104,9 @@ impact_classify() {
     macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift)
       impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/AvailableUpdate.swift|macOS/Sources/GitHubRelease*.swift|macOS/Sources/SemanticVersion.swift|macOS/Sources/Update*.swift)
+      impact_rule "$path" 'automatic application update domain' settings
+      impact_manual_add manual-settings manual-install ;;
     macOS/Sources/*SettingsView.swift|macOS/Sources/InputPreferences.swift)
       impact_rule "$path" 'settings domain' settings engine-options controller ai-runtime voice-controller
       impact_manual_add manual-input manual-settings ;;
@@ -121,7 +124,8 @@ impact_classify() {
       impact_manual_add manual-input ;;
     macOS/Tests/EngineTests.swift) impact_rule "$path" 'engine tests' engine ;;
     macOS/Tests/Controller*|macOS/scripts/test-controller*.sh) impact_rule "$path" 'controller tests' controller ai-headless ;;
-    macOS/Tests/SettingsTests.swift) impact_rule "$path" 'settings tests' settings ;;
+    macOS/Tests/SettingsTests.swift|macOS/Tests/SettingsUITests.swift|macOS/Tests/UpdateTests.swift)
+      impact_rule "$path" 'settings and application update tests' settings ;;
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 

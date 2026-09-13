@@ -25,6 +25,10 @@ package enum InkFlowApplicationBootstrap {
             }, logger: IFDictionaryCoordinator.persistentLogger)
             dictionaries.bootstrapForServing(runtime: .bundled(helper: helper), user: user)
             IFSettingsWindowController.sharedController.dictionaries = dictionaries
+            let currentVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+                .flatMap(IFSemanticVersion.init)
+            let updates = currentVersion.map { IFUpdateCoordinator(settings: .sharedSettings, currentVersion: $0) }
+            updates?.start()
             let lifecycle = IFApplicationLifecycle(stopDictionaries: { try await dictionaries.shutdown() },
                 stopEngine: { IFEngine.stop() },
                 closeStore: {
@@ -53,7 +57,8 @@ package enum InkFlowApplicationBootstrap {
             startup.end(processSpan)
             let eventLoop = startup.begin(.eventLoop)
             DispatchQueue.main.async { startup.end(eventLoop) }
-            withExtendedLifetime((server, dictionaries, lifecycle, statisticsStore)) { NSApp.run() }
+            withExtendedLifetime((server, dictionaries, lifecycle, statisticsStore, updates)) { NSApp.run() }
+            updates?.stop()
             return 0
         }
     }

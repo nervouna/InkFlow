@@ -52,6 +52,10 @@ change macOS/Sources/InputPreferences.swift; plan
 has 'engine-options'; has 'controller'; has 'manual-input'; has 'manual-settings'; not_has 'manual-install'
 
 new_case
+change macOS/Tests/SettingsUITests.swift; plan
+has 'Units: settings'; not_has 'quality-store'; not_has 'manual-input'; not_has 'manual-settings'; not_has 'manual-install'
+
+new_case
 change macOS/Sources/AIStatisticsStore.swift
 change macOS/Sources/StartupDiagnostics.swift
 git -C "$case_root" add macOS/Sources/AIStatisticsStore.swift

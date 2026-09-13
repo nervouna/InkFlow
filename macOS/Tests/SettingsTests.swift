@@ -6,12 +6,13 @@ import InkFlowTestSupport
 
 @main
 struct SettingsTests {
-    @MainActor static func main() throws {
+    @MainActor static func main() async throws {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
         let defaults = isolated.defaults
         let settings = isolated.settings
-        check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14 && !settings.thunderMode)
+        check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14 && !settings.thunderMode
+              && !settings.automaticUpdateChecksEnabled && !settings.automaticUpdateDownloadsEnabled)
         check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],
               "Only square brackets page by default")
         groupedInputPreferences()
@@ -40,6 +41,13 @@ struct SettingsTests {
         }
         defaults.set("yes", forKey: "vertical")
         check(!settings.vertical)
+        settings.automaticUpdateChecksEnabled = true
+        settings.automaticUpdateDownloadsEnabled = true
+        let checkedAt = Date(timeIntervalSince1970: 1_234_567)
+        settings.recordAutomaticUpdateCheck(at: checkedAt)
+        let updateReload = IFSettings(defaults: defaults)
+        check(updateReload.automaticUpdateChecksEnabled && updateReload.automaticUpdateDownloadsEnabled
+              && updateReload.lastAutomaticUpdateCheck == checkedAt)
         settings.candidateCount = 9; settings.fontSize = 36; settings.vertical = true; settings.thunderMode = true
         let reload = IFSettings(defaults: defaults)
         check(reload.candidateCount == 9 && reload.fontSize == 36 && reload.vertical && reload.thunderMode)
@@ -48,9 +56,10 @@ struct SettingsTests {
         settings.candidateCount = 1; settings.fontSize = 15
         check(settings.candidateCount == 5 && settings.fontSize == 14)
         try customPhrases(defaults: defaults, settings: settings)
+        try await UpdateTests.run()
         defaults.set("yes", forKey: "thunderMode")
         check(!settings.thunderMode, "Malformed Thunder preference must use the safe default")
-        print("PASS settings: defaults, malformed values, bounds, persistence, Thunder mode default-off")
+        print("PASS settings: defaults, malformed values, bounds, persistence, Thunder/update defaults-off")
     }
 
     @MainActor static func groupedInputPreferences() {

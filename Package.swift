@@ -20,6 +20,7 @@ let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
     "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
+    "AvailableUpdate.swift", "GitHubRelease.swift", "GitHubReleaseAsset.swift", "SemanticVersion.swift",
     "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLexicon.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
     "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
     "ThunderPanel.swift", "ThunderPresentation.swift",
@@ -28,7 +29,8 @@ let inkFlowCoreSources = [
     "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "Engine.swift", "InputController.swift", "InputPreferences.swift",
     "PackagedCache.swift", "PackagedCacheBootstrap.swift", "QualityRecorder.swift", "QualityRecords.swift",
-    "QualityStore.swift", "Settings.swift", "SmartSettingsView.swift", "StartupDiagnostics.swift",
+    "QualityStore.swift", "Settings.swift", "SmartSettingsView.swift", "StartupDiagnostics.swift", "UpdateCheckSchedule.swift",
+    "UpdateCoordinator.swift", "UpdateInstallerLauncher.swift", "UpdateService.swift", "UpdateSettingsView.swift",
 ]
 let installerCoreSources = [
     "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
@@ -46,7 +48,7 @@ let testSwiftSources = [
     "InstallerWindowTests.swift", "MetadataTests.swift", "QualityCaptureTests.swift",
     "QualityControllerTimingTests.swift", "QualityIdentityTests.swift", "QualityStoreTests.swift", "QualityTimingTests.swift",
     "ServingStartupTests.swift", "SettingsTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift",
-    "TerminationTests.swift", "TestSupport.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceLexiconTests.swift", "VoiceControllerTests.swift",
+    "TerminationTests.swift", "TestSupport.swift", "UpdateTests.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceLexiconTests.swift", "VoiceControllerTests.swift",
 ]
 let testAuxiliarySources = [
     "AIStatisticsQueryTests.py", "NativeTestSupport.m", "QualityQueryTests.py", "ServingStartupHarness.plist", "include",
@@ -292,7 +294,7 @@ let package = Package(
         executableTestTarget("QualityStoreTests", sources: ["QualityStoreTests.swift"]),
         executableTestTarget("QualityTimingTests", sources: ["QualityTimingTests.swift"]),
         executableTestTarget("ServingStartupTests", sources: ["ServingStartupTests.swift"]),
-        executableTestTarget("SettingsTests", sources: ["SettingsTests.swift"]),
+        executableTestTarget("SettingsTests", sources: ["SettingsTests.swift", "UpdateTests.swift"]),
         executableTestTarget("SettingsUITests", sources: ["SettingsUITests.swift", "DictionarySettingsUITests.swift"]),
         executableTestTarget("StartupDiagnosticsTests", sources: ["StartupDiagnosticsTests.swift"]),
         executableTestTarget("AppleVoiceRecognizerTests", sources: ["AppleVoiceRecognizerTests.swift"]),

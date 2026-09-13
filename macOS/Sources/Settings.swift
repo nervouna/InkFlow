@@ -110,6 +110,16 @@ final class IFSettings: ObservableObject {
         get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "thunderMode") }
     }
+    var automaticUpdateChecksEnabled: Bool {
+        get { integer(for: "automaticUpdateChecksEnabled", allowed: [0, 1], fallback: 0) != 0 }
+        set { set(newValue ? 1 : 0, for: "automaticUpdateChecksEnabled") }
+    }
+    var automaticUpdateDownloadsEnabled: Bool {
+        get { integer(for: "automaticUpdateDownloadsEnabled", allowed: [0, 1], fallback: 0) != 0 }
+        set { set(newValue ? 1 : 0, for: "automaticUpdateDownloadsEnabled") }
+    }
+    var lastAutomaticUpdateCheck: Date? { defaults.object(forKey: "lastAutomaticUpdateCheck") as? Date }
+    func recordAutomaticUpdateCheck(at date: Date) { defaults.set(date, forKey: "lastAutomaticUpdateCheck") }
     var voicePolishEnabled: Bool {
         get { integer(for: "voicePolishEnabled", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "voicePolishEnabled") }
@@ -162,6 +172,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case voice = "语音"
     case dictionaries = "词库"
     case smart = "AI 服务"
+    case updates = "更新"
     case about = "关于"
     var id: Self { self }
     var symbol: String {
@@ -172,6 +183,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .smart: "sparkles"
         case .voice: "mic"
         case .dictionaries: "books.vertical"
+        case .updates: "arrow.triangle.2.circlepath"
         case .about: "info.circle"
         }
     }
@@ -206,6 +218,7 @@ struct SettingsView: View {
                 else if section == .smart { SmartSettingsView(settings: settings, smart: settings.smart) }
                 else if section == .voice { VoiceSettingsView(settings: settings) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
+                else if section == .updates { UpdateSettingsView(settings: settings) }
                 else { appearance }
             }
             .frame(minHeight: 0, maxHeight: .infinity)
