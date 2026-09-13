@@ -112,7 +112,16 @@ The runner retains submission intents, responses, receipts, hashes and release
 state, and is resumable and idempotent: after interruption or a recoverable
 failure, inspect the retained diagnostic, resolve the cause, and run the same
 stable command again. It reuses matching completed stages and refuses ambiguous,
-drifted or conflicting state instead of overwriting it or duplicating submissions.
+drifted or conflicting state instead of overwriting it. Submissions skip
+`notarytool`'s redundant local preflight only after the repository's artifact
+checks pass, use Apple's standard S3 endpoint instead of Transfer Acceleration,
+and bound the upload phase. If an upload response is lost, the runner adopts
+exactly one later matching history entry. Zero or multiple matches remain
+fail-closed and never trigger an automatic resubmission of unknown remote state.
+The DMG build binding records the submitted, pre-stapling bytes; the final receipt
+records both that hash and the post-stapling distribution hash. A rerun with a
+valid final receipt verifies the final artifact and resumes at remote publication
+without requiring the stapled DMG to retain its pre-stapling inode or hash.
 
 If release verification selected a change-based installation/upgrade check, the
 runner may prepare the draft and verified assets but stops before publication until
@@ -140,7 +149,7 @@ Stop on the first failed gate and report the last successful step, version/build
 
 - Before the release commit: preserve the plist change and reuse the same version; do not package uncommitted bytes.
 - After the release commit but before a successful prepare: verify it matches the recorded source and package inputs before retrying. `package.sh prepare` refuses an existing output directory. If prepare failed before a usable submission ZIP, inspect and move that failed directory to a unique backup before retrying the same version.
-- After prepare: do not manually replay internal stages. Retain the ZIP, app, submission state, assemblies, DMG, tag and draft, then rerun only the stable `release-runner.sh continue` command. A process crash may leave an ownership lock; establish that no runner or packager is active before removing only the proven stale lock. The runner recovers a uniquely identifiable lost submission, reuses matching remote state and missing assets, and blocks ambiguous submissions, mismatching assets/tags or drifted notes instead of resubmitting, clobbering or overwriting a published version.
+- After prepare: do not manually replay internal stages. Retain the ZIP, app, submission state, assemblies, DMG, final receipt, tag and draft, then rerun only the stable `release-runner.sh continue` command. A process crash may leave an ownership lock; establish that no runner or packager is active before removing only the proven stale lock. The runner recovers a uniquely identifiable lost submission, reuses a valid post-stapling receipt, matching remote state and missing assets, and blocks zero or ambiguous submission matches, mismatching assets/tags or drifted notes without resubmitting unknown remote state, clobbering or overwriting a published version.
 - If source/artifact provenance cannot be recovered, stop and explain the gap instead of certifying old bytes. Never silently omit required release verification or notarization.
 
 ## Primary command references

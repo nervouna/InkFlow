@@ -53,8 +53,10 @@ history)
   while IFS="	" read -r id name created; do [[ -n "$id" ]] || continue; plutil -insert "history.$i" -dictionary "$out"; plutil -insert "history.$i.id" -string "$id" "$out"; plutil -insert "history.$i.name" -string "$name" "$out"; plutil -insert "history.$i.createdDate" -string "$created" "$out"; i=$((i+1)); done < "$history"
   cat "$out"; rm "$out" ;;
 submit)
-  artifact=$1; name=$(basename "$artifact"); count=0; [[ ! -f "$NOTARY_STATE/count" ]] || count=$(cat "$NOTARY_STATE/count"); count=$((count+1)); echo "$count" > "$NOTARY_STATE/count"; printf -v id '00000000-0000-4000-8000-%012d' "$count"
+  artifact=$1; name=$(basename "$artifact"); echo "submit-args:$*" >> "$EVENTS"; count=0; [[ ! -f "$NOTARY_STATE/count" ]] || count=$(cat "$NOTARY_STATE/count"); count=$((count+1)); echo "$count" > "$NOTARY_STATE/count"; printf -v id '00000000-0000-4000-8000-%012d' "$count"
   created=$(date -u '+%Y-%m-%dT%H:%M:%SZ'); mode=${NOTARY_MODE:-ok}; [[ "$mode" != late-* || "$name" != *"${mode#late-}"* ]] || created=2199-01-01T00:00:00Z; [[ "$mode" != bad-id ]] || id=damaged-id
+  if [[ "$mode" == hang-* && "$name" == *"${mode#hang-}"* ]]; then echo "submit:$name" >> "$EVENTS"; /bin/sleep 5; exit 70; fi
+  if [[ "$mode" == missing-* && "$name" == *"${mode#missing-}"* ]]; then echo "submit:$name" >> "$EVENTS"; exit 70; fi
   printf '%s\t%s\t%s\n' "$id" "$name" "$created" >> "$history"; echo "submit:$name" >> "$EVENTS"
   if [[ "$mode" == ambiguous-* && "$name" == *"${mode#ambiguous-}"* ]]; then printf -v extra '00000000-0000-4000-8000-%012d' "$((count + 100))"; printf '%s\t%s\t%s\n' "$extra" "$name" "$created" >> "$history"; exit 70; fi
   [[ "$mode" != late-* || "$name" != *"${mode#late-}"* ]] || exit 70
@@ -82,11 +84,22 @@ STUB
   cat > "$bin/xcrun" <<'STUB'
 #!/bin/bash
 [[ "$1" == stapler ]] || { echo "UNSTUBBED xcrun $*" >&2; exit 99; }; target=${!#}
-case "$2" in staple) touch "$target.ticket"; echo "staple:$(basename "$target")" >> "$EVENTS";; validate) [[ -e "$target.ticket" ]];; *) exit 99;; esac
+case "$2" in
+staple)
+  if [[ "$target" == *.dmg ]]; then
+    temporary="$target.stapled.$$"
+    { cat "$target"; printf 'fixture-ticket\n'; } > "$temporary"
+    mv "$temporary" "$target"
+  fi
+  touch "$target.ticket"
+  echo "staple:$(basename "$target")" >> "$EVENTS" ;;
+validate) [[ -e "$target.ticket" ]] ;;
+*) exit 99 ;;
+esac
 STUB
   cat > "$bin/codesign" <<'STUB'
 #!/bin/bash
-last=${!#}; if [[ "$1" == -dvvv ]]; then id=io.damao.inputmethod.inkflow; [[ "$last" != *'InkFlow Installer.app' ]] || id=io.damao.inkflow.installer; printf 'TeamIdentifier=T7976FL2LP\nIdentifier=%s\n' "$id" >&2; fi
+last=${!#}; if [[ "$1" == -dvvv ]]; then id=io.damao.inputmethod.inkflow; [[ "$last" != *'InkFlow Installer.app' ]] || id=io.damao.inkflow.installer; printf 'TeamIdentifier=T7976FL2LP\nIdentifier=%s\n' "$id" >&2; [[ "$last" != *.dmg ]] || printf 'CDHash=0123456789abcdef0123456789abcdef01234567\n' >&2; fi
 STUB
   printf '#!/bin/bash\nexit 0\n' > "$bin/spctl"
   cat > "$bin/hdiutil" <<'STUB'
@@ -101,12 +114,17 @@ STUB
   cat > "$bin/gh" <<'STUB'
 #!/bin/bash
 set -eu; echo "gh:$*" >> "$EVENTS"
-[[ "$1 $2" != 'repo view' ]] || { echo fixture/inkflow; exit; }
+if [[ "$1 $2" == 'repo view' ]]; then
+  case "${3:-}" in
+    --json|fixture/inkflow) echo fixture/inkflow; exit ;;
+    *) echo "unsupported repo view arguments: $*" >&2; exit 98 ;;
+  esac
+fi
 if [[ "$1" == api ]]; then printf 'HTTP/2.0 404 Not Found\n'; exit 1; fi
 [[ "$1" == release ]] || exit 99
 action=$2; tag=${3:-}; state="$GH_STATE"; mkdir -p "$state/assets"
 case "$action" in
-view) [[ -f "$state/exists" ]] || exit 1; case "$*" in *'--json tagName'*) cat "$state/tag";; *'--json name'*) cat "$state/name";; *'--json body'*) cat "$state/body";; *'--json isDraft'*) cat "$state/draft";; *'--json url'*) echo https://example.invalid/release;; *'--json assets'*) find "$state/assets" -type f -maxdepth 1 -exec basename {} \; | sort;; *) exit 99;; esac;;
+view) [[ -f "$state/exists" ]] || exit 1; case "$*" in *'--json tagName'*) cat "$state/tag";; *'--json name'*) cat "$state/name";; *'--json body'*'--template'*) cat "$state/body";; *'--json body'*'--jq'*) cat "$state/body"; echo;; *'--json isDraft'*) cat "$state/draft";; *'--json url'*) echo https://example.invalid/release;; *'--json assets'*) find "$state/assets" -type f -maxdepth 1 -exec basename {} \; | sort;; *) exit 99;; esac;;
 create) touch "$state/exists"; echo "$tag" > "$state/tag"; echo 'InkFlow 1.2.3' > "$state/name"; echo true > "$state/draft"; cp "${!#}" "$state/body"; echo create >> "$SIDE_EFFECTS";;
 upload) cp "$4" "$state/assets/$(basename "$4")"; echo "upload:$(basename "$4")" >> "$SIDE_EFFECTS";;
 download) dir=''; patterns=(); shift 3; while [[ $# -gt 0 ]]; do case "$1" in --dir) dir=$2; shift 2;; --pattern) patterns+=("$2"); shift 2;; --repo) shift 2;; *) shift;; esac; done; mkdir -p "$dir"; for pattern in "${patterns[@]}"; do cp "$state/assets/$pattern" "$dir/$pattern"; done;;
@@ -114,7 +132,7 @@ edit) echo false > "$state/draft"; echo publish >> "$SIDE_EFFECTS";; *) exit 99;
 STUB
   chmod +x "$bin/"*
   export PATH="$bin:/usr/bin:/bin:/usr/sbin:/sbin" EVENTS="$base/events" SIDE_EFFECTS="$base/side-effects" NOTARY_STATE="$external/notary" GH_STATE="$external/gh" PACKAGE_STATE="$external/package" MOUNT_POINT="$repo/build/mount" MOUNT_PAYLOAD="$repo/build/mount-payload"
-  export INKFLOW_RELEASE_TESTING=1 INKFLOW_RELEASE_POLL_INTERVAL=0
+  export INKFLOW_RELEASE_TESTING=1 INKFLOW_RELEASE_POLL_INTERVAL=0 INKFLOW_RELEASE_SUBMIT_TIMEOUT=10
   unset INKFLOW_RELEASE_REPO INKFLOW_RELEASE_PREVIOUS_TAG INKFLOW_RELEASE_NOTES
   : > "$EVENTS"; : > "$SIDE_EFFECTS"
 }
@@ -125,18 +143,41 @@ accept_install() { printf 'Release-Installation-Acceptance: version=1.2.3 build=
 
 setup_fixture happy false; run_ok
 [[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 2 && $(grep -c '^publish$' "$SIDE_EFFECTS") == 1 ]]
+[[ $(grep -c '^submit-args:.*--no-s3-acceleration' "$EVENTS") == 2 ]]
+[[ $(grep -c '^submit-args:.*--force' "$EVENTS") == 2 ]]
+grep -Fxq 'gh:repo view fixture/inkflow --json nameWithOwner --jq .nameWithOwner' "$EVENTS"
 cmp "$GH_STATE/body" "$repo/build/public-release-notes.md"; if grep -Fq 'INTERNAL SECRET PLACEHOLDER' "$GH_STATE/body"; then exit 1; fi
-effects=$(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}'); run_ok; [[ $(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}') == "$effects" ]]
+effects=$(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}'); run_ok
+[[ $(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}') == "$effects" ]]
+[[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^staple:' "$EVENTS") == 2 ]]
+grep -Fq 'gh:release view v1.2.3 --repo fixture/inkflow --json body --template {{.body}}' "$EVENTS"
 echo 'PASS: happy path and completed continue are exactly-once'
 
 for loss in zip dmg; do setup_fixture "loss-$loss" false; export NOTARY_MODE="loss-$loss"; run_ok; [[ $(grep -c '^submit:' "$EVENTS") == 2 ]]; unset NOTARY_MODE; done
 echo 'PASS: unique payload and DMG response-loss recovery does not resubmit'
 
-setup_fixture ambiguous false; export NOTARY_MODE=ambiguous-zip; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; unset NOTARY_MODE; grep -Fq 'refusing to resubmit' "$base/err"
+setup_fixture ambiguous false; export NOTARY_MODE=ambiguous-zip; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; unset NOTARY_MODE; grep -Fq 'refusing to choose one' "$base/err"
 echo 'PASS: ambiguous notarization history fails closed'
 
-setup_fixture late false; export NOTARY_MODE=late-zip; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; unset NOTARY_MODE; grep -Fq '0 matching history entries' "$base/err"
+setup_fixture late false; export NOTARY_MODE=late-zip; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; run_fail; [[ $(grep -c '^submit:' "$EVENTS") == 1 ]]; unset NOTARY_MODE; grep -Fq 'refusing to resubmit unknown remote state' "$base/err"
 echo 'PASS: response-loss history outside the recovery window is rejected without resubmit'
+
+setup_fixture missing-response false; export NOTARY_MODE=missing-dmg; run_fail; run_fail
+[[ $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 ]]
+unset NOTARY_MODE; grep -Fq 'refusing to resubmit unknown remote state' "$base/err"
+echo 'PASS: zero-history response loss remains fail-closed without resubmit'
+
+setup_fixture delayed-history false; export NOTARY_MODE=missing-dmg; run_fail
+printf '00000000-0000-4000-8000-000000009999\t%s\t%s\n' "$(basename "$release/InkFlow-1.2.3-7-arm64.dmg")" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$NOTARY_STATE/history.tsv"
+unset NOTARY_MODE; run_ok
+[[ $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && ! -d "$release/notary-attempts" ]]
+echo 'PASS: delayed unique history is adopted without resubmit'
+
+setup_fixture upload-timeout false; export NOTARY_MODE=hang-dmg INKFLOW_RELEASE_SUBMIT_TIMEOUT=1; run_fail
+grep -Fiq 'notarization upload timed out after 1 seconds' "$base/err"
+[[ $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && ! -e "$release/submission.plist" ]]
+unset NOTARY_MODE; export INKFLOW_RELEASE_SUBMIT_TIMEOUT=10
+echo 'PASS: stalled upload exits with retained recovery state'
 
 setup_fixture invalid-id false; export NOTARY_MODE=bad-id; run_fail; unset NOTARY_MODE; [[ ! -e "$release/payload-submission.plist" ]]
 echo 'PASS: malformed notarization UUID is rejected before querying'
@@ -150,12 +191,26 @@ echo 'PASS: unknown notarization status retains the response and stops'
 setup_fixture drift false; run_ok; printf tamper >> "$release/inputmethod-submission.zip"; run_fail
 echo 'PASS: state and artifact drift stop continuation'
 
+setup_fixture final-dmg-drift false; run_ok; printf tamper >> "$release/InkFlow-1.2.3-7-arm64.dmg"; run_fail
+grep -Fq 'Final DMG bytes drifted from receipt' "$base/err"
+echo 'PASS: final DMG drift stops before remote continuation'
+
+setup_fixture receipt-id-drift false; run_ok; plutil -replace submissionID -string 00000000-0000-4000-8000-000000009999 "$release/dmg-receipt.plist"; run_fail
+grep -Fq 'DMG receipt submission ID mismatch' "$base/err"
+echo 'PASS: final receipt remains bound to the accepted submission ID'
+
 setup_fixture finish-crash false; export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH=1; run_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH
 [[ -f "$release/InkFlow-1.2.3-7-arm64.dmg" && -f "$release/dmg-build.intent.plist" && ! -e "$release/dmg-build.plist" && ! -e "$release/dmg-receipt.plist" ]]
 run_ok
 [[ $(grep -c '^package-finish$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 && $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 2 ]]
 [[ -f "$release/dmg-receipt.plist" ]]
 echo 'PASS: post-finish pre-receipt crash adopts only the fully verified intended DMG'
+
+setup_fixture staple-crash false; export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_STAPLE=1; run_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_STAPLE
+[[ -f "$release/InkFlow-1.2.3-7-arm64.dmg.ticket" && -f "$release/dmg-build.plist" && -f "$release/submission.plist" && ! -e "$release/dmg-receipt.plist" ]]
+run_ok
+[[ $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^staple:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && -f "$release/dmg-receipt.plist" ]]
+echo 'PASS: post-staple pre-receipt crash resumes from accepted notarization and stable CDHash'
 
 setup_fixture replaced-after-finish false; export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH=1; run_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH
 echo replacement > "$base/replacement.dmg"; mv -f "$base/replacement.dmg" "$release/InkFlow-1.2.3-7-arm64.dmg"; run_fail

@@ -8,11 +8,17 @@ cd "$root"
 fail() { echo "Release runner stopped: $*" >&2; exit 1; }
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
 plist_get() { plutil -extract "$2" raw "$1" 2>/dev/null; }
+dmg_cdhash() {
+  local value
+  value=$(codesign -dvvv "$1" 2>&1 | awk -F= '$1 == "CDHash" {print $2; exit}')
+  [[ "$value" =~ ^[[:xdigit:]]{40,64}$ ]] || fail 'Could not read a valid DMG code-signing CDHash.'
+  printf '%s\n' "$value"
+}
 atomic_plist_command() {
   local target=$1; shift
   local temporary response_id
   temporary=$(mktemp "$(dirname "$target")/.response.XXXXXX")
-  if "$@" > "$temporary"; then
+  if run_with_timeout "${submit_timeout_seconds:-600}" "$@" > "$temporary"; then
     plutil -lint "$temporary" >/dev/null 2>&1 || { rm -f "$temporary"; return 1; }
     response_id=$(plist_get "$temporary" id || true)
     valid_uuid "$response_id" || { rm -f "$temporary"; return 1; }
@@ -22,6 +28,23 @@ atomic_plist_command() {
   fi
   rm -f "$temporary"
   return 1
+}
+run_with_timeout() {
+  local timeout_seconds=$1; shift
+  local command_pid watchdog_pid status=0
+  "$@" &
+  command_pid=$!
+  (
+    /bin/sleep "$timeout_seconds"
+    if kill -TERM "$command_pid" 2>/dev/null; then
+      echo "Notarization upload timed out after $timeout_seconds seconds; retained submission intent for history recovery." >&2
+    fi
+  ) &
+  watchdog_pid=$!
+  wait "$command_pid" || status=$?
+  kill "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  return "$status"
 }
 write_plist() {
   local target=$1; shift
@@ -114,12 +137,14 @@ fi
 state_sha=$(sha256 "$state")
 manual_install=$(plist_get "$state" manualInstallNeeded)
 
-verified_repo=$(gh repo view --repo "$repo" --json nameWithOwner --jq .nameWithOwner)
+verified_repo=$(gh repo view "$repo" --json nameWithOwner --jq .nameWithOwner)
 require_equal "$verified_repo" "$repo" 'GitHub repository identity mismatch.'
 
 poll_interval=${INKFLOW_RELEASE_POLL_INTERVAL:-30}
 [[ "$poll_interval" =~ ^[0-9]+$ ]] || fail 'Invalid polling interval.'
 if [[ "$poll_interval" == 0 && ${INKFLOW_RELEASE_TESTING:-0} != 1 ]]; then fail 'Zero polling interval is test-only.'; fi
+submit_timeout_seconds=${INKFLOW_RELEASE_SUBMIT_TIMEOUT:-600}
+[[ "$submit_timeout_seconds" =~ ^[1-9][0-9]*$ ]] || fail 'Invalid notarization upload timeout.'
 
 history_snapshot() {
   local output=$1 temporary
@@ -135,46 +160,51 @@ history_snapshot() {
   rm -f "$temporary"
 }
 recover_submission() {
-  local artifact=$1 intent=$2 response=$3 temporary i id name created created_base submitted_base recover_base candidates=0 candidate=''
+  local artifact=$1 intent=$2 response=$3 temporary i id name created created_base submitted_base observed_base candidates=0 candidate=''
   temporary=$(mktemp "$release_dir/.history.XXXXXX")
   bash .agents/skills/inkflow-release/scripts/notary.sh history --output-format plist > "$temporary"
   plutil -lint "$temporary" >/dev/null 2>&1 || { rm -f "$temporary"; fail 'Invalid notarization recovery history.'; }
   i=0
   submitted_base=$(plist_get "$intent" submittedAt); submitted_base=${submitted_base:0:19}
-  recover_base=$(plist_get "$intent" recoverUntil); recover_base=${recover_base:0:19}
+  observed_base=$(date -u '+%Y-%m-%dT%H:%M:%S')
   while id=$(plutil -extract "history.$i.id" raw "$temporary" 2>/dev/null); do
     valid_uuid "$id" || { rm -f "$temporary"; fail 'Notarization recovery history contains an invalid submission ID.'; }
     name=$(plutil -extract "history.$i.name" raw "$temporary" 2>/dev/null || true)
     created=$(plutil -extract "history.$i.createdDate" raw "$temporary" 2>/dev/null || true); created_base=${created:0:19}
-    if [[ "$name" == "$(basename "$artifact")" && "$created" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} && ( "$created_base" == "$submitted_base" || "$created_base" > "$submitted_base" ) && ( "$created_base" == "$recover_base" || "$created_base" < "$recover_base" ) ]] && ! printf '%s\n' "$(plist_get "$intent" preHistoryIDs)" | grep -Fxq "$id"; then
+    if [[ "$name" == "$(basename "$artifact")" && "$created" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} && ( "$created_base" == "$submitted_base" || "$created_base" > "$submitted_base" ) && ( "$created_base" == "$observed_base" || "$created_base" < "$observed_base" ) ]] && ! printf '%s\n' "$(plist_get "$intent" preHistoryIDs)" | grep -Fxq "$id"; then
       candidates=$((candidates + 1)); candidate=$id
     fi
     i=$((i + 1))
   done
   rm -f "$temporary"
-  [[ $candidates -eq 1 ]] || fail "Lost submission response has $candidates matching history entries; refusing to resubmit."
+  [[ $candidates -le 1 ]] || fail "Lost submission response has $candidates matching history entries; refusing to choose one."
+  [[ $candidates -eq 1 ]] || return 2
   write_plist "$response" id "$candidate" recoveredFromHistory true
 }
 ensure_submission() {
-  local kind=$1 artifact=$2 response=$3 intent=$4 pre_history id status info log
+  local kind=$1 artifact=$2 response=$3 intent=$4 pre_history id status info log recovery_status submitted_at
+  pre_history="$release_dir/$kind-pre-history.ids"
   if [[ -e "$intent" && ( ! -f "$intent" || -L "$intent" ) ]]; then fail "Untrusted $kind submission intent path."; fi
   if [[ -e "$response" && ( ! -f "$response" || -L "$response" ) ]]; then fail "Untrusted $kind submission response path."; fi
   if [[ -e "$response" && ! -f "$intent" ]]; then fail "$kind submission response lacks its immutable intent."; fi
   require_equal "$(sha256 "$artifact")" "$(plist_get "$intent" artifactSHA256 2>/dev/null || sha256 "$artifact")" "$kind artifact drifted after submission intent."
   if [[ ! -f "$response" ]]; then
     if [[ -f "$intent" && ! -L "$intent" ]]; then
-      recover_submission "$artifact" "$intent" "$response"
+      recover_submission "$artifact" "$intent" "$response" || recovery_status=$?
+      [[ ${recovery_status:-0} -ne 2 ]] || fail "Lost $kind submission response has no matching history entry; refusing to resubmit unknown remote state."
+      [[ ${recovery_status:-0} -eq 0 ]] || fail "$kind submission recovery failed."
     else
       [[ ! -e "$intent" && ! -L "$intent" ]] || fail "Untrusted $kind submission intent."
-      pre_history="$release_dir/$kind-pre-history.ids"
       [[ ! -e "$pre_history" ]] || fail "Existing $kind pre-history without intent."
       history_snapshot "$pre_history"
-      submitted_epoch=$(date -u '+%s')
-      submitted_at=$(date -u -r "$submitted_epoch" '+%Y-%m-%dT%H:%M:%SZ')
-      recover_until=$(date -u -r "$((submitted_epoch + 600))" '+%Y-%m-%dT%H:%M:%SZ')
-      write_plist "$intent" artifactSHA256 "$(sha256 "$artifact")" submittedAt "$submitted_at" recoverUntil "$recover_until" preHistoryIDs "$(cat "$pre_history")" stateSHA256 "$state_sha"
-      if ! atomic_plist_command "$response" bash .agents/skills/inkflow-release/scripts/notary.sh submit "$artifact" --no-wait --output-format plist; then
-        recover_submission "$artifact" "$intent" "$response"
+      submitted_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+      write_plist "$intent" artifactSHA256 "$(sha256 "$artifact")" submittedAt "$submitted_at" preHistoryIDs "$(cat "$pre_history")" stateSHA256 "$state_sha" transport s3-standard
+      atomic_plist_command "$response" bash .agents/skills/inkflow-release/scripts/notary.sh submit "$artifact" --no-wait --force --no-s3-acceleration --output-format plist || true
+      if [[ ! -f "$response" ]]; then
+        recovery_status=0
+        recover_submission "$artifact" "$intent" "$response" || recovery_status=$?
+        [[ $recovery_status -ne 2 ]] || fail "Lost $kind submission response has no matching history entry; refusing to resubmit unknown remote state."
+        [[ $recovery_status -eq 0 ]] || fail "$kind submission recovery failed."
       fi
     fi
   fi
@@ -202,6 +232,9 @@ ensure_submission() {
 dmg_receipt="$release_dir/dmg-receipt.plist"
 dmg_build_intent="$release_dir/dmg-build.intent.plist"
 dmg_build_response="$release_dir/dmg-build.plist"
+dmg_response="$release_dir/submission.plist"
+dmg_intent="$release_dir/submission.intent.plist"
+dmg_info="$release_dir/dmg-info.plist"
 assembly_snapshot() {
   local candidate
   while IFS= read -r candidate; do
@@ -210,6 +243,7 @@ assembly_snapshot() {
   done < <(find "$release_dir" -mindepth 1 -maxdepth 1 -name 'assembly.*' -print | LC_ALL=C sort)
 }
 if [[ -e "$dmg_build_intent" && ( ! -f "$dmg_build_intent" || -L "$dmg_build_intent" ) ]]; then fail 'Untrusted DMG build intent path.'; fi
+if [[ -e "$dmg_build_response" && ( ! -f "$dmg_build_response" || -L "$dmg_build_response" ) ]]; then fail 'Untrusted DMG build binding path.'; fi
 if [[ ! -f "$dmg_build_intent" ]]; then
   [[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Existing DMG has no immutable pre-finish intent.'
   write_plist "$dmg_build_intent" stateSHA256 "$state_sha" releaseCommit "$release_commit" expectedDMGPath "$dmg" expectedDMGName "$(basename "$dmg")" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" installerReceiptSHA256 "$(sha256 "$receipt")" preexistingAssemblies "$(assembly_snapshot)"
@@ -221,20 +255,6 @@ require_equal "$(plist_get "$dmg_build_intent" expectedDMGName)" "$(basename "$d
 require_equal "$(plist_get "$dmg_build_intent" sourcePlistSHA256)" "$source_sha" 'DMG build intent source plist mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" payloadZIPSHA256)" "$payload_sha" 'DMG build intent payload ZIP mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" installerReceiptSHA256)" "$(sha256 "$receipt")" 'DMG build intent installer receipt mismatch.'
-
-payload_response="$release_dir/payload-submission.plist"
-payload_intent="$release_dir/payload-submission.intent.plist"
-ensure_submission payload "$payload_zip" "$payload_response" "$payload_intent"
-if ! xcrun stapler validate "$payload_app" >/dev/null 2>&1; then xcrun stapler staple "$payload_app"; fi
-xcrun stapler validate "$payload_app"
-
-if [[ ! -e "$dmg" && ! -L "$dmg" ]]; then
-  bash .agents/skills/inkflow-release/scripts/package.sh finish
-  [[ -f "$dmg" && ! -L "$dmg" ]] || fail 'package.sh finish did not create the expected DMG.'
-  if [[ ${INKFLOW_RELEASE_TESTING:-0} == 1 && ${INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH:-0} == 1 ]]; then fail 'Fixture interruption after package.sh finish.'; fi
-else
-  [[ -f "$dmg" && ! -L "$dmg" ]] || fail 'Untrusted existing DMG path.'
-fi
 bind_dmg_build() {
   local candidates candidate count assembled intent_sha
   intent_sha=$(sha256 "$dmg_build_intent")
@@ -256,66 +276,115 @@ bind_dmg_build() {
     candidate=$(cat "$candidates"); rm -f "$candidates"
     assembled="$candidate/$(basename "$dmg")"
     [[ -f "$assembled" && ! -L "$assembled" && "$assembled" -ef "$dmg" ]] || fail 'Final DMG is not the hard-linked output of the unique new package assembly.'
-    write_plist "$dmg_build_response" intentSHA256 "$intent_sha" assemblyPath "$candidate" assembledDMGSHA256 "$(sha256 "$assembled")" finalDMGSHA256 "$(sha256 "$dmg")"
+    write_plist "$dmg_build_response" intentSHA256 "$intent_sha" assemblyPath "$candidate" assembledDMGSHA256 "$(sha256 "$assembled")" submittedDMGSHA256 "$(sha256 "$dmg")" submittedDMGCDHash "$(dmg_cdhash "$dmg")"
   fi
   assembled="$candidate/$(basename "$dmg")"
   [[ -d "$candidate" && ! -L "$candidate" && -f "$assembled" && ! -L "$assembled" && "$assembled" -ef "$dmg" ]] || fail 'Bound package assembly no longer owns the final DMG hard link.'
   require_equal "$(plist_get "$dmg_build_response" assembledDMGSHA256)" "$(sha256 "$assembled")" 'Assembled DMG drifted from build binding.'
-  require_equal "$(plist_get "$dmg_build_response" finalDMGSHA256)" "$(sha256 "$dmg")" 'Final DMG drifted from build binding.'
+  require_equal "$(plist_get "$dmg_build_response" submittedDMGSHA256)" "$(sha256 "$dmg")" 'Submitted DMG drifted from build binding.'
+  require_equal "$(plist_get "$dmg_build_response" submittedDMGCDHash)" "$(dmg_cdhash "$dmg")" 'Submitted DMG CDHash drifted from build binding.'
 }
-bind_dmg_build
-if [[ -e "$dmg_receipt" || -L "$dmg_receipt" ]]; then
+verify_accepted_dmg_submission() {
+  [[ -f "$dmg_build_response" && ! -L "$dmg_build_response" ]] || fail 'Missing trusted DMG build binding.'
+  [[ -f "$dmg_intent" && ! -L "$dmg_intent" && -f "$dmg_response" && ! -L "$dmg_response" ]] || fail 'Missing trusted DMG notarization state.'
+  [[ -f "$dmg_info" && ! -L "$dmg_info" ]] || fail 'Missing trusted accepted DMG notarization record.'
+  require_equal "$(plist_get "$dmg_build_response" submittedDMGSHA256)" "$(plist_get "$dmg_intent" artifactSHA256)" 'DMG build binding does not match submitted bytes.'
+  require_equal "$(plist_get "$dmg_intent" stateSHA256)" "$state_sha" 'DMG submission intent does not match release state.'
+  dmg_submission_id=$(plist_get "$dmg_response" id)
+  valid_uuid "$dmg_submission_id" || fail 'DMG notarization response contains an invalid submission ID.'
+  require_equal "$(plist_get "$dmg_info" id)" "$dmg_submission_id" 'DMG notarization record ID mismatch.'
+  require_equal "$(plist_get "$dmg_info" status)" Accepted 'DMG notarization is not accepted.'
+}
+verify_final_dmg_receipt() {
   [[ -f "$dmg_receipt" && ! -L "$dmg_receipt" ]] || fail 'Untrusted DMG receipt path.'
+  [[ -f "$dmg" && ! -L "$dmg" ]] || fail 'Missing trusted final DMG.'
+  verify_accepted_dmg_submission
+  require_equal "$(plist_get "$dmg_receipt" schema)" 1 'Unknown DMG receipt schema.'
   require_equal "$(plist_get "$dmg_receipt" stateSHA256)" "$state_sha" 'DMG receipt does not match release state.'
   require_equal "$(plist_get "$dmg_receipt" releaseCommit)" "$release_commit" 'DMG receipt commit mismatch.'
-  require_equal "$(plist_get "$dmg_receipt" dmgSHA256)" "$(sha256 "$dmg")" 'DMG bytes drifted from receipt.'
-fi
+  require_equal "$(plist_get "$dmg_receipt" version)" "$version" 'DMG receipt version mismatch.'
+  require_equal "$(plist_get "$dmg_receipt" build)" "$build" 'DMG receipt build mismatch.'
+  require_equal "$(plist_get "$dmg_receipt" submittedDMGSHA256)" "$(plist_get "$dmg_intent" artifactSHA256)" 'DMG receipt does not match submitted bytes.'
+  require_equal "$(plist_get "$dmg_receipt" submittedDMGSHA256)" "$(plist_get "$dmg_build_response" submittedDMGSHA256)" 'DMG receipt does not match build binding.'
+  require_equal "$(plist_get "$dmg_receipt" submittedDMGCDHash)" "$(plist_get "$dmg_build_response" submittedDMGCDHash)" 'DMG receipt CDHash does not match build binding.'
+  require_equal "$(plist_get "$dmg_receipt" submittedDMGCDHash)" "$(dmg_cdhash "$dmg")" 'Final DMG CDHash does not match submitted DMG.'
+  require_equal "$(plist_get "$dmg_receipt" submissionID)" "$dmg_submission_id" 'DMG receipt submission ID mismatch.'
+  require_equal "$(plist_get "$dmg_receipt" finalDMGSHA256)" "$(sha256 "$dmg")" 'Final DMG bytes drifted from receipt.'
+}
+verify_final_dmg_container() {
+  xcrun stapler validate "$dmg"
+  codesign --verify --strict --verbose=2 "$dmg"
+  spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
+  hdiutil verify "$dmg"
+}
 
-dmg_response="$release_dir/submission.plist"
-dmg_intent="$release_dir/submission.intent.plist"
-ensure_submission dmg "$dmg" "$dmg_response" "$dmg_intent"
-if ! xcrun stapler validate "$dmg" >/dev/null 2>&1; then xcrun stapler staple "$dmg"; fi
-xcrun stapler validate "$dmg"
-codesign --verify --strict --verbose=2 "$dmg"
-spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
-hdiutil verify "$dmg"
-mount_log=$(mktemp "$release_dir/.mount.XXXXXX")
-mount_point=''
-detach_mount() { [[ -z "$mount_point" ]] || hdiutil detach "$mount_point" >/dev/null; }
-trap 'detach_mount; cleanup_lock' EXIT
-hdiutil attach -readonly -nobrowse "$dmg" > "$mount_log"
-mount_point=$(awk -F '\t' '$3 ~ /^\// {print $3; exit}' "$mount_log")
-[[ -n "$mount_point" && -d "$mount_point" ]] || fail 'Could not determine mounted DMG path.'
-installer="$mount_point/InkFlow Installer.app"
-[[ -d "$installer" && -f "$mount_point/安装说明.txt" && $(find "$mount_point" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ') == 2 ]] || fail 'Unexpected DMG root contents.'
-codesign --verify --deep --strict --verbose=2 "$installer"
-metadata=$(codesign -dvvv "$installer" 2>&1)
-printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Mounted installer Team ID mismatch.'
-printf '%s\n' "$metadata" | grep -Fxq 'Identifier=io.damao.inkflow.installer' || fail 'Mounted installer identifier mismatch.'
-require_equal "$(plutil -extract CFBundleShortVersionString raw "$installer/Contents/Info.plist")" "$version" 'Mounted installer version mismatch.'
-require_equal "$(plutil -extract CFBundleVersion raw "$installer/Contents/Info.plist")" "$build" 'Mounted installer build mismatch.'
-spctl --assess --type execute --verbose=2 "$installer"
-"$installer/Contents/MacOS/InkFlowInstaller" --check-payload
-extract=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-inner.XXXXXX")
-ditto -x -k "$installer/Contents/Resources/Payload/InkFlow.zip" "$extract"
-inner="$extract/InkFlow.app"
-codesign --verify --deep --strict --verbose=2 "$inner"
-xcrun stapler validate "$inner"
-spctl --assess --type execute --verbose=2 "$inner"
-inner_metadata=$(codesign -dvvv "$inner" 2>&1)
-printf '%s\n' "$inner_metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Extracted payload Team ID mismatch.'
-printf '%s\n' "$inner_metadata" | grep -Fxq 'Identifier=io.damao.inputmethod.inkflow' || fail 'Extracted payload identifier mismatch.'
-require_equal "$(plutil -extract CFBundleShortVersionString raw "$inner/Contents/Info.plist")" "$version" 'Extracted payload version mismatch.'
-require_equal "$(plutil -extract CFBundleVersion raw "$inner/Contents/Info.plist")" "$build" 'Extracted payload build mismatch.'
-rm -rf "$extract"
-detach_mount; mount_point=''; rm -f "$mount_log"
+if [[ -e "$dmg_receipt" || -L "$dmg_receipt" ]]; then
+  verify_final_dmg_receipt
+  verify_final_dmg_container
+else
+  payload_response="$release_dir/payload-submission.plist"
+  payload_intent="$release_dir/payload-submission.intent.plist"
+  ensure_submission payload "$payload_zip" "$payload_response" "$payload_intent"
+  if ! xcrun stapler validate "$payload_app" >/dev/null 2>&1; then xcrun stapler staple "$payload_app"; fi
+  xcrun stapler validate "$payload_app"
 
-if [[ ! -e "$dmg_receipt" && ! -L "$dmg_receipt" ]]; then
-  write_plist "$dmg_receipt" stateSHA256 "$state_sha" releaseCommit "$release_commit" version "$version" build "$build" dmgSHA256 "$(sha256 "$dmg")"
+  if [[ ! -e "$dmg" && ! -L "$dmg" ]]; then
+    bash .agents/skills/inkflow-release/scripts/package.sh finish
+    [[ -f "$dmg" && ! -L "$dmg" ]] || fail 'package.sh finish did not create the expected DMG.'
+    if [[ ${INKFLOW_RELEASE_TESTING:-0} == 1 && ${INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH:-0} == 1 ]]; then fail 'Fixture interruption after package.sh finish.'; fi
+  else
+    [[ -f "$dmg" && ! -L "$dmg" ]] || fail 'Untrusted existing DMG path.'
+  fi
+  if [[ ! -f "$dmg_build_response" ]]; then bind_dmg_build; fi
+  submitted_dmg_sha=$(plist_get "$dmg_build_response" submittedDMGSHA256)
+  submitted_dmg_cdhash=$(plist_get "$dmg_build_response" submittedDMGCDHash)
+  if [[ $(sha256 "$dmg") == "$submitted_dmg_sha" ]]; then
+    bind_dmg_build
+    ensure_submission dmg "$dmg" "$dmg_response" "$dmg_intent"
+    require_equal "$submitted_dmg_sha" "$(plist_get "$dmg_intent" artifactSHA256)" 'Submitted DMG changed before stapling.'
+    verify_accepted_dmg_submission
+    if ! xcrun stapler validate "$dmg" >/dev/null 2>&1; then xcrun stapler staple "$dmg"; fi
+    if [[ ${INKFLOW_RELEASE_TESTING:-0} == 1 && ${INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_STAPLE:-0} == 1 ]]; then fail 'Fixture interruption after DMG stapling.'; fi
+  else
+    verify_accepted_dmg_submission
+    xcrun stapler validate "$dmg" >/dev/null 2>&1 || fail 'DMG differs from submitted bytes without a valid stapled ticket.'
+    require_equal "$(dmg_cdhash "$dmg")" "$submitted_dmg_cdhash" 'Stapled DMG CDHash does not match submitted DMG.'
+  fi
+  verify_final_dmg_container
+
+  mount_log=$(mktemp "$release_dir/.mount.XXXXXX")
+  mount_point=''
+  detach_mount() { [[ -z "$mount_point" ]] || hdiutil detach "$mount_point" >/dev/null; }
+  trap 'detach_mount; cleanup_lock' EXIT
+  hdiutil attach -readonly -nobrowse "$dmg" > "$mount_log"
+  mount_point=$(awk -F '\t' '$3 ~ /^\// {print $3; exit}' "$mount_log")
+  [[ -n "$mount_point" && -d "$mount_point" ]] || fail 'Could not determine mounted DMG path.'
+  installer="$mount_point/InkFlow Installer.app"
+  [[ -d "$installer" && -f "$mount_point/安装说明.txt" && $(find "$mount_point" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ') == 2 ]] || fail 'Unexpected DMG root contents.'
+  codesign --verify --deep --strict --verbose=2 "$installer"
+  metadata=$(codesign -dvvv "$installer" 2>&1)
+  printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Mounted installer Team ID mismatch.'
+  printf '%s\n' "$metadata" | grep -Fxq 'Identifier=io.damao.inkflow.installer' || fail 'Mounted installer identifier mismatch.'
+  require_equal "$(plutil -extract CFBundleShortVersionString raw "$installer/Contents/Info.plist")" "$version" 'Mounted installer version mismatch.'
+  require_equal "$(plutil -extract CFBundleVersion raw "$installer/Contents/Info.plist")" "$build" 'Mounted installer build mismatch.'
+  spctl --assess --type execute --verbose=2 "$installer"
+  "$installer/Contents/MacOS/InkFlowInstaller" --check-payload
+  extract=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-inner.XXXXXX")
+  ditto -x -k "$installer/Contents/Resources/Payload/InkFlow.zip" "$extract"
+  inner="$extract/InkFlow.app"
+  codesign --verify --deep --strict --verbose=2 "$inner"
+  xcrun stapler validate "$inner"
+  spctl --assess --type execute --verbose=2 "$inner"
+  inner_metadata=$(codesign -dvvv "$inner" 2>&1)
+  printf '%s\n' "$inner_metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Extracted payload Team ID mismatch.'
+  printf '%s\n' "$inner_metadata" | grep -Fxq 'Identifier=io.damao.inputmethod.inkflow' || fail 'Extracted payload identifier mismatch.'
+  require_equal "$(plutil -extract CFBundleShortVersionString raw "$inner/Contents/Info.plist")" "$version" 'Extracted payload version mismatch.'
+  require_equal "$(plutil -extract CFBundleVersion raw "$inner/Contents/Info.plist")" "$build" 'Extracted payload build mismatch.'
+  rm -rf "$extract"
+  detach_mount; mount_point=''; rm -f "$mount_log"
+  write_plist "$dmg_receipt" schema 1 stateSHA256 "$state_sha" releaseCommit "$release_commit" version "$version" build "$build" submissionID "$dmg_submission_id" submittedDMGSHA256 "$submitted_dmg_sha" submittedDMGCDHash "$submitted_dmg_cdhash" finalDMGSHA256 "$(sha256 "$dmg")"
+  verify_final_dmg_receipt
 fi
-require_equal "$(plist_get "$dmg_receipt" stateSHA256)" "$state_sha" 'Verified DMG receipt does not match release state.'
-require_equal "$(plist_get "$dmg_receipt" releaseCommit)" "$release_commit" 'Verified DMG receipt commit mismatch.'
-require_equal "$(plist_get "$dmg_receipt" dmgSHA256)" "$(sha256 "$dmg")" 'Verified DMG bytes drifted from receipt.'
 
 dmg_name=$(basename "$dmg")
 expected_checksum="$(sha256 "$dmg")  $dmg_name"
@@ -341,7 +410,7 @@ if release_tag=$(gh release view "$tag" --repo "$repo" --json tagName --jq .tagN
   require_equal "$release_tag" "$tag" 'GitHub Release tag mismatch.'
   require_equal "$(gh release view "$tag" --repo "$repo" --json name --jq .name)" "InkFlow $version" 'GitHub Release title mismatch.'
   release_body=$(mktemp "$release_dir/.github-body.XXXXXX")
-  gh release view "$tag" --repo "$repo" --json body --jq .body > "$release_body"
+  gh release view "$tag" --repo "$repo" --json body --template '{{.body}}' > "$release_body"
   cmp "$notes" "$release_body" || { rm -f "$release_body"; fail 'GitHub Release notes differ from the immutable notes file.'; }
   rm -f "$release_body"
 else
