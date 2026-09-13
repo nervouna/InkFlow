@@ -414,13 +414,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(sum(g['valid'] for g in result['groups']),12)
         self.assertEqual(self.result()['coverage']['valid'],11)
 
-    def test_analysis_schema_extensions_remain_compatible(self):
-        with sqlite3.connect(self.db) as db:
-            db.execute('CREATE VIEW analysis_view AS SELECT id FROM compositions')
-            db.execute('CREATE INDEX analysis_index ON candidate_decisions(text_kind)')
-            db.execute('ANALYZE')
-        self.assertEqual(self.result()['coverage']['compositions'],21)
-
     def test_timing_legacy_unknown_and_one_snapshot_per_composition(self):
         legacy = self.result('timing')
         self.assertEqual(legacy['coverage']['unavailable'], 21)

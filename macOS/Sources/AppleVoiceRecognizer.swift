@@ -52,15 +52,13 @@ final class VoiceAudioFeed: @unchecked Sendable {
     private let outputFormat: AVAudioFormat
     private let lock = NSLock()
     private var ended = false
-    /// AVAudioConverter invokes this only during synchronous convert; the borrowed buffer never
-    /// leaves that call. The separate lock also makes the Sendable callback's one-shot state safe.
+    /// AVAudioConverter invokes this only during the outer locked synchronous conversion;
+    /// the borrowed buffer never leaves that call.
     private final class Input: @unchecked Sendable {
         private let buffer: AVAudioPCMBuffer
-        private let lock = NSLock()
         private var supplied = false
         init(_ buffer: AVAudioPCMBuffer) { self.buffer = buffer }
         func take(_ state: UnsafeMutablePointer<AVAudioConverterInputStatus>) -> AVAudioBuffer? {
-            lock.lock(); defer { lock.unlock() }
             if supplied { state.pointee = .noDataNow; return nil }
             supplied = true; state.pointee = .haveData; return buffer
         }

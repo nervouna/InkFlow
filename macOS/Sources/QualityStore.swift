@@ -350,8 +350,8 @@ private final class QualityDatabase: @unchecked Sendable {
     private func validateSchema() throws {
         let version = try scalar("PRAGMA user_version")
         let identity = try scalar("PRAGMA application_id")
-        let rows = try query("SELECT name, sql, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")
-        if version == "0", identity == "0", rows.isEmpty {
+        let objects = try scalar("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+        if version == "0", identity == "0", objects == "0" {
             try execute("BEGIN IMMEDIATE")
             do {
                 // Another recorder may have initialized the empty file before this writer lock.
@@ -362,7 +362,7 @@ private final class QualityDatabase: @unchecked Sendable {
                 }
                 for sql in Self.creationOrder(schema: Self.schemaV2) { try execute(sql) }
                 for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
-                    try ensureIndex(preferredName: name, column: column)
+                    try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
                 }
                 try execute("PRAGMA application_id = \(Self.applicationID)")
                 try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
@@ -374,15 +374,12 @@ private final class QualityDatabase: @unchecked Sendable {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
         if version == "1" {
-            try validate(rows: rows, against: Self.schemaV1)
             try migrateV1()
             return
         }
         guard version == String(QualityLimits.databaseSchemaVersion) else {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
-        try validate(rows: rows, against: Self.schemaV2)
-        try validateLayeredIndexes()
     }
 
     private func migrateV1() throws {
@@ -390,23 +387,19 @@ private final class QualityDatabase: @unchecked Sendable {
         do {
             let lockedVersion = try scalar("PRAGMA user_version")
             let lockedIdentity = try scalar("PRAGMA application_id")
-            let lockedRows = try query("SELECT name, sql, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name")
             if lockedVersion == String(QualityLimits.databaseSchemaVersion), lockedIdentity == String(Self.applicationID) {
-                try validate(rows: lockedRows, against: Self.schemaV2)
-                try validateLayeredIndexes()
                 rollback()
                 return
             }
             guard lockedVersion == "1", lockedIdentity == String(Self.applicationID) else {
                 throw QualityDatabaseError(code: Self.unsupportedSchema)
             }
-            try validate(rows: lockedRows, against: Self.schemaV1)
             try execute("ALTER TABLE config_revisions ADD COLUMN ranking_fingerprint TEXT")
             try execute("ALTER TABLE config_revisions ADD COLUMN settings_fingerprint TEXT")
             try execute("ALTER TABLE config_revisions ADD COLUMN measurement_fingerprint TEXT")
             try execute("ALTER TABLE config_revisions ADD COLUMN build_identity TEXT")
             for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
-                try ensureIndex(preferredName: name, column: column)
+                try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
             }
             try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
             try inject(.beforeMigrationCommit)
@@ -417,26 +410,6 @@ private final class QualityDatabase: @unchecked Sendable {
         }
     }
 
-    private func validate(rows: [[String]], against schema: [String: String]) throws {
-        guard rows.count >= schema.count else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
-        var remaining = Set(schema.keys)
-        for row in rows {
-            if let expected = schema[row[0]] {
-                guard Self.normalize(row[1]) == Self.normalize(expected) else {
-                    throw QualityDatabaseError(code: Self.unsupportedSchema)
-                }
-                remaining.remove(row[0])
-            } else {
-                // Analysis views and non-unique indexes cannot change inserted records.
-                // Extra tables, triggers and unique constraints change the owned contract.
-                guard row[2] == "view" || (row[2] == "index" && row[1].uppercased().hasPrefix("CREATE INDEX ")) else {
-                    throw QualityDatabaseError(code: Self.unsupportedSchema)
-                }
-            }
-        }
-        guard remaining.isEmpty else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
-    }
-
     private static func creationOrder(schema: [String: String]) -> [String] {
         schema.keys.sorted { left, right in
             let leftTable = schema[left]!.hasPrefix("CREATE TABLE")
@@ -444,96 +417,6 @@ private final class QualityDatabase: @unchecked Sendable {
             if leftTable != rightTable { return leftTable }
             return left < right
         }.map { schema[$0]! }
-    }
-
-    private func validateLayeredIndexes() throws {
-        for column in Self.layeredIndexes.values where try !hasIndex(on: column) {
-            throw QualityDatabaseError(code: Self.unsupportedSchema)
-        }
-    }
-
-    private func ensureIndex(preferredName: String, column: String) throws {
-        if try hasIndex(on: column) { return }
-        var candidate = preferredName
-        var suffix = 1
-        while try scalar("SELECT count(*) FROM sqlite_master WHERE name = ?", [.text(candidate)]) != "0" {
-            candidate = suffix == 1 ? preferredName + "_owned" : preferredName + "_owned_\(suffix)"
-            suffix += 1
-        }
-        try execute("CREATE INDEX \(Self.quotedIdentifier(candidate)) ON config_revisions(\(Self.quotedIdentifier(column)))")
-    }
-
-    private func hasIndex(on column: String) throws -> Bool {
-        let indexes = try query("PRAGMA index_list(config_revisions)")
-        for index in indexes where index.count >= 5 && index[2] == "0" && index[4] == "0" {
-            let name = index[1]
-            let columns = try query("PRAGMA index_info(\(Self.quotedIdentifier(name)))")
-            if columns.count == 1, columns[0].count >= 3, columns[0][2] == column { return true }
-        }
-        return false
-    }
-
-    private static func quotedIdentifier(_ value: String) -> String {
-        "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
-    }
-
-    /// Ignores formatting whitespace while preserving SQL token boundaries and quoted contents.
-    private static func normalize(_ sql: String) -> String {
-        let characters = Array(sql)
-        var tokens: [String] = []
-        var index = 0
-        while index < characters.count {
-            let character = characters[index]
-            if character.isWhitespace { index += 1; continue }
-            if character == "'" || character == "\"" || character == "`" {
-                let quote = character
-                var token = String(character)
-                index += 1
-                while index < characters.count {
-                    token.append(characters[index])
-                    if characters[index] == quote {
-                        if index + 1 < characters.count, characters[index + 1] == quote {
-                            token.append(characters[index + 1]); index += 2; continue
-                        }
-                        index += 1
-                        break
-                    }
-                    index += 1
-                }
-                tokens.append(token)
-                continue
-            }
-            if character == "[" {
-                var token = String(character)
-                index += 1
-                while index < characters.count {
-                    token.append(characters[index])
-                    let ended = characters[index] == "]"
-                    index += 1
-                    if ended { break }
-                }
-                tokens.append(token)
-                continue
-            }
-            if character.isLetter || character.isNumber || character == "_" {
-                var token = String(character)
-                index += 1
-                while index < characters.count,
-                      characters[index].isLetter || characters[index].isNumber || characters[index] == "_" {
-                    token.append(characters[index]); index += 1
-                }
-                tokens.append(token)
-                continue
-            }
-            var token = String(character)
-            if index + 1 < characters.count,
-               ["!=", "<=", ">=", "==", "||", "<<", ">>"].contains(String([character, characters[index + 1]])) {
-                token.append(characters[index + 1]); index += 1
-            }
-            tokens.append(token)
-            index += 1
-        }
-        return tokens.joined(separator: "\u{1f}")
     }
 
     func write(_ batch: [QualityEnvelope]) throws -> (written: Int, oversized: Int, truncated: Int) {

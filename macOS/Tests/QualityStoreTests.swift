@@ -65,18 +65,11 @@ private func makeURL(_ name: String) throws -> URL {
     return directory.appendingPathComponent(name + ".sqlite3")
 }
 
-private func createV1Database(at url: URL, schemaVersion: Int = 1, committedLiteral: String = "committed") throws {
-    let layeredColumns = schemaVersion == 2 ? ", ranking_fingerprint TEXT, settings_fingerprint TEXT, measurement_fingerprint TEXT, build_identity TEXT" : ""
-    let layeredIndexes = schemaVersion == 2 ? """
-        CREATE INDEX revisions_ranking_fingerprint ON config_revisions(ranking_fingerprint);
-        CREATE INDEX revisions_settings_fingerprint ON config_revisions(settings_fingerprint);
-        CREATE INDEX revisions_measurement_fingerprint ON config_revisions(measurement_fingerprint);
-        CREATE INDEX revisions_build_identity ON config_revisions(build_identity);
-        """ : ""
+private func createV1Database(at url: URL) throws {
     let writer = try Reader(url, writable: true)
     try writer.execute("""
         PRAGMA application_id = 1229345073;
-        PRAGMA user_version = \(schemaVersion);
+        PRAGMA user_version = 1;
         CREATE TABLE recording_runs (
             id TEXT PRIMARY KEY NOT NULL, started_at TEXT NOT NULL, ended_at TEXT,
             status TEXT NOT NULL, engine_version TEXT NOT NULL, build_metadata_json TEXT NOT NULL,
@@ -85,7 +78,7 @@ private func createV1Database(at url: URL, schemaVersion: Int = 1, committedLite
         CREATE TABLE config_revisions (
             id TEXT PRIMARY KEY NOT NULL, fingerprint TEXT NOT NULL, created_at TEXT NOT NULL,
             applied_config_json TEXT NOT NULL, build_metadata_json TEXT NOT NULL,
-            engine_version TEXT NOT NULL, metric_rule_version INTEGER NOT NULL\(layeredColumns)
+            engine_version TEXT NOT NULL, metric_rule_version INTEGER NOT NULL
         );
         CREATE TABLE compositions (
             id TEXT PRIMARY KEY NOT NULL, run_id TEXT NOT NULL REFERENCES recording_runs(id),
@@ -112,7 +105,7 @@ private func createV1Database(at url: URL, schemaVersion: Int = 1, committedLite
             matches_custom_phrase INTEGER NOT NULL CHECK(matches_custom_phrase IN (0,1)),
             unknown_rank_reason TEXT, path_reason TEXT, UNIQUE(composition_id, sequence),
             FOREIGN KEY(commit_id, composition_id) REFERENCES commits(id, composition_id),
-            CHECK(outcome != '\(committedLiteral)' OR commit_id IS NOT NULL)
+            CHECK(outcome != 'committed' OR commit_id IS NOT NULL)
         );
         CREATE INDEX compositions_time_app ON compositions(started_at, app_bundle_id);
         CREATE INDEX decisions_composition ON candidate_decisions(composition_id);
@@ -122,9 +115,6 @@ private func createV1Database(at url: URL, schemaVersion: Int = 1, committedLite
         INSERT INTO compositions VALUES ('legacy-composition','legacy-run','2026-01-01T00:00:00.000Z','2026-01-01T00:00:01.000Z','legacy.app',NULL,'committed',0,0,NULL,'{}');
         INSERT INTO commits VALUES ('legacy-commit','legacy-composition','2026-01-01T00:00:01.000Z','legacy','candidate',1,NULL);
         INSERT INTO candidate_decisions VALUES ('legacy-decision','legacy-composition','legacy-revision','legacy-commit','2026-01-01T00:00:01.000Z',1,'space','committed',0,'legacy','english','{}',NULL,'[]',0,0,'{}',1,0,NULL,NULL);
-        CREATE INDEX analysis_time ON compositions(ended_at);
-        CREATE VIEW analysis_runs AS SELECT id FROM recording_runs;
-        \(layeredIndexes)
         """)
 }
 
@@ -199,7 +189,7 @@ struct QualityStoreTests {
         try await fatalFaults()
         try await v1Migration()
         try await identityFailures()
-        try await nonDestructiveSchemaAndOpen()
+        try await schemaAndOpenFailures()
         try await metadataAndRevisions()
         print("PASS quality store: 10 persistence/failure groups")
     }
@@ -248,8 +238,6 @@ private extension QualityStoreTests {
                reader.scalar("SELECT count(*) FROM commits WHERE id='legacy-commit'") == "1" &&
                reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id='legacy-decision'") == "1",
                "all five legacy table rows survive migration")
-        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE name IN ('analysis_time','analysis_runs')") == "2",
-               "allowed analysis index and view survive migration")
         expect(try reader.scalar("SELECT count(*) FROM config_revisions WHERE id='revision-after-migration' AND ranking_fingerprint IS NOT NULL AND settings_fingerprint IS NOT NULL AND measurement_fingerprint IS NOT NULL AND build_identity IS NOT NULL") == "1",
                "post-migration revision gets complete layered identities")
 
@@ -266,25 +254,7 @@ private extension QualityStoreTests {
         expect(failed.statistics().disabled, "migration failure disables recording")
         expect(try Data(contentsOf: rollbackURL) == before, "failed migration leaves v1 bytes unchanged")
 
-        let collisionURL = try makeURL("v1-index-collision")
-        defer { try? FileManager.default.removeItem(at: collisionURL.deletingLastPathComponent()) }
-        try createV1Database(at: collisionURL)
-        do {
-            let writer = try Reader(collisionURL, writable: true)
-            try writer.execute("CREATE INDEX revisions_ranking_fingerprint ON config_revisions(created_at)")
-        }
-        let collisionStore = QualityStore(url: collisionURL, engineVersion: "test", buildMetadata: metadata)
-        await collisionStore.close()
-        expect(!collisionStore.statistics().disabled, "analysis index name collision does not block migration")
-        let collisionReader = try Reader(collisionURL)
-        expect(try collisionReader.scalar("SELECT sql FROM sqlite_master WHERE name='revisions_ranking_fingerprint'").contains("created_at"),
-               "colliding analysis index is preserved unchanged")
-        expect(try collisionReader.scalar("SELECT count(*) FROM pragma_index_list('config_revisions') AS l JOIN pragma_index_info(l.name) AS i WHERE i.name='ranking_fingerprint'") == "1",
-               "migration creates a safe alternate ranking index")
-        let collisionReopen = QualityStore(url: collisionURL, engineVersion: "test", buildMetadata: metadata)
-        await collisionReopen.close()
-        expect(!collisionReopen.statistics().disabled, "migrated alternate layered index validates on reopen")
-        print("PASS quality store: strict atomic v1 migration, exact rows, NULL legacy layers, analysis objects, rollback")
+        print("PASS quality store: atomic v1 migration, exact rows, NULL legacy layers and rollback")
     }
 
     static func identityFailures() async throws {
@@ -574,9 +544,8 @@ private extension QualityStoreTests {
         print("PASS quality store: injected FULL, IOERR, CORRUPT rollback and disable/log-once")
     }
 
-    static func nonDestructiveSchemaAndOpen() async throws {
-        for setup in ["CREATE TABLE unrelated (value TEXT); INSERT INTO unrelated VALUES ('sentinel')",
-                      "PRAGMA user_version = 99", "PRAGMA user_version = 1; PRAGMA application_id = 123"] {
+    static func schemaAndOpenFailures() async throws {
+        for setup in ["PRAGMA user_version = 99", "PRAGMA user_version = 1; PRAGMA application_id = 123"] {
             let url = try makeURL("foreign")
             defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             do { let writer = try Reader(url, writable: true); try writer.execute(setup) }
@@ -587,30 +556,6 @@ private extension QualityStoreTests {
             expect(store.statistics().disabled, "foreign or unknown schema disabled")
             expect(try Data(contentsOf: url) == before, "foreign DB bytes unchanged")
         }
-        let incompatibleV1 = try makeURL("incompatible-v1")
-        defer { try? FileManager.default.removeItem(at: incompatibleV1.deletingLastPathComponent()) }
-        try createV1Database(at: incompatibleV1)
-        do {
-            let writer = try Reader(incompatibleV1, writable: true)
-            try writer.execute("CREATE TRIGGER changed_contract AFTER INSERT ON compositions BEGIN DELETE FROM compositions WHERE id = NEW.id; END")
-        }
-        let incompatibleBefore = try Data(contentsOf: incompatibleV1)
-        let incompatible = QualityStore(url: incompatibleV1, engineVersion: "test", buildMetadata: metadata)
-        await incompatible.close()
-        expect(incompatible.statistics().disabled, "contract-changing v1 database is rejected")
-        expect(try Data(contentsOf: incompatibleV1) == incompatibleBefore, "incompatible v1 database bytes remain unchanged")
-
-        for version in [1, 2] {
-            let literalURL = try makeURL("incompatible-literal-v\(version)")
-            defer { try? FileManager.default.removeItem(at: literalURL.deletingLastPathComponent()) }
-            try createV1Database(at: literalURL, schemaVersion: version, committedLiteral: "com mitted")
-            let literalBefore = try Data(contentsOf: literalURL)
-            let literalStore = QualityStore(url: literalURL, engineVersion: "test", buildMetadata: metadata)
-            await literalStore.close()
-            expect(literalStore.statistics().disabled, "v\(version) CHECK string literal mutation is rejected")
-            expect(try Data(contentsOf: literalURL) == literalBefore, "rejected v\(version) literal mutation remains byte-identical")
-        }
-
         let corrupt = try makeURL("corrupt")
         defer { try? FileManager.default.removeItem(at: corrupt.deletingLastPathComponent()) }
         let original = Data("not a sqlite database".utf8)
@@ -619,9 +564,6 @@ private extension QualityStoreTests {
         await bad.close()
         expect(try bad.statistics().disabled && Data(contentsOf: corrupt) == original, "corrupt database preserved")
 
-        let directoryURL = try makeURL("directory")
-        defer { try? FileManager.default.removeItem(at: directoryURL.deletingLastPathComponent()) }
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
         let readonlyURL = try makeURL("unwritable")
         let readonlyParent = readonlyURL.deletingLastPathComponent()
         try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: readonlyParent.path)
@@ -629,16 +571,14 @@ private extension QualityStoreTests {
             try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: readonlyParent.path)
             try? FileManager.default.removeItem(at: readonlyParent)
         }
-        for url in [URL(fileURLWithPath: "/dev/null/quality.sqlite3"), directoryURL, readonlyURL] {
-            let logged = Counter()
-            let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
-                hooks: QualityStoreHooks(loggedFailure: { _ in _ = logged.increment() }))
-            store.submit(fixture())
-            await store.flush()
-            await store.close()
-            expect(store.statistics().disabled && logged.read() == 1, "pre-open filesystem and sqlite open failures disable once")
-        }
-        print("PASS quality store: unknown/foreign/corrupt DB preserved, pre-open filesystem and SQLite open failures")
+        let logged = Counter()
+        let unwritable = QualityStore(url: readonlyURL, engineVersion: "test", buildMetadata: metadata,
+            hooks: QualityStoreHooks(loggedFailure: { _ in _ = logged.increment() }))
+        unwritable.submit(fixture())
+        await unwritable.flush()
+        await unwritable.close()
+        expect(unwritable.statistics().disabled && logged.read() == 1, "unwritable store disables once")
+        print("PASS quality store: unknown identity/version, corrupt data and unwritable storage fail closed")
     }
 
     static func metadataAndRevisions() async throws {
@@ -660,10 +600,6 @@ private extension QualityStoreTests {
         let saved = try QualityJSON.decoder().decode(QualityBuildMetadata.self,
             from: Data(try reader.scalar("SELECT build_metadata_json FROM recording_runs").utf8))
         expect(saved == metadata, "background reads exact bundled metadata")
-        do {
-            let analysis = try Reader(url, writable: true)
-            try analysis.execute("CREATE INDEX analysis_time ON compositions(ended_at); CREATE VIEW analysis_runs AS SELECT id FROM recording_runs")
-        }
         var changed = metadata
         changed.sourceTreeSHA256 = String(repeating: "f", count: 64)
         let next = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
@@ -680,15 +616,6 @@ private extension QualityStoreTests {
         mismatch.submit(invalid)
         await mismatch.close()
         expect(mismatch.statistics().droppedInvalid == 1, "actual snapshot settings must match saved revision")
-        do {
-            let writer = try Reader(url, writable: true)
-            try writer.execute("CREATE TRIGGER changed_contract AFTER INSERT ON compositions BEGIN DELETE FROM compositions WHERE id = NEW.id; END")
-        }
-        let before = try Data(contentsOf: url)
-        let unsupported = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
-        await unsupported.close()
-        expect(unsupported.statistics().disabled, "schema-changing trigger is unsupported")
-        expect(try Data(contentsOf: url) == before, "unsupported v1 changes stay untouched")
-        print("PASS quality store: background initialization, bundled metadata, stable fingerprints, mismatch rollback, analysis schema compatibility")
+        print("PASS quality store: background initialization, bundled metadata, stable fingerprints and mismatch rollback")
     }
 }

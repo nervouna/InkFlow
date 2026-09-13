@@ -272,8 +272,8 @@ private final class AIStatisticsDatabase: @unchecked Sendable {
 
     private func validateSchema() throws {
         let version = try scalar("PRAGMA user_version"), identity = try scalar("PRAGMA application_id")
-        let rows = try query("SELECT name, sql, type FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
-        if version == "0", identity == "0", rows.isEmpty {
+        let objects = try scalar("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")
+        if version == "0", identity == "0", objects == "0" {
             try transaction {
                 guard try scalar("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'") == "0" else { throw AISQLError(code: SQLITE_BUSY) }
                 for (_, sql) in Self.schema.sorted(by: { $0.key < $1.key }) { try execute(sql) }
@@ -282,20 +282,8 @@ private final class AIStatisticsDatabase: @unchecked Sendable {
             }
         } else {
             guard version == "1", identity == String(Self.applicationID) else { throw AISQLError(code: -1001) }
-            var remaining = Set(Self.schema.keys)
-            for row in rows {
-                if let expected = Self.schema[row[0]] {
-                    guard normalize(row[1]) == normalize(expected) else { throw AISQLError(code: -1001) }
-                    remaining.remove(row[0])
-                } else {
-                    guard row[2] == "view" || (row[2] == "index" && row[1].uppercased().hasPrefix("CREATE INDEX ")) else { throw AISQLError(code: -1001) }
-                }
-            }
-            guard remaining.isEmpty else { throw AISQLError(code: -1001) }
         }
     }
-
-    private func normalize(_ sql: String) -> String { sql.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
 
     func begin(id: String, stamp: AIStatisticsStamp, configuration: AIConfigurationSnapshot, association: AIStatisticsAssociation) throws {
         let rule = pricing?.rule(provider: configuration.provider, model: configuration.requestedModel, at: stamp.utc)

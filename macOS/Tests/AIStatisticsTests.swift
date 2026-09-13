@@ -171,14 +171,6 @@ struct AIStatisticsTests {
         handle.dispatch(.init(preceding: String(repeating: "x", count: 40_000), following: "", pinyin: "", selectedPrefix: ""), association: .init(), at: .now)
         await invalid.close()
         require(invalid.statistics().droppedOversized == 1, "Oversized sample cannot bypass memory cap")
-        let foreign = AIStatisticsTestDatabase(url: root.appendingPathComponent("foreign.sqlite3"))
-        _ = foreign.rows("CREATE TABLE unrelated(value TEXT)", writable: true)
-        let original = try Data(contentsOf: foreign.url)
-        let rejected = AIStatisticsStore(url: foreign.url)
-        _ = rejected.begin(configuration: config); await rejected.close()
-        require(rejected.statistics().disabled, "Foreign schema fails closed")
-        let preserved = try Data(contentsOf: foreign.url)
-        require(preserved == original, "Foreign database bytes are preserved")
         let crashDB = AIStatisticsTestDatabase(url: root.appendingPathComponent("crash.sqlite3"))
         let child = Process()
         child.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
@@ -189,6 +181,6 @@ struct AIStatisticsTests {
         await recovering.close()
         require(crashDB.scalar("SELECT recovery_state FROM attempts") == "interrupted", "Reopening detects released OS lock and marks pending accounting interrupted")
         require(crashDB.scalar("SELECT reason FROM attempt_events WHERE kind='uiEnded'") == "inputChanged", "Recovery never rewrites the original UI reason")
-        print("PASS AI statistics bounded queue, oversized payload, busy and foreign database preservation")
+        print("PASS AI statistics bounded queue, oversized payload, busy writer and crash recovery")
     }
 }

@@ -40,8 +40,9 @@ dictionary or automatic English sentence splitting.
 The supplemental spellings and policy ship with application updates. The Chinese
 check/download action does not update this file. Review changes against the
 provenance, then run the existing prepare-rime fixtures and native engine tests,
-which select all 122 display spellings and verify representative prefix, case,
-backspace, short-code and mixed/custom-phrase boundaries. Runtime/UI acceptance
+which validate every source row structurally and select representative display
+spellings across case, punctuation and spaces. They also verify prefix, backspace,
+short-code and mixed/custom-phrase boundaries. Runtime/UI acceptance
 in actual typing clients remains separate from these isolated tests.
 
 See [technology-english-NOTICE.txt](../Licenses/technology-english-NOTICE.txt) for
