@@ -101,6 +101,12 @@ impact_classify() {
     macOS/Tests/Dictionary*|macOS/scripts/test-dictionary*.sh|macOS/scripts/build-dictionary*.sh)
       impact_rule "$path" 'dictionary test domain' dictionary-generator deployment dictionary-updates dictionary-activation ;;
 
+    macOS/Sources/FeedbackReport.swift|macOS/Sources/FeedbackSettingsView.swift)
+      impact_rule "$path" 'opt-in feedback settings path' settings
+      impact_manual_add manual-settings ;;
+    macOS/Sources/AboutSettingsView.swift)
+      impact_rule "$path" 'about settings presentation' settings
+      impact_manual_add manual-settings ;;
     macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift)
       impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       impact_manual_add manual-input manual-settings ;;
@@ -121,7 +127,7 @@ impact_classify() {
       impact_manual_add manual-input ;;
     macOS/Tests/EngineTests.swift) impact_rule "$path" 'engine tests' engine ;;
     macOS/Tests/Controller*|macOS/scripts/test-controller*.sh) impact_rule "$path" 'controller tests' controller ai-headless ;;
-    macOS/Tests/SettingsTests.swift) impact_rule "$path" 'settings tests' settings ;;
+    macOS/Tests/SettingsTests.swift|macOS/Tests/SettingsUITests.swift) impact_rule "$path" 'settings tests' settings ;;
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 

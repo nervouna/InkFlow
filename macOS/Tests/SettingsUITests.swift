@@ -42,7 +42,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "反馈", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)
@@ -113,6 +113,7 @@ struct SettingsUITests {
             return
         }
         checkLayout(window)
+        checkFeedbackAndAbout(window, settings: settings)
         checkCustomPhrasesLayout(window, settings: settings)
         checkInputLayout(window, settings: settings)
         checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
@@ -172,6 +173,124 @@ struct SettingsUITests {
             while window.isVisible { drainEvents(seconds: 0.25) }
         }
         window.close()
+    }
+
+    @MainActor static func checkFeedbackAndAbout(_ window: NSWindow, settings: IFSettings) {
+        let state = FeedbackUIState()
+        let reporter = FeedbackReporter(
+            metadata: FeedbackMetadata(version: "0.4.1", build: "41", operatingSystem: "macOS 26.0 (25A1)"),
+            collectLogs: {
+                await state.recordCollection()
+                return "synthetic feedback log"
+            },
+            openURL: { url in
+                state.openedURLs.append(url)
+                return true
+            }
+        )
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(
+            settings: settings, initialSection: .feedback, feedbackReporter: reporter
+        ))
+        checkMinimumSize(window)
+        drainEvents()
+
+        func control(_ identifier: String) -> [String: Any] {
+            let elements = IFAccessibilityTree(window)
+            let matches = elements.filter { $0["id"] as? String == identifier }
+            if matches.count != 1 { for element in elements { print("AX feedback \(element)") } }
+            check(matches.count == 1, "One native Feedback control: \(identifier)")
+            return matches[0]
+        }
+        func press(_ identifier: String) {
+            let action = Process()
+            action.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+            action.arguments = ["--press-accessibility", String(ProcessInfo.processInfo.processIdentifier), identifier]
+            try! action.run()
+            let deadline = Date.now.addingTimeInterval(5)
+            while action.isRunning && Date.now < deadline { drainEvents(seconds: 0.02) }
+            if action.isRunning { action.terminate(); check(false, "Native Feedback action timed out: \(identifier)") }
+            check(action.terminationStatus == 0, "Native Feedback action: \(identifier)")
+            drainEvents()
+        }
+        func waitForOpen(count: Int) {
+            let deadline = Date.now.addingTimeInterval(5)
+            while state.openedURLs.count < count && Date.now < deadline { drainEvents(seconds: 0.02) }
+            check(state.openedURLs.count == count, "Feedback action must reach the injected browser handoff")
+        }
+        func body(of url: URL) -> String {
+            URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+                .first(where: { $0.name == "body" })?.value ?? ""
+        }
+
+        let includeLogs = control("settings.feedback.includeLogs")
+        let submit = control("settings.feedback.submitFeedback")
+        check(includeLogs["role"] as? String == "AXCheckBox" && includeLogs["value"] as? Int == 0,
+              "Feedback log attachment must be an accessible default-off checkbox")
+        check(includeLogs["label"] as? String == "附上最近 10 分钟运行日志")
+        check(submit["role"] as? String == "AXButton" && submit["label"] as? String == "在 GitHub 提交反馈",
+              "Feedback handoff must be an accessible named button")
+        let includeFrame = (includeLogs["frame"] as! NSValue).rectValue
+        let submitFrame = (submit["frame"] as! NSValue).rectValue
+        check(submitFrame.minY > includeFrame.maxY, "Feedback button must appear above the log checkbox")
+        check(abs(submitFrame.minX - includeFrame.minX) < 1,
+              "Feedback button and checkbox must share the page's leading alignment")
+        let initialFeedbackElements = IFAccessibilityTree(window)
+        check(!initialFeedbackElements.contains { $0["role"] as? String == "AXStaticText" },
+              "Feedback normal state must contain no static explanatory text")
+        check(window.title == "反馈")
+
+        press("settings.feedback.submitFeedback")
+        waitForOpen(count: 1)
+        check(state.logCollections == 0, "Default-off Feedback action must not collect logs")
+        check(!body(of: state.openedURLs[0]).contains("运行日志"))
+
+        press("settings.feedback.includeLogs")
+        check(control("settings.feedback.includeLogs")["value"] as? Int == 1)
+        press("settings.feedback.submitFeedback")
+        waitForOpen(count: 2)
+        check(state.logCollections == 1)
+        check(body(of: state.openedURLs[1]).contains("synthetic feedback log"))
+        check(window.title == "反馈")
+
+        let failureState = FeedbackUIState()
+        let failingReporter = FeedbackReporter(
+            metadata: FeedbackMetadata(version: "0.4.1", build: "41", operatingSystem: "macOS 26.0 (25A1)"),
+            collectLogs: { throw FeedbackLogError.commandFailed(7) },
+            openURL: { url in
+                failureState.openedURLs.append(url)
+                return true
+            }
+        )
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(
+            settings: settings, initialSection: .feedback, feedbackReporter: failingReporter
+        ))
+        drainEvents()
+        press("settings.feedback.includeLogs")
+        press("settings.feedback.submitFeedback")
+        let failureDeadline = Date.now.addingTimeInterval(5)
+        while failureState.openedURLs.isEmpty && Date.now < failureDeadline { drainEvents(seconds: 0.02) }
+        let status = control("settings.feedback.status")
+        check(status["value"] as? String == "未能采集运行日志，已打开不含日志的反馈页面。",
+              "Log collection failure must remain visible after the editable issue handoff")
+
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(
+            settings: settings, initialSection: .about, feedbackReporter: reporter
+        ))
+        drainEvents()
+        let aboutElements = IFAccessibilityTree(window)
+        check(window.title == "关于")
+        check(!aboutElements.contains { element in
+            let identifier = element["id"] as? String ?? ""
+            let text = [element["label"], element["value"]].compactMap { $0 as? String }.joined()
+            return identifier.hasPrefix("settings.feedback.") || text.contains("提交反馈") || text.contains("运行日志")
+        }, "About must contain version presentation only, without Feedback controls")
+        check(aboutElements.contains { ($0["value"] as? String)?.hasPrefix("版本 ") == true }
+              && aboutElements.contains { ($0["value"] as? String)?.hasPrefix("librime ") == true },
+              "About must retain InkFlow and librime version information")
+
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
+        drainEvents()
+        print("PASS Feedback/About UI: standalone ordered controls without help, injected action/failure, version-only About")
     }
 
     @MainActor static func checkInputLayout(_ window: NSWindow, settings: IFSettings) {
@@ -647,4 +766,12 @@ struct SettingsUITests {
         panel.hide()
         print("PASS native sizes: minimum vertical width 150, stable height, wider content expands, direction switches preserve horizontal sizing and digit keys")
     }
+}
+
+@MainActor
+final class FeedbackUIState {
+    var logCollections = 0
+    var openedURLs: [URL] = []
+
+    func recordCollection() { logCollections += 1 }
 }

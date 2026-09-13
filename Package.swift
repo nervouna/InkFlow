@@ -28,7 +28,8 @@ let inkFlowCoreSources = [
     "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "Engine.swift", "InputController.swift", "InputPreferences.swift",
     "PackagedCache.swift", "PackagedCacheBootstrap.swift", "QualityRecorder.swift", "QualityRecords.swift",
-    "QualityStore.swift", "Settings.swift", "SmartSettingsView.swift", "StartupDiagnostics.swift",
+    "QualityStore.swift", "Settings.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift",
+    "SmartSettingsView.swift", "StartupDiagnostics.swift",
 ]
 let installerCoreSources = [
     "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
