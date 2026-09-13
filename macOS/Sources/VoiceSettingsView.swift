@@ -2,7 +2,6 @@ import SwiftUI
 
 struct VoiceSettingsView: View {
     @ObservedObject var settings: IFSettings
-    @ObservedObject var smart: IFSmartSettings
 
     var body: some View {
         Form {
@@ -25,14 +24,6 @@ struct VoiceSettingsView: View {
             Section("快捷键") {
                 Text("按住右 Shift 说话，松开结束。")
                 Text("双击右 Shift 开始或结束连续听写；Esc 取消。")
-            }
-            Section("语音润色") {
-                Toggle("润色语音转写", isOn: $settings.voicePolishEnabled)
-                    .accessibilityIdentifier("voice.polish")
-                Text(smart.isAvailable ? "使用「AI 服务」中保存的配置。" : "请先在「AI 服务」中保存配置。")
-                    .font(.callout).foregroundStyle(.secondary)
-                Text("开启后将本次转写发送至配置的服务，失败时保留原文。与智能预测独立，默认关闭。")
-                    .font(.callout).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)

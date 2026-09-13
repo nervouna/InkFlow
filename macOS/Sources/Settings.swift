@@ -159,9 +159,9 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case appearance = "外观"
     case input = "输入"
     case personalization = "个性化"
-    case smart = "AI 服务"
     case voice = "语音"
     case dictionaries = "词库"
+    case smart = "AI 服务"
     case about = "关于"
     var id: Self { self }
     var symbol: String {
@@ -203,8 +203,8 @@ struct SettingsView: View {
                 if section == .about { about }
                 else if section == .input { input }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
-                else if section == .smart { SmartSettingsView(smart: settings.smart) }
-                else if section == .voice { VoiceSettingsView(settings: settings, smart: settings.smart) }
+                else if section == .smart { SmartSettingsView(settings: settings, smart: settings.smart) }
+                else if section == .voice { VoiceSettingsView(settings: settings) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else { appearance }
             }
@@ -216,22 +216,27 @@ struct SettingsView: View {
 
     private var appearance: some View {
         Form {
-            Picker("候选词方向", selection: $settings.vertical) {
-                Text("水平").tag(false)
-                Text("竖直").tag(true)
+            Section {
+                Picker("候选词方向", selection: $settings.vertical) {
+                    Text("水平").tag(false)
+                    Text("竖直").tag(true)
+                }
+                .accessibilityIdentifier("settings.direction")
+                Picker("候选词数量", selection: $settings.candidateCount) {
+                    ForEach(IFSettings.candidateCounts, id: \.self) { Text(String($0)).tag($0) }
+                }
+                .accessibilityIdentifier("settings.count")
+                Picker("候选词字号", selection: $settings.fontSize) {
+                    ForEach(IFSettings.fontSizes, id: \.self) { Text(String($0)).tag($0) }
+                }
+                .accessibilityIdentifier("settings.fontSize")
             }
-            .accessibilityIdentifier("settings.direction")
-            Picker("候选词数量", selection: $settings.candidateCount) {
-                ForEach(IFSettings.candidateCounts, id: \.self) { Text(String($0)).tag($0) }
+            Section {
+                Toggle("庆祝模式", isOn: $settings.thunderMode)
+                    .help("每次输入和上屏时在光标处绽放彩花")
+                    .accessibilityLabel("庆祝模式")
+                    .accessibilityIdentifier("settings.thunderMode")
             }
-            .accessibilityIdentifier("settings.count")
-            Picker("候选词字号", selection: $settings.fontSize) {
-                ForEach(IFSettings.fontSizes, id: \.self) { Text(String($0)).tag($0) }
-            }
-            .accessibilityIdentifier("settings.fontSize")
-            Toggle("庆祝模式", isOn: $settings.thunderMode)
-                .help("每次输入和上屏时在光标处绽放彩花")
-                .accessibilityIdentifier("settings.thunderMode")
         }
         .formStyle(.grouped)
         .accessibilityIdentifier("settings.appearance")

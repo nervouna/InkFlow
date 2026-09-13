@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SmartSettingsView: View {
+    @ObservedObject var settings: IFSettings
     @ObservedObject var smart: IFSmartSettings
     @State private var baseURL: String
     @State private var apiKey: String
@@ -8,7 +9,8 @@ struct SmartSettingsView: View {
     @State private var saveError: String?
     @State private var saved = false
 
-    init(smart: IFSmartSettings) {
+    init(settings: IFSettings, smart: IFSmartSettings) {
+        self.settings = settings
         self.smart = smart
         _baseURL = State(initialValue: smart.configuration.baseURL)
         _apiKey = State(initialValue: smart.configuration.apiKey)
@@ -30,8 +32,6 @@ struct SmartSettingsView: View {
                     Button("保存配置", action: save)
                         .accessibilityIdentifier("smart.save")
                 }
-                Text("智能预测与语音润色共用此配置。API Key 保存在本机钥匙串。")
-                    .font(.caption).foregroundStyle(.secondary)
                 if let error = saveError ?? smart.credentialError ?? smart.requestError {
                     Text(error).font(.caption).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
@@ -42,6 +42,10 @@ struct SmartSettingsView: View {
                 Toggle("智能预测", isOn: $smart.isEnabled)
                     .disabled(!smart.isAvailable)
                     .accessibilityIdentifier("smart.enabled")
+                Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("smart.notice")
                 Stepper(value: $smart.triggerDelayMS, in: IFSmartSettings.triggerDelayRangeMS, step: 100) {
                     LabeledContent("推荐触发时延", value: "\(smart.triggerDelayMS) ms")
                 }
@@ -49,10 +53,10 @@ struct SmartSettingsView: View {
                 Text("停止输入后等待多久再请求 AI 推荐。默认 500ms，修改后自动保存并生效。")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。与语音润色独立，默认关闭。")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("smart.notice")
+            }
+            Section("语音润色") {
+                Toggle("润色语音转写", isOn: $settings.voicePolishEnabled)
+                    .accessibilityIdentifier("voice.polish")
             }
         }
         .formStyle(.grouped)

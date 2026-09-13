@@ -42,7 +42,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "AI 服务", "语音", "词库", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)
@@ -307,6 +307,10 @@ struct SettingsUITests {
     }
 
     @MainActor static func checkCustomPhrasesLayout(_ window: NSWindow, settings: IFSettings) {
+        func accessibilityText(_ element: [String: Any]) -> String {
+            let label = element["label"] as? String ?? ""
+            return label.isEmpty ? element["value"] as? String ?? "" : label
+        }
         // In-process SwiftUI sidebar children are AX proxies without selectable NSAccessibility
         // rows. Choose the initial section for layout checks; exercise navigation in CUA.
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
@@ -331,6 +335,11 @@ struct SettingsUITests {
                 }
             }
             check(elements.contains { $0["id"] as? String == "phrases.empty" })
+            check(!elements.contains { element in
+                let text = accessibilityText(element)
+                return text == "输入完整输入码时，短语优先显示。同一输入码可添加多个短语。"
+                    || text == "自动保存；正在输入的组合结束后生效。"
+            }, "Personalization must not show explanatory annotations")
         }
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         checkMinimumSize(window)
@@ -341,6 +350,10 @@ struct SettingsUITests {
 
     @MainActor static func checkSmartSettings(_ window: NSWindow, server: IMKServer, controller: InkFlowInputController,
                                             settings: IFSettings, defaults: UserDefaults) {
+        func accessibilityText(_ element: [String: Any]) -> String {
+            let label = element["label"] as? String ?? ""
+            return label.isEmpty ? element["value"] as? String ?? "" : label
+        }
         func smartMenuItem() -> NSMenuItem {
             guard let item = controller.menu()!.items.first(where: { $0.title == "智能预测" }) else {
                 fatalError("Missing smart prediction menu item")
@@ -357,15 +370,31 @@ struct SettingsUITests {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
-            let identifiers = ["smart.enabled", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save"]
+            let identifiers = ["smart.enabled", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save", "voice.polish"]
             let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
-            check(controls.count == identifiers.count, "Smart settings must expose toggle, three fields and save button")
+            check(controls.count == identifiers.count, "AI settings must expose prediction and voice polish toggles, three fields and save button")
             for control in controls {
                 let frame = (control["frame"] as! NSValue).rectValue
-                check(frame.width > 0 && frame.height > 0 && window.convertToScreen(window.contentLayoutRect).contains(frame),
-                      "Smart setting control must fit the minimum window")
+                check(frame.width > 0 && frame.height > 0,
+                      "AI setting control \(control["id"] as? String ?? "") must have an accessible frame")
             }
             check(controls.first { $0["id"] as? String == "smart.enabled" }?["enabled"] as? Bool == false)
+            let prediction = controls.first { $0["id"] as? String == "smart.enabled" }
+            let notice = elements.first { $0["id"] as? String == "smart.notice" }
+            check(notice.map(accessibilityText) == "开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。",
+                  "Prediction privacy note must use concise copy")
+            if let predictionFrame = (prediction?["frame"] as? NSValue)?.rectValue,
+               let noticeFrame = (notice?["frame"] as? NSValue)?.rectValue {
+                check(noticeFrame.maxY <= predictionFrame.minY,
+                      "Prediction privacy note must appear immediately below its toggle")
+            } else {
+                check(false, "Prediction toggle and privacy note must expose accessible frames")
+            }
+            check(!elements.contains { element in
+                let text = accessibilityText(element)
+                return text == "智能预测与语音润色共用此配置。API Key 保存在本机钥匙串。"
+                    || text.contains("与语音润色独立")
+            }, "AI settings must omit removed annotations")
         }
         let editingFailures = smartEditingFailures(window, settings: settings, defaults: defaults)
         check(editingFailures.isEmpty, editingFailures.joined(separator: "; "))

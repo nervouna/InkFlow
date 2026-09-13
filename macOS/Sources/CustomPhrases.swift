@@ -47,8 +47,6 @@ struct CustomPhrasesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("自定义短语").font(.headline)
-            Text("输入完整输入码时，短语优先显示。同一输入码可添加多个短语。")
-                .font(.callout).foregroundStyle(.secondary)
             if let message = settings.customPhrasesLoadError ?? settings.inputSettingsError ?? error {
                 Text(message).font(.callout).foregroundStyle(.red)
                     .accessibilityIdentifier("phrases.error")
@@ -87,8 +85,6 @@ struct CustomPhrasesView: View {
                 Spacer()
                 Text("\(settings.customPhrases.count) 条").foregroundStyle(.secondary)
             }
-            Text("自动保存；正在输入的组合结束后生效。")
-                .font(.caption).foregroundStyle(.secondary)
         }
         .padding(20)
         .sheet(item: $editor) { phrase in
@@ -129,8 +125,6 @@ struct CustomPhraseEditor: View {
                 TextField("短语", text: $text, prompt: Text("例如 台北市信义区"))
                     .accessibilityIdentifier("phrases.editor.text")
             }
-            Text("输入码使用 a–z；大写字母会自动转为小写。")
-                .font(.caption).foregroundStyle(.secondary)
             if let error {
                 Text(error).foregroundStyle(.red).font(.callout)
                     .accessibilityIdentifier("phrases.editor.error")
