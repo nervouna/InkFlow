@@ -1,5 +1,24 @@
 # Chinese dictionary generation
 
+## Dictionary composition
+
+InkFlow combines the following sources into one always-on Chinese dictionary. The
+Settings window intentionally shows only whether that dictionary is ready, its entry
+count and update actions; provenance and generation details live here.
+
+| Source | Included material | Upstream or local source |
+| --- | --- | --- |
+| Frost | Character table, base, extended, idioms and poems, computer terms, Internet terms | [`gaboolic/rime-frost`](https://github.com/gaboolic/rime-frost) |
+| Rime Ice | Base and extended Chinese vocabulary | [`iDvel/rime-ice`](https://github.com/iDvel/rime-ice) |
+| Sogou conversion | Computer vocabulary converted for Rime | [`alswl/rime-selected`](https://github.com/alswl/rime-selected) |
+| Legacy Pinyin | Compatibility additions retained from the former baseline | [`rime/rime-pinyin-simp`](https://github.com/rime/rime-pinyin-simp) |
+| InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`macOS/config/chinese-overrides.tsv`](config/chinese-overrides.tsv) |
+| Technical English | Admitted technology terms and abbreviations | [`macOS/Data/TECHNOLOGY.md`](Data/TECHNOLOGY.md) |
+
+`DictionaryModels.swift` is the source of truth for exact files, pinned commits,
+digests and byte counts. License and redistribution notes remain under
+`macOS/Licenses/`.
+
 `DictionaryModels.swift` pins the initial source commits, file paths, byte sizes,
 Git blob IDs and SHA-256 values. `prepare-chinese.sh` downloads only these explicit
 text files into ignored `build/dictionary-sources`. It runs the same
@@ -167,17 +186,13 @@ download/update action. There is no scheduled check. One operation runs at a
 time, including the wait for input to become idle. Closing Settings leaves work
 running and reopening resumes its current progress.
 
-The pane shows all domain coverage as enabled by default, with no switches. Chinese
-check/download includes the rime-selected conversion repository, not Sogou's live
-service. Curated Chinese and [technical English](Data/TECHNOLOGY.md) update with the app.
-The pane reports the running manifest's full selectable content version,
-term/reading count and successful local activation time. Checking, downloading,
-validation failure, failed activation and content-identical source changes do
-not advance that time. Expand Sources for catalog-owned names, full commits and
-immutable GitHub file links. These describe Chinese dictionary inputs, excluding
-English, custom phrases and learning. Long source lists scroll independently of
-the operation controls. Errors have a Chinese summary and stage, the engine's
-current availability/version, retry, and selectable scrollable technical detail.
+The pane has no source switches. It reports whether the combined dictionary is ready,
+its Chinese term/reading count and one context-sensitive action: check, update, retry
+or restore. Busy states expose no duplicate action. Internal content versions, source
+commits and immutable URLs remain in this document and `DictionaryModels.swift`, not
+in Settings. Recoverable failures state that current input remains available; engine
+failure instead offers restoration. Both retain selectable technical detail behind a
+collapsed disclosure.
 
 Every live native session must be free of composition, native/buffered commits
 and client-delivery callbacks before replacement. The coordinator prepares the
@@ -216,14 +231,15 @@ editor and another client such as ChatGPT or WeChat:
    input method, and verify the learned preference remains. With clean learning,
    the pinned Frost weights rank `beijing`/`beijign` as 背景 and `shanghai` as 伤害.
    北京 and 上海 remain selectable; these source-frequency outcomes are deliberate.
-4. In Settings → 词库, inspect version/count/date and expand source links. Check
-   updates, then choose 下载并更新 only if offered. Leave a composition active in
+4. In Settings → 词库, confirm the ready state and entry count. Check updates, then
+   choose 更新词库 only if offered. Leave a composition active in
    either client while preparing; confirm input continues and activation waits
-   until both clients have finished. Confirm the newly active version and date.
+   until both clients have finished. Confirm the success state after activation.
 5. Close/reopen Settings during an operation and confirm progress continues. On
-   a check failure, inspect/copy the expanded details, bring the window forward
-   and switch panes, then close/reopen it. The error should clear only at window
-   closure or the next operation, and retry should remain possible.
+   a check failure, confirm current input remains available, inspect/copy the
+   expanded details, bring the window forward and switch panes, then close/reopen
+   it. The error should clear only at window closure or the next operation, and
+   retry should remain possible.
 
 Broad coverage includes poems and carries a real resource cost. One measured
 prepared version occupied about 137 MiB, including 30 MiB shared resources,

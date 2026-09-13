@@ -3,186 +3,105 @@ import SwiftUI
 /// Presentation only: the process-owned coordinator retains all work across window closure.
 struct DictionarySettingsView: View {
     var coordinator: IFDictionaryCoordinator?
-    @State private var sourcesExpanded = false
     @State private var detailsExpanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
-                    if coordinator?.engineAvailable == true, let active = coordinator?.active {
-                        activeDictionary(active)
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("默认启用：科技与软件、网络热词、科技英文与缩写。")
-                                .accessibilityIdentifier("dictionaries.coverage")
-                            Text("检查更新涵盖中文上游词库；搜狗计算机词汇跟随 Rime 转换仓库更新。")
-                                .accessibilityIdentifier("dictionaries.updateScope")
-                            Text("精选科技中文与英文词条随应用更新。")
-                                .accessibilityIdentifier("dictionaries.appUpdates")
-                        }
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        // Keep IDs on content leaves; a DisclosureGroup ID overrides descendant IDs.
-                        DisclosureGroup("词库来源", isExpanded: $sourcesExpanded) {
-                            sources(active.manifest)
-                        }
-                    } else {
-                        Text(coordinator == nil ? "词库服务尚未就绪" : "输入引擎暂不可用")
-                            .font(.headline)
-                            .accessibilityIdentifier("dictionaries.unavailable")
-                        Text("恢复词库后可查看当前版本并检查更新。")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(1)
-            }
-            .accessibilityIdentifier("dictionaries.metadata")
-
-            Divider()
+        VStack(alignment: .leading, spacing: 16) {
             if let failure = coordinator?.failure {
-                VStack(alignment: .leading, spacing: 6) {
-                    Label(failure.stage.failureSummary, systemImage: "exclamationmark.triangle")
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("dictionaries.failure")
-                    Text("失败阶段：\(failure.stage.displayName)")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("dictionaries.failureStage")
-                    Text(coordinator?.engineAvailable == true && coordinator?.active != nil
-                         ? "仍在使用词库 \(coordinator!.active!.manifest.contentVersion.prefix(15))…"
-                         : "输入引擎暂不可用")
-                        .font(.caption).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("dictionaries.failureEngineStatus")
-                    DisclosureGroup("错误详情", isExpanded: $detailsExpanded) {
-                        ScrollView([.horizontal, .vertical]) {
-                            Text(failure.technicalDetails)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
-                                .fixedSize(horizontal: true, vertical: true)
-                                .accessibilityIdentifier("dictionaries.errorDetails")
-                                .padding(4)
-                        }
-                        .frame(height: 100)
-                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
+                Label(coordinator?.engineAvailable == true ? "更新失败" : "词库暂不可用",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.headline)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("dictionaries.failure")
+                Text(coordinator?.engineAvailable == true
+                     ? "当前词库仍可正常使用。"
+                     : "请恢复后继续输入。")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("dictionaries.failureMessage")
+                DisclosureGroup("查看错误详情", isExpanded: $detailsExpanded) {
+                    ScrollView([.horizontal, .vertical]) {
+                        Text(failure.technicalDetails)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: true, vertical: true)
+                            .accessibilityIdentifier("dictionaries.errorDetails")
+                            .padding(4)
                     }
+                    .frame(height: 100)
+                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
                 }
+            } else if coordinator?.engineAvailable == true, let active = coordinator?.active {
+                Label("词库已启用", systemImage: "checkmark.circle")
+                    .font(.headline)
+                    .accessibilityIdentifier("dictionaries.state")
+                Text("\(active.manifest.entryCount.formatted()) 个中文词条")
+                    .accessibilityIdentifier("dictionaries.count")
+                Text(active.isBundled ? "正在使用随 InkFlow 提供的词库。" : "正在使用已更新的词库。")
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("dictionaries.engineStatus")
             } else {
+                Label(coordinator == nil ? "正在准备词库…" : "词库暂不可用",
+                      systemImage: coordinator == nil ? "hourglass" : "exclamationmark.triangle")
+                    .font(.headline)
+                    .accessibilityIdentifier("dictionaries.state")
+                if coordinator != nil {
+                    Text("恢复后即可继续输入。")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let status {
                 HStack(spacing: 8) {
                     if coordinator?.isBusy == true {
-                        ProgressView().controlSize(.small)
+                        ProgressView()
+                            .controlSize(.small)
                             .accessibilityLabel("词库更新进行中")
                     }
-                    Text(status).font(.callout)
+                    Text(status)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("dictionaries.status")
                 }
             }
-            HStack {
-                Button("检查词库更新") { coordinator?.checkForUpdates() }
-                    .disabled(coordinator?.canCheck != true)
+
+            if coordinator?.canRetry == true {
+                Button(coordinator?.engineAvailable == true ? "重试" : "恢复词库", action: retry)
+                    .accessibilityIdentifier("dictionaries.retry")
+            } else if coordinator?.canUpdate == true {
+                Button("更新词库", action: downloadAndUpdate)
+                    .accessibilityIdentifier("dictionaries.update")
+            } else if coordinator?.canCheck == true {
+                Button("检查词库更新", action: checkForUpdates)
                     .accessibilityIdentifier("dictionaries.check")
-                if coordinator?.canUpdate == true {
-                    Button("下载并更新") { coordinator?.downloadAndUpdate() }
-                        .disabled(coordinator?.canUpdate != true)
-                        .accessibilityIdentifier("dictionaries.update")
-                }
-                if coordinator?.canRetry == true {
-                    Button("重试") { coordinator?.retry() }
-                        .accessibilityIdentifier("dictionaries.retry")
-                }
-                Spacer(minLength: 0)
             }
+
+            Spacer(minLength: 0)
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: coordinator?.failure?.technicalDetails) { _, _ in detailsExpanded = false }
     }
 
-    private func activeDictionary(_ active: IFDictionaryActiveInfo) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            Text("当前使用的词库").font(.headline)
-            Text(active.manifest.contentVersion)
-                .font(.system(.caption, design: .monospaced))
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel("当前词库版本")
-                .accessibilityValue(active.manifest.contentVersion)
-                .accessibilityIdentifier("dictionaries.version")
-            Text("中文词条数：\(active.manifest.entryCount.formatted())（词语与读音组合）")
-                .accessibilityIdentifier("dictionaries.count")
-            Text("启用时间：\(active.activatedAt.formatted(date: .numeric, time: .shortened))")
-                .accessibilityIdentifier("dictionaries.activatedAt")
-            Text(active.isBundled ? "正在使用随应用提供的词库。" : "正在使用已下载并验证的词库。")
-                .font(.caption).foregroundStyle(.secondary)
-                .accessibilityIdentifier("dictionaries.engineStatus")
-        }
-    }
-
-    private func sources(_ manifest: IFDictionaryManifest) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("中文来源").font(.subheadline)
-            ForEach(manifest.sources, id: \.id) { receipt in
-                // The catalog owns names and destinations; downloaded metadata cannot introduce links.
-                if let spec = IFDictionaryCatalog.sources.first(where: { $0.id == receipt.id }),
-                   IFDictionaryHash.isHex(receipt.commit, length: 40) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Link(spec.name, destination: spec.sourceURL(commit: receipt.commit))
-                            .accessibilityIdentifier("dictionaries.source.\(spec.id)")
-                        Text(receipt.commit)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .accessibilityIdentifier("dictionaries.commit.\(spec.id)")
-                        Text(spec.sourceURL(commit: receipt.commit).absoluteString)
-                            .font(.caption).foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("dictionaries.url.\(spec.id)")
-                    }
-                }
-            }
-            Text("应用内精选补充：科技中文、搜狗专业词与热词；科技英文来自雾凇英文扩展和墨流维护词表。")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("dictionaries.curatedSources")
-            Link("雾凇 · 科技英文选词来源", destination: URL(string: "https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/en_dicts/en_ext.dict.yaml")!)
-                .accessibilityIdentifier("dictionaries.englishSource")
-        }
-        .padding(.top, 8)
-    }
-
-    private var status: String {
-        guard let coordinator else { return "仅在手动检查后下载更新。" }
-        if !coordinator.engineAvailable && !coordinator.isBusy { return "输入引擎暂不可用，请重试恢复。" }
-        let message: String
+    private var status: String? {
+        guard let coordinator, coordinator.failure == nil else { return nil }
+        let message: String?
         switch coordinator.activity {
-        case .idle: message = "仅在手动检查后下载更新。"
+        case .idle: message = nil
         case .checking: message = "正在检查词库更新…"
-        case .upToDate: message = "词库已是最新，无需更新。"
-        case .updateAvailable: message = "发现词库更新，可下载并更新。"
-        case .downloading: message = "正在下载词库…"
-        case .preparing: message = "正在准备词库…"
-        case .verifying: message = "正在验证词库…"
-        case .waitingForIdle: message = "词库已准备好，等待所有输入完成后启用。"
-        case .applying: message = "正在启用词库…"
+        case .upToDate: message = "词库已是最新。"
+        case .updateAvailable: message = "发现词库更新。"
+        case .downloading, .preparing, .verifying, .applying: message = "正在更新词库…"
+        case .waitingForIdle: message = "更新已准备好，将在当前输入结束后启用。"
         case .updated: message = "词库已更新并启用。"
         }
-        if let progress = coordinator.progress, progress.total > 0 {
+        guard let message else { return nil }
+        if let progress = coordinator.progress, progress.total > 0,
+           [.downloading, .preparing, .verifying, .applying].contains(coordinator.activity) {
             return "\(message)（\(progress.completed)/\(progress.total)）"
         }
         return message
     }
-}
 
-extension IFDictionaryStage {
-    var displayName: String {
-        switch self {
-        case .check: "检查更新"
-        case .download: "下载"
-        case .prepare: "准备"
-        case .verify: "验证"
-        case .apply: "启用"
-        case .rollback: "回退"
-        case .recovery: "恢复"
-        }
-    }
+    private func checkForUpdates() { coordinator?.checkForUpdates() }
+    private func downloadAndUpdate() { coordinator?.downloadAndUpdate() }
+    private func retry() { coordinator?.retry() }
 }

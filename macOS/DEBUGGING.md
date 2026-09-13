@@ -416,7 +416,7 @@ Select InkFlow to confirm it works as a system input source. If Settings shows a
 
 Dictionary preparation leaves the current engine running. The final switch waits for every live session, including inactive clients, to have no composition or pending commit. A controller owns a delivery lease until its `insertText` and marked-text callbacks return, so a nested client run loop cannot activate halfway through delivery. Complete or cancel the composition in each client to release this wait.
 
-The coordinator records a pending transaction before waiting. After an interrupted process it discards that pending choice, validates the confirmed cache, and rebuilds incompatible caches from inert dictionary data with the current app's resources. If recovery fails it tries the previous confirmed version and then the immutable bundled dictionary. Settings always reports the version and activation date of the engine that actually started. A failed rollback leaves the engine unavailable; the input menu and Settings remain reachable for retry.
+The coordinator records a pending transaction before waiting. After an interrupted process it discards that pending choice, validates the confirmed cache, and rebuilds incompatible caches from inert dictionary data with the current app's resources. If recovery fails it tries the previous confirmed version and then the immutable bundled dictionary. Settings reports whether the combined dictionary is ready and offers recovery when the engine is unavailable. A failed rollback leaves the engine unavailable; the input menu and Settings remain reachable for retry.
 
 Closing Settings clears its displayed diagnostic, while the process continues the task. Reopening shows current progress and does not replay earlier failures. Operational diagnostics remain in the macOS unified log:
 
@@ -484,21 +484,18 @@ private inspection method fails explicitly if unavailable on a future OS. Produc
 uses only public menu APIs. System menu rendering remains a separate installed-app
 acceptance check.
 
-## Dictionary disclosure contents have missing accessibility identifiers
+## Dictionary error details are missing from accessibility
 
-**Symptom:** Source names, full commits and URLs are present after expanding “词库来源”,
-but a lookup such as `dictionaries.source.frost-8105` fails even after additional waiting.
+**Symptom:** “查看错误详情” expands visually, but the technical diagnostic cannot be
+found or selected through accessibility.
 
-**Cause:** Applying `accessibilityIdentifier` to a SwiftUI `DisclosureGroup` overrides
-the identifiers on its descendants on the observed macOS 26 runtime. The same pattern
-affects the “错误详情” disclosure and its diagnostic text.
+**Cause:** Applying `accessibilityIdentifier` to a SwiftUI `DisclosureGroup` can override
+the identifier on its descendant text on the observed macOS 26 runtime.
 
-**Fix:** Keep identifiers on individual content elements. The native GUI test locates
-each disclosure by its `AXDisclosureTriangle` role and label, presses that exact control,
-and requires its expanded state to toggle. It retains independent content and layout
-assertions; missing or duplicate content identifiers print the accessibility tree.
+**Fix:** Keep the identifier on the diagnostic text. The native GUI test locates the
+disclosure by its `AXDisclosureTriangle` role and label, toggles it, and checks the full
+selectable diagnostic through its independent identifier.
 
 **Regression:** Run `bash macOS/scripts/test-settings-ui.sh` after building. The suite
-checks all seven sources and complete diagnostics across error stages, with disclosures
-expanded and collapsed and windows at minimum/enlarged sizes. It does not replace
-installed-input-method typing acceptance.
+checks compact ready, update, busy, failure and recovery states plus expanded/collapsed
+diagnostics. It does not replace installed-input-method typing acceptance.

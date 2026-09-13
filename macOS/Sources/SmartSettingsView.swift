@@ -39,20 +39,33 @@ struct SmartSettingsView: View {
                 }
             }
             Section("智能预测") {
-                Toggle("智能预测", isOn: $smart.isEnabled)
-                    .disabled(!smart.isAvailable)
-                    .accessibilityIdentifier("smart.enabled")
-                Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("smart.notice")
+                Toggle(isOn: $smart.isEnabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("智能预测")
+                        Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("smart.notice")
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("smart.predictionContent")
+                }
+                .disabled(!smart.isAvailable)
+                .accessibilityIdentifier("smart.enabled")
                 Stepper(value: $smart.triggerDelayMS, in: IFSmartSettings.triggerDelayRangeMS, step: 100) {
-                    LabeledContent("推荐触发时延", value: "\(smart.triggerDelayMS) ms")
+                    VStack(alignment: .leading, spacing: 2) {
+                        LabeledContent("推荐触发时延", value: "\(smart.triggerDelayMS) ms")
+                        Text("停止输入后等待多久再请求 AI 推荐。默认 500ms，修改后自动保存并生效。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("smart.triggerDelayNotice")
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("smart.triggerDelayContent")
                 }
                 .accessibilityIdentifier("smart.triggerDelay")
-                Text("停止输入后等待多久再请求 AI 推荐。默认 500ms，修改后自动保存并生效。")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             Section("语音润色") {
                 Toggle("润色语音转写", isOn: $settings.voicePolishEnabled)

@@ -370,25 +370,36 @@ struct SettingsUITests {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
-            let identifiers = ["smart.enabled", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save", "voice.polish"]
+            let identifiers = ["smart.enabled", "smart.triggerDelay", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save", "voice.polish"]
             let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
-            check(controls.count == identifiers.count, "AI settings must expose prediction and voice polish toggles, three fields and save button")
+            check(controls.count == identifiers.count,
+                  "AI settings must expose prediction, trigger delay, voice polish, three fields and save button")
             for control in controls {
                 let frame = (control["frame"] as! NSValue).rectValue
                 check(frame.width > 0 && frame.height > 0,
                       "AI setting control \(control["id"] as? String ?? "") must have an accessible frame")
             }
             check(controls.first { $0["id"] as? String == "smart.enabled" }?["enabled"] as? Bool == false)
-            let prediction = controls.first { $0["id"] as? String == "smart.enabled" }
+            let predictionContent = elements.first { $0["id"] as? String == "smart.predictionContent" }
             let notice = elements.first { $0["id"] as? String == "smart.notice" }
             check(notice.map(accessibilityText) == "开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。",
                   "Prediction privacy note must use concise copy")
-            if let predictionFrame = (prediction?["frame"] as? NSValue)?.rectValue,
+            if let predictionFrame = (predictionContent?["frame"] as? NSValue)?.rectValue,
                let noticeFrame = (notice?["frame"] as? NSValue)?.rectValue {
-                check(noticeFrame.maxY <= predictionFrame.minY,
-                      "Prediction privacy note must appear immediately below its toggle")
+                check(predictionFrame.contains(noticeFrame),
+                      "Prediction privacy note must belong to the toggle row")
             } else {
-                check(false, "Prediction toggle and privacy note must expose accessible frames")
+                check(false, "Prediction row and privacy note must expose accessible frames")
+            }
+            let delayContent = elements.first { $0["id"] as? String == "smart.triggerDelayContent" }
+            let delayNotice = elements.first { $0["id"] as? String == "smart.triggerDelayNotice" }
+            check(delayNotice.map(accessibilityText) == "停止输入后等待多久再请求 AI 推荐。默认 500ms，修改后自动保存并生效。",
+                  "Trigger delay note must use concise copy")
+            if let delayFrame = (delayContent?["frame"] as? NSValue)?.rectValue,
+               let noticeFrame = (delayNotice?["frame"] as? NSValue)?.rectValue {
+                check(delayFrame.contains(noticeFrame), "Trigger delay note must belong to the stepper row")
+            } else {
+                check(false, "Trigger delay row and note must expose accessible frames")
             }
             check(!elements.contains { element in
                 let text = accessibilityText(element)
