@@ -52,8 +52,24 @@ change macOS/Sources/InputPreferences.swift; plan
 has 'engine-options'; has 'controller'; has 'manual-input'; has 'manual-settings'; not_has 'manual-install'
 
 new_case
-change macOS/Sources/AIStatisticsStore.swift; plan
-has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; not_has 'manual-input'
+change macOS/Sources/AIStatisticsStore.swift
+change macOS/Sources/StartupDiagnostics.swift
+git -C "$case_root" add macOS/Sources/AIStatisticsStore.swift
+change macOS/Sources/AIStatisticsStore.swift
+plan --run
+has 'Changed paths (2):'; has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; has 'startup-diagnostics'; not_has 'manual-input'
+
+for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift; do
+  new_case
+  change "$path"; plan
+  has 'controller'; has 'manual-input'
+  case "$path" in
+    macOS/Sources/Engine.swift) has 'ai-learning'; has 'deployment'; has 'dictionary-activation' ;;
+    macOS/Sources/EngineAI.swift) has 'ai-learning'; has 'ai-headless' ;;
+    macOS/Sources/CustomPhrases.swift) has 'settings'; has 'dictionary-activation' ;;
+    macOS/Sources/Settings.swift) has 'settings'; has 'ai-transport'; has 'ai-runtime'; has 'ai-headless' ;;
+  esac
+done
 
 new_case
 change macOS/Sources/VoiceLexicon.swift; plan
@@ -72,10 +88,27 @@ change macOS/Sources/Future.swift; plan
 has 'quality-store'; has 'dictionary-worker'; has 'workflow'; has 'manual-install'
 
 new_case
+git -C "$case_root" mv macOS/Sources/AIStatistics.swift macOS/Sources/AIStatisticsStoreMoved.swift
+plan
+has 'macOS/Sources/AIStatistics.swift'; has 'macOS/Sources/AIStatisticsStoreMoved.swift'; has 'ai-statistics'
+
+new_case
+change macOS/Sources/AIStatistics.swift
+git -C "$case_root" add macOS/Sources/AIStatistics.swift
+git -C "$case_root" -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'test: statistics change'
+change macOS/Sources/InputPreferences.swift
+plan --from HEAD~1
+has 'macOS/Sources/AIStatistics.swift'; has 'ai-statistics'; has 'engine-options'
+
+new_case
 /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 900001' "$case_root/macOS/Info.plist"
 plan
 has 'Units: quality-metadata workflow'; has 'bundle-fast'
 not_has 'manual-input'; not_has 'manual-settings'; not_has 'manual-install'
+git -C "$case_root" add macOS/Info.plist
+git -C "$case_root" -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'test: version-only change'
+plan --from HEAD~1
+has 'Units: quality-metadata workflow'; has 'bundle-fast'; not_has 'manual-input'
 /usr/libexec/PlistBuddy -c 'Set :LSMinimumSystemVersion 99.0' "$case_root/macOS/Info.plist"
 plan
 has 'quality-store'; has 'manual-input'; has 'manual-settings'; has 'manual-install'
@@ -97,6 +130,13 @@ change macOS/scripts/build.sh
 export INKFLOW_AFFECTED_FAIL=build
 if plan --run; then exit 1; else [[ $? == 19 ]]; fi
 has 'Not executed:'; [[ $(wc -l < "$INKFLOW_AFFECTED_LOG" | tr -d ' ') == 1 ]]
+unset INKFLOW_AFFECTED_FAIL
+
+new_case
+change macOS/scripts/build.sh
+export INKFLOW_AFFECTED_FAIL=test
+if plan --run; then exit 1; else [[ $? == 19 ]]; fi
+has 'Not executed: bundle-fast'; ! grep -q '^check-bundle' "$INKFLOW_AFFECTED_LOG"
 unset INKFLOW_AFFECTED_FAIL
 
 for log in "$fixture"/commands-*; do ! grep -Eq 'gui|native|keychain|--live|install.sh' "$log"; done

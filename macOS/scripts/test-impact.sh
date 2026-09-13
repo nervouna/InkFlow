@@ -101,9 +101,21 @@ impact_classify() {
     macOS/Tests/Dictionary*|macOS/scripts/test-dictionary*.sh|macOS/scripts/build-dictionary*.sh)
       impact_rule "$path" 'dictionary test domain' dictionary-generator deployment dictionary-updates dictionary-activation ;;
 
-    macOS/Sources/Settings.swift|macOS/Sources/*SettingsView.swift|macOS/Sources/InputPreferences.swift)
+    macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift)
+      impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
+      impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/*SettingsView.swift|macOS/Sources/InputPreferences.swift)
       impact_rule "$path" 'settings domain' settings engine-options controller ai-runtime voice-controller
       impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/EngineAI.swift)
+      impact_rule "$path" 'engine and AI learning integration' engine controller ai-headless ai-learning voice-controller quality-capture-query
+      impact_manual_add manual-input ;;
+    macOS/Sources/CustomPhrases.swift)
+      impact_rule "$path" 'custom phrases and activation integration' engine controller ai-headless voice-controller quality-capture-query settings dictionary-activation
+      impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/Engine.swift)
+      impact_rule "$path" 'shared engine integration' engine controller ai-headless ai-learning voice-controller quality-capture-query deployment dictionary-activation
+      impact_manual_add manual-input ;;
     macOS/Sources/Engine*|macOS/Sources/InputController*|macOS/Sources/Context.swift|macOS/Sources/InputRankingContext.swift|macOS/Sources/CustomPhrases.swift|macOS/Sources/*Presentation.swift|macOS/Sources/*Panel.swift|macOS/Sources/NativeCandidates.*)
       impact_rule "$path" 'input engine and controller domain' engine controller ai-headless voice-controller quality-capture-query
       impact_manual_add manual-input ;;
