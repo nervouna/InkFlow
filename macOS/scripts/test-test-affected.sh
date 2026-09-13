@@ -57,7 +57,11 @@ has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; not_has 'manual-input
 
 new_case
 change macOS/Sources/VoiceLexicon.swift; plan
-has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'manual-input'
+has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
+
+new_case
+change schemas/lua/inkflow_ai_learning.lua; plan
+has 'voice-lexicon'; has 'ai-learning'; has 'ai-headless'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
 
 new_case
 change schemas/lua/inkflow_mixed.lua; plan
@@ -81,6 +85,12 @@ change macOS/Sources/DictionaryStore.swift; plan --run
 [[ $(head -n 1 "$INKFLOW_AFFECTED_LOG") == 'build ' ]]
 grep -Fq 'test ' "$INKFLOW_AFFECTED_LOG"
 grep -Fxq 'check-bundle --fast' "$INKFLOW_AFFECTED_LOG"
+
+for path in macOS/Resources/MenuIconTemplate.tiff macOS/Sources/PackagedCache.swift macOS/Tools/PackagedCacheTool.swift; do
+  new_case
+  change "$path"; plan
+  has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
+done
 
 new_case
 change macOS/scripts/build.sh

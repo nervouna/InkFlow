@@ -70,6 +70,9 @@ impact_classify() {
     macOS/Tests/AI*|macOS/scripts/test-ai-*.sh)
       impact_rule "$path" 'AI test domain' ai ;;
 
+    macOS/Sources/VoiceLexicon.swift)
+      impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport
+      impact_manual_add manual-input manual-settings ;;
     macOS/Sources/*Voice*.swift)
       impact_rule "$path" 'voice feature domain' voice-session apple-voice voice-lexicon voice-controller settings ai-transport
       impact_manual_add manual-input manual-settings ;;
@@ -83,6 +86,14 @@ impact_classify() {
       impact_rule "$path" 'packaged quality identity' quality-metadata workflow
       impact_bundle=true; impact_release_tools=true ;;
 
+    schemas/lua/inkflow_ai_learning.lua)
+      impact_rule "$path" 'native learning bridge and generated-data consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/PackagedCache*|macOS/Tools/PackagedCacheTool.swift|macOS/Resources/*)
+      impact_rule "$path" 'packaged resources and cache consumers' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation
+      impact_bundle=true
+      impact_manual_add manual-input ;;
     macOS/Sources/Dictionary*|macOS/DictionaryTool/*|macOS/DictionaryWorker/*|macOS/Data/*|macOS/config/*|schemas/*|config/*|Data/*|*.yaml|*.yml|macOS/scripts/prepare-*.sh)
       impact_rule "$path" 'dictionary and generated-data domain' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
