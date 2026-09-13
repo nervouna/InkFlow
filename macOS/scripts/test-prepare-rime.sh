@@ -30,9 +30,31 @@ check_repository_policy_word() {
 
 check_repository_policy_word eBPF ebpf
 check_repository_policy_word Type-C typec
-test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/Data/english-technology.tsv)" -eq 122
-test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/Data/english-technology-provenance.tsv)" -eq 122
-test "$(awk 'NF && $0 !~ /^[[:space:]]*#/ { count++ } END { print count + 0 }' macOS/config/english-overrides.tsv)" -eq 111
+awk -F '\t' '
+  NF && $0 !~ /^[[:space:]]*#/ {
+    if (NF != 3 || $1 == "" || $2 !~ /^[a-z0-9]+$/ || ($3 != "inkflow-maintained" && $3 != "rime-ice-en-ext") || display[$1]++ || code[$2]++) exit 1
+    rows++
+  }
+  END { if (!rows) exit 1 }
+' macOS/Data/english-technology.tsv
+awk -F '\t' '
+  FNR == NR {
+    if (NF && $0 !~ /^[[:space:]]*#/) { expected[$1] = $3; sourceRows++ }
+    next
+  }
+  NF && $0 !~ /^[[:space:]]*#/ {
+    if (NF != 6 || !($1 in expected) || $2 != expected[$1] || seen[$1]++) exit 1
+    provenanceRows++
+  }
+  END { if (!sourceRows || provenanceRows != sourceRows) exit 1 }
+' macOS/Data/english-technology.tsv macOS/Data/english-technology-provenance.tsv
+awk -F '\t' '
+  NF && $0 !~ /^[[:space:]]*#/ {
+    if (NF != 3 || $1 == "" || $2 !~ /^([0-8](\.[0-9]+)?|9(\.0+)?)$/ || $3 == "" || word[$1]++) exit 1
+    rows++
+  }
+  END { if (!rows) exit 1 }
+' macOS/config/english-overrides.tsv
 
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT

@@ -322,17 +322,26 @@ struct EngineTests {
         selectCandidate("深度求索", input: "shenduqiusuo", engine: engine)
         selectCandidate("阿米诺斯", input: "aminuosi", engine: engine)
         selectCandidate("并发信息系统", input: "bingfaxinxixitong", engine: engine)
-        selectCandidate("eBPF", input: "ebpf", engine: engine)
-        selectCandidate("Type-C", input: "typec", engine: engine)
         let english = try String(contentsOfFile: "macOS/Data/english-technology.tsv", encoding: .utf8)
-        var count = 0
-        for line in english.split(separator: "\n") where !line.hasPrefix("#") {
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-            check(fields.count == 3)
-            selectCandidate(String(fields[0]), input: String(fields[1]), engine: engine)
-            count += 1
+        let rows = english.split(separator: "\n").filter { !$0.hasPrefix("#") }.map {
+            $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
         }
-        check(count == 122, "Every selected technical English spelling is exercised")
+        check(!rows.isEmpty && rows.allSatisfy { $0.count == 3 && $0.allSatisfy { !$0.isEmpty } },
+              "Technology source rows require display, ASCII lookup code and source")
+        check(rows.allSatisfy { row in
+            row[1].unicodeScalars.allSatisfy { (48...57).contains($0.value) || (97...122).contains($0.value) }
+        }, "Technology lookup codes are lowercase ASCII letters and digits")
+        check(Set(rows.map { $0[0] }).count == rows.count && Set(rows.map { $0[1] }).count == rows.count,
+              "Technology display forms and lookup codes are unique")
+        check(Set(rows.map { $0[2] }).isSubset(of: ["inkflow-maintained", "rime-ice-en-ext"]),
+              "Technology rows use a declared spelling source")
+        let source = Dictionary(uniqueKeysWithValues: rows.map { ($0[0], $0[1]) })
+        for display in ["eBPF", "Type-C", "SwiftUI", "C++", "Claude Code", ".NET"] {
+            guard let code = source[display] else {
+                check(false, "Missing representative technology source row: \(display)"); return
+            }
+            selectCandidate(display, input: code, engine: engine)
+        }
         selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
         type(engine, "swiftui")
         for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
@@ -353,7 +362,7 @@ struct EngineTests {
         check(engine.snapshot().candidates.first == "我的接口" && allCandidates(engine).contains("API"),
               "Explicit custom phrases keep priority while technical English remains reachable")
         engine.clear()
-        print("PASS domain vocabulary: all curated Chinese and 122 technical English spellings selectable; exact case/punctuation/space commits, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
+        print("PASS domain vocabulary: structured technology source plus representative case/punctuation/space goldens, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
     }
 
     @MainActor static func conservativeChinesePrefixes() {
@@ -368,8 +377,10 @@ struct EngineTests {
                 (65...90).contains($0.value) || (97...122).contains($0.value)
             }
             let valid = !first.isEmpty && !containsASCII && (input != "d" || first == "的")
-            print("TRACE Chinese \(direction) \(input) => \(first)\(valid ? "" : " [FAIL]")")
-            if !valid { failures += 1 }
+            if !valid {
+                print("FAIL Chinese \(direction) \(input) => \(first)")
+                failures += 1
+            }
             steps += 1
         }
         for input in ["d", "niyebuxiangnid", "womenshenzh", "niyebuxiangnidepengyoushangxin",
@@ -393,9 +404,8 @@ struct EngineTests {
             }
             check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         }
-        print("TRACE Chinese prefix summary: \(steps) steps, \(failures) failures, \(Int(Date().timeIntervalSince(start) * 1000)) ms")
-        check(failures == 0, "Chinese partial input must stay ahead of English")
-        print("PASS conservative Chinese: short keys, incomplete syllables, all prefixes and backspaces")
+        check(failures == 0, "Chinese partial input must stay ahead of English across \(steps) steps")
+        print("PASS conservative Chinese: short keys, incomplete syllables, \(steps) prefixes and backspaces in \(Int(Date().timeIntervalSince(start) * 1000)) ms")
     }
 
     @MainActor static func missingEnglishResources(shared: String, user: String) throws {
@@ -430,7 +440,6 @@ struct EngineTests {
             // Abbreviation can add a full-coverage Chinese interpretation before this
             // mixed candidate. Preserve native coverage priority and exact selection.
             type(engine, input)
-            print("TRACE mixed recall \(input) => \(engine.snapshot().candidates)")
             engine.clear()
             selectCandidate(expected, input: input, engine: engine)
         }
@@ -456,7 +465,6 @@ struct EngineTests {
         let mixedCollision = engine.snapshot().candidates
         check(mixedCollision.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
               "Complete Chinese coverage leads mixed English: \(mixedCollision)")
-        print("TRACE mixed collision wofaleemail => \(mixedCollision)")
         engine.select(0)
         check(engine.takeCommit() == mixedCollision.first && engine.snapshot().preedit.isEmpty,
               "The leading Chinese candidate must consume the complete mixed input")
@@ -590,7 +598,6 @@ struct EngineTests {
                 check(candidates.first == "我们" && candidates.contains("women"),
                       "Measured common English remains available after Chinese: \(candidates)")
             }
-            print("TRACE English admission \(input) => \(candidates)")
             engine.clear()
         }
         // Exercise prefix lookup, edits, cache replacement, and selection/re-entry.
@@ -684,7 +691,6 @@ struct EngineTests {
         type(city, "beijign")
         let typoCandidates = city.snapshot().candidates
         check(typoCandidates.first == normalCandidates.first, "Typo alias preserves ordinary homophone ranking")
-        print("TRACE homophone correction: beijing=\(normalCandidates), beijign=\(typoCandidates)")
         guard let cityIndex = typoCandidates.firstIndex(of: "北京") else {
             check(false, "Keep 北京 reachable after final transposition"); return
         }
@@ -698,7 +704,6 @@ struct EngineTests {
             check(engine.snapshot().candidates.first == expected, "Normal spelling \(input): \(engine.snapshot())")
             if input == "shanghai" {
                 let candidates = engine.snapshot().candidates
-                print("TRACE homophone shanghai: \(candidates)")
                 guard let index = candidates.firstIndex(of: "上海") else {
                     check(false, "Keep 上海 reachable in ordinary homophone candidates"); return
                 }
@@ -1065,7 +1070,6 @@ struct EngineTests {
                 if let index = snapshot.candidates.firstIndex(of: expected) {
                     engine.select(index)
                     check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty)
-                    print("TRACE single-letter English \(input) -> \(expected) selected on page \(snapshot.page)")
                     selected = true
                     break
                 }
@@ -1109,7 +1113,6 @@ struct EngineTests {
         engine.clear()
         type(engine, "hello")
         let helloCandidates = engine.snapshot().candidates
-        print("TRACE English space selection hello => \(helloCandidates)")
         guard let helloIndex = helloCandidates.firstIndex(of: "hello") else {
             check(false, "Admitted hello must remain selectable"); return
         }

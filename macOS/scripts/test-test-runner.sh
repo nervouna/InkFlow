@@ -10,7 +10,7 @@ export INKFLOW_RUNNER_LOG="$fixture/commands.log"
 for script in dependencies prepare-rime test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
   test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
-  test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
+  test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
   test-startup-diagnostics test-test-runner test-test-affected test-workflow; do
   cat > "$fixture/macOS/scripts/$script.sh" <<'STUB'
 #!/bin/bash
@@ -29,6 +29,18 @@ build_swift_test() {
 #!/bin/bash
 name=$(basename "$0")
 echo "run $name ${3:-}" >> "$INKFLOW_RUNNER_LOG"
+if [[ "$name" == "${INKFLOW_SWIFT_FAIL:-}" ]]; then
+  echo 'WARNING: Logging before InitGoogleLogging() is written to STDERR' >&2
+  echo 'engine failure diagnostic' >&2
+  exit 29
+fi
+if [[ "$name" == engine-tests && "${INKFLOW_ENGINE_STDERR:-}" == known ]]; then
+  echo 'WARNING: Logging before InitGoogleLogging() is written to STDERR' >&2
+  echo "I20260913 12:38:08.481146 0x1 modules.cc:96] registering components from module 'lua'." >&2
+  echo 'I20260913 12:38:08.482306 0x1 modules.cc:87] rime.lua info: rime.lua should be either in the rime user data directory or in the rime shared data directory' >&2
+  echo "I20260913 12:38:09.221615 0x1 grammar_module.cc:15] registering components from module 'grammar'." >&2
+  echo 'unexpected engine warning' >&2
+fi
 case "$name" in engine-tests|controller-tests)
   [[ -d "$2" && ! -e "$2/used" ]] || exit 23
   touch "$2/used"
@@ -54,6 +66,17 @@ while IFS= read -r path; do [[ ! -e "$path" ]]; done < "$INKFLOW_RUNNER_LOG.path
 run engine engine-options
 [[ $(grep -c '^build engine-tests$' "$INKFLOW_RUNNER_LOG") == 1 ]]
 [[ $(grep -c '^run engine-tests ' "$INKFLOW_RUNNER_LOG") == 5 ]]
+export INKFLOW_ENGINE_STDERR=known
+run engine-english
+! grep -q 'InitGoogleLogging\|modules.cc\|grammar_module.cc' "$fixture/output.log"
+grep -q 'unexpected engine warning' "$fixture/output.log"
+unset INKFLOW_ENGINE_STDERR
+export INKFLOW_SWIFT_FAIL=engine-tests
+if run engine-english; then exit 1; else status=$?; fi
+[[ $status == 29 ]]
+grep -q 'InitGoogleLogging' "$fixture/output.log"
+grep -q 'engine failure diagnostic' "$fixture/output.log"
+unset INKFLOW_SWIFT_FAIL
 run ai-learning
 expect 'dependencies ' 'test-ai-learning '
 run voice-lexicon voice-lexicon
@@ -87,7 +110,7 @@ cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
 for required in test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
-  test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-suggestions test-ai-runtime test-ai-statistics \
+  test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
   test-dictionary-activation test-serving-startup test-startup-diagnostics test-termination \
   test-installer-core test-test-runner test-test-affected test-workflow; do

@@ -63,17 +63,22 @@ impact_classify() {
       impact_rule "$path" 'settings controls and input preferences' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       [[ $path != macOS/Sources/* ]] || impact_manual_add manual-settings manual-input ;;
     macOS/Sources/AppleVoiceRecognizer.swift|macOS/Tests/AppleVoiceRecognizerTests.swift|macOS/scripts/test-apple-voice.sh)
-      impact_rule "$path" 'Apple voice capture and ASR lifecycle' apple-voice voice-session voice-lexicon voice-controller ;;
+      impact_rule "$path" 'Apple voice capture and ASR lifecycle' apple-voice voice-session voice-lexicon voice-controller
+      [[ $path != macOS/Sources/* ]] || impact_manual_add manual-input ;;
     macOS/Sources/InputControllerVoice.swift|macOS/Sources/VoiceSettings.swift|macOS/Sources/VoiceSettingsView.swift|macOS/Tests/VoiceControllerTests.swift|macOS/scripts/test-voice-controller.sh)
       impact_rule "$path" 'voice target ownership, preparation and independent settings' voice-controller settings
       [[ $path != macOS/Sources/* ]] || impact_manual_add manual-input manual-settings ;;
     macOS/Sources/VoiceSession.swift|macOS/Sources/VoiceCorrectionClient.swift|macOS/Tests/VoiceSessionTests.swift|macOS/scripts/test-voice-session.sh)
-      impact_rule "$path" 'voice session and transport contracts' voice-session voice-controller ;;
+      impact_rule "$path" 'voice session and transport contracts' voice-session voice-controller
+      [[ $path != macOS/Sources/* ]] || impact_manual_add manual-input ;;
     macOS/Sources/VoiceLexicon.swift|macOS/Tests/VoiceLexiconTests.swift|macOS/scripts/test-voice-lexicon.sh)
-      impact_rule "$path" 'bounded voice lexicon and native learning preservation' voice-lexicon ai-learning ;;
+      impact_rule "$path" 'bounded voice lexicon and native learning preservation' voice-lexicon ai-learning
+      [[ $path != macOS/Sources/* ]] || impact_manual_add manual-input ;;
     macOS/Sources/AISettings.swift)
-      impact_rule "$path" 'AI configuration, invalidation and headless application' voice-session ai-transport ai-runtime ai-headless
+      impact_rule "$path" 'AI configuration, isolated Keychain startup, invalidation and headless application' voice-session ai-credentials ai-transport ai-runtime ai-headless settings
       impact_manual_add manual-settings manual-input ;;
+    macOS/Tests/AICredentialTests.swift|macOS/scripts/test-ai-credentials.sh)
+      impact_rule "$path" 'isolated no-prompt Keychain adapter and startup' ai-credentials ;;
     macOS/Sources/AIChatCompletions.swift|macOS/Tests/AISuggestionTests.swift|macOS/scripts/test-ai-suggestions.sh)
       impact_rule "$path" 'AI transport contracts' voice-session ai-transport ;;
     macOS/Tests/AIStatisticsTestSupport.swift)
@@ -122,6 +127,8 @@ impact_classify() {
       impact_rule "$path" 'generated dictionary contract and deployment' dictionary-generator deployment engine dictionary-worker dictionary-activation
       impact_bundle=true
       case "$path" in macOS/Sources/*|macOS/DictionaryTool/*) impact_manual_add manual-input ;; esac ;;
+    macOS/scripts/test-prepare-rime.sh)
+      impact_rule "$path" 'Rime preparation policy fixtures' preparation ;;
     schemas/lua/inkflow_ai_learning.lua)
       impact_rule "$path" 'native learning bridge and schema consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-worker dictionary-activation
       impact_bundle=true
@@ -162,9 +169,9 @@ impact_classify() {
     macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
       impact_rule "$path" 'native support consumers' controller ai-headless quality-capture-query dictionary-activation ;;
     macOS/Tests/TestSupport.swift)
-      impact_add voice-controller
-      impact_rule "$path" 'shared Swift assertions/settings isolation: all consumers'
-      impact_all=true ;;
+      impact_rule "$path" 'shared Swift assertions, clients and settings isolation: direct non-GUI consumers' \
+        quality-metadata quality-capture-query voice-controller ai-runtime ai-learning ai-headless \
+        deployment engine controller settings dictionary-activation termination ;;
     macOS/Tests/EngineTests.swift) impact_rule "$path" 'engine scenario collection' engine ;;
     macOS/Tests/ControllerTests.swift|macOS/Tests/ControllerInitializationTests.swift|macOS/scripts/test-controller-initialization.sh)
       impact_rule "$path" 'controller contracts' controller ai-headless ;;

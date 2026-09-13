@@ -79,9 +79,27 @@ for path in macOS/Tools/ai-statistics.py macOS/Tests/AIStatisticsTests.swift mac
   not_has 'ai-transport'; not_has 'ai-runtime'; not_has 'manual-input'
 done
 new_case
+change macOS/Sources/AISettings.swift
+plan --run
+has 'ai-credentials'; has 'ai-transport'; has 'settings'; has 'manual-input'; has 'manual-settings'
+grep -Fq 'ai-credentials' "$INKFLOW_AFFECTED_LOG"
+for path in macOS/Tests/AICredentialTests.swift macOS/scripts/test-ai-credentials.sh; do
+  new_case
+  change "$path"
+  plan
+  has 'Units: ai-credentials'; not_has 'manual-input'; not_has 'manual-settings'
+done
+new_case
 change macOS/Tests/NativeTestSupport.m
 plan
 has 'ai-headless'; has 'controller'; has 'quality-capture-query'; has 'dictionary-activation'
+new_case
+change macOS/Tests/TestSupport.swift
+plan
+for unit in quality-metadata quality-capture-query voice-controller ai-runtime ai-learning ai-headless deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings dictionary-activation termination; do
+  has "$unit"
+done
+not_has 'dictionary-source'; not_has 'dictionary-store'; not_has 'dictionary-worker'; not_has 'installer-core'; not_has 'workflow'
 new_case
 change macOS/Tests/AIStatisticsTestSupport.swift
 plan
@@ -98,6 +116,10 @@ for path in schemas/lua/inkflow_mixed.lua macOS/config/english-overrides.tsv; do
   plan
   has 'engine-english'; has 'dictionary-worker'; has 'manual-input'
 done
+new_case
+change macOS/scripts/test-prepare-rime.sh
+plan
+has 'Units: preparation'; not_has 'engine-english'; not_has 'dictionary-worker'; not_has 'workflow'
 new_case
 change macOS/Sources/Future.swift
 plan
@@ -121,7 +143,25 @@ has 'ai-statistics'; has 'engine-options'; has 'macOS/Sources/AIStatistics.swift
 new_case
 change macOS/Sources/VoiceLexicon.swift
 plan
-has 'voice-lexicon'; has 'ai-learning'; not_has 'dictionary-worker'
+has 'voice-lexicon'; has 'ai-learning'; has 'manual-input'; not_has 'dictionary-worker'
+new_case
+change macOS/Tests/VoiceLexiconTests.swift
+plan
+has 'voice-lexicon'; has 'ai-learning'; not_has 'manual-input'
+for path in AppleVoiceRecognizer VoiceSession VoiceCorrectionClient; do
+  new_case
+  change "macOS/Sources/$path.swift"
+  plan
+  has 'voice-controller'; has 'manual-input'
+done
+new_case
+change macOS/Tests/AppleVoiceRecognizerTests.swift
+plan
+has 'apple-voice'; has 'voice-controller'; not_has 'manual-input'
+new_case
+change macOS/Tests/VoiceSessionTests.swift
+plan
+has 'voice-session'; has 'voice-controller'; not_has 'manual-input'
 new_case
 change schemas/lua/inkflow_ai_learning.lua
 plan

@@ -2,6 +2,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source macOS/scripts/test-groups.sh
+report_successful_engine_stderr() {
+  awk '
+    $0 == "WARNING: Logging before InitGoogleLogging() is written to STDERR" { next }
+    /modules\.cc:[0-9]+\] registering components from module '\''lua'\''\.$/ { next }
+    /modules\.cc:[0-9]+\] rime\.lua info: rime\.lua should be either in the rime user data directory or in the rime shared data directory$/ { next }
+    /grammar_module\.cc:[0-9]+\] registering components from module '\''grammar'\''\.$/ { next }
+    { print }
+  ' "$1" >&2
+}
 if [[ $# == 1 && $1 == --help ]]; then
   echo 'Usage: test.sh [all | GROUP ...]'
   echo 'Parents: quality ai engine dictionary-updates'
@@ -42,6 +51,7 @@ for unit in "${test_units[@]}"; do
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
     apple-voice) bash macOS/scripts/test-apple-voice.sh ;;
     voice-session) bash macOS/scripts/test-voice-session.sh ;;
+    ai-credentials) bash macOS/scripts/test-ai-credentials.sh ;;
     ai-transport) bash macOS/scripts/test-ai-suggestions.sh ;;
     ai-statistics)
       bash macOS/scripts/test-ai-statistics.sh
@@ -53,7 +63,14 @@ for unit in "${test_units[@]}"; do
     engine-*)
       if ! $engine_built; then build_swift_test engine-tests build/engine-tests; engine_built=true; fi
       mkdir -p "$scratch/$unit"
-      build/engine-tests "$PWD/build/test-shared" "$scratch/$unit" "--${unit#engine-}" ;;
+      engine_stderr="$scratch/$unit.stderr"
+      if build/engine-tests "$PWD/build/test-shared" "$scratch/$unit" "--${unit#engine-}" 2>"$engine_stderr"; then
+        report_successful_engine_stderr "$engine_stderr"
+      else
+        status=$?
+        cat "$engine_stderr" >&2
+        exit "$status"
+      fi ;;
     controller)
       build_swift_test controller-tests build/controller-tests
       mkdir -p "$scratch/controller"
