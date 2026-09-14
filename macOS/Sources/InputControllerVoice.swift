@@ -1,5 +1,6 @@
 @preconcurrency import InputMethodKit
 import Carbon
+import Combine
 
 struct VoiceForeground: Equatable {
     let bundleID: String
@@ -47,7 +48,14 @@ final class IFInputControllerVoice {
     var isDelivering: Bool { deliveryDepth > 0 }
     var blocksRime: Bool { isActive || isDelivering }
 
-    func configure(_ controller: IFInputControllerShell) { self.controller = controller }
+    private var shortcutChanges: AnyCancellable?
+    func configure(_ controller: IFInputControllerShell) {
+        self.controller = controller
+        shortcutChanges = controller.settings.shortcuts.$revision.dropFirst().sink { [weak self] _ in
+            MainActor.assumeIsolated { self?.cancel(.editing) }
+        }
+    }
+
 
     func controllerActivated() {
         // InputMethodKit may activate a new controller before deactivating the old one.
@@ -72,7 +80,9 @@ final class IFInputControllerVoice {
                              replacementRange: NSRange(location: NSNotFound, length: 0))
     }
 
-    private var leftShiftDown = false
+    private var pressedModifiers: Set<UInt16> = []
+    private var gestureBinding: ShortcutBinding?
+    private var firstTapBinding: ShortcutBinding?
     private var gestureGeneration: UInt64 = 0
     private var rightDownAt: TimeInterval?
     private var firstTapDown: TimeInterval?
@@ -91,61 +101,100 @@ final class IFInputControllerVoice {
         gestureGeneration &+= 1
         cancelHold?(); cancelHold = nil
         rightDownAt = nil; firstTapDown = nil; secondTap = false
+        gestureBinding = nil; firstTapBinding = nil
+    }
+
+    private func gestureDown(_ binding: ShortcutBinding, holdBinding: ShortcutBinding,
+                             toggleBinding: ShortcutBinding, client: IMKTextInput?) -> Bool {
+        if rightDownAt != nil { return gestureBinding == binding }
+        guard !isDelivering || token != nil else { return false }
+        let now = gestureTime()
+        secondTap = binding == toggleBinding && firstTapBinding == binding && (firstTapDown.map { now - $0 <= 0.350 } ?? false)
+        rightDownAt = now; gestureBinding = binding
+        gestureGeneration &+= 1
+        let generation = gestureGeneration, expected = epoch, app = foreground()
+        if !isActive {
+            if let owner = Self.activeOwner, owner !== self { owner.cancel(.deactivated) }
+            Self.activeOwner = self
+        }
+        if binding == holdBinding {
+            cancelHold = scheduleHold { [weak self] in
+                guard let self, self.epoch == expected, self.gestureGeneration == generation,
+                      self.rightDownAt == now, self.controller?.settings.shortcuts.binding(for: .voiceHold) == binding else { return }
+                self.firstTapDown = nil; self.firstTapBinding = nil; self.secondTap = false
+                guard !self.isActive, !self.isDelivering else { return }
+                let current = self.currentClient.map { $0() } ?? self.controller?.client()
+                guard let client, let current, ObjectIdentifier(client as AnyObject) == ObjectIdentifier(current as AnyObject),
+                      self.foreground() == app else { self.resetGesture(); return }
+                self.held = true; self.start(client: client)
+                if !self.isActive { self.held = false }
+            }
+        }
+        return true
+    }
+
+    private func gestureUp(_ binding: ShortcutBinding, toggleBinding: ShortcutBinding, client: IMKTextInput?) -> Bool {
+        guard gestureBinding == binding, let down = rightDownAt else { return false }
+        cancelHold?(); cancelHold = nil; rightDownAt = nil; gestureBinding = nil
+        if held {
+            firstTapDown = nil; firstTapBinding = nil; secondTap = false; held = false; stop(); return true
+        }
+        guard gestureTime() - down < 0.250 else { firstTapDown = nil; firstTapBinding = nil; secondTap = false; return true }
+        if secondTap && binding == toggleBinding {
+            firstTapDown = nil; firstTapBinding = nil; secondTap = false
+            if isActive { stop() }
+            else if !isDelivering { start(client: client) }
+        } else if binding == toggleBinding { firstTapDown = down; firstTapBinding = binding }
+        return true
     }
 
     func handle(_ event: NSEvent, client: IMKTextInput?) -> Bool {
-        let flags = event.modifierFlags.intersection([.shift, .control, .option, .command, .function])
+        let flags = event.modifierFlags.intersection(ShortcutBinding.relevantFlags)
+        let holdBinding = controller?.settings.shortcuts.binding(for: .voiceHold) ?? .rightShift
+        let toggleBinding = controller?.settings.shortcuts.binding(for: .voiceToggle) ?? .rightShift
         if event.type == .flagsChanged {
-            // IMK may strip device bits; keyCode still identifies the changed Shift key.
-            if !flags.contains(.shift) { leftShiftDown = false }
-            if event.keyCode == UInt16(kVK_Shift) { leftShiftDown = flags.contains(.shift) }
-            let deviceShift = event.modifierFlags.rawValue & 0x6
-            let right = deviceShift == 0 ? flags.contains(.shift) : deviceShift & 0x4 != 0
-            let left = event.modifierFlags.rawValue & 0x2 != 0 || leftShiftDown
-            if event.keyCode == UInt16(kVK_RightShift), !left, flags.isSubset(of: .shift) {
-                if right {
-                    if rightDownAt != nil { return true }
-                    guard !isDelivering || token != nil else { return false }
-                    let now = gestureTime()
-                    secondTap = firstTapDown.map { now - $0 <= 0.350 } ?? false
-                    rightDownAt = now
-                    gestureGeneration &+= 1
-                    let generation = gestureGeneration
-                    let expected = epoch, app = foreground()
-                    if !isActive { if let owner = Self.activeOwner, owner !== self { owner.cancel(.deactivated) }; Self.activeOwner = self }
-                    cancelHold = scheduleHold { [weak self] in
-                        guard let self, self.epoch == expected, self.gestureGeneration == generation, self.rightDownAt == now else { return }
-                        self.firstTapDown = nil; self.secondTap = false
-                        guard !self.isActive, !self.isDelivering else { return }
-                        let current = self.currentClient.map { $0() } ?? self.controller?.client()
-                        guard let client, let current, ObjectIdentifier(client as AnyObject) == ObjectIdentifier(current as AnyObject),
-                              self.foreground() == app else { self.resetGesture(); return }
-                        self.held = true
-                        self.start(client: client)
-                        if !self.isActive { self.held = false }
-                    }
-                    VoiceDiagnostics.shortcutArrival(.rightShiftDown, repeated: false, recognizedModifiers: true, delivering: isDelivering)
-                    return true
-                }
-                guard let down = rightDownAt else { return false }
-                cancelHold?(); cancelHold = nil; rightDownAt = nil
-                VoiceDiagnostics.shortcutArrival(.rightShiftUp, repeated: false, recognizedModifiers: true, delivering: isDelivering)
-                if held {
-                    firstTapDown = nil; secondTap = false; held = false; stop(); return true
-                }
-                guard gestureTime() - down < 0.250 else { firstTapDown = nil; secondTap = false; return true }
-                if secondTap {
-                    firstTapDown = nil; secondTap = false
-                    if isActive { stop() }
-                    else if !isDelivering { start(client: client) }
-                } else { firstTapDown = down }
-                return true
+            if flags.isEmpty { pressedModifiers.removeAll() }
+            if let changed = ShortcutBinding.allCases.first(where: { $0.keyCode == event.keyCode }) {
+                if changed.modifierIsDown(event) { pressedModifiers.insert(event.keyCode) }
+                else { pressedModifiers.remove(event.keyCode) }
             }
+            if let binding = gestureBinding, !binding.isModifier {
+                if flags == binding.flags { return false }
+                if !flags.isSubset(of: binding.flags) {
+                    cancel(.editing)
+                    return false
+                }
+                // Releasing a chord modifier finishes held dictation but never counts as a tap.
+                let wasHeld = held
+                held = false; resetGesture()
+                if wasHeld { stop() }
+                return false
+            }
+            if let binding = [holdBinding,toggleBinding].first(where: { $0.isModifier && $0.keyCode == event.keyCode }),
+               pressedModifiers.count <= 1, !event.modifierFlags.contains(.function), flags.isSubset(of: binding.flags) {
+                if binding.modifierIsDown(event) {
+                    return gestureDown(binding, holdBinding: holdBinding, toggleBinding: toggleBinding, client: client)
+                }
+                return gestureUp(binding, toggleBinding: toggleBinding, client: client)
+            }
+            // Chord taps may release their modifiers between the two presses.
+            if let binding = firstTapBinding, !binding.isModifier, flags.isSubset(of: binding.flags) { return false }
             resetGesture()
             if held { cancel(.editing) }
             return false
         }
+        if event.type == .keyUp, let binding = gestureBinding, !binding.isModifier, event.keyCode == binding.keyCode {
+            return gestureUp(binding, toggleBinding: toggleBinding, client: client)
+        }
         if event.type == .keyDown {
+            if let binding = [holdBinding,toggleBinding].first(where: { $0.matches(event) }) {
+                if event.isARepeat { return gestureBinding == binding }
+                if gestureBinding != nil && gestureBinding != binding {
+                    resetGesture()
+                    if held { cancel(.editing) }
+                }
+                return gestureDown(binding, holdBinding: holdBinding, toggleBinding: toggleBinding, client: client)
+            }
             // A reentrant edit is passed through; retain the held key's release edge.
             if !isDelivering || !held { resetGesture() }
             guard isActive else { return false }
@@ -300,7 +349,7 @@ final class IFInputControllerVoice {
     }
 
     func cancel(_ reason: VoiceDiagnostics.Reason = .deactivated) {
-        if reason == .deactivated { leftShiftDown = false }
+        if reason == .deactivated { pressedModifiers.removeAll() }
         resetGesture()
         held = false
         guard isActive || isDelivering else {

@@ -74,7 +74,7 @@ change macOS/Sources/AIStatisticsStore.swift
 plan --run
 has 'Changed paths (2):'; has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; has 'startup-diagnostics'; not_has 'manual-input'
 
-for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift; do
+for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift macOS/Sources/KeyboardShortcuts.swift; do
   new_case
   change "$path"; plan
   has 'controller'; has 'manual-input'
@@ -82,7 +82,7 @@ for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Source
     macOS/Sources/Engine.swift) has 'ai-learning'; has 'deployment'; has 'dictionary-activation' ;;
     macOS/Sources/EngineAI.swift) has 'ai-learning'; has 'ai-headless' ;;
     macOS/Sources/CustomPhrases.swift) has 'settings'; has 'dictionary-activation' ;;
-    macOS/Sources/Settings.swift) has 'settings'; has 'ai-transport'; has 'ai-runtime'; has 'ai-headless' ;;
+    macOS/Sources/Settings.swift|macOS/Sources/KeyboardShortcuts.swift) has 'settings'; has 'ai-transport'; has 'ai-runtime'; has 'ai-headless' ;;
   esac
 done
 

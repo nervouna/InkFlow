@@ -42,7 +42,7 @@ struct SmartSettingsView: View {
                 Toggle(isOn: $smart.isEnabled) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("智能预测")
-                        Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。")
+                        Text("开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -67,9 +67,8 @@ struct SmartSettingsView: View {
                 }
                 .accessibilityIdentifier("smart.triggerDelay")
             }
-            Section("语音润色") {
-                Toggle("润色语音转写", isOn: $settings.voicePolishEnabled)
-                    .accessibilityIdentifier("voice.polish")
+            Section {
+                LabeledContent("采纳建议", value: "Tab")
             }
         }
         .formStyle(.grouped)

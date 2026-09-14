@@ -29,6 +29,7 @@ final class IFSettings: ObservableObject {
     static let candidateCounts = Array(3...9)
     static let fontSizes = [14, 16, 18, 24, 36]
     private let defaults: UserDefaults
+    let shortcuts: KeyboardShortcuts
     let smart: IFSmartSettings
     let voice: VoicePreparation
     private(set) var customPhrases: [CustomPhrase] = []
@@ -38,6 +39,7 @@ final class IFSettings: ObservableObject {
     init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
          voiceService: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
         self.defaults = defaults
+        shortcuts = KeyboardShortcuts(defaults: defaults)
         voice = VoicePreparation(service: voiceService)
         smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
         guard let stored = defaults.object(forKey: "customPhrases") else { return }
@@ -166,20 +168,28 @@ final class IFSettings: ObservableObject {
 }
 
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case appearance = "外观"
     case input = "输入"
-    case personalization = "个性化"
-    case voice = "语音"
+    case shortcuts = "快捷键"
+    case appearance = "外观"
+    case personalization = "自定义短语"
     case dictionaries = "词库"
+    case voice = "语音"
     case smart = "AI 服务"
     case updates = "更新"
     case feedback = "反馈"
     case about = "关于"
+    static let groups: [(title: String, sections: [Self])] = [
+        ("输入体验", [.input, .shortcuts, .appearance]),
+        ("语言与辅助", [.personalization, .dictionaries, .voice, .smart]),
+        ("应用", [.updates, .feedback, .about])
+    ]
+    static var defaultSection: Self { groups[0].sections[0] }
     var id: Self { self }
     var symbol: String {
         switch self {
         case .appearance: "paintbrush"
-        case .input: "keyboard"
+        case .input: "text.cursor"
+        case .shortcuts: "keyboard"
         case .personalization: "person.crop.circle"
         case .smart: "sparkles"
         case .voice: "mic"
@@ -198,7 +208,7 @@ struct SettingsView: View {
     @State private var section: SettingsSection?
 
     init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil,
-         initialSection: SettingsSection = .appearance, feedbackReporter: FeedbackReporter = .live) {
+         initialSection: SettingsSection = .defaultSection, feedbackReporter: FeedbackReporter = .live) {
         self.settings = settings
         self.dictionaries = dictionaries
         self.feedbackReporter = feedbackReporter
@@ -207,9 +217,15 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(SettingsSection.allCases, selection: $section) { section in
-                Label(section.rawValue, systemImage: section.symbol)
-                    .tag(section)
+            List(selection: $section) {
+                ForEach(SettingsSection.groups, id: \.title) { group in
+                    Section(group.title) {
+                        ForEach(group.sections) { section in
+                            Label(section.rawValue, systemImage: section.symbol)
+                                .tag(section)
+                        }
+                    }
+                }
             }
             .listStyle(.sidebar)
             .accessibilityLabel("墨流拼音设置")
@@ -219,16 +235,17 @@ struct SettingsView: View {
             Group {
                 if section == .about { AboutSettingsView() }
                 else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter) }
-                else if section == .input { input }
+                else if section == .appearance { appearance }
+                else if section == .shortcuts { ShortcutsSettingsView(shortcuts: settings.shortcuts) }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
                 else if section == .smart { SmartSettingsView(settings: settings, smart: settings.smart) }
-                else if section == .voice { VoiceSettingsView(settings: settings) }
+                else if section == .voice { VoiceSettingsView(settings: settings, shortcuts: settings.shortcuts, showShortcuts: { section = .shortcuts }, showAIService: { section = .smart }) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
                 else if section == .updates { UpdateSettingsView(settings: settings) }
-                else { appearance }
+                else { input }
             }
             .frame(minHeight: 0, maxHeight: .infinity)
-            .navigationTitle((section ?? .appearance).rawValue)
+            .navigationTitle((section ?? .defaultSection).rawValue)
         }
         .navigationSplitViewStyle(.balanced)
     }

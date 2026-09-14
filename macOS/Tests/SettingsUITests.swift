@@ -11,6 +11,10 @@ import InkFlowTestSupport
 @main
 struct SettingsUITests {
     @MainActor static func main() throws {
+        if CommandLine.arguments.contains("--preview") {
+            runPreview()
+            return
+        }
         if CommandLine.arguments.contains("--microphone-reproduction") || CommandLine.arguments.contains("--settings-window-lifecycle") {
             runMicrophoneReproduction(lifecycleOnly: CommandLine.arguments.contains("--settings-window-lifecycle"))
             return
@@ -47,7 +51,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["外观", "输入", "个性化", "语音", "词库", "AI 服务", "更新", "反馈", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["输入", "快捷键", "外观", "自定义短语", "词库", "语音", "AI 服务", "更新", "反馈", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)
@@ -74,6 +78,26 @@ struct SettingsUITests {
         if let testError { throw testError }
         check(dictionaryCompleted, "Dictionary UI cases must finish before the harness exits")
         print("PASS settings UI suite: complete")
+    }
+
+    /// UI-only preview: no assertions, input engine, permissions, or network services.
+    @MainActor static func runPreview() {
+        let suite = "inkflow.settings-preview.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let settings = IFSettings(defaults: defaults, voiceService: VoiceRecognitionFixture(mode: .preview))
+        _ = NSApplication.shared
+        NSApp.finishLaunching()
+        let preferences = IFSettingsWindowController(settings: settings)
+        preferences.loadWindow()
+        let window = preferences.window!
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .shortcuts))
+        preferences.present()
+        print("HOLD: isolated Settings preview ready; tests deferred; close the window to clean up")
+        fflush(stdout)
+        while window.isVisible { drainEvents(seconds: 0.25) }
+        withExtendedLifetime(preferences) {}
+        print("END settings preview")
     }
 
     /// Explicit interactive diagnostic: real permission/resources, isolated settings, no recording or IME registration.
@@ -170,7 +194,8 @@ struct SettingsUITests {
               "Repeated settings presentation must not duplicate editing commands")
         checkMinimumSize(window)
         check(window.styleMask.contains([.resizable, .fullSizeContentView]))
-        check(window.titleVisibility == .visible && window.title == "外观", "SwiftUI navigation title must remain visible")
+        check(window.titleVisibility == .visible && window.title == SettingsSection.groups[0].sections[0].rawValue,
+              "Settings must open to the first sidebar panel with its navigation title visible")
         check(window.contentViewController is SettingsHostingController)
         initializeAccessibility()
         if CommandLine.arguments.contains("--input-only") {
@@ -186,6 +211,8 @@ struct SettingsUITests {
             window.close()
             return
         }
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .appearance))
+        waitForFocus(window)
         checkLayout(window)
         checkFeedbackAndAbout(window, settings: settings)
         checkCustomPhrasesLayout(window, settings: settings)
@@ -243,6 +270,9 @@ struct SettingsUITests {
         print("PASS settings UI: actual IMK dictionary dispatch, SwiftUI settings, singleton reopen/focus, native direction/font/digit keys, composition preserved, deferred count")
         fflush(stdout)
         if CommandLine.arguments.contains("--hold") {
+            window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .shortcuts))
+            window.setContentSize(NSSize(width: 700, height: 450))
+            drainEvents()
             print("HOLD: isolated SwiftUI settings window ready for CUA; close the window to finish and clean up")
             fflush(stdout)
             while window.isVisible { drainEvents(seconds: 0.25) }
@@ -472,28 +502,6 @@ struct SettingsUITests {
         press("settings.input.fuzzy")
         check(!settings.fuzzyEnabled)
 
-        func checkPaging(_ selection: IFSettings.PagingKeys) {
-            let radios = IFAccessibilityTree(window).filter { $0["role"] as? String == "AXRadioButton" }
-            check(radios.count == 2, "Exactly two mutually exclusive paging radios")
-            for keys in IFSettings.PagingKeys.allCases {
-                let key = keys == .brackets ? "brackets" : "minusEqual"
-                let radio = control("settings.input.paging.\(key)")
-                check(radio["label"] as? String == keys.rawValue && radio["value"] as? Int == (keys == selection ? 1 : 0),
-                      "Exact paging title and mutual exclusion: \(keys.rawValue)")
-            }
-            let frames = radios.map { ($0["frame"] as! NSValue).rectValue }.sorted { $0.minX < $1.minX }
-            check(abs(frames[0].midY - frames[1].midY) < 2 && frames[0].maxX <= frames[1].minX,
-                  "Native paging radio choices are horizontal")
-            let toggleFrame = (control("settings.input.emoji")["frame"] as! NSValue).rectValue
-            check(abs(frames[1].maxX - toggleFrame.maxX) < 3,
-                  "Paging radio choices align with the right-side controls")
-            checkTitle("翻页", beside: control("settings.input.paging.brackets"))
-            check(settings.pagingKeys == selection)
-        }
-        checkPaging(.brackets)
-        press("settings.input.paging.minusEqual"); checkPaging(.minusEqual)
-        press("settings.input.paging.brackets"); checkPaging(.brackets)
-
         let mappings: [(InputOption, String, String)] = [(.cornerQuotes, "{}", "「」"), (.middleDot, "`", "·"),
                                                         (.fullwidthPipe, "|", "｜"), (.ideographicComma, "\\", "、")]
         for (option, key, mapped) in mappings {
@@ -537,6 +545,66 @@ struct SettingsUITests {
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX input final \(element)") }
         }
+        func checkPaging(_ selection: IFSettings.PagingKeys) {
+            let radios = IFAccessibilityTree(window).filter { $0["role"] as? String == "AXRadioButton" }
+            check(radios.count == 2, "Exactly two mutually exclusive paging radios")
+            for keys in IFSettings.PagingKeys.allCases {
+                let key = keys == .brackets ? "brackets" : "minusEqual"
+                let radio = control("settings.input.paging.\(key)")
+                check(radio["label"] as? String == keys.rawValue && radio["value"] as? Int == (keys == selection ? 1 : 0),
+                      "Exact paging title and mutual exclusion: \(keys.rawValue)")
+            }
+            let frames = radios.map { ($0["frame"] as! NSValue).rectValue }.sorted { $0.minX < $1.minX }
+            check(abs(frames[0].midY - frames[1].midY) < 2 && frames[0].maxX <= frames[1].minX,
+                  "Native paging radio choices are horizontal")
+            checkTitle("翻页", beside: control("settings.input.paging.brackets"))
+            check(settings.pagingKeys == selection)
+        }
+        checkPaging(.brackets)
+        press("settings.input.paging.minusEqual"); checkPaging(.minusEqual)
+        press("settings.input.paging.brackets"); checkPaging(.brackets)
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .shortcuts))
+        drainEvents()
+        check(!IFAccessibilityTree(window).contains { $0["role"] as? String == "AXRadioButton" },
+              "Paging remains an Input preference")
+        for action in ShortcutAction.allCases {
+            check(control("shortcuts.\(action.rawValue)")["role"] as? String == "AXButton",
+                  "Every shortcut is configurable")
+        }
+
+        press("shortcuts.punctuation")
+        let recordedChord = keyEvent(40, "k", [.control, .option])
+        NSApp.sendEvent(recordedChord)
+        drainEvents()
+        check(settings.shortcuts.binding(for: .punctuation) == ShortcutBinding.recorded(from: recordedChord),
+              "Native recorder saves an arbitrary key combination through the app event path")
+        press("shortcuts.script")
+        NSApp.sendEvent(recordedChord)
+        drainEvents()
+        check(settings.shortcuts.binding(for: .script) == .none && settings.shortcuts.error != nil,
+              "Native recorder rejects a duplicate without changing the binding")
+        NSApp.sendEvent(keyEvent(53, "\u{1b}"))
+        drainEvents()
+        press("shortcuts.punctuation")
+        NSApp.sendEvent(keyEvent(51, "\u{7f}"))
+        drainEvents()
+        check(settings.shortcuts.binding(for: .punctuation) == .none, "Delete clears a recorded binding")
+        press("shortcuts.restoreDefaults")
+
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .voice))
+        drainEvents()
+        let originalPolish = settings.voicePolishEnabled
+        press("voice.polish")
+        check(settings.voicePolishEnabled != originalPolish, "Voice polish remains functional on the Voice page")
+        press("voice.polish")
+        press("voice.shortcuts")
+        check(window.title == "快捷键", "Voice shortcut link navigates within Settings")
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .voice))
+        drainEvents()
+        press("voice.aiService")
+        check(window.title == "AI 服务", "Voice configuration link opens shared AI service")
+        check(!IFAccessibilityTree(window).contains { $0["id"] as? String == "voice.polish" },
+              "Voice polish has one control, on Voice")
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         drainEvents()
         print("PASS input settings layout: exact compact labels, no headings/copy, unified fuzzy action, horizontal exclusive radios, native popup choices/actions, preserved disabled mappings and actual error")
@@ -552,7 +620,7 @@ struct SettingsUITests {
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
         checkMinimumSize(window)
         drainEvents()
-        check(window.title == "个性化")
+        check(window.title == "自定义短语")
         for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
@@ -606,10 +674,10 @@ struct SettingsUITests {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
-            let identifiers = ["smart.enabled", "smart.triggerDelay", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save", "voice.polish"]
+            let identifiers = ["smart.enabled", "smart.triggerDelay", "smart.baseURL", "smart.apiKey", "smart.model", "smart.save"]
             let controls = elements.filter { identifiers.contains($0["id"] as? String ?? "") }
             check(controls.count == identifiers.count,
-                  "AI settings must expose prediction, trigger delay, voice polish, three fields and save button")
+                  "AI settings must expose prediction, trigger delay, three fields and save button")
             for control in controls {
                 let frame = (control["frame"] as! NSValue).rectValue
                 check(frame.width > 0 && frame.height > 0,
@@ -618,7 +686,7 @@ struct SettingsUITests {
             check(controls.first { $0["id"] as? String == "smart.enabled" }?["enabled"] as? Bool == false)
             let predictionContent = elements.first { $0["id"] as? String == "smart.predictionContent" }
             let notice = elements.first { $0["id"] as? String == "smart.notice" }
-            check(notice.map(accessibilityText) == "开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。按 Tab 采纳建议。",
+            check(notice.map(accessibilityText) == "开启后，输入停顿时会将光标前后文本和拼音发送至所配置的服务。",
                   "Prediction privacy note must use concise copy")
             if let predictionFrame = (predictionContent?["frame"] as? NSValue)?.rectValue,
                let noticeFrame = (notice?["frame"] as? NSValue)?.rectValue {

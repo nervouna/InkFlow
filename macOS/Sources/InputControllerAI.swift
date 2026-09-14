@@ -117,8 +117,7 @@ final class IFInputControllerAI {
     }
 
     func acceptSuggestion(_ event: NSEvent, client eventClient: IMKTextInput?, entered: TimeInterval) -> Bool {
-        guard let controller, event.type == .keyDown, event.keyCode == 48,
-              event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
+        guard let controller, event.type == .keyDown, event.keyCode == 48, event.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
               let eventClient, ObjectIdentifier(eventClient as AnyObject) == client.map({ ObjectIdentifier($0 as AnyObject) }),
               let engine = controller.engine, !engine.snapshot().preedit.isEmpty,
               let input = engine.aiInputIdentity() else { return false }

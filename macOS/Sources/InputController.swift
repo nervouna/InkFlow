@@ -122,19 +122,19 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             menu.autoenablesItems = false
             let ascii = engine?.requestedASCIIMode ?? false
             let mode = menu.addItem(withTitle: ascii ? "切换到中文输入" : "切换到英文输入",
-                                    action: #selector(toggleInputMode(_:)), keyEquivalent: "⇧")
+                                    action: #selector(toggleInputMode(_:)), keyEquivalent: settings.shortcuts.binding(for: .inputMode).menuEquivalent)
             mode.target = self
-            mode.keyEquivalentModifierMask = []
+            mode.keyEquivalentModifierMask = settings.shortcuts.binding(for: .inputMode).flags
             mode.allowsAutomaticKeyEquivalentLocalization = false
             mode.indentationLevel = 0
-            let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: ".")
+            let punctuation = menu.addItem(withTitle: "英文标点", action: #selector(toggleEnglishPunctuation(_:)), keyEquivalent: settings.shortcuts.binding(for: .punctuation).menuEquivalent)
             punctuation.target = self
-            punctuation.keyEquivalentModifierMask = .control
+            punctuation.keyEquivalentModifierMask = settings.shortcuts.binding(for: .punctuation).flags
             punctuation.indentationLevel = 0
             punctuation.state = settings.inputPreferences[.englishPunctuation] ? .on : .off
-            let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: "f")
+            let traditional = menu.addItem(withTitle: "繁体输入", action: #selector(toggleTraditional(_:)), keyEquivalent: settings.shortcuts.binding(for: .script).menuEquivalent)
             traditional.target = self
-            traditional.keyEquivalentModifierMask = [.control, .shift]
+            traditional.keyEquivalentModifierMask = settings.shortcuts.binding(for: .script).flags
             traditional.indentationLevel = 0
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
             menu.addItem(.separator())

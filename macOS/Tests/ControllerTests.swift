@@ -197,14 +197,10 @@ struct ControllerTests {
         }
         let punctuationItem = menu.items.first { $0.title == "英文标点" }!
         let traditionalItem = menu.items.first { $0.title == "繁体输入" }!
-        check(modeItem.keyEquivalent == "⇧" && modeItem.keyEquivalentModifierMask.isEmpty &&
-              !modeItem.allowsAutomaticKeyEquivalentLocalization,
-              "Modifier-only left Shift must use a separate right-side annotation")
-        check(traditionalItem.keyEquivalent == "f" &&
-              traditionalItem.keyEquivalentModifierMask == [.control, .shift],
-              "Traditional toggle must expose Control-Shift-F in the native shortcut column")
-        check(punctuationItem.keyEquivalent == "." && punctuationItem.keyEquivalentModifierMask == .control,
-              "Punctuation toggle must expose Control-period in the native shortcut column")
+        check(modeItem.keyEquivalent.isEmpty && !modeItem.allowsAutomaticKeyEquivalentLocalization,
+              "A standalone modifier has no fabricated native menu key equivalent")
+        check(traditionalItem.keyEquivalent.isEmpty && punctuationItem.keyEquivalent.isEmpty,
+              "Unassigned punctuation and script commands have no hidden default key equivalents")
         check(menu.items.filter { !$0.isSeparatorItem }.allSatisfy { $0.indentationLevel == 0 },
               "Every menu item must stay at the menu's root indentation level")
         check(menu.index(of: punctuationItem) < menu.index(of: traditionalItem),
@@ -292,6 +288,9 @@ struct ControllerTests {
     }
 
     @MainActor static func controlShortcuts(settings: IFSettings) {
+        settings.shortcuts.restoreDefaults()
+        defer { settings.shortcuts.restoreDefaults() }
+
         settings.setInputOption(.traditional, enabled: false)
         settings.setInputOption(.englishPunctuation, enabled: false)
         let client = RecordingClient(document: "")
@@ -303,6 +302,18 @@ struct ControllerTests {
         check(!controller.handle(keyEvent(3, "f", .control), client: client) &&
               !settings.inputPreferences[.traditional] && status.records.isEmpty,
               "Control-F must pass through without toggling or presenting status")
+        _ = controller.handle(keyEvent(3, "f", [.control, .shift]), client: client)
+        _ = controller.handle(keyEvent(47, ".", .control), client: client)
+        check(!settings.inputPreferences[.traditional] && !settings.inputPreferences[.englishPunctuation],
+              "Former hardcoded chords do not toggle options while unassigned")
+        check(settings.shortcuts.set(ShortcutBinding.recorded(from: keyEvent(3, "f", [.control, .shift]))!, for: .script))
+        check(settings.shortcuts.set(ShortcutBinding.recorded(from: keyEvent(47, ".", .control))!, for: .punctuation))
+        let configuredMenu = controller.menu()!
+        check(configuredMenu.items.first { $0.title == "繁体输入" }?.keyEquivalent == "f"
+              && configuredMenu.items.first { $0.title == "繁体输入" }?.keyEquivalentModifierMask == [.control, .shift])
+        check(configuredMenu.items.first { $0.title == "英文标点" }?.keyEquivalent == "."
+              && configuredMenu.items.first { $0.title == "英文标点" }?.keyEquivalentModifierMask == .control,
+              "Native menu equivalents reflect explicitly assigned commands")
         for letter in "ni" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
         let composing = controller.engine!.snapshot()
         check(controller.handle(keyEvent(3, "f", [.control, .shift]), client: client))

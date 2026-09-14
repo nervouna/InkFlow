@@ -93,6 +93,8 @@ struct VoiceControllerTests {
         await unstableClientIdentifier()
         await inputMethodKitAbsentMark()
         await earlyRelease()
+        await recordedVoiceChords()
+        await recordedVoiceChordCancellation()
         await holdChordRelease()
         await stopDuringPreviewDelivery()
         await activationBeforeDeactivation()
@@ -106,6 +108,94 @@ struct VoiceControllerTests {
         await startRejectionDiagnostics()
         await correctingCancellation()
         print("PASS voice controller: hold/toggle, UTF16 marks, exact-once fallback, target ownership, reentrancy and independent settings")
+    }
+
+    @MainActor static func voiceChordEvent(_ down: Bool, flags: NSEvent.ModifierFlags = [.control, .option],
+                                          repeated: Bool = false) -> NSEvent {
+        NSEvent.keyEvent(with: down ? .keyDown : .keyUp, location: .zero, modifierFlags: flags, timestamp: 0,
+                         windowNumber: 0, context: nil, characters: "k", charactersIgnoringModifiers: "k",
+                         isARepeat: repeated, keyCode: 40)!
+    }
+
+    @MainActor static func recordedVoiceChords() async {
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            let binding = ShortcutBinding.recorded(from: voiceChordEvent(true))!
+            check(h.settings.shortcuts.set(binding, for: .voiceHold))
+            check(h.controller.handle(voiceChordEvent(true), client: h.client))
+            check(!h.controller.voice.isActive && h.timer != nil, "A recorded hold chord waits for its hold threshold")
+            h.now += 0.25; h.timer?()
+            for _ in 0..<20 { await Task.yield() }
+            check(h.controller.voice.isActive && h.fake.starts == 1)
+            check(h.controller.handle(voiceChordEvent(true, repeated: true), client: h.client))
+            check(h.fake.starts == 1, "Key repeat cannot restart held dictation")
+            check(h.controller.handle(voiceChordEvent(false), client: h.client))
+            check(h.fake.stops == 1 && h.fake.cancels == 0, "Releasing the recorded key finishes held dictation once")
+            h.fake.callbacks?.onFinalized("")
+        }
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            let binding = ShortcutBinding.recorded(from: voiceChordEvent(true))!
+            check(h.settings.shortcuts.set(binding, for: .voiceHold))
+            check(h.settings.shortcuts.set(binding, for: .voiceToggle))
+            func tap() {
+                check(h.controller.handle(voiceChordEvent(true), client: h.client)); h.now += 0.05
+                check(h.controller.handle(voiceChordEvent(false), client: h.client)); h.now += 0.05
+                _ = h.controller.handle(modifierEvent(59), client: h.client)
+                _ = h.controller.handle(modifierEvent(59, .control), client: h.client)
+                _ = h.controller.handle(modifierEvent(58, [.control, .option]), client: h.client)
+            }
+            tap()
+            check(!h.controller.voice.isActive && h.timer == nil, "A short chord tap does not start held or continuous dictation")
+            tap()
+            for _ in 0..<20 { await Task.yield() }
+            check(h.controller.voice.isActive && h.fake.starts == 1,
+                  "Two recorded chord taps start continuous dictation even when modifiers are released between taps")
+            h.now += 0.5
+            tap(); tap()
+            check(h.fake.stops == 1 && h.fake.starts == 1, "Another double tap stops the existing continuous session once")
+            h.fake.callbacks?.onFinalized("")
+        }
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            check(h.settings.shortcuts.set(ShortcutBinding.recorded(from: voiceChordEvent(true))!, for: .voiceHold))
+            check(h.controller.handle(voiceChordEvent(true), client: h.client))
+            h.now += 0.25; h.timer?()
+            for _ in 0..<20 { await Task.yield() }
+            _ = h.controller.handle(modifierEvent(58, .control), client: h.client)
+            check(h.fake.stops == 1 && h.fake.cancels == 0,
+                  "Releasing a required chord modifier finishes held dictation")
+            h.fake.callbacks?.onFinalized("")
+        }
+    }
+
+    @MainActor static func recordedVoiceChordCancellation() async {
+        for active in [false, true] {
+            for interruption in ["extraModifier", "restoreDefaults", "reassign", "deactivate"] {
+                let h = VoiceHarness(); defer { h.close() }
+                check(h.settings.shortcuts.set(ShortcutBinding.recorded(from: voiceChordEvent(true))!, for: .voiceHold))
+                check(h.controller.handle(voiceChordEvent(true), client: h.client))
+                let stale = h.timer!
+                if active {
+                    h.now += 0.25; stale()
+                    for _ in 0..<20 { await Task.yield() }
+                    check(h.fake.starts == 1)
+                }
+                switch interruption {
+                case "extraModifier": _ = h.controller.handle(modifierEvent(56, [.control, .option, .shift]), client: h.client)
+                case "restoreDefaults": h.settings.shortcuts.restoreDefaults()
+                case "reassign": check(h.settings.shortcuts.set(.none, for: .voiceHold))
+                default: h.controller.deactivateServer(h.client)
+                }
+                h.now += 0.25; stale()
+                for _ in 0..<20 { await Task.yield() }
+                check(!h.controller.voice.isActive && h.timer == nil && h.fake.stops == 0,
+                      "\(interruption) cancels rather than finalizes \(active ? "active" : "pending") recorded hold")
+                check(h.fake.starts == (active ? 1 : 0) && h.fake.cancels == (active ? 1 : 0),
+                      "Cancelled hold callbacks cannot start a replacement capture")
+            }
+        }
+        print("PASS recorded voice chords: hold, double tap, repeats, required release, added modifiers, settings reset and deactivation")
     }
 
     @MainActor static func earlyRelease() async {

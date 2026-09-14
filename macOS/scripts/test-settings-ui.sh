@@ -54,6 +54,9 @@ build_swift_test settings-ui-tests "$app/Contents/MacOS/SettingsHarness"
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-settings-ui.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 "$app/Contents/MacOS/SettingsHarness" "$PWD/build/InkFlow.app/Contents/Resources/Rime" "$user_dir" "$@" | tee "$user_dir/output.log"
+if [[ "${1:-}" == --preview ]]; then
+  exit 0
+fi
 if ! rg -q '^PASS settings UI suite: complete$' "$user_dir/output.log"; then
   echo "FAIL settings UI harness exited without completing all requested cases" >&2
   exit 1

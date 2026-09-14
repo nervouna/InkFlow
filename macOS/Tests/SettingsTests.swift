@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
@@ -16,6 +17,7 @@ struct SettingsTests {
         check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],
               "Only square brackets page by default")
         groupedInputPreferences()
+        configurableShortcuts()
         for option in InputOption.allCases where ![.fuzzyZ, .fuzzyC, .fuzzyS, .bracketPaging, .minusEqualPaging].contains(option) {
             check(settings.inputPreferences[option] == option.defaultValue)
             settings.setInputOption(option, enabled: !option.defaultValue)
@@ -61,6 +63,55 @@ struct SettingsTests {
         defaults.set("yes", forKey: "thunderMode")
         check(!settings.thunderMode, "Malformed Thunder preference must use the safe default")
         print("PASS settings: defaults, malformed values, bounds, persistence, Thunder/update defaults-off")
+    }
+
+    @MainActor static func configurableShortcuts() {
+        let isolated = IsolatedSettings(); defer { isolated.cleanup() }
+        let shortcuts = isolated.settings.shortcuts
+        check(ShortcutAction.allCases.map(\.rawValue) == ["inputMode", "punctuation", "script", "voiceHold", "voiceToggle"],
+              "Only five customizable commands are exposed; AI acceptance remains fixed")
+        check(shortcuts.binding(for: .inputMode) == .leftShift && shortcuts.binding(for: .voiceHold) == .rightShift
+              && shortcuts.binding(for: .voiceToggle) == .rightShift)
+        check(shortcuts.binding(for: .punctuation) == .none && shortcuts.binding(for: .script) == .none)
+        let chord = ShortcutBinding.recorded(from: keyEvent(40, "k", [.control, .option, .shift]))!
+        check(shortcuts.set(chord, for: .punctuation), "A recorded combination outside the old preset list is supported")
+        check(chord.matches(keyEvent(40, "K", [.control, .option, .shift, .capsLock])), "Matching uses physical key and ignores Caps Lock")
+        check(!chord.matches(keyEvent(40, "k", [.control, .option])) && !chord.matches(keyEvent(37, "k", [.control, .option, .shift])),
+              "Both modifier set and physical key must match")
+        check(!shortcuts.set(chord, for: .script) && shortcuts.error != nil && shortcuts.binding(for: .script) == .none,
+              "A conflicting assignment leaves the previous binding intact")
+        check(shortcuts.set(chord, for: .punctuation))
+        let reload = KeyboardShortcuts(defaults: isolated.defaults)
+        check(reload.binding(for: .punctuation) == chord && reload.binding(for: .punctuation).title == chord.title,
+              "Recorded identity and display label survive persistence")
+        check(shortcuts.set(.none, for: .inputMode))
+        check(KeyboardShortcuts(defaults: isolated.defaults).binding(for: .inputMode) == .none,
+              "Explicitly clearing a default binding survives reload")
+        check(shortcuts.set(chord, for: .inputMode) == false)
+        check(shortcuts.set(.none, for: .punctuation))
+        check(shortcuts.set(chord, for: .voiceHold) && shortcuts.set(chord, for: .voiceToggle),
+              "Hold and double-tap may share the same recorded combination")
+        for event in [keyEvent(0, "a"), keyEvent(48, "\t"), keyEvent(7, "x", .command), keyEvent(49, " ", .command)] {
+            let invalid = ShortcutBinding.recorded(from: event)!
+            check(!shortcuts.set(invalid, for: .script) && shortcuts.error != nil,
+                  "Typing keys, fixed Tab, and reserved system/application commands must be rejected")
+        }
+        check(!shortcuts.set(.leftShift, for: .script), "Punctuation/script commands require combinations")
+        let modifiedTab = ShortcutBinding.recorded(from: keyEvent(48, "\t", [.control, .option]))!
+        check(shortcuts.set(modifiedTab, for: .script), "Reserving plain Tab does not reserve every modified Tab chord")
+        let functionKey = ShortcutBinding.recorded(from: keyEvent(122, "", .function))!
+        check(shortcuts.set(functionKey, for: .script), "An unmodified function key is recordable")
+        let revision = shortcuts.revision
+        shortcuts.restoreDefaults()
+        check(shortcuts.revision > revision && shortcuts.error == nil,
+              "Restoring defaults publishes a runtime cancellation revision")
+        let restored = KeyboardShortcuts(defaults: isolated.defaults)
+        check(restored.binding(for: .inputMode) == .leftShift && restored.binding(for: .voiceHold) == .rightShift
+              && restored.binding(for: .voiceToggle) == .rightShift && restored.binding(for: .script) == .none)
+        isolated.defaults.set(Data("{broken".utf8), forKey: "shortcut.inputMode")
+        check(KeyboardShortcuts(defaults: isolated.defaults).binding(for: .inputMode) == .leftShift,
+              "Malformed persisted data safely falls back to the default")
+        print("PASS configurable shortcuts: recording, exact matches, defaults, clear, conflicts, persistence, validation, reset revision")
     }
 
     static func feedbackBody(_ url: URL) -> String {

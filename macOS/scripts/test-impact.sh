@@ -109,7 +109,7 @@ impact_classify() {
     macOS/Sources/AboutSettingsView.swift)
       impact_rule "$path" 'about settings presentation' settings
       impact_manual_add manual-settings ;;
-    macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift)
+    macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift|macOS/Sources/KeyboardShortcuts.swift)
       impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/AvailableUpdate.swift|macOS/Sources/GitHubRelease*.swift|macOS/Sources/SemanticVersion.swift|macOS/Sources/Update*.swift)

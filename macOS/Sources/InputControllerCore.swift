@@ -1,7 +1,7 @@
 @preconcurrency import InputMethodKit
 import Carbon
 
-/// Audited offline IMK path. AI may consume only an explicitly recognized plain Tab;
+/// Audited offline IMK path. AI may consume only plain Tab;
 /// presentation callbacks run after the offline state transition and cannot replace it.
 @MainActor
 @objc(InkFlowInputController)
@@ -12,7 +12,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
         return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
     }()
-    private var leftShiftArmed = false
+    private var modeModifierArmed: ShortcutBinding?
 
     nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
         Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .keyUp, .flagsChanged).rawValue)
@@ -26,7 +26,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         nonisolated(unsafe) let callbackClient = sender
         let shouldCommit = MainActor.assumeIsolated {
             voice.cancel(.editing)
-            leftShiftArmed = false
+            modeModifierArmed = nil
             guard !ai.isAccepting, ownsMarkedText, index >= 0, index != NSNotFound,
                   let activeClient = callbackClient as? IMKTextInput else { return false }
             let markedRange = activeClient.markedRange()
@@ -38,50 +38,47 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         return false
     }
 
-    private func handleModeShift(_ event: NSEvent, client: IMKTextInput?, capturedAt: TimeInterval) -> Bool {
-        guard event.type == .flagsChanged else {
-            leftShiftArmed = false
-            return false
-        }
-        guard event.keyCode == UInt16(kVK_Shift) else {
-            leftShiftArmed = false
-            return false
-        }
-        if event.modifierFlags.contains(.shift) {
-            leftShiftArmed = event.modifierFlags.intersection([.control, .option, .command, .function]).isEmpty
-            return leftShiftArmed
-        }
-        let shouldToggle = leftShiftArmed
-        leftShiftArmed = false
-        guard shouldToggle else { return false }
+    private func toggleConfiguredMode(client: IMKTextInput?, capturedAt: TimeInterval) {
         if let engine, engine.toggleASCIIMode(capturedAt: capturedAt) {
             let state = engine.snapshot()
             statusPresentation?.present(engine.requestedASCIIMode ? .english : .chinese, client: client,
                                         characterIndex: state.preedit.isEmpty ? 0 : state.cursor)
         }
+    }
+
+    private func handleModeShift(_ event: NSEvent, client: IMKTextInput?, capturedAt: TimeInterval) -> Bool {
+        let binding = settings.shortcuts.binding(for: .inputMode)
+        guard binding.isModifier, event.type == .flagsChanged, event.keyCode == binding.keyCode,
+              !event.modifierFlags.contains(.function) else {
+            modeModifierArmed = nil
+            return false
+        }
+        if binding.modifierIsDown(event) {
+            let alone = event.modifierFlags.intersection(ShortcutBinding.relevantFlags) == binding.flags
+            modeModifierArmed = alone ? binding : nil
+            return alone
+        }
+        let shouldToggle = modeModifierArmed == binding && event.modifierFlags.intersection(ShortcutBinding.relevantFlags).isEmpty
+        modeModifierArmed = nil
+        guard shouldToggle else { return false }
+        toggleConfiguredMode(client: client, capturedAt: capturedAt)
         return true
     }
 
-    private func handleControlShortcut(_ event: NSEvent, client: IMKTextInput?) -> Bool {
-        let shortcutFlags = event.modifierFlags.intersection([.shift, .control, .option, .command, .function])
-        guard event.type == .keyDown else { return false }
-        let requiredFlags: NSEvent.ModifierFlags
-        switch event.keyCode {
-        case UInt16(kVK_ANSI_F): requiredFlags = [.control, .shift]
-        case UInt16(kVK_ANSI_Period): requiredFlags = .control
-        default: return false
-        }
-        guard shortcutFlags == requiredFlags else { return false }
+    private func handleControlShortcut(_ event: NSEvent, client: IMKTextInput?, capturedAt: TimeInterval) -> Bool {
+        guard let action = [ShortcutAction.inputMode, .punctuation, .script].first(where: {
+            settings.shortcuts.binding(for: $0).matches(event)
+        }) else { return false }
         if event.isARepeat { return true }
-        switch event.keyCode {
-        case UInt16(kVK_ANSI_F):
+        switch action {
+        case .inputMode: toggleConfiguredMode(client: client, capturedAt: capturedAt)
+        case .script:
             toggleInputOption(.traditional, enabledStatus: .traditional,
                               disabledStatus: .simplified, client: client)
-        case UInt16(kVK_ANSI_Period):
+        case .punctuation:
             toggleInputOption(.englishPunctuation, enabledStatus: .englishPunctuation,
                               disabledStatus: .chinesePunctuation, client: client)
-        default:
-            return false
+        default: return false
         }
         return true
     }
@@ -185,11 +182,11 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 return finishFirstKey(handled, handled ? .voiceDeliveringHandled : .voiceDeliveringPassThrough)
             }
             guard !ai.isAccepting else {
-                leftShiftArmed = false
+                modeModifierArmed = nil
                 return finishFirstKey(false, .aiAccepting)
             }
             if let callbackEvent, voice.handle(callbackEvent, client: callbackClient as? IMKTextInput) {
-                leftShiftArmed = false
+                modeModifierArmed = nil
                 return finishFirstKey(true, .voiceHandled)
             }
             let entered = qualityClock.monotonic()
@@ -198,14 +195,13 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
                 return handleModeShift(callbackEvent, client: callbackClient as? IMKTextInput, capturedAt: entered)
             }
-            leftShiftArmed = false
+            modeModifierArmed = nil
             observeQualityVisibility(at: entered)
             ai.validate()
-            if let callbackEvent, handleControlShortcut(callbackEvent, client: callbackClient as? IMKTextInput) {
+            if let callbackEvent, handleControlShortcut(callbackEvent, client: callbackClient as? IMKTextInput, capturedAt: entered) {
                 return finishFirstKey(true, .controlShortcut)
             }
-            if let callbackEvent, callbackEvent.type == .keyDown, callbackEvent.keyCode == 48,
-               callbackEvent.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
+            if let callbackEvent, callbackEvent.type == .keyDown, callbackEvent.keyCode == 48, callbackEvent.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
                ai.acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) {
                 return finishFirstKey(true, .aiSuggestionAccepted)
             }
@@ -234,7 +230,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
-        MainActor.assumeIsolated { leftShiftArmed = false }
+        MainActor.assumeIsolated { modeModifierArmed = nil }
         super.deactivateServer(sender)
     }
 

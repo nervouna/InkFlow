@@ -2,6 +2,10 @@ import SwiftUI
 
 struct VoiceSettingsView: View {
     @ObservedObject var settings: IFSettings
+    @ObservedObject var shortcuts: KeyboardShortcuts
+
+    var showShortcuts: () -> Void = {}
+    var showAIService: () -> Void = {}
 
     var body: some View {
         Form {
@@ -22,8 +26,19 @@ struct VoiceSettingsView: View {
                 }
             }
             Section("快捷键") {
-                Text("按住右 Shift 说话，松开结束。")
-                Text("双击右 Shift 开始或结束连续听写；Esc 取消。")
+                LabeledContent("按住说话", value: shortcuts.title(for: .voiceHold))
+                LabeledContent("连续听写", value: shortcuts.title(for: .voiceToggle))
+                Text("松开结束按住说话；Esc 取消听写。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("查看快捷键", action: showShortcuts)
+                    .accessibilityIdentifier("voice.shortcuts")
+            }
+            Section("语音润色") {
+                Toggle("润色语音转写", isOn: $settings.voicePolishEnabled)
+                    .accessibilityIdentifier("voice.polish")
+                Button("配置 AI 服务", action: showAIService)
+                    .accessibilityIdentifier("voice.aiService")
             }
         }
         .formStyle(.grouped)
