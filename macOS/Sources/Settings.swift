@@ -356,7 +356,10 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     }()
     var dictionaries: IFDictionaryCoordinator?
 
-    func windowWillClose(_ notification: Notification) { dictionaries?.presentationClosed() }
+    func windowWillClose(_ notification: Notification) {
+        dictionaries?.presentationClosed()
+        NSApp.setActivationPolicy(.accessory)
+    }
     private let settings: IFSettings
 
     init(settings: IFSettings) {
@@ -393,7 +396,10 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
             mainMenu.addItem(Self.editingMenuItem)
         }
         NSApp.mainMenu = mainMenu
-        NSApp.setActivationPolicy(.accessory)
+        // TCC can return focus to another app when an accessory app's permission
+        // alert closes. Keep Settings a regular window, including Dock/Cmd-Tab
+        // reachability, until it closes; ordinary input remains accessory-only.
+        NSApp.setActivationPolicy(.regular)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)

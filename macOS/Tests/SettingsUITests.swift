@@ -1,6 +1,7 @@
 import InputMethodKit
 import SwiftUI
 import ApplicationServices
+import AVFoundation
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
@@ -10,6 +11,10 @@ import InkFlowTestSupport
 @main
 struct SettingsUITests {
     @MainActor static func main() throws {
+        if CommandLine.arguments.contains("--microphone-reproduction") || CommandLine.arguments.contains("--settings-window-lifecycle") {
+            runMicrophoneReproduction(lifecycleOnly: CommandLine.arguments.contains("--settings-window-lifecycle"))
+            return
+        }
         if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--press-accessibility" {
             let application = AXUIElementCreateApplication(Int32(CommandLine.arguments[2])!)
             AXUIElementSetMessagingTimeout(application, 2)
@@ -71,6 +76,72 @@ struct SettingsUITests {
         print("PASS settings UI suite: complete")
     }
 
+    /// Explicit interactive diagnostic: real permission/resources, isolated settings, no recording or IME registration.
+    @MainActor static func runMicrophoneReproduction(lifecycleOnly: Bool = false) {
+        let name = "inkflow.microphone-reproduction.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let settings = IFSettings(defaults: defaults)
+        _ = NSApplication.shared
+        NSApp.finishLaunching()
+        let preferences = IFSettingsWindowController(settings: settings)
+        preferences.loadWindow()
+        let window = preferences.window!
+        var closed = false
+        let started = Date.now
+        var observers: [NSObjectProtocol] = []
+        for event in [NSWindow.willCloseNotification, NSWindow.didBecomeKeyNotification,
+                      NSWindow.didResignKeyNotification, NSApplication.didBecomeActiveNotification,
+                      NSApplication.didResignActiveNotification, NSApplication.didHideNotification,
+                      NSApplication.didUnhideNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: event, object: nil, queue: .main) { notification in
+                let eventName = notification.name
+                let isTargetWindow = notification.object as? NSWindow === window
+                MainActor.assumeIsolated {
+                    if eventName == NSWindow.willCloseNotification, isTargetWindow { closed = true }
+                    print("EVENT t=\(Date.now.timeIntervalSince(started)) name=\(eventName.rawValue)")
+                    fflush(stdout)
+                }
+            })
+        }
+        defer { for observer in observers { NotificationCenter.default.removeObserver(observer) } }
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: lifecycleOnly ? .appearance : .voice))
+        preferences.present()
+        check(NSApp.activationPolicy() == .regular, "Open Settings must participate in ordinary app activation")
+        if lifecycleOnly {
+            preferences.present()
+            check(NSApp.activationPolicy() == .regular && preferences.window === window)
+            window.close()
+            check(NSApp.activationPolicy() == .accessory, "Closing Settings removes its Dock presence")
+            preferences.present()
+            check(NSApp.activationPolicy() == .regular && preferences.window === window, "Reopen restores regular activation on the same window")
+            window.close()
+            check(NSApp.activationPolicy() == .accessory)
+            print("PASS settings window lifecycle: open, repeated present, close, reopen and accessory restoration")
+            return
+        }
+        print("READY microphone reproduction: status=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)")
+        fflush(stdout)
+        Task { @MainActor in
+            var previous = ""
+            var endReason = "timeout"
+            for _ in 0..<6000 {
+                let front = NSWorkspace.shared.frontmostApplication
+                let state = "status=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue) preparing=\(settings.voice.preparing) ready=\(settings.voice.service.isReady) action=\(String(describing: settings.voice.action)) active=\(NSApp.isActive) hidden=\(NSApp.isHidden) visible=\(window.isVisible) key=\(window.isKeyWindow) occluded=\(!window.occlusionState.contains(.visible)) minimized=\(window.isMiniaturized) activeSpace=\(window.isOnActiveSpace) front=\(front?.bundleIdentifier ?? "unknown") frontPID=\(front?.processIdentifier ?? -1)"
+                if state != previous { print("STATE t=\(Date.now.timeIntervalSince(started)) \(state)"); fflush(stdout); previous = state }
+                if closed { endReason = "windowClosed"; break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            print("END reason=\(endReason)")
+            print("END microphone reproduction"); fflush(stdout)
+            NSApp.stop(nil)
+            NSApp.postEvent(NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
+                timestamp: 0, windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0)!, atStart: false)
+        }
+        NSApp.run()
+        withExtendedLifetime(preferences) {}
+    }
+
     @MainActor static func runCases(settings: IFSettings, defaults: UserDefaults) {
         let previousMainMenu = NSApp.mainMenu
         defer { NSApp.mainMenu = previousMainMenu }
@@ -87,6 +158,7 @@ struct SettingsUITests {
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
         waitForFocus(window)
+        check(NSApp.activationPolicy() == .regular)
         check(NSApp.mainMenu === existingMainMenu && existingMainMenu.items.contains { $0 === existingItem },
               "Settings presentation must preserve the existing main menu and items")
         let menuItems = existingMainMenu.items

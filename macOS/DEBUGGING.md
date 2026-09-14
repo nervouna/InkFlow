@@ -1,5 +1,66 @@
 # Debugging index
 
+## Settings disappears after first microphone authorization (GitHub #3)
+
+**Observed cause:** On macOS 26.6.2 (25G83), the Settings window used accessory
+activation. Granting microphone permission moved activation from InkFlow to
+`com.apple.UserNotificationCenter`, then to the preceding regular app (Codex or
+WeChat), leaving Settings behind its windows. The user confirmed no intervening
+click on another app. The process stayed alive, the window was neither closed nor
+hidden, and speech preparation succeeded. Window `occlusionState` only establishes
+partial visibility; it does not prove that other windows do not cover Settings.
+The user also reported the symptom on a single-display Mac, without Stage Manager.
+
+**Controlled comparison:** Removing only `LSBackgroundOnly` did not help. Calling
+`activate()` plus either `makeKeyAndOrderFront` or `orderFrontRegardless` at permission
+completion also failed user-visible acceptance. With the original permission code
+and regular activation while Settings was open, the same permission prompt returned
+both application activation and key-window status to Settings; the user confirmed
+the window stayed in front. Existing v0.4.1 IMK deactivation crash reports are a
+separate symptom and are not evidence of the cause of this window disappearance.
+
+**Fix:** `IFSettingsWindowController.present()` uses regular activation; its close
+delegate returns to accessory activation. Settings therefore has the existing
+InkFlow Dock icon and Cmd-Tab presence while open. Closing it removes that presence.
+There are no delayed focus retries, floating window levels, permission-flow changes,
+or changes to the installed input source. Apple describes [activation as a request,
+not a guarantee](https://developer.apple.com/documentation/macos-release-notes/appkit-release-notes-for-macos-14).
+[Handy #1618](https://github.com/cjpais/Handy/issues/1618) reports a similar permission
+flow symptom; [AnyDoor's window coordinator](https://github.com/ZingerLittleBee/AnyDoor/blob/main/Sources/AnyDoor/Services/RegularWindowCoordinator.swift)
+uses regular activation while settings/editor windows are open. These references
+informed the comparison; the local user-visible result is the acceptance evidence.
+
+Run `bash macOS/scripts/test-settings-ui.sh --settings-window-lifecycle` for the
+focused native open/repeated-present/close/reopen policy regression. It requests no
+microphone permission. Use `--microphone-reproduction` instead for an explicit
+interactive real-permission diagnostic. Both build an ad-hoc signed app with the
+production Settings controller, the existing app icon, isolated defaults and a
+separate bundle ID. Neither registers an IME, reads production credentials or records
+audio. The microphone variant can prepare Apple's speech assets; allow the system
+prompt yourself. It ends on window close or after ten minutes, not merely on hiding.
+App/window notifications and changed front-app/state samples are recorded only in
+this diagnostic. Logs remain in ignored `build/settings-window-run.*/` until removed
+after investigation; close one diagnostic before starting another. The defaults
+suite is removed on normal exit, and the app remains under `build/` for inspection.
+
+Launch through LaunchServices as the script does. Direct executable launch can
+inherit the terminal host's permission. Check for initial authorization status 0;
+status 3 only tests an already-authorized path. The isolated TCC decision belongs to
+`io.damao.inkflow.microphone-reproduction`. Rebuilding ad-hoc code can invalidate it;
+an explicit `tccutil reset Microphone io.damao.inkflow.microphone-reproduction` can
+repeat first authorization. Never implicitly reset production permission. The
+diagnostic has no registered IMK client lifecycle; installed-input-method typing,
+focus and cross-app behavior remain separate user-owned acceptance.
+
+**Final isolated acceptance (2026-09-14):** The user confirmed the existing InkFlow
+Dock icon displayed correctly, Settings stayed in front after first microphone
+authorization, and closing Settings removed the Dock icon. The final diagnostic
+recorded authorization changing from 0 to 3, application/key-window activation
+returning to the harness, successful preparation, and normal window-close exit.
+The native window lifecycle check and focused `settings`, `engine-options`,
+`controller`, `voice-controller`, `ai-transport`, `ai-runtime` and `ai-headless`
+regressions passed. No installed-IME acceptance or release was performed.
+
 ## Cold startup versus same-process app-switch delay
 
 Collect process startup, dictionary recovery and input callbacks separately, or combine
