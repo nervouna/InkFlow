@@ -75,6 +75,17 @@ for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Source
   esac
 done
 
+for path in macOS/Sources/FeedbackReport.swift macOS/Sources/FeedbackSettingsView.swift macOS/Sources/AboutSettingsView.swift; do
+  new_case
+  change "$path"; plan
+  has 'Units: settings'; has 'manual-settings'
+  not_has 'manual-input'; not_has 'manual-install'; not_has 'ai-transport'
+done
+
+new_case
+change macOS/Tests/SettingsUITests.swift; plan
+has 'Units: settings'; not_has 'manual-input'; not_has 'manual-install'
+
 new_case
 change macOS/Sources/VoiceLexicon.swift; plan
 has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'

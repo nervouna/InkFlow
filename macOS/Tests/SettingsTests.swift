@@ -57,9 +57,78 @@ struct SettingsTests {
         check(settings.candidateCount == 5 && settings.fontSize == 14)
         try customPhrases(defaults: defaults, settings: settings)
         try await UpdateTests.run()
+        try await feedbackReports()
         defaults.set("yes", forKey: "thunderMode")
         check(!settings.thunderMode, "Malformed Thunder preference must use the safe default")
         print("PASS settings: defaults, malformed values, bounds, persistence, Thunder/update defaults-off")
+    }
+
+    static func feedbackBody(_ url: URL) -> String {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .first(where: { $0.name == "body" })?.value ?? ""
+    }
+
+    @MainActor static func feedbackReports() async throws {
+        let metadata = FeedbackMetadata(version: "0.4.1", build: "41", operatingSystem: "macOS 26.0 (25A1)")
+        let calls = FeedbackTestRecorder()
+        let opened = FeedbackOpenRecorder()
+        let reporter = FeedbackReporter(metadata: metadata, maximumURLLength: 2_000, collectLogs: {
+            await calls.recordLogCollection()
+            return "2026-09-14 newest private-safe diagnostic"
+        }, openURL: { url in
+            opened.url = url
+            return true
+        })
+
+        let withoutLogs = await reporter.prepare(includeLogs: false)
+        let bodyWithoutLogs = feedbackBody(withoutLogs.url)
+        let initialLogCollections = await calls.logCollections
+        check(initialLogCollections == 0, "Default-off feedback must never run the log collector")
+        check(withoutLogs.url.host == "github.com" && withoutLogs.url.path == "/nervouna/InkFlow/issues/new")
+        check(bodyWithoutLogs.contains("墨流版本：0.4.1 (41)") && bodyWithoutLogs.contains("macOS：macOS 26.0 (25A1)"))
+        check(!bodyWithoutLogs.contains("运行日志") && !bodyWithoutLogs.contains("private-safe diagnostic"),
+              "Opted-out feedback must contain metadata only")
+
+        let withLogs = await reporter.prepare(includeLogs: true)
+        let includedLogCollections = await calls.logCollections
+        check(includedLogCollections == 1)
+        check(feedbackBody(withLogs.url).contains("newest private-safe diagnostic"))
+        check(withLogs.notice == nil)
+
+        let longLogs = (1...80).map { "record-\($0)-" + String(repeating: "诊断", count: 12) }.joined(separator: "\n")
+        let bounded = FeedbackReporter(metadata: metadata, maximumURLLength: 1_200,
+            collectLogs: { longLogs }, openURL: { _ in true })
+        let truncated = await bounded.prepare(includeLogs: true)
+        let truncatedBody = feedbackBody(truncated.url)
+        check(truncated.url.absoluteString.utf8.count <= 1_200, "Final percent-encoded issue URL must respect its bound")
+        check(truncatedBody.contains("日志已截断") && truncatedBody.contains("record-80-"),
+              "Truncation must be explicit and retain newest records")
+        check(!truncatedBody.contains("record-1-"), "Truncation must discard oldest records first")
+
+        let failed = FeedbackReporter(metadata: metadata, maximumURLLength: 2_000, collectLogs: {
+            throw NSError(domain: "FeedbackTests", code: 7)
+        }, openURL: { _ in true })
+        let fallback = await failed.prepare(includeLogs: true)
+        let fallbackBody = feedbackBody(fallback.url)
+        check(fallbackBody.contains("日志采集失败") && !fallbackBody.contains("NSError"))
+        check(fallback.notice != nil, "Collection failure must be visible to the user while preserving the issue handoff")
+
+        let commandRecorder = FeedbackCommandRecorder()
+        let collector = FeedbackLogCollector(run: { executable, arguments in
+            await commandRecorder.record(executable: executable, arguments: arguments)
+            return "synthetic unified log"
+        })
+        let collected = try await collector.collect()
+        check(collected == "synthetic unified log")
+        let command = await commandRecorder.command
+        check(command?.0.path == "/usr/bin/log")
+        check(command?.1 == ["show", "--last", "10m", "--style", "compact", "--predicate",
+                             "subsystem == \"io.damao.inputmethod.inkflow\""],
+              "Feedback may collect only the bounded InkFlow unified-log predicate")
+
+        _ = reporter.open(withoutLogs)
+        check(opened.url == withoutLogs.url, "Injected browser handoff must receive the prepared URL")
+        print("PASS feedback reports: opt-in collection, metadata-only default, exact log predicate, failure fallback and newest-first URL bound")
     }
 
     @MainActor static func groupedInputPreferences() {
@@ -177,4 +246,21 @@ struct SettingsTests {
         do { try operation(); check(false, "Invalid custom phrase operation must fail") }
         catch { check(!error.localizedDescription.isEmpty) }
     }
+}
+
+actor FeedbackTestRecorder {
+    private(set) var logCollections = 0
+
+    func recordLogCollection() { logCollections += 1 }
+}
+
+@MainActor
+final class FeedbackOpenRecorder {
+    var url: URL?
+}
+
+actor FeedbackCommandRecorder {
+    private(set) var command: (URL, [String])?
+
+    func record(executable: URL, arguments: [String]) { command = (executable, arguments) }
 }

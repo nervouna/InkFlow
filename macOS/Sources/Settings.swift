@@ -173,6 +173,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case dictionaries = "词库"
     case smart = "AI 服务"
     case updates = "更新"
+    case feedback = "反馈"
     case about = "关于"
     var id: Self { self }
     var symbol: String {
@@ -184,6 +185,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .voice: "mic"
         case .dictionaries: "books.vertical"
         case .updates: "arrow.triangle.2.circlepath"
+        case .feedback: "exclamationmark.bubble"
         case .about: "info.circle"
         }
     }
@@ -192,11 +194,14 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @ObservedObject var settings: IFSettings
     var dictionaries: IFDictionaryCoordinator?
+    let feedbackReporter: FeedbackReporter
     @State private var section: SettingsSection?
 
-    init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil, initialSection: SettingsSection = .appearance) {
+    init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil,
+         initialSection: SettingsSection = .appearance, feedbackReporter: FeedbackReporter = .live) {
         self.settings = settings
         self.dictionaries = dictionaries
+        self.feedbackReporter = feedbackReporter
         _section = State(initialValue: initialSection)
     }
 
@@ -212,7 +217,8 @@ struct SettingsView: View {
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 210)
         } detail: {
             Group {
-                if section == .about { about }
+                if section == .about { AboutSettingsView() }
+                else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter) }
                 else if section == .input { input }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
                 else if section == .smart { SmartSettingsView(settings: settings, smart: settings.smart) }
@@ -314,24 +320,6 @@ struct SettingsView: View {
         .accessibilityIdentifier("settings.input")
     }
 
-    private var about: some View {
-        let bundle = Bundle.main
-        return VStack(spacing: 12) {
-            if let icon = bundle.image(forResource: (bundle.object(forInfoDictionaryKey: "CFBundleIconFile") as? String) ?? "AppIcon") {
-                Image(nsImage: icon).resizable().frame(width: 64, height: 64).accessibilityHidden(true)
-            }
-            Text((bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String) ?? "墨流拼音")
-                .font(.title).bold()
-            Text("版本 \((bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1.0") (\((bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? "1"))")
-                .foregroundStyle(.secondary)
-            Text("librime \(IFEngine.version)")
-                .font(.caption).foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .accessibilityIdentifier("settings.about")
-    }
 }
 
 @MainActor
