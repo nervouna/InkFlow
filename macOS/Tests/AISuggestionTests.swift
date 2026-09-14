@@ -106,6 +106,28 @@ struct AISuggestionTests {
         let deepseek = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: .init(baseURL: "https://api.deepseek.com/v1", apiKey: "fixture-key", model: "deepseek-v4-flash"))
         let body = try JSONSerialization.jsonObject(with: deepseek.httpBody!) as! [String: Any]
         expect((body["thinking"] as? [String: String])?["type"] == "disabled", "Official DeepSeek V4 latency option")
+        for base in ["http://localhost:11434/v1/", "http://127.0.0.1:11434/v1", "http://[::1]:11434/v1/chat/completions"] {
+            for model in ["qwen3:4b", "qwen3.5:4b-mlx"] {
+                let configuration = AISuggestionConfiguration(baseURL: base, apiKey: "fixture-key", model: model)
+                let request = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: configuration)
+                let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+                expect(json["reasoning_effort"] as? String == "none" && json["thinking"] == nil,
+                       "Local Ollama Qwen disables thinking through the OpenAI-compatible field")
+                expect(json["max_tokens"] as? Int == 256 && AIChatCompletionsClient.statisticsConfiguration(configuration).thinkingDisabled,
+                       "Ollama keeps the bounded budget and records the actual thinking policy")
+            }
+        }
+        for (base, model) in [("https://compatible.example/v1", "qwen3.5:4b-mlx"),
+                              ("http://localhost:8080/v1", "qwen3.5:4b-mlx"),
+                              ("http://localhost.example:11434/v1", "qwen3.5:4b-mlx"),
+                              ("http://localhost:11434/v1", "gpt-oss:20b"),
+                              ("http://localhost:11434/v1", "qwen3-coder:30b")] {
+            let configuration = AISuggestionConfiguration(baseURL: base, apiKey: "fixture-key", model: model)
+            let request = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: configuration)
+            let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+            expect(json["reasoning_effort"] == nil && !AIChatCompletionsClient.statisticsConfiguration(configuration).thinkingDisabled,
+                   "Unidentified servers and other model families retain their request contract")
+        }
         for invalid in ["bad URL", "file:///tmp/fixture", "https://user:secret@compatible.example", "https://compatible.example?key=secret", "https://compatible.example/#secret"] {
             do {
                 _ = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: .init(baseURL: invalid, apiKey: "fixture-key", model: "m"))
@@ -133,7 +155,8 @@ struct AISuggestionTests {
                                         (200, "malformed-private", .invalidResponse),
                                         (200, #"{"choices":[]}"#, .emptySuggestion),
                                         (200, #"{"choices":[{"message":{"content":"  "}}]}"#, .emptySuggestion),
-                                        (200, #"{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}"#, .incompleteSuggestion)] {
+                                        (200, #"{"choices":[{"message":{"content":"partial"},"finish_reason":"length"}]}"#, .incompleteSuggestion),
+                                        (200, #"{"choices":[{"message":{"content":"","reasoning":"private reasoning"},"finish_reason":"length"}]}"#, .incompleteSuggestion)] {
             AIStubURLProtocol.state.configure(status: status, body: body)
             do {
                 _ = try await client.suggest(input: fixture, configuration: config)

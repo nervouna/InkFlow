@@ -133,6 +133,29 @@ dictionary and Lua filter are packaged. Real-client typing remains a separate
 acceptance step.
 ## AI suggestions do not appear
 
+### Local Ollama Qwen reports an incomplete suggestion (GitHub #4)
+
+The issue used `http://localhost:11434/v1/` with `qwen3.5:4b-mlx`.
+On Ollama 0.34.0, a synthetic `nihao` request using the production prompt and
+256-token limit reproduced `finish_reason=length`, empty content, and 256
+completion tokens consumed by thinking. This is a request-policy compatibility
+failure, not an HTTP connectivity failure. The original issue log alone records
+only `incompleteSuggestion`; it does not identify the provider's finish reason.
+
+Ollama's [OpenAI adapter](https://github.com/ollama/ollama/blob/main/openai/openai.go)
+maps `reasoning_effort: "none"` to `think: false`. With that field, the same
+synthetic request returned `你好`, `finish_reason=stop`, and no reasoning text.
+Prediction requests now send this field for `qwen3` / `qwen3.5` model families
+on loopback hosts (`localhost`, `127.0.0.1`, `::1`) at port 11434. This is a
+default-endpoint convention, not server discovery. Custom ports, remote/proxied
+servers and other model families retain their existing request behavior.
+
+The 256-token budget, timeout, and rejection of incomplete responses remain in
+place. No retry, additional request, preference, or stored user content is added.
+`test-ai-suggestions.sh` covers request boundaries, statistics policy and
+reasoning-only truncated responses. Local synthetic transport verification does
+not establish candidate-panel display or Tab insertion in an external editor.
+
 ### Native acceptance timing and prerequisites
 
 `test-ai-native.sh` retains each invocation's compile log, combined stdout/stderr,
