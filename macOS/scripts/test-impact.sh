@@ -57,6 +57,8 @@ impact_classify() {
       impact_release_tools=true ;;
     *.md|docs/*|LICENSE|LICENSE.*|NOTICE)
       impact_rule "$path" 'documentation: diff check only' ;;
+    macOS/scripts/probe-imk-candidate-lifetime.sh|macOS/scripts/diagnostics/IMKCandidateLifetimeProbe.m)
+      impact_rule "$path" 'standalone native diagnostic: run explicitly outside daily checks' ;;
     Package.swift|macOS/Info.plist)
       impact_rule "$path" 'product and target graph: complete non-GUI coverage'
       impact_all=true; impact_bundle=true; impact_release_tools=true

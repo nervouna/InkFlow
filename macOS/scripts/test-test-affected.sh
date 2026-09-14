@@ -47,6 +47,17 @@ for input in '--unknown' '--from'; do
 done
 if plan --from absent-ref --run; then exit 1; else [[ $? == 2 ]]; fi
 
+for path in macOS/scripts/probe-imk-candidate-lifetime.sh macOS/scripts/diagnostics/IMKCandidateLifetimeProbe.m; do
+  new_case
+  change "$path"; plan --run
+  has 'Units: none'; has 'standalone native diagnostic'; has 'Manual: none'
+  [[ ! -s "$INKFLOW_AFFECTED_LOG" ]]
+done
+
+new_case
+change macOS/scripts/diagnostics/UnclassifiedProbe.m; plan
+has 'quality-store'; has 'workflow'
+
 new_case
 change macOS/Sources/InputPreferences.swift; plan
 has 'engine-options'; has 'controller'; has 'manual-input'; has 'manual-settings'; not_has 'manual-install'

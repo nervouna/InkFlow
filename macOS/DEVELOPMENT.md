@@ -16,6 +16,18 @@ The application, settings interface, registration tool, and test scenarios are w
 - `Tools/RegisterInputSource.swift` retains the separate registration and read-only `--verify-enabled` modes. Build and test scripts do not install, register, enable, or select the application.
 - `scripts/prepare-rime.sh` copies pinned dictionaries and Lua modules and generates the supplemental mixed dictionary for every build and engine-test entry point. `schemas/lua` only supplies translations; Rime retains editing, selection, and paging. See `DEPENDENCIES.md` for weighting and lookup boundaries.
 
+## Native candidate lifetime
+
+Native candidate panels remain per-controller. Application bootstrap keeps a
+`NativeCandidateLifetime` through the event loop to retain only the latest panel
+registered with its server, because the observed legacy server borrows that
+pointer. Controllers still release normally, and older panels release when replaced
+and no longer controller-owned. The server's association back to the lifetime owner
+is weak to avoid the panel-to-server retain cycle. Native diagnostic hosts must
+create the same lifetime owner before constructing production controllers and keep
+it until their input callbacks finish. See `DEBUGGING.md` for the regression and
+installed-input acceptance boundary.
+
 ## Custom phrase loading
 
 `InputPreferences.swift` provides immutable typed composition snapshots. `IFSettings` keeps existing `input.<option>` keys and exposes canonical grouped values: any enabled fuzzy pair enables all three; paging preserves an exclusive minus/equal choice and otherwise selects brackets. Group setters persist every affected bit before one settings notification. The Input page uses unlabeled sections, one fuzzy toggle, a horizontal paging radio group aligned to the right and four punctuation dropdowns. The input-source menu shares global punctuation/traditional settings while ASCII remains session-local. Options and ASCII requests wait until the current composition commits or cancels. ASCII uses literal punctuation without modifying the saved Chinese punctuation option. Quality records include only applied input values in an optional backwards-readable field, and count paging aliases according to those applied values.

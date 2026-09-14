@@ -53,11 +53,12 @@ package enum InkFlowApplicationBootstrap {
                 InkFlowInputController.statisticsStore = nil
                 return 1
             }
+            let candidateLifetime = NativeCandidateLifetime(server: server)
             startup.end(serverSpan)
             startup.end(processSpan)
             let eventLoop = startup.begin(.eventLoop)
             DispatchQueue.main.async { startup.end(eventLoop) }
-            withExtendedLifetime((server, dictionaries, lifecycle, statisticsStore, updates)) { NSApp.run() }
+            withExtendedLifetime((server, candidateLifetime, dictionaries, lifecycle, statisticsStore, updates)) { NSApp.run() }
             updates?.stop()
             return 0
         }

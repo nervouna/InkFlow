@@ -1,5 +1,83 @@
 # Debugging index
 
+## Input disappears until switching to ABC and back: candidate lifetime
+
+**Incident (2026-09-14, macOS 26.6.2 / 25G83):** The user reported no text or
+candidate window in Codex, restored by switching to ABC and back. Installed
+v0.4.4 (11) crashed at 23:03:07 (PID 2624), 23:03:14 (28242), and 23:04:47
+(28382), each with `EXC_BAD_ACCESS` in `objc_msgSend` called from
+`-[_IMKServerLegacy deactivateServer_CommonWithClientWrapper:controller:] + 368`.
+The next process, 30174, started at 23:05:15, became ready in 240 ms and recorded
+a handled Rime key with a marked-text update at 23:05:17. Logs do not identify
+the ABC switch itself. An earlier v0.4.1 (8) report at 01:14:56 has the same
+stack, so the recent Ollama change does not explain the origin of this failure.
+
+**Source and platform evidence:** Each `IFInputControllerShell.configure` creates
+an `IMKCandidates`; controller teardown releases it. On this OS, the server keeps
+a non-zeroing candidate pointer. Native disassembly shows the failing `+368`
+return address follows `_windowIsOpen`, which tail-calls `isVisible` on that
+candidate pointer. This occurs before calling the application's `deactivateServer:`.
+Controller-release events precede all three crashes; the latest created controllers
+were released at 23:03:05.337, 23:03:11.266 and 23:03:24.421 respectively.
+
+**Independent reproduction:** An isolated process creates a real server and native
+candidate panel, hides/releases the panel, then inspects the server's pointer
+without retaining or messaging the freed object. A weak reference becomes nil
+while the server still returns the same pointer. Calling the native common
+deactivation method with Zombies enabled reports:
+
+```text
+panel_released=1 server_still_references_panel=1
+*** -[IMKCandidates isVisible]: message sent to deallocated instance
+-[_IMKServerLegacy deactivateServer_CommonWithClientWrapper:controller:] + 368
+```
+
+Keeping the panel alive through that same call instead records
+`panel_released=0` and `native_deactivation_returned`. This establishes a concrete
+candidate use-after-free mechanism matching the production instruction and selector.
+The production heap was not captured; the exact production object's allocation and
+release stack remain unobserved. This reproduction is not real-client acceptance.
+
+Run the explicit diagnostic from an unlocked GUI session outside a restricted
+sandbox:
+
+```sh
+bash macOS/scripts/probe-imk-candidate-lifetime.sh --inspect
+bash macOS/scripts/probe-imk-candidate-lifetime.sh --keep-alive
+bash macOS/scripts/probe-imk-candidate-lifetime.sh --zombie
+```
+
+The final mode intentionally stops its own child in LLDB; LLDB exit status zero
+does not mean a passing regression. The probe uses private methods only to inspect
+and reproduce this OS-specific behavior and reports unsupported when unavailable.
+It creates an independently named IMK server connection, never registers/selects
+an input source, reads no input content or production settings, and does not attach
+to the installed process. Its temporary executable is removed on exit. macOS may
+retain its own diagnostic reports. Investigation transcripts in ignored
+`build/imk-investigation/` can be removed after this diagnosis is no longer needed.
+
+**Repair:** `NativeCandidateLifetime` is owned by application bootstrap through the
+event loop and retains only the latest registered panel for its server. Controllers
+keep their independent panels. Replacing the retained panel releases the previous
+one when its controller no longer owns it. The server links to this lifetime owner
+weakly through a public Objective-C association: a strong association would create
+a cycle because the native panel itself retains its server. No private server
+pointer is changed. The borrowed US selection-key layout has process lifetime.
+Controller teardown hides its own panel and submits an empty candidate array before
+releasing ownership. The native line-to-identifier query still returns a cell
+identifier after an empty array in an isolated live-panel control, so it is not
+used as evidence of native internal data erasure.
+
+**Regression:** Headless controller tests replace native activation/deactivation
+and cannot establish this fix. `test-controller-initialization.sh` now exercises
+the exact production initializer, controller release, the native post-release
+deactivation path, repeated bounded panel replacement, borrowed layout validity,
+and lifetime-owner teardown. Its pre-fix regression failed with
+`Server candidate must survive controller release`. Private inspection is confined
+to the explicit native diagnostic; a future OS without the selector is unsupported,
+not a passing result. Installed-input-method trial and user-owned cross-app input
+acceptance remain separate from these tests.
+
 ## Settings disappears after first microphone authorization (GitHub #3)
 
 **Observed cause:** On macOS 26.6.2 (25G83), the Settings window used accessory

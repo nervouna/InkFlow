@@ -150,6 +150,8 @@ struct SettingsUITests {
         NSApp.mainMenu = existingMainMenu
         let name = "inkflow.settings-ui.\(UUID().uuidString)"
         let server = IMKServer(name: name, bundleIdentifier: name)!
+        let candidateLifetime = NativeCandidateLifetime(server: server)
+        defer { withExtendedLifetime(candidateLifetime) {} }
         let preferences = IFSettingsWindowController(settings: settings)
         let controller = InkFlowInputController(server: server, delegate: nil, client: nil,
                                                 settings: settings, settingsWindow: preferences)!
