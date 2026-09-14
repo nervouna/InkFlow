@@ -67,12 +67,22 @@ struct AIChatCompletionsClient: AISuggestionServing {
                      promptTemplate: promptTemplate,
                      provider: provider.utf8.count > 256 || (provider.contains(configuration.apiKey) && !configuration.apiKey.isEmpty) ? "unknown" : provider,
                      requestedModel: configuration.model.contains(configuration.apiKey) && !configuration.apiKey.isEmpty ? "unknown" : AIConfigurationSnapshot.identifier(configuration.model),
-                     maxTokens: 256, stream: false, thinkingDisabled: thinkingDisabled(configuration))
+                     maxTokens: 256, stream: false,
+                     thinkingDisabled: thinkingDisabled(configuration) || ollamaThinkingDisabled(configuration))
     }
     static func thinkingDisabled(_ configuration: AISuggestionConfiguration) -> Bool {
         let components = URLComponents(string: configuration.baseURL)
         return components?.host?.lowercased() == "api.deepseek.com" && components?.scheme?.lowercased() == "https" &&
             ["deepseek-v4-flash", "deepseek-v4-pro"].contains(configuration.model.lowercased())
+    }
+    private static func ollamaThinkingDisabled(_ configuration: AISuggestionConfiguration) -> Bool {
+        let components = URLComponents(string: configuration.baseURL)
+        let family = configuration.model.lowercased().split(separator: ":").first.map(String.init)
+        // Ollama's OpenAI endpoint maps reasoning_effort=none to think=false.
+        // Limit this inference to its default local endpoint and known Qwen families.
+        return ["http", "https"].contains(components?.scheme?.lowercased() ?? "") &&
+            ["localhost", "127.0.0.1", "[::1]", "::1"].contains(components?.host?.lowercased() ?? "") &&
+            components?.port == 11434 && ["qwen3", "qwen3.5"].contains(family ?? "")
     }
     private let session: URLSession
     private static let defaultSession: URLSession = {
@@ -113,6 +123,8 @@ struct AIChatCompletionsClient: AISuggestionServing {
             "messages": [["role": "system", "content": promptTemplate], ["role": "user", "content": inputJSON]]]
         if thinkingDisabled(configuration) {
             body["thinking"] = ["type": "disabled"]
+        } else if ollamaThinkingDisabled(configuration) {
+            body["reasoning_effort"] = "none"
         }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.httpMethod = "POST"
