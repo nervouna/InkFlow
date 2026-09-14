@@ -1,5 +1,6 @@
 import InputMethodKit
 import Carbon
+import ObjectiveC
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
@@ -21,7 +22,10 @@ struct ControllerInitializationTests {
         check(NSClassFromString(className) === InkFlowInputController.self, "IMK runtime class lookup")
         let name = "io.damao.inkflow.initialization-test.\(UUID().uuidString)"
         let server = IMKServer(name: name, bundleIdentifier: name)!
+        var candidateLifetime: NativeCandidateLifetime? = NativeCandidateLifetime(server: server)
+        weak let releasedLifetime = candidateLifetime
         weak var releasedController: InkFlowInputController?
+        weak var retainedPanel: IMKCandidates?
         autoreleasepool {
             // Exercise the exact production initializer and real panel, without stubs.
             var controller: InkFlowInputController?
@@ -30,6 +34,7 @@ struct ControllerInitializationTests {
             releasedController = controller
             var panel = controller?.panel
             check(panel != nil)
+            retainedPanel = panel
             let layout = panel!.selectionKeysKeylayout()!.takeUnretainedValue()
             let identifier = Unmanaged<CFString>.fromOpaque(TISGetInputSourceProperty(layout, kTISPropertyInputSourceID)).takeUnretainedValue() as String
             check(identifier == "com.apple.keylayout.US")
@@ -47,10 +52,72 @@ struct ControllerInitializationTests {
             controller!.candidateSelected(NSAttributedString(string: "👋"))
             check(engine.snapshot().preedit.isEmpty && controller!.candidates(nil).isEmpty)
             print("PASS native emoji: candidate identifiers preserve Unicode sequences, emoji selection callback clears composition")
+            panel!.setCandidateData(["session teardown fixture"])
+            check(panel!.candidateIdentifier(atLineNumber: 0) != NSNotFound)
             panel = nil; controller = nil
         }
         check(releasedController == nil)
+        autoreleasepool {
+            check(retainedPanel != nil, "Server candidate must survive controller release")
+            check(!retainedPanel!.isVisible(), "Released session leaves no visible candidate window")
+        }
+        // Diagnostic-only private dispatch, matching the crash before controller callbacks.
+        // Fail explicitly if a future OS removes these inspection entry points.
+        let deactivate = NSSelectorFromString("deactivateServer_CommonWithClientWrapper:controller:")
+        check(server.responds(to: deactivate), "Native deactivation diagnostic is supported")
+        let invoke = unsafeBitCast(server.method(for: deactivate),
+            to: (@convention(c) (AnyObject, Selector, AnyObject?, AnyObject?) -> Void).self)
+        let storageIvar = class_getInstanceVariable(IMKServer.self, "_private")
+        check(storageIvar != nil, "Native candidate storage diagnostic is supported")
+        let storage = object_getIvar(server, storageIvar!)! as AnyObject
+        let getter = NSSelectorFromString("_candidates")
+        check(storage.responds(to: getter), "Native candidate reference diagnostic is supported")
+        let getCandidates = unsafeBitCast(storage.method(for: getter),
+            to: (@convention(c) (AnyObject, Selector) -> UnsafeRawPointer?).self)
+        for _ in 0..<4 {
+            weak var replacedPanel: IMKCandidates?
+            // Native accessors can autorelease their return values. Drain the whole
+            // inspection, deactivation and replacement before checking deallocation.
+            autoreleasepool {
+                check(retainedPanel != nil)
+                let layout = retainedPanel!.selectionKeysKeylayout()!.takeUnretainedValue()
+                let identifier = Unmanaged<CFString>.fromOpaque(TISGetInputSourceProperty(layout, kTISPropertyInputSourceID)).takeUnretainedValue() as String
+                check(identifier == "com.apple.keylayout.US", "Borrowed layout survives controller release")
+                check(retainedPanel!.selectionKeys() as? [Int] == [18, 19, 20, 21, 23])
+                invoke(server, deactivate, nil, nil)
+                replacedPanel = retainedPanel
+                var controller: InkFlowInputController? = InkFlowInputController(server: server, delegate: nil, client: nil)
+                releasedController = controller
+                retainedPanel = controller?.panel
+                controller = nil
+            }
+            check(releasedController == nil, "Lifetime must not retain controllers")
+            check(replacedPanel == nil, "Only the latest retired panel remains retained")
+        }
+        // Refreshing and restyling an older session must not replace the server reference.
+        weak var olderPanel: IMKCandidates?
+        autoreleasepool {
+            var older: InkFlowInputController? = InkFlowInputController(server: server, delegate: nil, client: nil)
+            olderPanel = older?.panel
+            var newer: InkFlowInputController? = InkFlowInputController(server: server, delegate: nil, client: nil)
+            retainedPanel = newer?.panel
+            let expected = UnsafeRawPointer(Unmanaged.passUnretained(newer!.panel!).toOpaque())
+            check(getCandidates(storage, getter) == expected, "Server registers the newest panel")
+            older?.panel?.update()
+            older?.panel?.show(kIMKLocateCandidatesBelowHint)
+            older?.panel?.hide()
+            older?.panel?.setPanelType(kIMKSingleColumnScrollingCandidatePanel)
+            check(getCandidates(storage, getter) == expected, "Older panel operations preserve server reference")
+            older = nil
+            newer = nil
+        }
+        check(olderPanel == nil && retainedPanel != nil, "Older session refresh preserves bounded latest panel ownership")
+        autoreleasepool { invoke(server, deactivate, nil, nil) }
+        autoreleasepool { candidateLifetime = nil }
+        check(releasedLifetime == nil && retainedPanel == nil, "Application lifetime releases panels without a server cycle")
         IFEngine.stop()
+        print("PASS lifetime: post-release native deactivation, bounded replacement, borrowed layout and owner teardown")
+
         print("PASS initialization: exact runtime class, real controller, selection-key configuration, layout reuse and teardown")
     }
 }

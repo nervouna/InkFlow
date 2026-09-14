@@ -76,6 +76,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             panel = IMKCandidates(server: server, panelType: kIMKSingleRowSteppingCandidatePanel)
             panel?.setDismissesAutomatically(false)
             if let panel {
+                NativeCandidateLifetime.retainLatest(panel, server: server)
                 candidatePresentation = NativeCandidatePresentation(panel: panel)
                 aiPresentation = ai.makePresentation(panel)
             }
@@ -103,6 +104,9 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         voice.cancel(.deactivated)
         statusPresentation?.hide()
         thunderPresentation?.hide()
+        // The server lifetime may retain this panel after the session ends.
+        panel?.hide()
+        panel?.setCandidateData([])
         candidatePresentation = nil
         aiPresentation = nil
         statusPresentation = nil

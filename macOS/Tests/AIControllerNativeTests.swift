@@ -132,6 +132,8 @@ struct AIControllerNativeTests {
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2], qualityStore: nil)
         defer { IFEngine.stop() }
         let server = IMKServer(name: "inkflow.ai-native.\(UUID().uuidString)", bundleIdentifier: Bundle.main.bundleIdentifier)!
+        let candidateLifetime = NativeCandidateLifetime(server: server)
+        defer { withExtendedLifetime(candidateLifetime) {} }
         // IMK's initializer accepts only its cross-process proxy class. Reuse the existing
         // test shim for the recording client; production controller and native panels remain real.
         IFStubHeadlessControllerFramework()

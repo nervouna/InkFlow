@@ -6,7 +6,12 @@ import Carbon
 @MainActor
 @objc(InkFlowInputController)
 final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable {
-    private var selectionKeyLayout: TISInputSource?
+    // IMKCandidates borrows this source. The latest panel can outlive its controller,
+    // so retain the single immutable selection layout for the process lifetime.
+    private static let selectionKeyLayout: TISInputSource? = {
+        let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
+        return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
+    }()
     private var leftShiftArmed = false
 
     nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
@@ -92,12 +97,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     private func applySelectionKeys() {
-        if selectionKeyLayout == nil {
-            let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
-            selectionKeyLayout = (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
-        }
-        // IMKCandidates borrows this source; retain it for the controller lifetime.
-        if let selectionKeyLayout { panel?.setSelectionKeysKeylayout(selectionKeyLayout) }
+        if let selectionKeyLayout = Self.selectionKeyLayout { panel?.setSelectionKeysKeylayout(selectionKeyLayout) }
         let keys = [18, 19, 20, 21, 23, 22, 26, 28, 25]
         panel?.setSelectionKeys(Array(keys.prefix(engine?.candidateCount ?? 5)))
     }

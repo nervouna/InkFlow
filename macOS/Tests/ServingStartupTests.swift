@@ -97,6 +97,8 @@ private final class StartupRankerTracker: @unchecked Sendable {
 
         IFStubHeadlessControllerFramework()
         var retainedServer: IMKServer?
+        var candidateLifetime: NativeCandidateLifetime?
+        defer { withExtendedLifetime(candidateLifetime) {} }
         for mode in native ? ["success"] : ["success", "previous", "failure", "activation-failure", "shutdown"] {
             let user = root.appendingPathComponent(mode)
             let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
@@ -147,6 +149,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
             // IMK owns one process server connection. Reuse it across isolated coordinator cases.
             if retainedServer == nil { retainedServer = IMKServer(name: "inkflow.serving.\(UUID())", bundleIdentifier: Bundle.main.bundleIdentifier ?? "inkflow.serving.tests")! }
             let server = retainedServer!
+            if candidateLifetime == nil { candidateLifetime = NativeCandidateLifetime(server: server) }
             try await until("Rebuild enters detached gate") { gate.held }
             var tick = false
             DispatchQueue.main.async { tick = true }
