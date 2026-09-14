@@ -43,6 +43,13 @@ private final class RecordingThunderPanel: ThunderPanelPresenting {
     func hide() { hideCount += 1 }
 }
 
+private final class InputDiagnosticCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [InputDiagnosticRecord] = []
+    func append(_ record: InputDiagnosticRecord) { lock.withLock { storage.append(record) } }
+    var records: [InputDiagnosticRecord] { lock.withLock { storage } }
+}
+
 @main
 struct ControllerTests {
     @MainActor static func main() throws {
@@ -64,8 +71,106 @@ struct ControllerTests {
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
         try deliveryAndRecovery(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
+        try inputLifecycleDiagnostics(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         IFEngine.stop()
         print("PASS controller: idle client unchanged, Escape clears owned mark once, commit inserts once without empty replacement, consecutive quotes and shifted punctuation")
+    }
+
+    @MainActor static func inputLifecycleDiagnostics(settings: IFSettings, shared: String, user: String) throws {
+        let capture = InputDiagnosticCapture()
+        let client = RecordingClient(document: "sentinel-private-input 拼音秘密 候选秘密")
+        var reactivatedController: UUID?
+        var deactivatedController: UUID?
+        try InputDiagnostics.$observe.withValue({ capture.append($0) }) {
+            let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            controller.activateServer(client)
+            check(controller.handle(keyEvent(0, "n"), client: client))
+            check(controller.handle(keyEvent(0, "i"), client: client))
+            controller.deactivateServer(client)
+
+            controller.activateServer(client)
+            check(!controller.handle(keyEvent(123, ""), client: client))
+
+            controller.activateServer(client)
+            IFEngine.stop()
+            check(!controller.handle(keyEvent(0, "sentinel-private-input"), client: client))
+            try IFEngine.start(shared: shared, user: user)
+
+            let reentrantClient = RecordingClient(document: "")
+            let reentrant = InkFlowInputController(server: nil, delegate: nil, client: reentrantClient,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            reactivatedController = reentrant.inputDiagnostics.controller
+            reentrant.activateServer(reentrantClient)
+            var reactivated = false
+            reentrantClient.onMutation = {
+                guard !reactivated else { return }
+                reactivated = true
+                reentrantClient.onMutation = nil
+                reentrant.deactivateServer(reentrantClient)
+                reentrant.activateServer(reentrantClient)
+                check(reentrant.handle(keyEvent(0, "i"), client: reentrantClient))
+            }
+            check(reentrant.handle(keyEvent(0, "n"), client: reentrantClient))
+            reentrant.commitComposition(reentrantClient)
+
+            let interruptClient = RecordingClient(document: "")
+            let interrupted = InkFlowInputController(server: nil, delegate: nil, client: interruptClient,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            deactivatedController = interrupted.inputDiagnostics.controller
+            interrupted.activateServer(interruptClient)
+            var deactivated = false
+            interruptClient.onMutation = {
+                guard !deactivated else { return }
+                deactivated = true
+                interruptClient.onMutation = nil
+                interrupted.deactivateServer(interruptClient)
+            }
+            check(interrupted.handle(keyEvent(0, "n"), client: interruptClient))
+        }
+        let records = capture.records
+        let arrivals = records.filter { $0.event == .firstKeyEntered }
+        let completions = records.filter { $0.event == .firstKeyCompleted }
+        let initialCompletions = Array(completions.prefix(3))
+        check(initialCompletions.count == 3, "Each activation must retain exactly one first keyDown completion")
+        check(initialCompletions[0].outcome == .handled && initialCompletions[0].reason == .rime &&
+              initialCompletions[0].clientPresent == true && initialCompletions[0].markedTextUpdate == true,
+              "Handled Rime input must report the editor delivery attempted by refresh")
+        check(initialCompletions[1].outcome == .passThrough && initialCompletions[1].reason == .rime,
+              "An unhandled Rime key must be distinguishable from missing callbacks")
+        check(initialCompletions[2].outcome == .skipped && initialCompletions[2].reason == .engineUnavailable,
+              "A received key while the existing engine session is unavailable must retain its gate")
+        check(Set(initialCompletions.compactMap(\.activation)).count == 3,
+              "Reactivation must reset first-key deduplication with a fresh correlation ID")
+
+        let reactivationRecords = records.filter { $0.controller == reactivatedController }
+        let reactivationArrivals = reactivationRecords.filter { $0.event == .firstKeyEntered }
+        let reactivationCompletions = reactivationRecords.filter { $0.event == .firstKeyCompleted }
+        check(reactivationArrivals.count == 2 && reactivationCompletions.count == 2,
+              "Synchronous reactivation must retain one pair for both activations")
+        check(Set(reactivationArrivals.compactMap(\.activation)) == Set(reactivationCompletions.compactMap(\.activation)) &&
+              reactivationArrivals[0].activation != reactivationArrivals[1].activation,
+              "The old completion must keep activation A while activation B records its own first key")
+        check(Set(reactivationArrivals.compactMap(\.key)) == Set(reactivationCompletions.compactMap(\.key)),
+              "Every completion must retain its arrival correlation across synchronous reentry")
+
+        let interruptionRecords = records.filter { $0.controller == deactivatedController }
+        let arrivalIndex = interruptionRecords.firstIndex { $0.event == .firstKeyEntered }
+        let deactivationIndex = interruptionRecords.firstIndex { $0.event == .deactivationEntered }
+        let completionIndex = interruptionRecords.firstIndex { $0.event == .firstKeyCompleted }
+        check(arrivalIndex != nil && deactivationIndex != nil && completionIndex != nil &&
+              arrivalIndex! < deactivationIndex! && deactivationIndex! < completionIndex!,
+              "Arrival must survive before synchronous deactivation and completion may follow it")
+        check(interruptionRecords[arrivalIndex!].activation == interruptionRecords[completionIndex!].activation &&
+              interruptionRecords[arrivalIndex!].key == interruptionRecords[completionIndex!].key,
+              "A completion after deactivation must retain the original activation and key IDs")
+        check(arrivals.count == completions.count,
+              "Every deterministic controller first-key callback must complete in this fixture")
+        let messages = records.map(\.message).joined(separator: "\n")
+        for sentinel in ["sentinel-private-input", "拼音秘密", "候选秘密"] {
+            check(!messages.contains(sentinel), "Input diagnostics must never retain input or document content")
+        }
+        print("PASS input lifecycle diagnostics: arrival/completion, reentrant reactivation, unavailable gate, handled refresh delivery")
     }
 
     @MainActor static func inputSettings(settings: IFSettings) {

@@ -67,7 +67,9 @@ final class IFDictionaryCoordinator {
     @ObservationIgnored private let backendFactory: (@Sendable () throws -> IFDictionaryBackend)?
     @ObservationIgnored private let logger: IFDictionaryDiagnosticLogger
     @ObservationIgnored private let now: @Sendable () -> Date
+    @ObservationIgnored private let rankerLoader: @Sendable (String) throws -> IFContextRanker
     @ObservationIgnored private var task: Task<Void, Never>?
+    @ObservationIgnored private var rankerTask: Task<Void, Never>?
     @ObservationIgnored private var operationID: UUID?
     @ObservationIgnored private var checked: IFDictionaryCheck?
     @ObservationIgnored private var descriptor: IFDictionaryDescriptor?
@@ -76,6 +78,7 @@ final class IFDictionaryCoordinator {
     @ObservationIgnored private var pending: IFPreparedActivation?
     @ObservationIgnored private var servingStartup: (runtime: IFDictionaryRuntime, user: URL)?
     @ObservationIgnored private var servingFallback: IFPreparedActivation?
+    @ObservationIgnored private var servingRankerFailed = false
     @ObservationIgnored private var pendingRecovery: IFDictionaryVersion?
     @ObservationIgnored private var recoveryAlternatives: [(IFDictionaryVersion, IFPreparedActivation)] = []
     @ObservationIgnored private var retryOperation: Operation?
@@ -88,8 +91,10 @@ final class IFDictionaryCoordinator {
     /// No default root, preferences, networking, or engine startup. Shared Settings remains inert in harnesses.
     init(backend: IFDictionaryBackend? = nil, backendFactory: (@Sendable () throws -> IFDictionaryBackend)? = nil,
          now: @escaping @Sendable () -> Date = Date.init,
-         logger: @escaping IFDictionaryDiagnosticLogger = { _ in }) {
+         logger: @escaping IFDictionaryDiagnosticLogger = { _ in },
+         rankerLoader: @escaping @Sendable (String) throws -> IFContextRanker = IFContextRanker.init(dictionary:)) {
         self.backend = backend; self.backendFactory = backendFactory; self.now = now; self.logger = logger
+        self.rankerLoader = rankerLoader
     }
 
     static let persistentLogger: IFDictionaryDiagnosticLogger = { failure in
@@ -144,10 +149,11 @@ final class IFDictionaryCoordinator {
             let descriptor = try IFStartupDiagnostics.shared.measure(.cacheValidation, source: .bundled) {
                 try IFPackagedCache.descriptor(resources: runtime.resources)
             }
-            let prepared = try Self.prepareIndex(descriptor, user: user)
+            let prepared = Self.prepareConfiguration(descriptor, user: user)
             try IFEngine.start(prepared.configuration)
             servingFallback = prepared
             use(prepared, date: now())
+            beginServingRankerPreparation()
             begin(.servingRecovery)
         } catch {
             recordUnavailable(error)
@@ -214,7 +220,7 @@ final class IFDictionaryCoordinator {
             if let prepared {
                 guard let bundled = prepared.bundled else { throw IFDictionaryUpdateError(.recovery, "bundled-unavailable") }
                 loaded = bundled
-            } else { loaded = try Self.prepareIndex(store.bundled(backend.runtime.resources), user: backend.user) }
+            } else { loaded = try Self.prepareIndex(store.bundled(backend.runtime.resources), user: backend.user, loader: rankerLoader) }
             let bundled = loaded.descriptor
             try IFEngine.start(loaded.configuration)
             let date = !malformed && state.bundled?.contentVersion == bundled.manifest.contentVersion ? state.bundled!.activatedAt : now()
@@ -236,28 +242,30 @@ final class IFDictionaryCoordinator {
             let descriptor = try IFStartupDiagnostics.shared.measure(.cacheValidation, source: .downloaded) {
                 try backend.store.resolve(version, fingerprint: fingerprint)
             }
-            return try Self.prepareIndex(descriptor, user: backend.user)
+            return try Self.prepareIndex(descriptor, user: backend.user, loader: rankerLoader)
         }
         catch {
             record(.wrapping(error, stage: .recovery), retry: .recovery)
-            return try Self.rebuild(version, backend: backend, fingerprint: fingerprint)
+            return try Self.rebuild(version, backend: backend, fingerprint: fingerprint, loader: rankerLoader)
         }
     }
 
-    private nonisolated static func rebuild(_ version: IFDictionaryVersion, backend: IFDictionaryBackend, fingerprint: String) throws -> IFPreparedActivation {
+    private nonisolated static func rebuild(_ version: IFDictionaryVersion, backend: IFDictionaryBackend, fingerprint: String,
+                                            loader: @Sendable (String) throws -> IFContextRanker) throws -> IFPreparedActivation {
         return try IFStartupDiagnostics.shared.measure(.rebuild, source: .downloaded) {
             let inert = try backend.store.storedDictionary(version)
             let candidate = try backend.store.candidate()
             defer { if FileManager.default.fileExists(atPath: candidate.path) { try? backend.store.removeCandidate(candidate) } }
             _ = try backend.services.rebuild(candidate, inert)
             let rebuilt = try backend.store.adopt(candidate, fingerprint: fingerprint)
-            return try Self.prepareIndex(backend.store.resolve(rebuilt, fingerprint: fingerprint), user: backend.user)
+            return try Self.prepareIndex(backend.store.resolve(rebuilt, fingerprint: fingerprint), user: backend.user, loader: loader)
         }
     }
 
     /// Manual and serving recovery share disk validation, helper work and indexes on a background executor.
     /// The serving path supplies its already-running packaged fallback to avoid rebuilding its index.
-    private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend, bundledFallback: IFPreparedActivation? = nil) -> IFRecoveryPreparation {
+    private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend, bundledFallback: IFPreparedActivation? = nil,
+                                                    loader: @Sendable (String) throws -> IFContextRanker) -> IFRecoveryPreparation {
         var errors: [IFDictionaryUpdateError] = []
         var state = IFDictionaryState(), malformed = false
         do { state = try IFStartupDiagnostics.shared.measure(.journal) { try backend.store.recoverInterrupted() } }
@@ -269,17 +277,17 @@ final class IFDictionaryCoordinator {
         if let fingerprint, !malformed, state.bundled == nil {
             for version in [state.current, state.previous].compactMap({ $0 }) {
                 do {
-                    do { versions[version.artifactID] = try prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user) }
+                    do { versions[version.artifactID] = try prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader) }
                     catch {
                         errors.append(.wrapping(error, stage: .recovery))
-                        versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint)
+                        versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint, loader: loader)
                     }
                 } catch { errors.append(.wrapping(error, stage: .recovery)) }
             }
         }
         var bundled = bundledFallback
         if bundled == nil {
-            do { bundled = try prepareIndex(backend.store.bundled(backend.runtime.resources), user: backend.user) }
+            do { bundled = try prepareIndex(backend.store.bundled(backend.runtime.resources), user: backend.user, loader: loader) }
             catch { errors.append(.wrapping(error, stage: .recovery)) }
         }
         return .init(state: state, malformed: malformed, fingerprint: fingerprint, versions: versions, bundled: bundled, errors: errors)
@@ -296,8 +304,10 @@ final class IFDictionaryCoordinator {
     /// Pending activation is abandoned only after every producer has stopped; normal replacement is unchanged.
     func shutdown() async throws {
         isShuttingDown = true
+        if let servingFallback { IFEngine.cancelPendingContextRanker(for: servingFallback.configuration) }
         IFEngine.idleHandler = nil
         while let current = task { await current.value }
+        if let rankerTask { await rankerTask.value }
         IFEngine.idleHandler = nil
         pending = nil
         pendingRecovery = nil; recoveryAlternatives = []
@@ -344,7 +354,8 @@ final class IFDictionaryCoordinator {
                 do {
                     if backend == nil, let factory = backendFactory { backend = try await Task.detached { try factory() }.value }
                     if let backend {
-                        let prepared = await Task.detached { Self.prepareRecovery(backend) }.value
+                        let loader = rankerLoader
+                        let prepared = await Task.detached { Self.prepareRecovery(backend, loader: loader) }.value
                         isBusy = false
                         bootstrap(prepared: prepared)
                         isBusy = true
@@ -387,9 +398,10 @@ final class IFDictionaryCoordinator {
                         } else {
                             let date = now()
                             // Hash-heavy adopt/resolve and immutable context-index construction all stay off the input actor.
+                            let loader = rankerLoader
                             let prepared = try await Task.detached {
                                 let version = try backend.store.adopt(candidate, fingerprint: fingerprint, now: date)
-                                let prepared = try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user)
+                                let prepared = try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader)
                                 try backend.store.beginActivation(version)
                                 return prepared
                             }.value
@@ -425,6 +437,7 @@ final class IFDictionaryCoordinator {
     /// Keep the transient bundled engine serving during every disk/index/worker wait. No new
     /// persistent fallback pointer is needed: only successful recovery confirms the existing journal.
     private func beginServingRecovery() {
+        beginServingRankerPreparation()
         activity = .preparing
         task = Task { [self] in
             do {
@@ -433,7 +446,10 @@ final class IFDictionaryCoordinator {
                 guard let backend, let fallback = servingFallback else {
                     throw IFDictionaryUpdateError(.recovery, "backend-unavailable")
                 }
-                let prepared = await Task.detached { Self.prepareRecovery(backend, bundledFallback: fallback) }.value
+                let loader = rankerLoader
+                let prepared = await Task.detached {
+                    Self.prepareRecovery(backend, bundledFallback: fallback, loader: loader)
+                }.value
                 guard !isShuttingDown else { finishServingRecovery(); return }
                 fingerprint = prepared.fingerprint
                 for error in prepared.errors { record(error, retry: .servingRecovery) }
@@ -451,8 +467,8 @@ final class IFDictionaryCoordinator {
                     // repair contract only after the shipped fallback has actually started successfully.
                     try await Task.detached { try backend.store.repairBundled(fallback.descriptor.manifest, now: date) }.value
                     guard !isShuttingDown else { finishServingRecovery(); return }
-                    use(fallback, date: date)
-                    retryOperation = fingerprint == nil ? .servingRecovery : nil
+                    use(servingFallback ?? fallback, date: date)
+                    retryOperation = fingerprint == nil || servingRankerFailed ? .servingRecovery : nil
                     await cleanupAfterOperation(backend.store)
                     finishServingRecovery(); return
                 }
@@ -464,8 +480,8 @@ final class IFDictionaryCoordinator {
                     ? prepared.state.bundled!.activatedAt : now()
                 try await Task.detached { try backend.store.confirmBundled(fallback.descriptor.manifest, now: date) }.value
                 guard !isShuttingDown else { finishServingRecovery(); return }
-                use(fallback, date: date)
-                retryOperation = nil
+                use(servingFallback ?? fallback, date: date)
+                retryOperation = servingRankerFailed ? .servingRecovery : nil
                 await cleanupAfterOperation(backend.store)
             } catch {
                 record(.wrapping(error, stage: .recovery), retry: .servingRecovery)
@@ -476,11 +492,58 @@ final class IFDictionaryCoordinator {
 
     private func queueServingRecovery() {
         guard !isShuttingDown, !recoveryAlternatives.isEmpty else { finishServingRecovery(); return }
+        guard servingFallback?.configuration.ranker != nil else {
+            activity = .preparing; task = nil
+            if rankerTask == nil || servingRankerFailed {
+                recoveryAlternatives = []
+                retryOperation = .servingRecovery
+                finishServingRecovery()
+            }
+            return
+        }
         let (original, prepared) = recoveryAlternatives.removeFirst()
         pendingRecovery = original; pending = prepared
         activity = .waitingForIdle; task = nil
         IFEngine.idleHandler = { [weak self] in self?.activateIfIdle() }
         IFEngine.signalIdle()
+    }
+
+    /// The large bundled phrase index is optional for baseline input. Build it off the input actor,
+    /// then retain the ranked configuration for rollback and publish it only at a native idle boundary.
+    private func beginServingRankerPreparation() {
+        guard rankerTask == nil, let fallback = servingFallback, fallback.configuration.ranker == nil else { return }
+        servingRankerFailed = false
+        let original = fallback.configuration
+        let descriptor = fallback.descriptor
+        let loader = rankerLoader
+        rankerTask = Task { [self] in
+            do {
+                let ranker = try await Task.detached {
+                    try IFStartupDiagnostics.shared.measure(.indexes, source: .bundled) {
+                        try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+                    }
+                }.value
+                guard !isShuttingDown else { rankerTask = nil; return }
+                let ranked = IFEngineConfiguration(shared: original.shared, cache: original.cache,
+                    user: original.user, ranker: ranker)
+                let prepared = IFPreparedActivation(descriptor: descriptor, configuration: ranked)
+                if servingFallback?.configuration.identity == original.identity { servingFallback = prepared }
+                if configuration?.identity == original.identity {
+                    configuration = ranked
+                    IFEngine.publishContextRanker(ranker, for: ranked)
+                }
+                rankerTask = nil
+                if isBusy, pending == nil, !recoveryAlternatives.isEmpty { queueServingRecovery() }
+            } catch {
+                servingRankerFailed = true
+                rankerTask = nil
+                record(.wrapping(error, stage: .recovery), retry: .servingRecovery)
+                if isBusy, pending == nil, !recoveryAlternatives.isEmpty {
+                    recoveryAlternatives = []
+                    finishServingRecovery()
+                }
+            }
+        }
     }
 
     private func finishServingRecovery() {
@@ -564,11 +627,18 @@ final class IFDictionaryCoordinator {
         engineAvailable = IFEngine.ready
     }
 
-    private nonisolated static func prepareIndex(_ descriptor: IFDictionaryDescriptor, user: URL) throws -> IFPreparedActivation {
+    private nonisolated static func prepareConfiguration(_ descriptor: IFDictionaryDescriptor, user: URL,
+                                                         ranker: IFContextRanker? = nil) -> IFPreparedActivation {
+        .init(descriptor: descriptor, configuration: .init(shared: descriptor.sharedData,
+            cache: descriptor.cache, user: user.path, ranker: ranker))
+    }
+
+    private nonisolated static func prepareIndex(_ descriptor: IFDictionaryDescriptor, user: URL,
+                                                 loader: @Sendable (String) throws -> IFContextRanker) throws -> IFPreparedActivation {
         let ranker = try IFStartupDiagnostics.shared.measure(.indexes, source: descriptor.version == nil ? .bundled : .downloaded) {
-            try IFContextRanker(dictionary: descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+            try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
         }
-        return .init(descriptor: descriptor, configuration: .init(shared: descriptor.sharedData, cache: descriptor.cache, user: user.path, ranker: ranker))
+        return prepareConfiguration(descriptor, user: user, ranker: ranker)
     }
 
     private func record(_ value: IFDictionaryUpdateError, retry: Operation) {

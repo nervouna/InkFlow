@@ -28,6 +28,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     var deliveredPreedit = ""
     let ai: IFInputControllerAI
     let voice: IFInputControllerVoice
+    let inputDiagnostics: IFInputLifecycleDiagnostics
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         settings = MainActor.assumeIsolated { .sharedSettings }
@@ -35,6 +36,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         qualityClock = MainActor.assumeIsolated { QualityClock() }
         ai = MainActor.assumeIsolated { IFInputControllerAI(statisticsStore: Self.statisticsStore) }
         voice = MainActor.assumeIsolated { IFInputControllerVoice() }
+        inputDiagnostics = MainActor.assumeIsolated { IFInputLifecycleDiagnostics() }
         super.init(server: server, delegate: delegate, client: inputClient)
         nonisolated(unsafe) let callbackServer = server
         MainActor.assumeIsolated { configure(server: callbackServer) }
@@ -55,6 +57,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         self.settingsWindow = settingsWindow
         ai = IFInputControllerAI(statisticsStore: aiStatisticsStore, service: smartService)
         voice = IFInputControllerVoice()
+        inputDiagnostics = IFInputLifecycleDiagnostics()
         self.secureInput = secureInput
         candidatePresentation = presentation
         aiPresentation = presentation
@@ -65,6 +68,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     private func configure(server: IMKServer?) {
+        inputDiagnostics.controllerCreated()
         if statusPresentation == nil, server != nil { statusPresentation = NativeInputStatusPresentation() }
         if thunderPresentation == nil, server != nil { thunderPresentation = NativeThunderPresentation() }
         engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
@@ -91,6 +95,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     isolated deinit {
+        inputDiagnostics.controllerReleased()
         qualityVisibilityTimer?.invalidate()
         NotificationCenter.default.removeObserver(self)
         NSWorkspace.shared.notificationCenter.removeObserver(self)
@@ -245,16 +250,25 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func activateServer(_ sender: Any!) {
-        MainActor.assumeIsolated { voice.controllerActivated() }
+        MainActor.assumeIsolated {
+            inputDiagnostics.beginActivation()
+            voice.controllerActivated()
+        }
         let span = IFStartupDiagnostics.shared.begin(.activation, source: .client)
         super.activateServer(sender)
-        IFStartupDiagnostics.shared.end(span, MainActor.assumeIsolated { IFEngine.ready } ? .ready : .skipped)
+        let available = MainActor.assumeIsolated { engine?.available == true }
+        IFStartupDiagnostics.shared.end(span, available ? .ready : .skipped)
+        MainActor.assumeIsolated { inputDiagnostics.finishActivation(engineAvailable: available) }
     }
 
     nonisolated override func deactivateServer(_ sender: Any!) {
         nonisolated(unsafe) let callbackClient = sender
         let span = IFStartupDiagnostics.shared.begin(.deactivation, source: .client)
-        defer { IFStartupDiagnostics.shared.end(span) }
+        MainActor.assumeIsolated { inputDiagnostics.deactivationEntered() }
+        defer {
+            MainActor.assumeIsolated { inputDiagnostics.deactivationFinished() }
+            IFStartupDiagnostics.shared.end(span)
+        }
         MainActor.assumeIsolated {
             voice.controllerDeactivated(callbackClient as? IMKTextInput)
             ai.deactivateEntered()
@@ -263,7 +277,9 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         }
         commitComposition(sender)
         MainActor.assumeIsolated { ai.deactivateCommitted() }
+        MainActor.assumeIsolated { inputDiagnostics.deactivationBeforeSuper() }
         super.deactivateServer(sender)
+        MainActor.assumeIsolated { inputDiagnostics.deactivationAfterSuper() }
         MainActor.assumeIsolated { ai.deactivateFinished() }
     }
 

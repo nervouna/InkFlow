@@ -2,10 +2,18 @@
 
 ## Cold startup versus same-process app-switch delay
 
-Collect category `startup` alongside `dictionary` and the existing AI callback diagnostics:
+Collect process startup, dictionary recovery and input callbacks separately, or combine
+them for one incident window:
 
 ```sh
-/usr/bin/log show --last 1h --style compact --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND (category == "startup" OR category == "dictionary")'
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "startup"'
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "dictionary"'
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "input"'
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND (category == "startup" OR category == "dictionary" OR category == "input")'
 ```
 
 Startup events use one process `run` UUID plus PID; each stage has a paired `span`
@@ -13,19 +21,49 @@ UUID, source kind, outcome and monotonic `elapsed_ms`. A begin without its match
 end identifies work still pending (or a process exit), not proof of a deadlock.
 No document text, custom phrases, paths or error descriptions enter these events.
 Dictionary errors retain their existing detailed bounded diagnostic channel.
-Events are emitted only at stage transitions and native activation/deactivation,
-never per key. They use the existing unified log, with no new permanent store.
+Startup events are emitted only at stage transitions and native activation/deactivation.
+The input category adds one record for the first key-down callback in each activation,
+not a permanent per-key stream. Both use the existing unified log, with no new store.
 
 Read server construction, event-loop progress, and engine readiness separately.
 Production starts the immutable `RimePrebuilt` bundled fallback before constructing
-the server. Its integrity checks, index construction and native initialization still
-take time; no zero-latency cold-start claim is made. Downloaded-cache recovery and
-its potentially long worker waits run detached after the fallback is usable.
+the server. Packaged-cache validation and native Rime initialization still precede
+server construction, so no zero-latency cold-start claim is made. The large context
+ranking index no longer blocks server construction: baseline Rime starts without it,
+the index is built on a detached executor, and it is published only when all sessions
+are idle. Until then candidate order is Rime's original order. Downloaded-cache recovery
+and its potentially long worker waits also run detached after the fallback is usable.
 Per-worker timeouts do not bound the total fallback chain, but that chain now leaves
 the bundled engine serving. Activation/deactivation spans in the same run/PID indicate
 client lifecycle callbacks rather than a new process. A ready activation reports
 engine availability at callback return; it does not prove first-key/preedit delivery.
 An activation marked skipped means the engine was unavailable then.
+
+Input records carry random `controller` and `activation` UUIDs. Follow one activation
+from `activationReady` or `activationSkipped` to a `firstKeyEntered` /
+`firstKeyCompleted` pair with the same random `key` UUID, then through deactivation.
+`firstKeyEntered` is emitted immediately and proves that one key-down callback reached
+InkFlow. `firstKeyCompleted` adds its fixed `outcome` and `reason`, distinguishing Rime
+handled/pass-through, missing or unavailable engine, and voice/AI/control-shortcut
+early paths. A lone entered record means the synchronous callback did not return through
+an observed outcome; it does not by itself identify a hang, crash, client reentry or
+process exit. The pair retains its original activation IDs even if an editor callback
+synchronously deactivates or reactivates the controller. Both stages are deliberately
+deduplicated until the next activation, so they cannot describe later keys or prove
+that a missing later keystroke never reached the controller.
+
+When the first key enters ordinary Rime refresh, `client_present`, `commit_insertion`,
+`marked_text_update`, and `marked_text_clear` report only whether the corresponding
+editor call was issued. They do not prove that another application displayed the text.
+`deactivationEntered`, `deactivationBeforeSuper`, `deactivationAfterSuper`, and
+`deactivationFinished` bracket InputMethodKit teardown. A missing later checkpoint is
+evidence of interruption in that interval, not proof of its cause; correlate the PID
+and timestamp with a DiagnosticReports crash before attributing it to InkFlow or macOS.
+Controller creation/release can occur without a complete activation when a client exits.
+
+Input messages contain only allowlisted event/reason/outcome labels, random UUIDs and
+booleans. They exclude key codes, modifier flags, characters, Pinyin, candidates,
+document text and length, client identifiers, paths, URLs and arbitrary error text.
 
 `bash macOS/scripts/test-startup-diagnostics.sh` verifies a deliberately gated
 stage retains its begin event while server readiness has not occurred, then

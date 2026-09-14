@@ -103,7 +103,13 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     override func refresh(_ client: IMKTextInput?) {
-        guard !voice.blocksRime else { return }
+        _ = refreshWithInputDiagnostics(client)
+    }
+
+    private func refreshWithInputDiagnostics(_ client: IMKTextInput?) -> InputDeliveryDiagnostic {
+        var delivery = InputDeliveryDiagnostic(clientPresent: client != nil, commitInsertion: false,
+                                               markedTextUpdate: false, markedTextClear: false)
+        guard !voice.blocksRime else { return delivery }
         let previousPreeditCount = deliveredPreedit.count
         observeQualityVisibility()
         ai.beginRefresh(client: client)
@@ -117,6 +123,8 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             ownsMarkedText = false
             qualityInsertionDepth += 1
             defer { qualityInsertionDepth -= 1 }
+            delivery = InputDeliveryDiagnostic(clientPresent: client != nil, commitInsertion: client != nil,
+                                               markedTextUpdate: false, markedTextClear: false)
             client?.insertText(commit, replacementRange: NSRange(location: NSNotFound, length: 0))
         }
         if !commit.isEmpty || qualityInsertionDepth == 0 {
@@ -127,10 +135,16 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         let state = engine?.snapshot() ?? EngineSnapshot()
         if !state.preedit.isEmpty {
             ownsMarkedText = true
+            delivery = InputDeliveryDiagnostic(clientPresent: client != nil,
+                                               commitInsertion: delivery.commitInsertion,
+                                               markedTextUpdate: client != nil, markedTextClear: false)
             client?.setMarkedText(state.preedit, selectionRange: NSRange(location: state.cursor, length: 0),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
         } else if ownsMarkedText {
             ownsMarkedText = false
+            delivery = InputDeliveryDiagnostic(clientPresent: client != nil,
+                                               commitInsertion: delivery.commitInsertion,
+                                               markedTextUpdate: false, markedTextClear: client != nil)
             client?.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
         }
@@ -148,6 +162,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         candidatePresentation?.refreshCandidates(strings, highlight: state.highlight)
         updating = false
         didPresentCandidates()
+        return delivery
     }
 
     // InputMethodKit's legacy callbacks are synchronous and main-thread-bound but lack actor annotations.
@@ -155,15 +170,27 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender
         return MainActor.assumeIsolated {
+            let firstKey = callbackEvent?.type == .keyDown ? inputDiagnostics.beginFirstKey() : nil
+            @MainActor func finishFirstKey(_ handled: Bool, _ reason: InputDiagnosticReason,
+                                           delivery: InputDeliveryDiagnostic? = nil) -> Bool {
+                inputDiagnostics.finishFirstKey(firstKey, outcome: handled ? .handled : .passThrough,
+                                                reason: reason, delivery: delivery)
+                return handled
+            }
             if let event = callbackEvent, event.type == .flagsChanged {
                 VoiceDiagnostics.modifierArrival(keyCode: event.keyCode, flags: event.modifierFlags.rawValue)
             }
             if voice.isDelivering {
-                return callbackEvent.map { voice.handle($0, client: callbackClient as? IMKTextInput) } ?? false
+                let handled = callbackEvent.map { voice.handle($0, client: callbackClient as? IMKTextInput) } ?? false
+                return finishFirstKey(handled, handled ? .voiceDeliveringHandled : .voiceDeliveringPassThrough)
             }
-            guard !ai.isAccepting else { leftShiftArmed = false; return false }
+            guard !ai.isAccepting else {
+                leftShiftArmed = false
+                return finishFirstKey(false, .aiAccepting)
+            }
             if let callbackEvent, voice.handle(callbackEvent, client: callbackClient as? IMKTextInput) {
-                leftShiftArmed = false; return true
+                leftShiftArmed = false
+                return finishFirstKey(true, .voiceHandled)
             }
             let entered = qualityClock.monotonic()
             if let callbackEvent, callbackEvent.type == .flagsChanged {
@@ -175,24 +202,34 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             observeQualityVisibility(at: entered)
             ai.validate()
             if let callbackEvent, handleControlShortcut(callbackEvent, client: callbackClient as? IMKTextInput) {
-                return true
+                return finishFirstKey(true, .controlShortcut)
             }
             if let callbackEvent, callbackEvent.type == .keyDown, callbackEvent.keyCode == 48,
                callbackEvent.modifierFlags.intersection([.shift, .control, .option, .command]).isEmpty,
-               ai.acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) { return true }
+               ai.acceptSuggestion(callbackEvent, client: callbackClient as? IMKTextInput, entered: entered) {
+                return finishFirstKey(true, .aiSuggestionAccepted)
+            }
             if engine == nil, IFEngine.ready {
                 engine = IFEngine(qualityStore: injectedQualityStore, qualityClock: qualityClock)
                 applySettings()
             }
-            guard let engine, engine.available, let callbackEvent, callbackEvent.type == .keyDown else { return false }
+            guard let engine else {
+                inputDiagnostics.finishFirstKey(firstKey, outcome: .skipped, reason: .engineMissing)
+                return false
+            }
+            guard engine.available else {
+                inputDiagnostics.finishFirstKey(firstKey, outcome: .skipped, reason: .engineUnavailable)
+                return false
+            }
+            guard let callbackEvent, callbackEvent.type == .keyDown else { return false }
             associateQualityClient(callbackClient as? IMKTextInput)
             engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             IFInputRankingContext.prepareForKey(engine, client: callbackClient as? IMKTextInput,
                                                 ownsMarkedText: ownsMarkedText)
             let handled = engine.event(callbackEvent, capturedAt: entered)
             if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
-            refresh(callbackClient as? IMKTextInput)
-            return handled
+            let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput)
+            return finishFirstKey(handled, .rime, delivery: delivery)
         }
     }
 

@@ -13,8 +13,15 @@ private final class Capture: @unchecked Sendable {
     func advance(_ delta: TimeInterval) { lock.lock(); defer { lock.unlock() }; time += delta }
 }
 
+private final class InputCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [InputDiagnosticRecord] = []
+    func append(_ record: InputDiagnosticRecord) { lock.withLock { storage.append(record) } }
+    var records: [InputDiagnosticRecord] { lock.withLock { storage } }
+}
+
 @main struct StartupDiagnosticsTests {
-    static func main() {
+    @MainActor static func main() {
         let capture = Capture()
         let trace = IFStartupDiagnostics(pid: 42, clock: { capture.now() }, sink: { capture.append($0) })
         let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0), done = DispatchSemaphore(value: 0)
@@ -55,6 +62,53 @@ private final class Capture: @unchecked Sendable {
             precondition(events[pair + 1].contains(beginSpan))
         }
         events.forEach { print($0) }
+        inputLifecycle()
         print("PASS startup diagnostics: gated stage, monotonic delay, readiness order, failure/cancel/skip, bounded content-free correlation")
+    }
+
+    @MainActor static func inputLifecycle() {
+        let capture = InputCapture()
+        let controller = UUID()
+        InputDiagnostics.$observe.withValue({ capture.append($0) }) {
+            let lifecycle = IFInputLifecycleDiagnostics(controller: controller)
+            lifecycle.controllerCreated()
+            lifecycle.beginActivation()
+            lifecycle.finishActivation(engineAvailable: true)
+            lifecycle.recordFirstKey(outcome: .handled, reason: .rime,
+                delivery: .init(clientPresent: true, commitInsertion: false,
+                                markedTextUpdate: true, markedTextClear: false))
+            lifecycle.recordFirstKey(outcome: .passThrough, reason: .rime)
+            lifecycle.deactivationEntered()
+            lifecycle.deactivationBeforeSuper()
+            lifecycle.deactivationAfterSuper()
+            lifecycle.deactivationFinished()
+            lifecycle.beginActivation()
+            lifecycle.finishActivation(engineAvailable: false)
+            lifecycle.recordFirstKey(outcome: .skipped, reason: .engineUnavailable)
+            lifecycle.controllerReleased()
+        }
+        let records = capture.records
+        let arrivals = records.filter { $0.event == .firstKeyEntered }
+        let completions = records.filter { $0.event == .firstKeyCompleted }
+        precondition(arrivals.count == 2 && completions.count == 2,
+                     "Only one first-key pair in each activation is retained")
+        precondition(completions[0].outcome == .handled && completions[0].reason == .rime &&
+                     completions[0].clientPresent == true && completions[0].markedTextUpdate == true &&
+                     completions[0].commitInsertion == false && completions[0].markedTextClear == false)
+        precondition(completions[1].outcome == .skipped && completions[1].reason == .engineUnavailable)
+        precondition(arrivals[0].key == completions[0].key && arrivals[1].key == completions[1].key)
+        precondition(completions[0].activation != completions[1].activation,
+                     "A new activation permits one new first-key record")
+        precondition(records.allSatisfy { $0.controller == controller && $0.message.utf8.count < 400 })
+        let message = records.map(\.message).joined(separator: "\n")
+        for sentinel in ["sentinel-private-input", "拼音秘密", "候选秘密", "/private/secret", "error detail"] {
+            precondition(!message.contains(sentinel))
+        }
+        for event: InputDiagnosticEvent in [.controllerCreated, .activationReady, .deactivationEntered,
+                                             .deactivationBeforeSuper, .deactivationAfterSuper,
+                                             .deactivationFinished, .activationSkipped, .controllerReleased] {
+            precondition(records.contains { $0.event == event }, "Missing input lifecycle event \(event)")
+        }
+        print("PASS input diagnostics: activation correlation, first-key dedupe, bounded content-free delivery outcomes")
     }
 }

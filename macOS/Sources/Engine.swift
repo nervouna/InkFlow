@@ -66,12 +66,38 @@ final class IFEngine {
         Task { @MainActor in
             idleScheduled = false
             idleHandler?()
+            publishPendingContextRankerIfIdle()
             voiceLexicon.prepareIfNeeded()
         }
     }
     private static var userDirectory = ""
     static var compiledDirectory = URL(fileURLWithPath: "/")
     private static var contextRanker: IFContextRanker?
+    private static var activeConfiguration: IFEngineConfiguration.Identity?
+    private static var pendingContextRanker: (identity: IFEngineConfiguration.Identity, ranker: IFContextRanker)?
+    static var contextRankingReady: Bool { contextRanker != nil }
+
+    /// A prepared index is published only to the engine it was built for and only between compositions.
+    static func publishContextRanker(_ ranker: IFContextRanker, for configuration: IFEngineConfiguration) {
+        pendingContextRanker = (configuration.identity, ranker)
+        signalIdle()
+    }
+
+    static func cancelPendingContextRanker(for configuration: IFEngineConfiguration) {
+        guard pendingContextRanker?.identity == configuration.identity else { return }
+        pendingContextRanker = nil
+    }
+
+    private static func publishPendingContextRankerIfIdle() {
+        guard let pendingContextRanker else { return }
+        guard ready, pendingContextRanker.identity == activeConfiguration else {
+            Self.pendingContextRanker = nil
+            return
+        }
+        guard allSessionsIdle else { return }
+        contextRanker = pendingContextRanker.ranker
+        Self.pendingContextRanker = nil
+    }
     private static var productionQualityStore: QualityStore?
     private final class WeakQualityRecorder {
         weak var value: QualityRecorder?
@@ -196,6 +222,7 @@ final class IFEngine {
         } catch { api.pointee.finalize(); throw error }
         ready = true
         userDirectory = user
+        activeConfiguration = configuration.identity
         contextRanker = configuration.ranker
         do {
             for (index, engine) in liveSessions.enumerated() {
@@ -218,6 +245,8 @@ final class IFEngine {
         // sync_user_data starts backup/sync maintenance and is not a generic shutdown flush.
         if ready { api.pointee.finalize(); ready = false }
         contextRanker = nil
+        activeConfiguration = nil
+        pendingContextRanker = nil
         generation &+= 1
     }
 
@@ -724,8 +753,20 @@ enum IFEngineSwitchStep: Equatable { case start, probe, session(Int), sessionCre
 
 /// Immutable index construction and descriptor validation happen away from live native input callbacks.
 struct IFEngineConfiguration: Sendable {
+    struct Identity: Equatable, Sendable {
+        let shared: String
+        let cache: String?
+        let user: String
+    }
+
     let shared: URL
     let cache: URL?
     let user: String
-    let ranker: IFContextRanker
+    let ranker: IFContextRanker?
+
+    var identity: Identity {
+        .init(shared: shared.standardizedFileURL.path,
+              cache: cache?.standardizedFileURL.path,
+              user: URL(fileURLWithPath: user).standardizedFileURL.path)
+    }
 }
