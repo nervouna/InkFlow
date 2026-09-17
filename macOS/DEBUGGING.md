@@ -161,8 +161,52 @@ end identifies work still pending (or a process exit), not proof of a deadlock.
 No document text, custom phrases, paths or error descriptions enter these events.
 Dictionary errors retain their existing detailed bounded diagnostic channel.
 Startup events are emitted only at stage transitions and native activation/deactivation.
-The input category adds one record for the first key-down callback in each activation,
-not a permanent per-key stream. Both use the existing unified log, with no new store.
+The input category records the first key-down callback in each activation and bounded
+composition/insertion transitions, not a permanent per-key stream. Allowlisted startup,
+input, AI, voice, dictionary, update, termination and statistics events also enter the
+local diagnostic store described below. Existing detailed dictionary system logs are
+separate and are not copied into the default diagnostic archive.
+
+### Save an incident and bring its evidence to another computer
+
+In Settings → 反馈, use **保存问题现场** when a problem occurs. The default occurrence
+time is the button click; enable **问题发生在更早时间** to select an earlier time.
+Saving freezes the preceding 30 minutes that are still available. The optional note
+is exported verbatim, so do not enter passwords, input contents or other sensitive text.
+After saving, the export selection points to that incident. **导出诊断包…** can also
+export the last 30 minutes, 24 hours, or all retained history. Cancelling the destination
+dialog creates no archive. Transfer the ZIP yourself through an allowed channel;
+InkFlow performs no automatic upload, remote collection, or GitHub issue submission.
+The existing GitHub feedback action and its opt-in system-log attachment remain separate.
+
+Production records are under `~/Library/Application Support/InkFlow/Diagnostics/`.
+Rolling records and saved incidents share an upper limit of **7 days / 50 MiB**;
+capacity can evict evidence sooner, and saving a scene does not exempt it from expiry.
+Diagnostics use a bounded queue and normally flush within one second on a background
+worker. A stalled disk, abnormal exit or full disk can lose buffered records. A normal
+quit makes only a bounded best-effort drain. Zero observed loss counters never establish
+complete history. A begin without its end establishes neither deadlock nor its cause;
+an insertion return does not prove text appeared in another application.
+
+Open `manifest.json` in the ZIP first for collection status, loss observations and the
+requested/observed window; `events.jsonl` contains complete records, and `summary.json`
+includes process versions, module observation states and the optional note. All timestamps
+are Unix milliseconds in UTC. Missing/unreadable modules or unsupported crash reports
+are explicitly distinguished from successful collection. Crash attachments are bounded
+safe summaries, not original crash files. The default archive excludes raw system logs,
+`quality.sqlite3`, `ai-statistics.sqlite3`, preferences, document text and audio.
+
+If InkFlow cannot start, open Finder → Go → Go to Folder and enter
+`~/Library/Application Support/InkFlow/Diagnostics/`. Copy **only that directory** to a
+local evidence folder and compress the copy. Do not copy the parent InkFlow folder or
+its statistical databases. This manual copy is raw diagnostic evidence and may include
+an explicitly written incident note or unfinished export staging; inspect it before
+sharing. A live copy may race writes, so record its collection time and do not claim it
+is a complete snapshot. Separately preserve matching InkFlow reports from
+`~/Library/Logs/DiagnosticReports/` (and `/Library/Logs/DiagnosticReports/` when readable).
+Original crash reports are separate sensitive attachments requiring manual review;
+they are not automatically added to the local ZIP. The system-log commands above are
+an additional manual investigation path, not a substitute for the frozen incident.
 
 Read server construction, event-loop progress, and engine readiness separately.
 Production starts the immutable `RimePrebuilt` bundled fallback before constructing

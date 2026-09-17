@@ -11,6 +11,25 @@ private final class TestClock: @unchecked Sendable {
     func advance(_ seconds: Double) { lock.withLock { value.addTimeInterval(seconds) } }
 }
 
+private final class ProducerCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [LocalDiagnosticEvent] = []
+    func append(_ event: LocalDiagnosticEvent) { lock.withLock { storage.append(event) } }
+    var events: [LocalDiagnosticEvent] { lock.withLock { storage } }
+}
+
+@MainActor private final class DiagnosticVoiceFailure: VoiceRecognitionServing {
+    let isReady = false
+    var cancellation = false
+    func prepare(requestPermission: Bool) async throws {
+        if cancellation { throw CancellationError() }
+        throw NSError(domain: NSURLErrorDomain, code: -1009, userInfo: [NSLocalizedDescriptionKey: "secretContent-provider-body"])
+    }
+    func start(id: UUID, snapshot: VoiceLexiconSnapshot, callbacks: AppleVoiceRecognizer.Callbacks) { preconditionFailure() }
+    func stop(id: UUID) {}
+    func cancel() {}
+}
+
 @main struct LocalDiagnosticsTests {
     static func main() async throws {
         // Foundation deliberately abbreviates /private/var to /var even in resolvingSymlinksInPath.
@@ -71,7 +90,63 @@ private final class TestClock: @unchecked Sendable {
         precondition(outsideFiles.isEmpty)
         try await recoveryAndPrivacy(root: root, configuration: config, clock: clock)
         try await capacityAndFailure(root: root, configuration: config, clock: clock)
+        try await metadataAndBoundedDrain(root: root, configuration: config)
+        try await producerRecords(root: root, configuration: config)
         print("PASS local diagnostics: correlation, queue/size/age bounds, restart, tail recovery, blocked IO, write failure, symlink refusal, sentinel exclusion")
+    }
+
+    @MainActor private static func producerRecords(root: URL, configuration: DiagnosticStoreConfiguration) async throws {
+        precondition(LocalDiagnostics.shared.store == nil, "Test producers must never activate the user's diagnostics directory")
+        let capture = ProducerCapture(), attempt = UUID(), session = UUID()
+        let service = DiagnosticVoiceFailure()
+        let preparation = VoicePreparation(service: service)
+        await LocalDiagnostics.$observe.withValue({ capture.append($0) }) {
+            let startup = IFStartupDiagnostics()
+            startup.end(startup.begin(.engine, source: .bundled), .ready)
+            AIDiagnostics.write(.init(event: .transportFailed, reason: .network, attempt: attempt,
+                session: session, networkCode: -1009, enabled: true, keyPresent: true))
+            IFDictionaryCoordinator.persistentLogger(.init(.download, "secretContent-code", source: "secretContent-source",
+                httpStatus: 503, detail: "secretContent-detail", stderr: "secretContent-stderr"))
+            await preparation.prepare()
+            service.cancellation = true
+            await preparation.prepare()
+        }
+        let ai = capture.events.first { $0.module == .ai }!
+        precondition(ai.event == "transportFailed" && ai.reason == "network" && ai.context?.session == session
+            && ai.context?.attempt == attempt && ai.context?.keyPresent == true)
+        let startup = capture.events.filter { $0.module == .startup }
+        precondition(startup.count == 2 && startup[0].correlation == startup[1].correlation && startup[0].context?.source == .bundled)
+        let voice = capture.events.filter { $0.module == .voice }
+        precondition(voice.count == 4 && voice[0].correlation == voice[1].correlation
+            && voice[1].outcome == .failed && voice[1].errorDomain == .url && voice[1].errorCode == -1009
+            && voice[2].correlation == voice[3].correlation && voice[3].outcome == .cancelled)
+        let store = LocalDiagnosticStore(directory: root.appendingPathComponent("Producers"))
+        capture.events.forEach(store.submit)
+        let snapshot = await store.snapshot()
+        precondition(snapshot.records.count == capture.events.count)
+        let encoded = String(decoding: try snapshot.jsonLines(), as: UTF8.self)
+        precondition(!encoded.contains("secretContent"))
+        precondition(snapshot.records.first { $0.module == .dictionary }?.reason == "unknown")
+    }
+
+    private static func metadataAndBoundedDrain(root: URL, configuration: DiagnosticStoreConfiguration) async throws {
+        let url = root.appendingPathComponent("QualityBuild.json")
+        var metadata = QualityBuildMetadata.unknown
+        metadata.sourceRevision = "abcdef0123456789abcdef0123456789abcdef0123"
+        try JSONEncoder().encode(metadata).write(to: url)
+        let store = LocalDiagnosticStore(directory: root.appendingPathComponent("Metadata"), configuration: configuration,
+            beforeIO: { precondition(!Thread.isMainThread) }, buildMetadataURL: url)
+        store.submit(.init(module: .startup, event: "process", outcome: .begin))
+        let result = await store.snapshot()
+        precondition(result.records.first?.process.revision == metadata.sourceRevision)
+        let gate = DispatchSemaphore(value: 0)
+        let blocked = LocalDiagnosticStore(directory: root.appendingPathComponent("Drain"), configuration: configuration,
+            beforeIO: { gate.wait() })
+        blocked.submit(.init(module: .termination, event: "cleanup", outcome: .completed))
+        let began = ProcessInfo.processInfo.systemUptime
+        let drained = await blocked.drain(timeout: 0.05)
+        precondition(!drained && ProcessInfo.processInfo.systemUptime - began < 1)
+        gate.signal()
     }
 
     private static func recoveryAndPrivacy(root: URL, configuration: DiagnosticStoreConfiguration, clock: TestClock) async throws {
@@ -93,7 +168,9 @@ private final class TestClock: @unchecked Sendable {
         precondition(snapshot.records.count == 1)
         precondition(snapshot.oldest!.timeIntervalSince1970 == exact.timeIntervalSince1970
             && snapshot.newest!.timeIntervalSince1970 == exact.timeIntervalSince1970)
-        precondition(snapshot.status.loss.corruptBytes > 0 && snapshot.status.loss.invalidRecords > 0)
+        precondition(snapshot.status.loss.corruptBytes > 0 && snapshot.invalidRecordCount > 0)
+        let repeated = await recovered.snapshot(since: exact, until: exact)
+        precondition(repeated.invalidRecordCount == snapshot.invalidRecordCount)
         let safe = String(decoding: try snapshot.jsonLines(), as: UTF8.self)
         precondition(!safe.contains("secretContent") && !safe.contains("privateText"))
         let repaired = try Data(contentsOf: file)

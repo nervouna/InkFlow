@@ -100,7 +100,11 @@ final class IFDictionaryCoordinator {
     static let persistentLogger: IFDictionaryDiagnosticLogger = { failure in
         // Only source/protocol/worker diagnostics enter here, never document context or learning data.
         let log = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "dictionary")
-        let event = UUID().uuidString
+        let operation = UUID()
+        LocalDiagnostics.shared.submit(.init(module: .dictionary, event: failure.stage, outcome: .failed,
+            reason: DictionaryDiagnosticCode(rawValue: failure.code), correlation: operation,
+            errorCode: failure.exitStatus.map(Int.init), httpStatus: failure.httpStatus))
+        let event = operation.uuidString
         let parts = diagnosticChunks(failure.technicalDetails)
         for (index, part) in parts.enumerated() {
             log.error("event=\(event, privacy: .public) part=\(index + 1)/\(parts.count) \(part, privacy: .public)")

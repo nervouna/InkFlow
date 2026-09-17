@@ -60,6 +60,7 @@ struct SettingsTests {
         try customPhrases(defaults: defaults, settings: settings)
         try await UpdateTests.run()
         try await feedbackReports()
+        await DiagnosticFeedbackModelTests.run()
         defaults.set("yes", forKey: "thunderMode")
         check(!settings.thunderMode, "Malformed Thunder preference must use the safe default")
         print("PASS settings: defaults, malformed values, bounds, persistence, Thunder/update defaults-off")

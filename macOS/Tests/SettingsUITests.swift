@@ -336,7 +336,7 @@ struct SettingsUITests {
             }
         )
         window.contentViewController = SettingsHostingController(rootView: SettingsView(
-            settings: settings, initialSection: .feedback, feedbackReporter: reporter
+            settings: settings, initialSection: .feedback, feedbackReporter: reporter, diagnosticDependencies: .unavailable
         ))
         checkMinimumSize(window)
         drainEvents()
@@ -382,8 +382,12 @@ struct SettingsUITests {
         check(abs(submitFrame.minX - includeFrame.minX) < 1,
               "Feedback button and checkbox must share the page's leading alignment")
         let initialFeedbackElements = IFAccessibilityTree(window)
-        check(!initialFeedbackElements.contains { $0["role"] as? String == "AXStaticText" },
-              "Feedback normal state must contain no static explanatory text")
+        check(initialFeedbackElements.contains { $0["id"] as? String == "settings.feedback.privacy" },
+              "Feedback must explain that optional notes are included and sensitive text should be omitted")
+        check(initialFeedbackElements.contains { $0["id"] as? String == "settings.feedback.retention" },
+              "Feedback must explain the shared retention upper limits")
+        check(initialFeedbackElements.contains { $0["role"] as? String == "AXScrollArea" },
+              "Diagnosis controls must remain reachable at the minimum Settings height")
         check(window.title == "反馈")
 
         press("settings.feedback.submitFeedback")
@@ -409,7 +413,7 @@ struct SettingsUITests {
             }
         )
         window.contentViewController = SettingsHostingController(rootView: SettingsView(
-            settings: settings, initialSection: .feedback, feedbackReporter: failingReporter
+            settings: settings, initialSection: .feedback, feedbackReporter: failingReporter, diagnosticDependencies: .unavailable
         ))
         drainEvents()
         press("settings.feedback.includeLogs")
@@ -437,7 +441,7 @@ struct SettingsUITests {
 
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         drainEvents()
-        print("PASS Feedback/About UI: standalone ordered controls without help, injected action/failure, version-only About")
+        print("PASS Feedback/About UI: ordered GitHub controls, diagnostic privacy/retention guidance, injected action/failure, version-only About")
     }
 
     @MainActor static func checkInputLayout(_ window: NSWindow, settings: IFSettings) {

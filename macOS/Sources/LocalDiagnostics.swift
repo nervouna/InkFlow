@@ -1,12 +1,38 @@
 import Foundation
 import Darwin
 
+/// Only finite, source-defined diagnostic enums conform. Never conform a wrapper around user text.
+protocol DiagnosticLabel: RawRepresentable, Sendable where RawValue == String {}
+
+struct DiagnosticContext: Codable, Sendable {
+    var startupRun: UUID?
+    var session: UUID?
+    var attempt: UUID?
+    var controller: UUID?
+    var activation: UUID?
+    var key: UUID?
+    var composition: UUID?
+    var sequence: Int?
+    var source: IFStartupDiagnostics.Source?
+    var enabled: Bool?
+    var baseURLPresent: Bool?
+    var keyPresent: Bool?
+    var modelPresent: Bool?
+    var precedingAvailable: Bool?
+    var followingAvailable: Bool?
+    var engineAvailable: Bool?
+    var clientPresent: Bool?
+    var commitInsertion: Bool?
+    var markedTextUpdate: Bool?
+    var markedTextClear: Bool?
+}
+
 /// Automatic records accept compile-time labels, UUIDs and numbers only. Never pass error descriptions,
 /// URLs, application identifiers, document text or configuration values into this channel.
 struct LocalDiagnosticEvent: Sendable {
     enum Module: String, Codable, Sendable { case startup, input, ai, voice, dictionary, update, termination, statistics, diagnostics }
-    enum Outcome: String, Codable, Sendable { case begin, ready, completed, failed, skipped, cancelled, timeout, unavailable }
-    enum ErrorDomain: String, Codable, Sendable { case cocoa, posix, url, speech, audio, unknown }
+    enum Outcome: String, Codable, Sendable { case begin, ready, completed, failed, skipped, cancelled, timeout, unavailable, handled, passThrough }
+    enum ErrorDomain: String, Codable, Sendable { case cocoa, posix, url, speech, audio, sqlite, unknown }
     let module: Module
     let event: String
     let outcome: Outcome
@@ -16,6 +42,7 @@ struct LocalDiagnosticEvent: Sendable {
     let errorDomain: ErrorDomain?
     let errorCode: Int?
     let httpStatus: Int?
+    var context: DiagnosticContext?
 
     init(module: Module, event: StaticString, outcome: Outcome, reason: StaticString? = nil,
          correlation: UUID? = nil, elapsedMilliseconds: Double? = nil,
@@ -26,6 +53,30 @@ struct LocalDiagnosticEvent: Sendable {
         self.errorDomain = errorDomain; self.errorCode = errorCode
         self.httpStatus = httpStatus.flatMap { (100...599).contains($0) ? $0 : nil }
     }
+
+    init<E: DiagnosticLabel, R: DiagnosticLabel>(module: Module, event: E, outcome: Outcome,
+         reason: R, correlation: UUID? = nil, elapsedMilliseconds: Double? = nil,
+         errorDomain: ErrorDomain? = nil, errorCode: Int? = nil, httpStatus: Int? = nil,
+         context: DiagnosticContext? = nil) {
+        self.module = module; self.event = event.rawValue; self.outcome = outcome; self.reason = reason.rawValue
+        self.correlation = correlation
+        self.elapsedMilliseconds = elapsedMilliseconds.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
+        self.errorDomain = errorDomain; self.errorCode = errorCode
+        self.httpStatus = httpStatus.flatMap { (100...599).contains($0) ? $0 : nil }; self.context = context
+    }
+
+    static func safeError(_ error: any Error) -> (ErrorDomain, Int) {
+        let value = error as NSError
+        let domain: ErrorDomain = switch value.domain {
+        case NSCocoaErrorDomain: .cocoa
+        case NSPOSIXErrorDomain: .posix
+        case NSURLErrorDomain: .url
+        case "kAFAssistantErrorDomain", "SFSpeechErrorDomain": .speech
+        case "com.apple.coreaudio.avfaudio", NSOSStatusErrorDomain: .audio
+        default: .unknown
+        }
+        return (domain, value.code)
+    }
 }
 
 struct DiagnosticProcess: Codable, Sendable {
@@ -33,7 +84,7 @@ struct DiagnosticProcess: Codable, Sendable {
     let pid: Int32
     let version: String
     let build: String
-    let revision: String
+    var revision: String
     let systemVersion: String
 
     init(bundle: Bundle = .main) {
@@ -56,7 +107,7 @@ struct DiagnosticRecord: Codable, Sendable {
     let schema: Int
     let timestamp: Date
     let uptime: Double
-    let process: DiagnosticProcess
+    var process: DiagnosticProcess
     let module: LocalDiagnosticEvent.Module
     let event: String
     let outcome: LocalDiagnosticEvent.Outcome
@@ -66,12 +117,14 @@ struct DiagnosticRecord: Codable, Sendable {
     let errorDomain: LocalDiagnosticEvent.ErrorDomain?
     let errorCode: Int?
     let httpStatus: Int?
+    let context: DiagnosticContext?
 
     init(_ event: LocalDiagnosticEvent, process: DiagnosticProcess, timestamp: Date) {
         schema = 1; self.timestamp = timestamp; uptime = ProcessInfo.processInfo.systemUptime
         self.process = process; module = event.module; self.event = event.event; outcome = event.outcome
         reason = event.reason; correlation = event.correlation; elapsedMilliseconds = event.elapsedMilliseconds
         errorDomain = event.errorDomain; errorCode = event.errorCode; httpStatus = event.httpStatus
+        context = event.context
     }
 
     /// On-disk input is decoded rather than blindly included in an export. Unknown JSON fields are discarded.
@@ -95,7 +148,7 @@ struct DiagnosticLoss: Codable, Sendable {
     var expiredFiles = 0
     var capacityFiles = 0
     var corruptBytes = 0
-    var invalidRecords = 0
+
 }
 
 struct DiagnosticStatus: Codable, Sendable {
@@ -106,9 +159,10 @@ struct DiagnosticStatus: Codable, Sendable {
     var loss = DiagnosticLoss()
 }
 
-struct DiagnosticSnapshot: Sendable {
+struct DiagnosticSnapshot: Codable, Sendable {
     let records: [DiagnosticRecord]
     let status: DiagnosticStatus
+    var invalidRecordCount = 0
     var oldest: Date? { records.first?.timestamp }
     var newest: Date? { records.last?.timestamp }
     func jsonLines() throws -> Data {
@@ -134,6 +188,8 @@ final class LocalDiagnosticStore: @unchecked Sendable {
     private let directory: URL
     private let configuration: DiagnosticStoreConfiguration
     private let process = DiagnosticProcess()
+    private let buildMetadataURL: URL?
+    private var loadedRevision: String?
     private let now: @Sendable () -> Date
     private let beforeIO: (@Sendable () -> Void)?
     private let beforeWrite: (@Sendable () throws -> Void)?
@@ -149,14 +205,16 @@ final class LocalDiagnosticStore: @unchecked Sendable {
     private var lockFD: Int32 = -1
     private var activeFile: String?
     private var recovered = false
+    private var invalidRecordCount = 0
     private var maintenanceTimer: DispatchSourceTimer?
     private var lastMaintenance = Date.distantPast
 
     init(directory: URL, configuration: DiagnosticStoreConfiguration = .init(),
          now: @escaping @Sendable () -> Date = { Date() }, beforeIO: (@Sendable () -> Void)? = nil,
-         beforeWrite: (@Sendable () throws -> Void)? = nil) {
+         beforeWrite: (@Sendable () throws -> Void)? = nil, buildMetadataURL: URL? = nil) {
         self.directory = directory; self.configuration = configuration; self.now = now; self.beforeIO = beforeIO
         self.beforeWrite = beforeWrite
+        self.buildMetadataURL = buildMetadataURL
         precondition(configuration.maximumBytes >= 4_096 && configuration.maximumFileBytes > 0
             && configuration.maximumFileBytes <= configuration.maximumBytes - 2_048
             && configuration.maximumEventBytes > 0 && configuration.maximumEventBytes <= configuration.maximumFileBytes
@@ -198,15 +256,38 @@ final class LocalDiagnosticStore: @unchecked Sendable {
                         try self.loadLoss()
                         try self.maintain()
                         let records = try self.readRecords(since: since, until: until)
-                        try self.saveLoss()
+                        // A bookkeeping failure must not discard records already read successfully.
+                        do { try self.saveLoss() } catch { self.fail(error) }
                         return records
                     }
-                    continuation.resume(returning: .init(records: records, status: self.status))
+                    continuation.resume(returning: .init(records: records, status: self.status, invalidRecordCount: self.invalidRecordCount))
                 } catch {
                     self.fail(error)
                     continuation.resume(returning: .init(records: [], status: self.status))
                 }
             }
+        }
+    }
+
+    private final class DrainReply: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+        func finish(_ success: Bool) {
+            let reply = lock.withLock { let reply = continuation; continuation = nil; return reply }
+            reply?.resume(returning: success)
+        }
+    }
+
+    /// Best effort only: optional diagnostics must not hold application termination on a stalled disk.
+    @discardableResult func drain(timeout: TimeInterval = 0.5) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let reply = DrainReply(continuation)
+            worker.async {
+                self.flush()
+                reply.finish(self.status.availability == .available && self.lock.withLock { self.pending.isEmpty })
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + max(0, timeout)) { reply.finish(false) }
         }
     }
 
@@ -224,7 +305,19 @@ final class LocalDiagnosticStore: @unchecked Sendable {
                 }
                 status.loss.queueDropped += batch.1
                 let encoder = Self.encoder()
-                for record in batch.0 {
+                if loadedRevision == nil {
+                    loadedRevision = "unknown"
+                    if let url = buildMetadataURL,
+                       let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 16_384,
+                       let data = try? Data(contentsOf: url),
+                       let build = try? JSONDecoder().decode(QualityBuildMetadata.self, from: data),
+                       (7...64).contains(build.sourceRevision.utf8.count),
+                       build.sourceRevision.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) {
+                        loadedRevision = build.sourceRevision
+                    }
+                }
+                for var record in batch.0 {
+                    record.process.revision = loadedRevision ?? "unknown"
                     guard record.isValid else { status.loss.oversizedDropped += 1; continue }
                     var data = try encoder.encode(record); data.append(10)
                     guard data.count <= configuration.maximumEventBytes else { status.loss.oversizedDropped += 1; continue }
@@ -310,13 +403,16 @@ final class LocalDiagnosticStore: @unchecked Sendable {
             }
             let parts = name.split(separator: "_")
             guard parts.count == 3, parts[0] == "log" || parts[0] == "incident",
-                  let milliseconds = Double(parts[1]), milliseconds.isFinite,
-                  UUID(uuidString: String(parts[2].split(separator: ".")[0])) != nil,
-                  name.hasSuffix(parts[0] == "log" ? ".jsonl" : ".json") else { continue }
+                  let milliseconds = Int64(parts[1]), milliseconds >= 0,
+                  String(milliseconds) == parts[1] else { continue }
+            let suffix = parts[0] == "log" ? ".jsonl" : ".json"
+            guard parts[2].hasSuffix(suffix) else { continue }
+            let identifier = String(parts[2].dropLast(suffix.count))
+            guard let uuid = UUID(uuidString: identifier), uuid.uuidString == identifier else { continue }
             var info = stat()
             guard fstatat(directoryFD, name, &info, AT_SYMLINK_NOFOLLOW) == 0,
                   (info.st_mode & S_IFMT) == S_IFREG && info.st_nlink == 1 else { throw StoreError.failure(.unsafePath) }
-            files.append(.init(name: name, created: Date(timeIntervalSince1970: milliseconds / 1_000),
+            files.append(.init(name: name, created: Date(timeIntervalSince1970: Double(milliseconds) / 1_000),
                                size: Int(info.st_size), incident: parts[0] == "incident"))
         }
         return files.sorted { $0.created == $1.created ? $0.name < $1.name : $0.created < $1.created }
@@ -332,6 +428,13 @@ final class LocalDiagnosticStore: @unchecked Sendable {
             try remove(file.name); total -= file.size; status.loss.capacityFiles += 1
         }
         if !recovered {
+            // A crashed save can leave this one bounded temporary file; the directory lock excludes active saves.
+            var temporary = stat()
+            if fstatat(directoryFD, "incident.next", &temporary, AT_SYMLINK_NOFOLLOW) == 0 {
+                guard temporary.st_mode & S_IFMT == S_IFREG && temporary.st_nlink == 1 else { throw StoreError.failure(.unsafePath) }
+                try remove("incident.next")
+            }
+
             for file in try ownedFiles() where !file.incident {
                 guard file.size <= configuration.maximumFileBytes else {
                     try remove(file.name); status.loss.capacityFiles += 1; continue
@@ -409,6 +512,7 @@ final class LocalDiagnosticStore: @unchecked Sendable {
         return data
     }
     private func readRecords(since: Date?, until: Date?) throws -> [DiagnosticRecord] {
+        invalidRecordCount = 0
         let decoder = Self.decoder()
         var records: [DiagnosticRecord] = []
         let lower = max(since ?? .distantPast, now().addingTimeInterval(-configuration.retention))
@@ -418,13 +522,13 @@ final class LocalDiagnosticStore: @unchecked Sendable {
                 guard line.count <= configuration.maximumEventBytes,
                       let record = try? decoder.decode(DiagnosticRecord.self, from: Data(line)), record.isValid else {
                     // The corrupt record is never copied to a diagnostic bundle.
-                    status.loss.invalidRecords += 1
+                    invalidRecordCount += 1
                     continue
                 }
                 // JSON dates use Unix milliseconds. Compare in that same time base; Date's reference
                 // epoch arithmetic can otherwise exclude an exact boundary by a fraction of a microsecond.
-                if record.timestamp.timeIntervalSince1970 >= lower.timeIntervalSince1970
-                    && record.timestamp.timeIntervalSince1970 <= (until ?? .distantFuture).timeIntervalSince1970 { records.append(record) }
+                if DiagnosticTime.milliseconds(record.timestamp) >= DiagnosticTime.milliseconds(lower)
+                    && DiagnosticTime.milliseconds(record.timestamp) <= DiagnosticTime.milliseconds(until ?? .distantFuture) { records.append(record) }
             }
         }
         return records.sorted { $0.timestamp == $1.timestamp ? $0.uptime < $1.uptime : $0.timestamp < $1.timestamp }
@@ -453,7 +557,124 @@ final class LocalDiagnostics: @unchecked Sendable {
     static let shared = LocalDiagnostics()
     private let lock = NSLock()
     private var storage: LocalDiagnosticStore?
-    func activate(directory: URL) { lock.withLock { if storage == nil { storage = LocalDiagnosticStore(directory: directory) } } }
+    @TaskLocal static var observe: (@Sendable (LocalDiagnosticEvent) -> Void)?
+    func activate(directory: URL, buildMetadataURL: URL? = nil) {
+        let activated = lock.withLock {
+            guard storage == nil else { return false }
+            storage = LocalDiagnosticStore(directory: directory, buildMetadataURL: buildMetadataURL)
+            return true
+        }
+        if activated {
+            Task.detached(priority: .utility) {
+                await DiagnosticArchiveWriter(stagingRoot: directory.appendingPathComponent("Exports")).cleanupStale()
+            }
+        }
+    }
     var store: LocalDiagnosticStore? { lock.withLock { storage } }
-    func submit(_ event: LocalDiagnosticEvent) { store?.submit(event) }
+    func submit(_ event: LocalDiagnosticEvent) { Self.observe?(event); store?.submit(event) }
+}
+
+extension LocalDiagnosticStore {
+    /// Incidents share the rolling log's lock, budget and age policy. No second store or database.
+    func saveIncident(occurredAt: Date, clickedAt: Date, note: String?) async throws -> DiagnosticIncident {
+        try DiagnosticIncident.validate(note: note)
+        guard occurredAt.timeIntervalSince1970.isFinite, clickedAt.timeIntervalSince1970.isFinite,
+              occurredAt <= clickedAt, clickedAt <= now(), occurredAt.timeIntervalSince1970 >= 1_800 else {
+            throw DiagnosticFeedbackError.invalidTime
+        }
+        let occurredAt = DiagnosticTime.canonical(occurredAt)
+        let clickedAt = DiagnosticTime.canonical(clickedAt)
+        let start = occurredAt.addingTimeInterval(-1_800)
+        guard let anchor = Int64(exactly: DiagnosticTime.milliseconds(start)) else { throw DiagnosticFeedbackError.invalidTime }
+        guard start > now().addingTimeInterval(-configuration.retention) else { throw DiagnosticFeedbackError.expired }
+        try Task.checkCancellation()
+        return try await incidentOperation {
+            self.flush()
+            return try self.withDirectoryLock {
+                try self.loadLoss()
+                try self.maintain()
+                let records = try self.readRecords(since: start, until: occurredAt)
+                let incident = DiagnosticIncident(schema: 1, id: UUID(), savedAt: clickedAt, occurredAt: occurredAt,
+                    windowStart: start, windowEnd: occurredAt, note: note,
+                    snapshot: .init(records: records, status: self.status, invalidRecordCount: self.invalidRecordCount))
+                let data = try Self.encoder().encode(incident)
+                guard data.count <= self.configuration.maximumBytes - 2_048 else { throw DiagnosticFeedbackError.tooLarge }
+                // Validate size before making room: an impossible save must not evict existing evidence.
+                try self.maintain(reserving: data.count)
+                let temporary = "incident.next"
+                let fd = try self.openRegular(temporary, flags: O_WRONLY | O_CREAT | O_TRUNC)
+                defer { close(fd); _ = unlinkat(self.directoryFD, temporary, 0) }
+                try self.writeAll(data, fd: fd)
+                let name = "incident_\(anchor)_\(incident.id).json"
+                guard renameat(self.directoryFD, temporary, self.directoryFD, name) == 0 else { throw DiagnosticFeedbackError.unavailable }
+                // The frozen snapshot is usable even if later bookkeeping fails.
+                do { try self.saveLoss() } catch { self.fail(error) }
+                return incident
+            }
+        }
+    }
+
+    func incidents() async throws -> DiagnosticIncidentList {
+        try await incidentOperation {
+            try self.withDirectoryLock {
+                try self.loadLoss()
+                try self.maintain()
+                var summaries: [DiagnosticIncidentSummary] = [], invalid = 0
+                for file in try self.ownedFiles() where file.incident {
+                    do { summaries.append(try self.readIncident(file).summary) }
+                    catch { invalid += 1 }
+                }
+                do { try self.saveLoss() } catch { self.fail(error) }
+                return .init(incidents: summaries.sorted { $0.occurredAt > $1.occurredAt },
+                             invalidIncidentCount: invalid, storageStatus: self.status)
+            }
+        }
+    }
+
+    func incident(id: UUID) async throws -> DiagnosticIncident {
+        try await incidentOperation {
+            try self.withDirectoryLock {
+                try self.loadLoss()
+                try self.maintain()
+                do { try self.saveLoss() } catch { self.fail(error) }
+                guard let file = try self.ownedFiles().first(where: { $0.incident && $0.name.hasSuffix("_\(id).json") }) else {
+                    throw DiagnosticFeedbackError.missingIncident
+                }
+                let incident = try self.readIncident(file)
+                guard incident.id == id else { throw DiagnosticFeedbackError.invalidIncident }
+                if self.status.availability == .unavailable {
+                    var status = incident.snapshot.status
+                    status.availability = .unavailable; status.failure = self.status.failure
+                    return DiagnosticIncident(schema: incident.schema, id: incident.id, savedAt: incident.savedAt,
+                        occurredAt: incident.occurredAt, windowStart: incident.windowStart, windowEnd: incident.windowEnd,
+                        note: incident.note, snapshot: .init(records: incident.records, status: status,
+                                                          invalidRecordCount: incident.snapshot.invalidRecordCount))
+                }
+                return incident
+            }
+        }
+    }
+
+    private func readIncident(_ file: OwnedFile) throws -> DiagnosticIncident {
+        guard file.size <= configuration.maximumBytes - 2_048 else { throw DiagnosticFeedbackError.invalidIncident }
+        let data = try read(file.name, limit: configuration.maximumBytes - 2_048)
+        guard let value = try? Self.decoder().decode(DiagnosticIncident.self, from: data), value.isValid,
+              file.name == "incident_\(Int64(DiagnosticTime.milliseconds(value.windowStart)))_\(value.id).json",
+              value.windowStart > now().addingTimeInterval(-configuration.retention) else { throw DiagnosticFeedbackError.invalidIncident }
+        return value
+    }
+
+    private func incidentOperation<T: Sendable>(_ operation: @escaping @Sendable () throws -> T) async throws -> T {
+        guard lock.withLock({ if requests >= 4 { return false }; requests += 1; return true }) else {
+            throw DiagnosticFeedbackError.unavailable
+        }
+        return try await withCheckedThrowingContinuation { continuation in
+            worker.async {
+                defer { self.lock.withLock { self.requests -= 1 } }
+                do { continuation.resume(returning: try operation()) }
+                catch let error as DiagnosticFeedbackError { continuation.resume(throwing: error) }
+                catch { self.fail(error); continuation.resume(throwing: DiagnosticFeedbackError.unavailable) }
+            }
+        }
+    }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-enum IFDictionaryStage: String, Codable, Sendable {
+enum IFDictionaryStage: String, Codable, DiagnosticLabel {
     case check, download, prepare, verify, apply, rollback, recovery
     var failureSummary: String {
         switch self {
@@ -13,6 +13,27 @@ enum IFDictionaryStage: String, Codable, Sendable {
         case .recovery: "恢复词库状态失败"
         }
     }
+}
+
+/// Error.code is a String because worker/source failures cross a process boundary. Only these fixed
+/// codes may enter the content-free local log; descriptions, source names and stderr never do.
+struct DictionaryDiagnosticCode: DiagnosticLabel {
+    let rawValue: String
+    private static let allowed: Set<String> = [
+        "underlying", "backend-unavailable", "bundled-unavailable", "engine-unavailable", "missing-check",
+        "http-status", "non-http-response", "redirect-host", "request-host", "response-json", "response-size",
+        "response-too-large", "commit-format", "checked-source", "tree-file", "tree-incomplete",
+        "source-set", "source-checksum", "source-format", "source-location", "source-size",
+        "activation-in-progress", "activation-mismatch", "invalid-state", "invalid-version", "invalid-receipt",
+        "manifest-integrity", "manifest-legacy", "manifest-metadata", "manifest-source", "manifest-version",
+        "missing-resources", "missing-runtime-resource", "nonregular-file", "observation-content",
+        "prepared-checksum", "prepared-extra-files", "prepared-file-missing", "prepared-path", "prepared-version",
+        "runtime-changed", "runtime-fingerprint", "symlink-path", "symlink-resource", "unsafe-candidate", "unsafe-path",
+        "worker-arguments", "worker-exit", "worker-launch", "worker-timeout", "candidate-not-empty",
+        "compiled-file-missing", "rebuild-integrity", "rime-compile", "smoke-probe", "legacy-changed",
+        "calibration-empty", "correction-duplicate", "correction-format", "invalid-reading"
+    ]
+    init(rawValue: String) { self.rawValue = Self.allowed.contains(rawValue) ? rawValue : "unknown" }
 }
 
 /// Diagnostic payloads are deliberately separate from the persistent state and manifest.

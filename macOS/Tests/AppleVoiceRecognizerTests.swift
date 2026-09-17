@@ -109,7 +109,8 @@ struct AppleVoiceRecognizerTests {
         await fixtureLifecycle()
         // Invoke the exact production tap on a detached executor, without opening a microphone.
         let input = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-        let output = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+        let output = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16000, channels: 1, interleaved: false)!
+        precondition(output.commonFormat == .pcmFormatInt16 && !output.isInterleaved)
         let feed = try VoiceAudioFeed(input: input, output: output)
         let tap = feed.makeTap()
         await Task.detached {

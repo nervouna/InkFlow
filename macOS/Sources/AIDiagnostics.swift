@@ -3,7 +3,7 @@ import OSLog
 
 /// Only allowlisted labels and scalar metadata cross this privacy boundary. Never pass
 /// document text, configuration values, provider bodies or arbitrary error descriptions.
-enum AIDiagnosticEvent: String, Sendable {
+enum AIDiagnosticEvent: String, DiagnosticLabel {
     case settingsLoaded, settingsSaved, settingsToggled, credentialFailed
     case eligibility, anchorRejected, contextRejected, contextCaptured
     case scheduled, dispatched, invalidated, cancelled, discarded, failed, shown, adoptionRequested
@@ -12,7 +12,7 @@ enum AIDiagnosticEvent: String, Sendable {
     case presentationFailed, deactivateEntered, deactivateCommitted, deactivateSuperReturned, deactivateFinished
 }
 
-enum AIDiagnosticReason: String, Sendable {
+enum AIDiagnosticReason: String, DiagnosticLabel {
     case none, ready, disabled, incompleteConfiguration, credentialRead, credentialWrite
     case accepting, secureInput, missingPanel, panelHidden, emptyCandidates, missingEngine, inputUnavailable
     case missingClient, unownedMark, invalidMark, emptyMark, invalidSelection, selectionOutsideMark
@@ -75,6 +75,19 @@ enum AIDiagnostics {
     }
 
     static func write(_ record: AIDiagnosticRecord) {
+        let outcome: LocalDiagnosticEvent.Outcome = switch record.event {
+        case .credentialFailed, .failed, .transportFailed, .presentationFailed: .failed
+        case .cancelled, .transportCancelled: .cancelled
+        case .discarded, .invalidated: .skipped
+        case .dispatched, .transportStarted, .insertionIssued: .begin
+        default: .completed
+        }
+        LocalDiagnostics.shared.submit(.init(module: .ai, event: record.event, outcome: outcome,
+            reason: record.reason, correlation: record.attempt, elapsedMilliseconds: record.elapsedMS.map(Double.init),
+            errorDomain: record.networkCode == nil ? nil : .url, errorCode: record.networkCode, httpStatus: record.status,
+            context: .init(session: record.session, attempt: record.attempt, enabled: record.enabled,
+                baseURLPresent: record.baseURLPresent, keyPresent: record.keyPresent, modelPresent: record.modelPresent,
+                precedingAvailable: record.precedingAvailable, followingAvailable: record.followingAvailable)))
         let message = record.message
         switch record.event {
         case .credentialFailed, .failed, .transportFailed, .presentationFailed:

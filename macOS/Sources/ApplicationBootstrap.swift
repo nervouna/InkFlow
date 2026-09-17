@@ -3,12 +3,14 @@ import InputMethodKit
 package enum InkFlowApplicationBootstrap {
     @MainActor package static func run() -> Int32 {
         autoreleasepool {
+            let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
+            LocalDiagnostics.shared.activate(directory: user.appendingPathComponent("Diagnostics"),
+                buildMetadataURL: Bundle.main.url(forResource: "QualityBuild", withExtension: "json"))
             let startup = IFStartupDiagnostics.shared
             let processSpan = startup.begin(.process)
             _ = NSApplication.shared
             let bundle = Bundle.main
             let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
-            let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
             let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version)
             let statisticsStore = AIStatisticsStore(url: user.appendingPathComponent("ai-statistics.sqlite3"),
                 pricingURL: user.appendingPathComponent("ai-pricing.json"),
@@ -47,7 +49,11 @@ package enum InkFlowApplicationBootstrap {
                 NSLog("InkFlow could not create its input method server.")
                 IFEngine.stop()
                 let drained = DispatchSemaphore(value: 0)
-                Task.detached { await qualityStore.close(); await statisticsStore.close(); drained.signal() }
+                Task.detached {
+                    await qualityStore.close(); await statisticsStore.close()
+                    await LocalDiagnostics.shared.store?.drain()
+                    drained.signal()
+                }
                 drained.wait()
                 IFEngine.configureQualityRecording(nil)
                 InkFlowInputController.statisticsStore = nil

@@ -3,12 +3,12 @@ import os
 
 /// Content-free, constant-size events. Run ID and PID separate cold starts from client switches.
 struct IFStartupDiagnostics: Sendable {
-    enum Stage: String, Sendable {
+    enum Stage: String, DiagnosticLabel {
         case process, bootstrap, backend, journal, fingerprint, cacheValidation, indexes, rebuild
         case worker, engine, initialization, maintenance, server, eventLoop, activation, deactivation
     }
-    enum Source: String, Sendable { case process, bundled, downloaded, prepared, client }
-    enum Status: String, Sendable { case begin, ready, failed, skipped, cancelled, timeout }
+    enum Source: String, Codable, Sendable { case process, bundled, downloaded, prepared, client }
+    enum Status: String, DiagnosticLabel { case begin, ready, failed, skipped, cancelled, timeout }
     struct Span: Sendable {
         let id: UUID
         let stage: Stage
@@ -37,6 +37,9 @@ struct IFStartupDiagnostics: Sendable {
     func end(_ span: Span, _ status: Status = .ready) { emit(span, status) }
     private func emit(_ span: Span, _ status: Status) {
         let elapsed = max(0, clock() - span.started) * 1000
+        LocalDiagnostics.shared.submit(.init(module: .startup, event: span.stage,
+            outcome: .init(rawValue: status.rawValue) ?? .completed, reason: status,
+            correlation: span.id, elapsedMilliseconds: elapsed, context: .init(startupRun: run, source: span.source)))
         sink("run=\(run) pid=\(pid) span=\(span.id) stage=\(span.stage.rawValue) source=\(span.source.rawValue) status=\(status.rawValue) elapsed_ms=\(String(format: "%.3f", elapsed))")
     }
     func measure<T>(_ stage: Stage, source: Source = .process, _ body: () throws -> T) rethrows -> T {
@@ -48,21 +51,23 @@ struct IFStartupDiagnostics: Sendable {
 
 /// Fixed labels and boolean delivery facts only. Never add key metadata, input text,
 /// candidates, document values, identifiers from a client, paths or error descriptions.
-enum InputDiagnosticEvent: String, Sendable {
+enum InputDiagnosticEvent: String, DiagnosticLabel {
     case controllerCreated, controllerReleased
     case activationReady, activationSkipped
     case firstKeyEntered, firstKeyCompleted
     case deactivationEntered, deactivationBeforeSuper, deactivationAfterSuper, deactivationFinished
+    case compositionBegan, compositionEnded, insertionIssued, insertionReturned, engineUnavailable
 }
 
 enum InputDiagnosticOutcome: String, Sendable {
     case handled, passThrough, skipped
 }
 
-enum InputDiagnosticReason: String, Sendable {
+enum InputDiagnosticReason: String, DiagnosticLabel {
     case none, rime, engineMissing, engineUnavailable
     case voiceDeliveringHandled, voiceDeliveringPassThrough, voiceHandled
     case aiAccepting, controlShortcut, aiSuggestionAccepted
+    case committed, cleared, deactivated, clientMissing, reactivated, teardown
 }
 
 struct InputDeliveryDiagnostic: Sendable {
@@ -79,6 +84,7 @@ struct InputDiagnosticRecord: Sendable {
     let controller: UUID
     let activation: UUID?
     let key: UUID?
+    var composition: UUID? = nil
     var engineAvailable: Bool? = nil
     var clientPresent: Bool? = nil
     var commitInsertion: Bool? = nil
@@ -90,6 +96,7 @@ struct InputDiagnosticRecord: Sendable {
                       "controller=\(controller.uuidString)"]
         if let activation { fields.append("activation=\(activation.uuidString)") }
         if let key { fields.append("key=\(key.uuidString)") }
+        if let composition { fields.append("composition=\(composition.uuidString)") }
         if let outcome { fields.append("outcome=\(outcome.rawValue)") }
         if let engineAvailable { fields.append("engine_available=\(engineAvailable)") }
         if let clientPresent { fields.append("client_present=\(clientPresent)") }
@@ -106,6 +113,13 @@ enum InputDiagnostics {
     @TaskLocal static var observe: (@Sendable (InputDiagnosticRecord) -> Void)?
 
     static func write(_ record: InputDiagnosticRecord) {
+        let outcome: LocalDiagnosticEvent.Outcome = record.outcome.flatMap { .init(rawValue: $0.rawValue) }
+            ?? (record.event == .insertionIssued || record.event == .compositionBegan ? .begin : .completed)
+        LocalDiagnostics.shared.submit(.init(module: .input, event: record.event, outcome: outcome,
+            reason: record.reason, correlation: record.composition ?? record.key ?? record.activation,
+            context: .init(controller: record.controller, activation: record.activation, key: record.key,
+                composition: record.composition, engineAvailable: record.engineAvailable, clientPresent: record.clientPresent,
+                commitInsertion: record.commitInsertion, markedTextUpdate: record.markedTextUpdate, markedTextClear: record.markedTextClear)))
         let message = record.message
         logger.notice("\(message, privacy: .public)")
         observe?(record)
@@ -129,6 +143,9 @@ final class IFInputLifecycleDiagnostics {
     private var recordedFirstKey = false
     private var created = false
     private var released = false
+    struct CompositionToken { let id: UUID; let activation: UUID? }
+    private var composition: CompositionToken?
+    private var unavailableReported = false
 
     init(controller: UUID = UUID()) {
         self.controller = controller
@@ -141,8 +158,53 @@ final class IFInputLifecycleDiagnostics {
     }
 
     func beginActivation() {
+        endComposition(.reactivated)
         activation = UUID()
         recordedFirstKey = false
+        unavailableReported = false
+    }
+
+    func engineAvailability(_ available: Bool, reason: InputDiagnosticReason = .engineUnavailable) {
+        if available { unavailableReported = false; return }
+        guard !unavailableReported else { return }
+        unavailableReported = true
+        emit(.engineUnavailable, reason: reason, outcome: .skipped, engineAvailable: false)
+    }
+
+    @discardableResult func beginComposition() -> CompositionToken {
+        if let composition { return composition }
+        let token = CompositionToken(id: UUID(), activation: activation)
+        composition = token
+        emitComposition(.compositionBegan, token: token, reason: .none)
+        return token
+    }
+
+    func endComposition(_ reason: InputDiagnosticReason) {
+        guard let token = composition else { return }
+        composition = nil
+        emitComposition(.compositionEnded, token: token, reason: reason)
+    }
+
+    func insertionBegan(clientPresent: Bool) -> CompositionToken {
+        let token = beginComposition()
+        // Reserve/end current composition before client delivery may synchronously activate another.
+        composition = nil
+        emitComposition(.insertionIssued, token: token, reason: clientPresent ? .none : .clientMissing,
+                        outcome: clientPresent ? .handled : .skipped, clientPresent: clientPresent)
+        return token
+    }
+
+    func insertionFinished(_ token: CompositionToken, clientPresent: Bool) {
+        emitComposition(.insertionReturned, token: token, reason: clientPresent ? .none : .clientMissing,
+                        outcome: clientPresent ? .handled : .skipped, clientPresent: clientPresent)
+        emitComposition(.compositionEnded, token: token, reason: clientPresent ? .committed : .clientMissing)
+    }
+
+    private func emitComposition(_ event: InputDiagnosticEvent, token: CompositionToken,
+                                 reason: InputDiagnosticReason, outcome: InputDiagnosticOutcome? = nil,
+                                 clientPresent: Bool? = nil) {
+        InputDiagnostics.write(.init(event: event, reason: reason, outcome: outcome, controller: controller,
+            activation: token.activation, key: nil, composition: token.id, clientPresent: clientPresent))
     }
 
     func finishActivation(engineAvailable: Bool) {
@@ -180,7 +242,7 @@ final class IFInputLifecycleDiagnostics {
              markedTextClear: delivery?.markedTextClear)
     }
 
-    func deactivationEntered() { emit(.deactivationEntered) }
+    func deactivationEntered() { endComposition(.deactivated); emit(.deactivationEntered) }
     func deactivationBeforeSuper() { emit(.deactivationBeforeSuper) }
     func deactivationAfterSuper() { emit(.deactivationAfterSuper) }
     func deactivationFinished() { emit(.deactivationFinished) }
@@ -188,6 +250,7 @@ final class IFInputLifecycleDiagnostics {
     func controllerReleased() {
         guard !released else { return }
         released = true
+        endComposition(.teardown)
         emit(.controllerReleased)
     }
 

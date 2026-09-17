@@ -72,7 +72,11 @@ change macOS/Sources/StartupDiagnostics.swift
 git -C "$case_root" add macOS/Sources/AIStatisticsStore.swift
 change macOS/Sources/AIStatisticsStore.swift
 plan --run
-has 'Changed paths (2):'; has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; has 'startup-diagnostics'; not_has 'manual-input'
+has 'Changed paths (2):'; has 'ai-transport'; has 'ai-runtime'; has 'ai-statistics'; has 'startup-diagnostics'; has 'local-diagnostics'; not_has 'manual-input'
+
+new_case
+change macOS/Sources/DiagnosticFeedbackModel.swift; plan
+has 'settings'; has 'local-diagnostics'; has 'diagnostic-archive'; has 'manual-settings'
 
 for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift macOS/Sources/KeyboardShortcuts.swift; do
   new_case

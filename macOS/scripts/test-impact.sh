@@ -51,6 +51,11 @@ impact_classify_git() {
 
 impact_classify() {
   local path=$1
+  # Producers share the content-free record contract in addition to their own feature behavior.
+  case "$path" in
+    macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/UpdateCoordinator.swift|macOS/Sources/VoiceSettings.swift)
+      impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
+  esac
   case "$path" in
     .agents/skills/inkflow-release/*)
       impact_rule "$path" 'release workflow' workflow
@@ -103,6 +108,9 @@ impact_classify() {
     macOS/Tests/Dictionary*|macOS/scripts/test-dictionary*.sh|macOS/scripts/build-dictionary*.sh)
       impact_rule "$path" 'dictionary test domain' dictionary-generator deployment dictionary-updates dictionary-activation ;;
 
+    macOS/Sources/DiagnosticFeedback*.swift|macOS/Tests/DiagnosticFeedbackModelTests.swift)
+      impact_rule "$path" 'local diagnostic feedback settings' settings local-diagnostics diagnostic-archive
+      impact_manual_add manual-settings ;;
     macOS/Sources/FeedbackReport.swift|macOS/Sources/FeedbackSettingsView.swift)
       impact_rule "$path" 'opt-in feedback settings path' settings
       impact_manual_add manual-settings ;;
@@ -135,7 +143,9 @@ impact_classify() {
     macOS/Tests/SettingsTests.swift|macOS/Tests/SettingsUITests.swift|macOS/Tests/UpdateTests.swift)
       impact_rule "$path" 'settings and application update tests' settings ;;
     macOS/Sources/LocalDiagnostics.swift|macOS/Tests/LocalDiagnosticsTests.swift|macOS/scripts/test-local-diagnostics.sh)
-      impact_rule "$path" 'bounded local diagnostics' local-diagnostics ;;
+      impact_rule "$path" 'bounded local diagnostics' local-diagnostics diagnostic-archive ;;
+    macOS/Sources/DiagnosticIncident.swift|macOS/Sources/DiagnosticArchive.swift|macOS/Sources/DiagnosticCrashReader.swift|macOS/Tests/DiagnosticArchiveTests.swift|macOS/scripts/test-diagnostic-archive.sh)
+      impact_rule "$path" 'local incident and archive contract' diagnostic-archive local-diagnostics settings ;;
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 

@@ -187,7 +187,11 @@ final class AIStatisticsStore: @unchecked Sendable {
         }
         // Permanent failures may prevent saving the counters themselves. Retain one
         // content-free diagnostic, never an error message, path, SQL, or provider body.
-        if shouldLog { NSLog("InkFlow AI statistics recording disabled (code %d)", code) }
+        if shouldLog {
+            LocalDiagnostics.shared.submit(.init(module: .statistics, event: "aiStoreDisabled", outcome: .failed,
+                errorDomain: .sqlite, errorCode: Int(code)))
+            NSLog("InkFlow AI statistics recording disabled (code %d)", code)
+        }
     }
 }
 

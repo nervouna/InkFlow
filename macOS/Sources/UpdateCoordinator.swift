@@ -69,14 +69,21 @@ final class IFUpdateCoordinator: NSObject {
             do { try await Task.sleep(for: .seconds(delay)) }
             catch { return }
             let automaticDownload = settings.automaticUpdateDownloadsEnabled
+            let operation = UUID()
+            LocalDiagnostics.shared.submit(.init(module: .update, event: "automaticCheck", outcome: .begin, correlation: operation))
             do {
                 if let update = try await checkForUpdate(), automaticDownload {
                     let image = try await download(update)
                     try await openInstaller(image, update.version)
                 }
+                LocalDiagnostics.shared.submit(.init(module: .update, event: "automaticCheck", outcome: .completed, correlation: operation))
             } catch is CancellationError {
+                LocalDiagnostics.shared.submit(.init(module: .update, event: "automaticCheck", outcome: .cancelled, correlation: operation))
                 return
             } catch {
+                let safe = LocalDiagnosticEvent.safeError(error)
+                LocalDiagnostics.shared.submit(.init(module: .update, event: "automaticCheck", outcome: .failed,
+                    correlation: operation, errorDomain: safe.0, errorCode: safe.1))
                 NSLog("InkFlow automatic update check failed: %@", String(describing: error))
             }
             settings.recordAutomaticUpdateCheck(at: .now)
