@@ -134,6 +134,8 @@ impact_classify() {
     macOS/Tests/Controller*|macOS/scripts/test-controller*.sh) impact_rule "$path" 'controller tests' controller ai-headless ;;
     macOS/Tests/SettingsTests.swift|macOS/Tests/SettingsUITests.swift|macOS/Tests/UpdateTests.swift)
       impact_rule "$path" 'settings and application update tests' settings ;;
+    macOS/Sources/LocalDiagnostics.swift|macOS/Tests/LocalDiagnosticsTests.swift|macOS/scripts/test-local-diagnostics.sh)
+      impact_rule "$path" 'bounded local diagnostics' local-diagnostics ;;
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 
