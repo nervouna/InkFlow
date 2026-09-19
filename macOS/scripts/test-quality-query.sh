@@ -1,5 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-python_bin=$(mise which python)
-"$python_bin" macOS/Tests/QualityQueryTests.py "$@"
+if [[ $(uname -s) == Darwin ]]; then
+  exec devbox "$PWD" -- bash macOS/scripts/test-quality-query.sh "$@"
+fi
+python3 macOS/Tests/QualityQueryTests.py "$@"

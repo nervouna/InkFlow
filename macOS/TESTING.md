@@ -61,3 +61,21 @@ GUI scripts remain available only for explicit diagnostics. The noninteractive `
 For changes that affect interaction, hand off only relevant operations and expected outcomes: input selection/focus/App switching, affected Settings controls, or installation/upgrade. Record unperformed steps as pending. Headless or native harness success does not establish real typing acceptance. Do not recover focus in a loop or run GUI checks on a locked desktop.
 
 Release verification builds once, runs `test.sh all` once and one deep bundle check, plus applicable release-helper fixtures. Entering the release workflow assumes affected input and Settings GUI interaction has already been manually accepted, so these daily-development checklist items are neither printed as release pending work nor publication gates. Release verification prints only a change-based installation/upgrade item and freezes the verified installer/icon for packaging. Automated verification and packaging can complete while that installation result is pending. The release skill requires the explicit result before public publication when installation is affected, recorded in the existing `build/release-notes.md` with version, scope, outcome and commit. Later changes to delivery behavior or artifacts invalidate that acceptance.
+
+## Portable Python query checks
+
+On macOS, `test-quality-query.sh` and `test-ai-statistics-query.sh` invoke the
+installed `devbox` launcher and its prebuilt Apple-container development image.
+The container runtime must be running. Linux executes these checks with its own
+`python3`; host Python and mise are not required for these two entry points.
+
+The selected repository is the only mounted source directory. Explicit AI writer
+fixture directories may be repository-relative or absolute paths inside this
+repository; absolute paths are canonicalized and translated before forwarding.
+Paths outside the repository are rejected rather than mounting additional data. The existing Swift
+capture/writer tests still run on macOS and create synthetic evidence beneath
+`build/`; query tests consume those same files through the project mount.
+`test-ai-statistics.sh` supplies the AI writer fixture pair, while the quality
+capture/query unit owns fresh engine evidence for `--require-engine`. Existing
+fixtures do not replace fresh writer/capture checks when their production code
+changes. No production telemetry database or credentials are mounted separately.
