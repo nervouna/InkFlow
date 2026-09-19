@@ -51,8 +51,14 @@ struct IFStartupDiagnostics: Sendable {
 enum InputDiagnosticEvent: String, Sendable {
     case controllerCreated, controllerReleased
     case activationReady, activationSkipped
-    case firstKeyEntered, firstKeyCompleted
+    case firstKeyEntered, firstKeyCheckpoint, firstKeyCompleted
     case deactivationEntered, deactivationBeforeSuper, deactivationAfterSuper, deactivationFinished
+}
+
+/// Bounded work sections inside one synchronous first-key callback. The labels never
+/// identify the key, client, document, candidate, or result content.
+enum InputDiagnosticStage: String, Sendable {
+    case routing, context, rime, commit, refresh
 }
 
 enum InputDiagnosticOutcome: String, Sendable {
@@ -79,6 +85,8 @@ struct InputDiagnosticRecord: Sendable {
     let controller: UUID
     let activation: UUID?
     let key: UUID?
+    var stage: InputDiagnosticStage? = nil
+    var elapsedMilliseconds: Double? = nil
     var engineAvailable: Bool? = nil
     var clientPresent: Bool? = nil
     var commitInsertion: Bool? = nil
@@ -90,6 +98,8 @@ struct InputDiagnosticRecord: Sendable {
                       "controller=\(controller.uuidString)"]
         if let activation { fields.append("activation=\(activation.uuidString)") }
         if let key { fields.append("key=\(key.uuidString)") }
+        if let stage { fields.append("stage=\(stage.rawValue)") }
+        if let elapsedMilliseconds { fields.append("elapsed_ms=\(String(format: "%.3f", elapsedMilliseconds))") }
         if let outcome { fields.append("outcome=\(outcome.rawValue)") }
         if let engineAvailable { fields.append("engine_available=\(engineAvailable)") }
         if let clientPresent { fields.append("client_present=\(clientPresent)") }
@@ -117,11 +127,13 @@ final class IFInputLifecycleDiagnostics {
     final class FirstKeyToken {
         fileprivate let activation: UUID
         fileprivate let key: UUID
+        fileprivate let started: TimeInterval
         fileprivate var completed = false
 
-        fileprivate init(activation: UUID, key: UUID) {
+        fileprivate init(activation: UUID, key: UUID, started: TimeInterval) {
             self.activation = activation
             self.key = key
+            self.started = started
         }
     }
     let controller: UUID
@@ -129,9 +141,11 @@ final class IFInputLifecycleDiagnostics {
     private var recordedFirstKey = false
     private var created = false
     private var released = false
+    private let clock: @Sendable () -> TimeInterval
 
-    init(controller: UUID = UUID()) {
+    init(controller: UUID = UUID(), clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.controller = controller
+        self.clock = clock
     }
 
     func controllerCreated() {
@@ -163,9 +177,16 @@ final class IFInputLifecycleDiagnostics {
         activation = current
         // Reserve before editor delivery, which can synchronously reenter the controller.
         recordedFirstKey = true
-        let token = FirstKeyToken(activation: current, key: UUID())
+        let token = FirstKeyToken(activation: current, key: UUID(), started: clock())
         emit(.firstKeyEntered, activationID: token.activation, key: token.key)
         return token
+    }
+
+    /// Emits only after a synchronous section returns, so it never changes input flow.
+    func checkpointFirstKey(_ token: FirstKeyToken?, stage: InputDiagnosticStage) {
+        guard let token, !token.completed else { return }
+        emit(.firstKeyCheckpoint, activationID: token.activation, key: token.key,
+             stage: stage, elapsedMilliseconds: max(0, clock() - token.started) * 1000)
     }
 
     func finishFirstKey(_ token: FirstKeyToken?, outcome: InputDiagnosticOutcome,
@@ -174,6 +195,7 @@ final class IFInputLifecycleDiagnostics {
         token.completed = true
         emit(.firstKeyCompleted, reason: reason, outcome: outcome,
              activationID: token.activation, key: token.key,
+             elapsedMilliseconds: max(0, clock() - token.started) * 1000,
              clientPresent: delivery?.clientPresent,
              commitInsertion: delivery?.commitInsertion,
              markedTextUpdate: delivery?.markedTextUpdate,
@@ -194,10 +216,12 @@ final class IFInputLifecycleDiagnostics {
     private func emit(_ event: InputDiagnosticEvent, reason: InputDiagnosticReason = .none,
                       outcome: InputDiagnosticOutcome? = nil, engineAvailable: Bool? = nil,
                       activationID: UUID? = nil, key: UUID? = nil,
+                      stage: InputDiagnosticStage? = nil, elapsedMilliseconds: Double? = nil,
                       clientPresent: Bool? = nil, commitInsertion: Bool? = nil,
                       markedTextUpdate: Bool? = nil, markedTextClear: Bool? = nil) {
         InputDiagnostics.write(InputDiagnosticRecord(event: event, reason: reason, outcome: outcome,
             controller: controller, activation: activationID ?? activation, key: key,
+            stage: stage, elapsedMilliseconds: elapsedMilliseconds,
             engineAvailable: engineAvailable,
             clientPresent: clientPresent, commitInsertion: commitInsertion,
             markedTextUpdate: markedTextUpdate, markedTextClear: markedTextClear))

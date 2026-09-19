@@ -74,7 +74,13 @@ private final class InputCapture: @unchecked Sendable {
             lifecycle.controllerCreated()
             lifecycle.beginActivation()
             lifecycle.finishActivation(engineAvailable: true)
-            lifecycle.recordFirstKey(outcome: .handled, reason: .rime,
+            let first = lifecycle.beginFirstKey()
+            lifecycle.checkpointFirstKey(first, stage: .routing)
+            lifecycle.checkpointFirstKey(first, stage: .context)
+            lifecycle.checkpointFirstKey(first, stage: .rime)
+            lifecycle.checkpointFirstKey(first, stage: .commit)
+            lifecycle.checkpointFirstKey(first, stage: .refresh)
+            lifecycle.finishFirstKey(first, outcome: .handled, reason: .rime,
                 delivery: .init(clientPresent: true, commitInsertion: false,
                                 markedTextUpdate: true, markedTextClear: false))
             lifecycle.recordFirstKey(outcome: .passThrough, reason: .rime)
@@ -89,12 +95,17 @@ private final class InputCapture: @unchecked Sendable {
         }
         let records = capture.records
         let arrivals = records.filter { $0.event == .firstKeyEntered }
+        let checkpoints = records.filter { $0.event == .firstKeyCheckpoint }
         let completions = records.filter { $0.event == .firstKeyCompleted }
         precondition(arrivals.count == 2 && completions.count == 2,
                      "Only one first-key pair in each activation is retained")
         precondition(completions[0].outcome == .handled && completions[0].reason == .rime &&
                      completions[0].clientPresent == true && completions[0].markedTextUpdate == true &&
                      completions[0].commitInsertion == false && completions[0].markedTextClear == false)
+        precondition(checkpoints.map(\.stage) == [.routing, .context, .rime, .commit, .refresh] &&
+                     checkpoints.allSatisfy { $0.key == arrivals[0].key && $0.activation == arrivals[0].activation &&
+                         $0.elapsedMilliseconds != nil && $0.message.contains("elapsed_ms=") },
+                     "First-key checkpoints must be ordered, correlated, and include elapsed time")
         precondition(completions[1].outcome == .skipped && completions[1].reason == .engineUnavailable)
         precondition(arrivals[0].key == completions[0].key && arrivals[1].key == completions[1].key)
         precondition(completions[0].activation != completions[1].activation,

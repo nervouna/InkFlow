@@ -218,13 +218,18 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 return false
             }
             guard let callbackEvent, callbackEvent.type == .keyDown else { return false }
+            inputDiagnostics.checkpointFirstKey(firstKey, stage: .routing)
             associateQualityClient(callbackClient as? IMKTextInput)
             engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             IFInputRankingContext.prepareForKey(engine, client: callbackClient as? IMKTextInput,
                                                 ownsMarkedText: ownsMarkedText)
+            inputDiagnostics.checkpointFirstKey(firstKey, stage: .context)
             let handled = engine.event(callbackEvent, capturedAt: entered)
+            inputDiagnostics.checkpointFirstKey(firstKey, stage: .rime)
             if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
+            inputDiagnostics.checkpointFirstKey(firstKey, stage: .commit)
             let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput)
+            inputDiagnostics.checkpointFirstKey(firstKey, stage: .refresh)
             return finishFirstKey(handled, .rime, delivery: delivery)
         }
     }

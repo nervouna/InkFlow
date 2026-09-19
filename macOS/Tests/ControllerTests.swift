@@ -142,6 +142,12 @@ struct ControllerTests {
               "A received key while the existing engine session is unavailable must retain its gate")
         check(Set(initialCompletions.compactMap(\.activation)).count == 3,
               "Reactivation must reset first-key deduplication with a fresh correlation ID")
+        let firstRimeCheckpoints = records.filter { $0.event == .firstKeyCheckpoint &&
+            $0.key == initialCompletions[0].key }
+        check(firstRimeCheckpoints.map(\.stage) == [.routing, .context, .rime, .commit, .refresh] &&
+              firstRimeCheckpoints.allSatisfy { $0.activation == initialCompletions[0].activation &&
+                  $0.elapsedMilliseconds != nil },
+              "Handled Rime input must retain content-free timings for each synchronous boundary")
 
         let reactivationRecords = records.filter { $0.controller == reactivatedController }
         let reactivationArrivals = reactivationRecords.filter { $0.event == .firstKeyEntered }
