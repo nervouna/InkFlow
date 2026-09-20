@@ -23,8 +23,12 @@ private final class FakeVoice: VoiceRecognitionServing {
 @MainActor
 private final class VoiceStatus: InputStatusPresenting {
     var values: [InputStatus] = []
-    func present(_ status: InputStatus, client: IMKTextInput?, characterIndex: Int) { values.append(status) }
-    func hide() {}
+    var visible: InputStatus?
+    func present(_ status: InputStatus, client: IMKTextInput?, characterIndex: Int) {
+        values.append(status)
+        visible = status
+    }
+    func hide() { visible = nil }
 }
 
 @MainActor
@@ -261,6 +265,8 @@ struct VoiceControllerTests {
         check(h.rightShift(false))
         for _ in 0..<20 { await Task.yield() }
         check(h.fake.stops == 1)
+        check(h.controller.voice.isActive && h.status.visible == nil,
+              "Releasing hold hides the overlay while recognition finalizes")
         h.fake.callbacks?.onFinalized("")
         h.toggle()
         for _ in 0..<20 { await Task.yield() }
@@ -269,6 +275,8 @@ struct VoiceControllerTests {
         h.hold(); check(h.rightShift(false))
         check(h.fake.stops == stops, "Long hold during continuous recording does not change mode")
         h.toggle(); check(h.fake.stops == stops + 1, "Double tap ends continuous recording")
+        check(h.controller.voice.isActive && h.status.visible == nil,
+              "Ending continuous recording hides the overlay while recognition finalizes")
         h.fake.callbacks?.onFinalized("")
         h.hold()
         for _ in 0..<20 { await Task.yield() }
@@ -647,6 +655,8 @@ struct VoiceControllerTests {
         h.client.selection = NSRange(location: -1, length: 0)
         h.key()
         check(reasons.last == .selection && h.fake.starts == 0 && h.fake.prepares == 0)
+        check(h.status.values.isEmpty && h.status.visible == nil,
+              "Rejected voice starts retain diagnostics without presenting a generic target warning")
         check(h.client.requests.isEmpty && h.client.lengthReads == 0 && h.client.mutations.isEmpty,
               "Diagnostics never read content, mutate the client or open recognition")
         var limiter = VoiceDiagnostics.StartRejectionLimiter()

@@ -209,17 +209,16 @@ final class IFInputControllerVoice {
             if rejectionLimiter.admit(reason) { reportStartRejection(reason) }
         }
         guard let controller, let engine = controller.engine, engine.available else {
-            reject(.engine); show(.voiceTargetUnavailable, client: client); return
+            reject(.engine); return
         }
         guard engine.snapshot().preedit.isEmpty, !controller.ownsMarkedText else {
-            reject(.busy); show(.voiceTargetUnavailable, client: client); return
+            reject(.busy); return
         }
         guard !controller.secureInput() else {
-            reject(.secure); show(.voiceTargetUnavailable, client: client); return
+            reject(.secure); return
         }
         guard IFEngine.allSessionsIdle else {
-            reject(.busy)
-            show(.voiceTargetUnavailable, client: client); return
+            reject(.busy); return
         }
         guard controller.settings.voice.service.isReady else { show(.voiceNotReady, client: client); return }
         let snapshot = lexicon()
@@ -231,21 +230,17 @@ final class IFInputControllerVoice {
         // Client reads can activate another controller before capture completes.
         Self.activeOwner = self
         defer { starting = false; endDelivery() }
-        guard let captured = readTarget(epoch: expected, onReject: reject) else {
-            guard epoch == expected else { return }
-            show(.voiceTargetUnavailable, client: client); return
-        }
-        guard let client else { reject(.client); show(.voiceTargetUnavailable); return }
+        guard let captured = readTarget(epoch: expected, onReject: reject) else { return }
+        guard let client else { reject(.client); return }
         guard captured.proxy == ObjectIdentifier(client as AnyObject) else {
-            reject(.proxy); show(.voiceTargetUnavailable, client: client); return
+            reject(.proxy); return
         }
         // TSMDocumentAccess is optional. Unknown selection is not an inability to type.
         let selection = captured.client.selectedRange()
         guard epoch == expected else { reject(.stale); return }
         let unknownSelection = selection.location == NSNotFound && (selection.length == NSNotFound || selection.length == 0)
         guard unknownSelection || AIClientAnchor.valid(selection) else {
-            reject(.selection)
-            show(.voiceTargetUnavailable, client: client); return
+            reject(.selection); return
         }
         guard unknownSelection || selection.length == 0 else { reject(.selection); show(.voiceSelectionUnsupported, client: client); return }
         guard epoch == expected else { reject(.stale); return }
@@ -278,7 +273,7 @@ final class IFInputControllerVoice {
                 guard let self, self.epoch == expected else { return }
                 self.stopped = true
                 VoiceDiagnostics.emit(.tail, id: id)
-                self.show(.voiceTail)
+                self.controller?.statusPresentation?.hide()
                 self.controller?.settings.voice.service.stop(id: id)
             }, onFinish: { [weak self] outcome in self?.finish(outcome, epoch: expected) })
         session = model
