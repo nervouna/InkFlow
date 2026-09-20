@@ -4,7 +4,7 @@ import InkFlowInputSources
 #endif
 
 @main struct RegisterInputSource {
-    @MainActor static func main() {
-        IFRegisterInputSourceBootstrap.run(arguments: CommandLine.arguments)
+    @MainActor static func main() async {
+        await IFRegisterInputSourceBootstrap.run(arguments: CommandLine.arguments)
     }
 }

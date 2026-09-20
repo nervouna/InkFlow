@@ -1,10 +1,15 @@
 import Foundation
 
 package enum IFRegisterInputSourceBootstrap {
-    @MainActor package static func run(arguments: [String]) {
+    @MainActor package static func run(arguments: [String]) async {
         func fail(_ message: String, _ code: Int32) -> Never {
             FileHandle.standardError.write(Data("\(message)\n".utf8))
             exit(code)
+        }
+        if arguments.count >= 3, ["--prepare-update", "--finish-update"].contains(arguments[2]) {
+            do { try await trialUpdate(arguments) }
+            catch { fail("Installation lifecycle failed: \(error)", 1) }
+            return
         }
         let verify = arguments.count == 3 && arguments[2] == "--verify-enabled"
         guard arguments.count == 2 || verify else {
@@ -30,13 +35,43 @@ package enum IFRegisterInputSourceBootstrap {
                 let parent = roster.source(IFInputIdentity.bundleID)
                 let parentEnabled = parent?.enabled == true && roster.isEnabled(IFInputIdentity.bundleID)
                 let modeEnabled = mode.enabled && roster.isEnabled(IFInputIdentity.modeID)
-                print("parent_enabled=\(parentEnabled ? 1 : 0)\nmode_enabled=\(modeEnabled ? 1 : 0)")
+                print("parent_enabled=\(parentEnabled ? "1" : "unconfirmed")\nmode_enabled=\(modeEnabled ? "1" : "unconfirmed")")
                 guard parentEnabled && modeEnabled else { throw IFInputError.unavailable("enabled parent/mode") }
             } else {
                 print("Registered only. Add InkFlow in System Settings, then run --verify-enabled. Registration does not enable or select it.")
             }
         } catch {
             fail("\(error)", 1)
+        }
+    }
+
+    @MainActor private static func trialUpdate(_ arguments: [String]) async throws {
+        let prepare = arguments[2] == "--prepare-update"
+        guard arguments.count == (prepare ? 5 : 4) else {
+            throw IFInputError.unavailable("Usage: register-input-source target --prepare-update state.json staged.app | target --finish-update state.json")
+        }
+        let target = URL(fileURLWithPath: arguments[1]).standardizedFileURL
+        let allowed = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods/InkFlow.app")
+        guard target == allowed else { throw IFInputError.unavailable("trial install must target current user's installed InkFlow.app") }
+        let stateURL = URL(fileURLWithPath: arguments[3])
+        let lifecycle = IFTrialInstallation(sources: IFSystemInputSources(), processes: IFTrialSystemProcesses())
+        if prepare {
+            let staged = URL(fileURLWithPath: arguments[4])
+            guard let bundle = Bundle(url: staged), bundle.bundleIdentifier == IFInputIdentity.bundleID,
+                  let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
+                throw IFInputError.unavailable("staged candidate identity")
+            }
+            let state = try await lifecycle.prepare(target: target, build: build)
+            try JSONEncoder().encode(state).write(to: stateURL, options: .atomic)
+            print("old_processes_stopped=\(state.oldPIDs.map(String.init).joined(separator: ","))")
+        } else {
+            let state = try JSONDecoder().decode(IFTrialInstallationState.self, from: Data(contentsOf: stateURL))
+            guard let bundle = Bundle(url: target), bundle.bundleIdentifier == IFInputIdentity.bundleID,
+                  let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
+                throw IFInputError.unavailable("installed candidate identity")
+            }
+            let pid = try await lifecycle.finish(target: target, state: state, installedBuild: build)
+            print("running_pid=\(pid)\nrunning_executable=\(target.path)/Contents/MacOS/InkFlow\ninstalled_build=\(build)\ninput_source_state_restored=1")
         }
     }
 }

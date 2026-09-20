@@ -80,6 +80,7 @@ scripts="$fixture/repo/.agents/skills/inkflow-release/scripts"
 mkdir -p "$scripts" "$fixture/repo/macOS/scripts" "$fixture/repo/build/InkFlow.app/Contents/MacOS"
 cp "$root/.agents/skills/inkflow-release/scripts/"{package,release-config,check-credentials}.sh "$scripts/"
 cp "$root/macOS/scripts/verify-developer-id.sh" "$fixture/repo/macOS/scripts/"
+cp "$root/macOS/scripts/release-build.sh" "$fixture/repo/macOS/scripts/"
 export INKFLOW_RELEASE_CONFIG="$fixture/missing.plist" INKFLOW_NOTARY_PROFILE=fixture-profile
 cp "$root/macOS/Info.plist" "$fixture/repo/macOS/Info.plist"
 cp "$root/macOS/Info.plist" "$fixture/repo/build/InkFlow.app/Contents/Info.plist"
@@ -89,6 +90,9 @@ if INKFLOW_SIGN_IDENTITY=invalid bash "$scripts/package.sh" prepare > "$fixture/
 [[ ! -e "$fixture/repo/build/releases" ]]
 version=$(plutil -extract CFBundleShortVersionString raw "$fixture/repo/macOS/Info.plist")
 build=$(plutil -extract CFBundleVersion raw "$fixture/repo/macOS/Info.plist")
+mkdir -p "$fixture/repo/build/release-verification"
+plutil -create xml1 "$fixture/repo/build/release-verification/installer.plist"
+plutil -insert appBuild -string "$build" "$fixture/repo/build/release-verification/installer.plist"
 output="$fixture/repo/build/releases/InkFlow-$version-$build"
 mkdir -p "$output"
 echo preserved > "$output/sentinel"

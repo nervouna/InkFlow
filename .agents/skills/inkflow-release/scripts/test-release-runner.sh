@@ -18,9 +18,10 @@ setup_fixture() {
   base="$fixture/$name"; seed="$base/seed"; bare="$base/origin.git"; repo="$base/repo"; bin="$base/bin"; external="$base/external"
   mkdir -p "$seed/.agents/skills/inkflow-release/scripts" "$seed/macOS/scripts" "$seed/build" "$bin" "$external"
   cp "$runner_source" "$seed/.agents/skills/inkflow-release/scripts/release-runner.sh"
+  cp "$root/macOS/scripts/release-build.sh" "$seed/macOS/scripts/"
   chmod +x "$seed/.agents/skills/inkflow-release/scripts/release-runner.sh"
   printf 'build/\n' > "$seed/.gitignore"
-  make_plist "$seed/macOS/Info.plist" CFBundleShortVersionString 1.2.3 CFBundleVersion 7
+  make_plist "$seed/macOS/Info.plist" CFBundleShortVersionString 1.2.3 CFBundleVersion 6
   printf 'notes\n' > "$seed/README.md"
   cat > "$seed/macOS/scripts/release-receipt.sh" <<'STUB'
 #!/bin/bash
@@ -35,7 +36,7 @@ STUB
 #!/bin/bash
 set -eu
 [[ "$1" == finish ]] || exit 92
-version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist); build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
+version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist); build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
 dir="build/releases/InkFlow-$version-$build"; scratch=$(mktemp -d "$dir/assembly.XXXXXX")
 echo fixture-dmg > "$scratch/InkFlow-$version-$build-arm64.dmg"
 echo package-finish-attempt >> "$EVENTS"
@@ -75,10 +76,16 @@ STUB
   release="$repo/build/releases/InkFlow-1.2.3-7"
   mkdir -p "$release/payload/InkFlow.app/Contents/MacOS" "$release/verified" "$repo/build/mount/InkFlow Installer.app/Contents/MacOS" "$repo/build/mount/InkFlow Installer.app/Contents/Resources/Payload" "$repo/build/mount-payload/InkFlow.app/Contents/MacOS"
   cp "$repo/macOS/Info.plist" "$release/payload/InkFlow.app/Contents/Info.plist"; cp "$repo/macOS/Info.plist" "$repo/build/mount/InkFlow Installer.app/Contents/Info.plist"; plutil -replace CFBundleIdentifier -string io.damao.inkflow.installer "$repo/build/mount/InkFlow Installer.app/Contents/Info.plist"; cp "$repo/macOS/Info.plist" "$repo/build/mount-payload/InkFlow.app/Contents/Info.plist"
+  # Real builds allocate above the source floor; every delivered layer must keep 7.
+  for app_plist in "$release/payload/InkFlow.app/Contents/Info.plist" "$repo/build/mount/InkFlow Installer.app/Contents/Info.plist" "$repo/build/mount-payload/InkFlow.app/Contents/Info.plist"; do
+    plutil -replace CFBundleVersion -string 7 "$app_plist"
+  done
   printf '#!/bin/bash\nexit 0\n' > "$repo/build/mount/InkFlow Installer.app/Contents/MacOS/InkFlowInstaller"; chmod +x "$repo/build/mount/InkFlow Installer.app/Contents/MacOS/InkFlowInstaller"
   touch "$repo/build/mount/安装说明.txt" "$repo/build/mount/InkFlow Installer.app/Contents/Resources/Payload/InkFlow.zip"; echo zip > "$release/inputmethod-submission.zip"; echo installer > "$release/verified/InkFlowInstaller"; echo icon > "$release/verified/AppIcon.icns"
   touch "$repo/build/mount-payload/InkFlow.app.ticket"
-  make_plist "$release/verified/installer.plist" sourceCommit "$(git -C "$repo" rev-parse HEAD)"
+  make_plist "$release/verified/installer.plist" sourceCommit "$(git -C "$repo" rev-parse HEAD)" appBuild 7
+  mkdir -p "$repo/build/release-verification"
+  cp "$release/verified/installer.plist" "$repo/build/release-verification/installer.plist"
   printf 'INTERNAL SECRET PLACEHOLDER must never publish\n' > "$repo/build/release-notes.md"
   printf '公开发布说明\n' > "$repo/build/public-release-notes.md"
   cat > "$bin/xcrun" <<'STUB'

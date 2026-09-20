@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+mkdir -p build
+mkdir build/app-build.lock 2>/dev/null || { echo 'App build active or interrupted; inspect build/app-build.lock before retrying.' >&2; exit 1; }
+trap 'rmdir build/app-build.lock' EXIT
+build_number=$(bash macOS/scripts/build-number.sh)
 macOS/scripts/dependencies.sh
 # Download and verify the generator-declared dictionary inputs before freezing the
 # build identity. They remain part of the snapshot, so later changes still fail.
@@ -19,6 +23,7 @@ installed=false
 cleanup() {
   if [[ "$installed" != true && -d "$previous" && ! -e "$target" ]]; then mv "$previous" "$target"; fi
   rm -rf "$stage_root"
+  rmdir build/app-build.lock
 }
 trap cleanup EXIT
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks/rime-plugins" "$app/Contents/Resources/Rime" "$app/Contents/Resources/Licenses"
@@ -27,6 +32,7 @@ bash macOS/scripts/build-icon.sh
 cp build/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 ditto macOS/Resources "$app/Contents/Resources"
 cp macOS/Info.plist "$app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$build_number" "$app/Contents/Info.plist"
 cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.dylib"
 # librime discovers plugins beside its loaded dylib, not beside the executable.
 cp build/deps/dist/lib/rime-plugins/librime-lua.dylib "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
@@ -47,3 +53,4 @@ mv "$app" "$target"
 installed=true
 rm -rf "$previous"
 echo "Built $target"
+bash macOS/scripts/build-summary.sh "$target"

@@ -144,7 +144,7 @@ let package = Package(
         .target(
             name: "InkFlowInputSources",
             path: "macOS/Shared",
-            sources: ["InputSourceManager.swift", "RegisterInputSourceBootstrap.swift"],
+            sources: ["InputSourceManager.swift", "RegisterInputSourceBootstrap.swift", "TrialInstallationLifecycle.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: [.linkedFramework("Carbon")]
         ),

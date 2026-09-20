@@ -154,7 +154,7 @@ impact_classify() {
     macOS/scripts/test-workflow.sh|macOS/scripts/test-release-*.sh|macOS/scripts/release-*.sh|macOS/scripts/test-install.sh|macOS/scripts/test-cleanup.sh|macOS/scripts/cleanup.sh)
       impact_rule "$path" 'workflow helpers' workflow
       impact_release_tools=true ;;
-    macOS/scripts/build.sh|macOS/scripts/build-icon.sh|macOS/scripts/dependencies.sh|macOS/scripts/swift-package.sh|macOS/scripts/swift-test.sh|macOS/scripts/check-bundle.sh|macOS/scripts/verify-developer-id.sh|macOS/scripts/test-build-workflow.sh|macOS/scripts/test-dependencies-cache.sh|macOS/DeveloperID.entitlements)
+    macOS/scripts/build.sh|macOS/scripts/build-number.sh|macOS/scripts/build-summary.sh|macOS/scripts/build-icon.sh|macOS/scripts/dependencies.sh|macOS/scripts/swift-package.sh|macOS/scripts/swift-test.sh|macOS/scripts/check-bundle.sh|macOS/scripts/verify-developer-id.sh|macOS/scripts/test-build-workflow.sh|macOS/scripts/test-dependencies-cache.sh|macOS/DeveloperID.entitlements)
       impact_rule "$path" 'build and package workflow' workflow
       impact_bundle=true; impact_release_tools=true ;;
     macOS/Tests/*|macOS/scripts/test-*.sh)

@@ -62,7 +62,7 @@ require_equal() { [[ "$1" == "$2" ]] || fail "$3"; }
 valid_uuid() { [[ "$1" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]]; }
 
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
-build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
+build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && "$build" =~ ^[1-9][0-9]*$ ]] || fail 'Invalid source version/build.'
 tag="v$version"
 release_dir="$root/build/releases/InkFlow-$version-$build"
@@ -74,6 +74,7 @@ state="$release_dir/release-state.plist"
 notes="$root/build/public-release-notes.md"
 internal_notes="$root/build/release-notes.md"
 [[ -d "$release_dir" && ! -L "$release_dir" && -f "$payload_zip" && ! -L "$payload_zip" && -d "$payload_app" && ! -L "$payload_app" ]] || fail 'Missing trustworthy package.sh prepare output.'
+bash macOS/scripts/release-build.sh "$release_dir/verified/installer.plist" "$payload_app/Contents/Info.plist" >/dev/null
 [[ -f "$notes" && ! -L "$notes" ]] || fail 'Missing build/public-release-notes.md.'
 [[ -f "$internal_notes" && ! -L "$internal_notes" ]] || fail 'Missing internal build/release-notes.md.'
 

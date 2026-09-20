@@ -6,6 +6,8 @@ trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"; mkdir -p "$repo/macOS/scripts" "$repo/build/releases/history" "$repo/build/swiftpm/cache" \
   "$repo/build/SettingsHarness.app" "$repo/build/unknown-failure" "$repo/build/gui-verification" "$repo/build/backups"
 cp macOS/scripts/cleanup.sh "$repo/macOS/scripts/"
+mkdir -p "$repo/build/build-number"
+printf 123 > "$repo/build/build-number/last"
 touch "$repo/build/releases/history/sentinel" "$repo/build/unknown-failure/sentinel" "$repo/build/gui-verification/failed.log"
 for index in 1 2 3 4; do mkdir "$repo/build/backups/installation.$index"; touch -t "2026090${index}0101" "$repo/build/backups/installation.$index"; done
 (
@@ -21,5 +23,6 @@ for index in 1 2 3 4; do mkdir "$repo/build/backups/installation.$index"; touch 
   [[ ! -e build/backups/installation.1 && ! -e build/backups/installation.2 ]]
   [[ -d build/backups/installation.3 && -d build/backups/installation.4 ]]
   [[ -f build/releases/history/sentinel && -f build/unknown-failure/sentinel && -f build/gui-verification/failed.log ]]
+  [[ $(cat build/build-number/last) == 123 ]]
 )
 echo 'PASS cleanup: dry-run default, scoped apply, two backups retained, releases/failure evidence preserved'

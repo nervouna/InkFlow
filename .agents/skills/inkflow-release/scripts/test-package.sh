@@ -9,6 +9,7 @@ scripts="$repo/.agents/skills/inkflow-release/scripts"
 mkdir -p "$scripts" "$repo/macOS/scripts" "$repo/macOS/Installer" "$repo/macOS/Shared" \
   "$repo/build/InkFlow.app/Contents/MacOS" "$repo/build/release-verification" "$fixture/bin"
 cp "$root/.agents/skills/inkflow-release/scripts/"{package,release-config}.sh "$scripts/"
+cp "$root/macOS/scripts/release-build.sh" "$repo/macOS/scripts/"
 cp "$root/macOS/Info.plist" "$repo/macOS/Info.plist"
 cp "$root/macOS/DeveloperID.entitlements" "$repo/macOS/DeveloperID.entitlements"
 printf 'fixture package\n' > "$repo/Package.swift"
@@ -18,6 +19,8 @@ printf 'fixture swift package script\n' > "$repo/macOS/scripts/swift-package.sh"
 printf 'verified fixture icon\n' > "$repo/build/release-verification/AppIcon.icns"
 printf 'mutable build icon\n' > "$repo/build/AppIcon.icns"
 cp "$root/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
+allocated_build=$(( $(plutil -extract CFBundleVersion raw "$repo/macOS/Info.plist") + 1 ))
+plutil -replace CFBundleVersion -string "$allocated_build" "$repo/build/InkFlow.app/Contents/Info.plist"
 touch "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 chmod +x "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 mkdir -p "$repo/.agents/skills/inkflow-release/assets"
@@ -44,7 +47,7 @@ echo build-installer >> "$EVENTS"
 [[ $# == 4 && -x "$3" && -f "$4" ]] || exit 97
 mkdir -p "$2/Contents/MacOS" "$2/Contents/Resources/Payload"
 cp "$1" "$2/Contents/Resources/Payload/InkFlow.zip"
-cp macOS/Info.plist "$2/Contents/Info.plist"
+unzip -p "$1" InkFlow.app/Contents/Info.plist > "$2/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string io.damao.inkflow.installer "$2/Contents/Info.plist"
 cp "$3" "$2/Contents/MacOS/InkFlowInstaller"
 cp "$4" "$2/Contents/Resources/AppIcon.icns"
@@ -65,7 +68,7 @@ digest=$(shasum -a 256 Package.swift macOS/Info.plist macOS/Installer/AppMain.sw
   macOS/Shared/InputSourceManager.swift macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}')
 binary=$(shasum -a 256 "$2" | awk '{print $1}')
 icon=$(shasum -a 256 "$3" | awk '{print $1}')
-[[ "$1" == verify && -f "$4" && "$(sed -n '1p' "$4")" == "$digest" && "$(sed -n '2p' "$4")" == "$binary" && "$(sed -n '3p' "$4")" == "$icon" ]]
+[[ "$1" == verify && -f "$4" && "$(plutil -extract inputs raw "$4")" == "$digest" && "$(plutil -extract binary raw "$4")" == "$binary" && "$(plutil -extract icon raw "$4")" == "$icon" ]]
 STUB
 cat > "$fixture/bin/codesign" <<'STUB'
 #!/bin/bash
@@ -133,11 +136,14 @@ chmod +x "$fixture/bin/"*
 chmod +x "$repo/macOS/scripts/release-receipt.sh"
 (
   cd "$repo"
-  shasum -a 256 Package.swift macOS/Info.plist macOS/Installer/AppMain.swift macOS/Shared/InputSourceManager.swift \
-    macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}' \
-      > build/release-verification/installer.plist
-  shasum -a 256 build/release-verification/InkFlowInstaller | awk '{print $1}' >> build/release-verification/installer.plist
-  shasum -a 256 build/release-verification/AppIcon.icns | awk '{print $1}' >> build/release-verification/installer.plist
+  receipt=build/release-verification/installer.plist
+  plutil -create xml1 "$receipt"
+  inputs=$(shasum -a 256 Package.swift macOS/Info.plist macOS/Installer/AppMain.swift macOS/Shared/InputSourceManager.swift \
+    macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}')
+  plutil -insert inputs -string "$inputs" "$receipt"
+  plutil -insert binary -string "$(shasum -a 256 build/release-verification/InkFlowInstaller | awk '{print $1}')" "$receipt"
+  plutil -insert icon -string "$(shasum -a 256 build/release-verification/AppIcon.icns | awk '{print $1}')" "$receipt"
+  plutil -insert appBuild -string "$allocated_build" "$receipt"
 )
 # Prove the volume-content assertions reject an extra root entry.
 mkdir -p "$fixture/invalid-volume/InkFlow Installer.app"
@@ -150,7 +156,7 @@ fi
 
 
 version=$(plutil -extract CFBundleShortVersionString raw "$repo/macOS/Info.plist")
-build=$(plutil -extract CFBundleVersion raw "$repo/macOS/Info.plist")
+build=$allocated_build
 output="$repo/build/releases/InkFlow-$version-$build"
 dmg="$output/InkFlow-$version-$build-arm64.dmg"
 package() { bash "$scripts/package.sh" "$@" > "$fixture/result.log" 2>&1; }
@@ -164,6 +170,7 @@ plutil -replace CFBundleVersion -string 999 "$repo/build/InkFlow.app/Contents/In
 reject prepare
 [[ ! -e "$output" ]]
 cp "$repo/macOS/Info.plist" "$repo/build/InkFlow.app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$allocated_build" "$repo/build/InkFlow.app/Contents/Info.plist"
 package prepare
 [[ -f "$output/inputmethod-submission.zip" && ! -e "$dmg" ]]
 [[ $(grep -Fxc 'bash .agents/skills/inkflow-release/scripts/release-runner.sh continue' "$fixture/result.log") == 1 ]]
@@ -206,6 +213,7 @@ MISSING_ENTITLEMENT=1 reject finish
 plutil -replace CFBundleVersion -string 999 "$output/payload/InkFlow.app/Contents/Info.plist"
 reject finish
 cp "$repo/macOS/Info.plist" "$output/payload/InkFlow.app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$allocated_build" "$output/payload/InkFlow.app/Contents/Info.plist"
 for gate in BUNDLE_FAILURE ARCH_FAILURE PAYLOAD_FAILURE; do
   export "$gate=1"
   reject finish

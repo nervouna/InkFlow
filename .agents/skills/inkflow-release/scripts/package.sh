@@ -14,7 +14,7 @@ load_release_config
 identity=$INKFLOW_SIGN_IDENTITY
 fail() { echo "$*" >&2; exit 1; }
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
-build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
+build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ && "$build" =~ ^[1-9][0-9]*$ ]] || fail 'Invalid release version/build.'
 release_dir="$PWD/build/releases/InkFlow-$version-$build"
 app="$release_dir/payload/InkFlow.app"
@@ -42,7 +42,7 @@ verify_app() {
 if [[ "$phase" == prepare ]]; then
   [[ ! -e "$release_dir" && ! -L "$release_dir" ]] || fail 'Release output already exists; inspect it before retrying.'
   source_app="$PWD/build/InkFlow.app"
-  cmp macOS/Info.plist "$source_app/Contents/Info.plist"
+  bash macOS/scripts/release-build.sh build/release-verification/installer.plist "$source_app/Contents/Info.plist" >/dev/null
   [[ -x "$source_app/Contents/MacOS/InkFlow" ]] || fail 'Missing built executable.'
   verified_installer="$PWD/build/release-verification/InkFlowInstaller"
   verified_icon="$PWD/build/release-verification/AppIcon.icns"
@@ -79,7 +79,7 @@ bash macOS/scripts/release-receipt.sh verify "$verified_installer" "$verified_ic
 mkdir "$release_dir/finishing" 2>/dev/null || fail 'Finish already running or interrupted; inspect finishing lock.'
 trap 'rmdir "$release_dir/finishing"' EXIT
 verify_app "$app" io.damao.inputmethod.inkflow
-cmp macOS/Info.plist "$app/Contents/Info.plist"
+bash macOS/scripts/release-build.sh "$installer_receipt" "$app/Contents/Info.plist" >/dev/null
 xcrun stapler validate "$app"
 INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
 bash .agents/skills/inkflow-release/scripts/check-credentials.sh

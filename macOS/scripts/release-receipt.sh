@@ -10,7 +10,7 @@ input_digest() {
   local manifest digest
   manifest=$(mktemp "${TMPDIR:-/tmp}/inkflow-installer-inputs.XXXXXX")
   git ls-files -z -- Package.swift macOS/Info.plist macOS/Installer macOS/Shared \
-    macOS/scripts/build-installer.sh macOS/scripts/swift-package.sh | while IFS= read -r -d '' file; do
+    macOS/scripts/build-installer.sh macOS/scripts/release-build.sh macOS/scripts/swift-package.sh | while IFS= read -r -d '' file; do
       [[ -e "$file" && ! -L "$file" ]] || fail "Missing installer input: $file"
       shasum -a 256 "$file"
     done > "$manifest"
@@ -24,6 +24,8 @@ inputs=$(input_digest)
 binary_sha=$(shasum -a 256 "$binary" | awk '{print $1}')
 icon_sha=$(shasum -a 256 "$icon" | awk '{print $1}')
 if [[ "$mode" == create ]]; then
+  app_build=$(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist)
+  [[ "$app_build" =~ ^[1-9][0-9]*$ && ${#app_build} -le 9 ]] || fail 'Invalid verified candidate build.'
   mkdir -p "$(dirname "$receipt")"
   temporary=$(mktemp "$(dirname "$receipt")/.installer-receipt.XXXXXX")
   plutil -create xml1 "$temporary"
@@ -31,6 +33,7 @@ if [[ "$mode" == create ]]; then
   plutil -insert installerInputsSHA256 -string "$inputs" "$temporary"
   plutil -insert installerExecutableSHA256 -string "$binary_sha" "$temporary"
   plutil -insert installerIconSHA256 -string "$icon_sha" "$temporary"
+  plutil -insert appBuild -string "$app_build" "$temporary"
   mv "$temporary" "$receipt"
   exit 0
 fi

@@ -56,6 +56,24 @@ For stable personal use, download the latest DMG from the [GitHub Releases page]
 
 ### Try the current development version
 
+Every `build.sh` invocation reserves a new positive build number before compilation,
+including release builds. Only the staged app's `CFBundleVersion` changes; the source
+plist remains a minimum baseline. The allocator uses the greatest source baseline,
+previous local app, installed app, and shared counter, then adds one. Linked worktrees
+share the main checkout's ignored `build/build-number/last`. Preserve that directory
+across cleanup and worktree removal; failed builds consume their reservation and may
+leave gaps. Concurrent allocations are serialized, while two builds in the same
+checkout are rejected. Interrupted lock directories require inspection before removal.
+Separate clones do not share a global sequence.
+
+After every successful app build, include the Markdown metadata table printed by
+`build-summary.sh` in the result. It reads the actual bundle version/build, provenance,
+hashes and signature state. Its timestamp is report time, not an embedded build date.
+Installation, process launch, and notarization remain separate evidence. Installer
+assembly inherits the version/build from its embedded payload ZIP. Release packaging
+uses the build frozen in the verified installer receipt, while continuing to compare
+all other app plist fields and verify source/resource provenance.
+
 Select and run the affected `test.sh` groups, create a fresh staged bundle with `build.sh`, run the repeatable fast bundle checks, then install with Developer ID signing:
 
 ```sh
@@ -66,6 +84,8 @@ bash macOS/scripts/install.sh --developer-id
 ```
 
 Choose groups from `bash macOS/scripts/test.sh --help` using behavior, callers, shared configuration, and resources. Set `INKFLOW_SIGN_IDENTITY` to the already verified Developer ID Application certificate SHA-1 with team `T7976FL2LP`; `install.sh` verifies the resulting team and bundle ID. Confirm the installed path and active process before user-owned typing acceptance. `install.sh --debug` is only for development debugging, never for a trial build or release evidence. The install script does not run tests or build automatically.
+
+Run installation and input-source verification outside a restricted sandbox in the logged-in desktop session. The installer stages and signs first, preserves enabled/selected input sources, requests normal termination of the installed instance, and waits for exit before replacing files. Refusal or timeout leaves the old app in place. It then restores input-source state and verifies a fresh PID, the actual installed executable path, and the candidate build number. This proves process replacement, not typing or microphone acceptance. First installation preserves the existing input-source selection and requires adding InkFlow in System Settings. Connection errors mean input-source state is unknown. Successful installs remove temporary lifecycle state; failed post-replacement verification retains the reported `.inkflow-install.*` directory for inspection, and the existing `build/backups/installation.*/InkFlow.zip` archives remain subject to explicit cleanup.
 
 ### Publish a release
 

@@ -24,10 +24,12 @@ fi
 scratch="$(mktemp -d build/installer-task/compiler/assembly.XXXXXX)"
 trap 'rm -rf "$scratch"' EXIT
 app="$scratch/InkFlow Installer.app"
+unzip -p "$payload" InkFlow.app/Contents/Info.plist > "$scratch/payload.plist"
+[[ $(plutil -extract CFBundleIdentifier raw "$scratch/payload.plist") == io.damao.inputmethod.inkflow ]] || { echo 'Unexpected payload bundle identity.' >&2; exit 1; }
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources/Payload"
 cp macOS/Installer/Info.plist "$app/Contents/Info.plist"
 for key in CFBundleShortVersionString CFBundleVersion; do
-  value="$(/usr/libexec/PlistBuddy -c "Print :$key" macOS/Info.plist)"
+  value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$scratch/payload.plist")"
   /usr/libexec/PlistBuddy -c "Set :$key $value" "$app/Contents/Info.plist"
 done
 cp "$verified_icon" "$app/Contents/Resources/AppIcon.icns"

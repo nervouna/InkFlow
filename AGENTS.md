@@ -1,5 +1,7 @@
 # Project guidance
 
+After every successful application build, report the actual artifact metadata as a Markdown table using `macOS/scripts/build-summary.sh`: path, semantic version, allocated build, bundle ID, source commit/dirty state and hashes, report time, signature integrity, signing authority/team, and installation/notarization evidence. Read the artifact rather than the source version floor; do not imply installation or launch from build success. Every new `build.sh` invocation allocates a fresh build number, including release verification.
+
 1. For known failures, start with [macOS/DEBUGGING.md](macOS/DEBUGGING.md) and classify evidence as source, configuration, InkFlow, platform, or test-environment behavior.
 2. Run build paths that invoke `iconutil` in an appropriate non-restricted environment on the first attempt; investigate icon resources only if the unchanged command still fails there. API names, simulated clients, and timing correlation prove neither behavior nor cause.
 3. Preserve offline Rime as baseline. Optional AI, downloads, telemetry, and recovery must not block or corrupt it; keep network, disk, SQLite/JSON, and long preparation off the key-event path.

@@ -5,7 +5,7 @@ import Foundation
 
 @main
 struct VoiceSessionTests {
-@MainActor static func waitUntil(_ condition: () -> Bool) async throws {
+    @MainActor static func waitUntil(_ condition: () -> Bool) async throws {
         for _ in 0..<400 {
             if condition() { return }
             try await Task.sleep(for: .milliseconds(5))
@@ -37,6 +37,8 @@ struct VoiceSessionTests {
         // A whole-session correction failure preserves the complete finalized ASR transcript.
         results = []
         let failed = VoiceSession(correct: { _ in
+            // Completion must not depend on a fast synthetic transport.
+            try await Task.sleep(for: .milliseconds(100))
             throw VoiceCorrectionClient.Failure.incomplete
         }, onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
         let failureID = failed.start()
@@ -46,13 +48,16 @@ struct VoiceSessionTests {
         failed.stop(id: failureID)
         failed.receiveFinal("tail", id: failureID)
         failed.finalized(transcript: "abtail", id: failureID)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitUntil { !results.isEmpty }
         precondition(results == [.completed("abtail", usedRawFallback: true)])
 
         // Cancellation wins even when the correction ignores task cancellation and returns later.
         results = []
+        var releaseCancelledCorrection: CheckedContinuation<Void, Never>?
+        var cancelledCorrectionReturned = false
         let cancelled = VoiceSession(correct: { _ in
-            try? await Task.sleep(for: .milliseconds(20))
+            await withCheckedContinuation { releaseCancelledCorrection = $0 }
+            cancelledCorrectionReturned = true
             return "late"
         }, onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
         let old = cancelled.start()
@@ -60,13 +65,17 @@ struct VoiceSessionTests {
         await Task.yield()
         cancelled.stop(id: old)
         cancelled.finalized(transcript: "raw", id: old)
+        try await waitUntil { releaseCancelledCorrection != nil }
         cancelled.cancel(id: old)
         let fresh = cancelled.start()
         cancelled.finalized(transcript: "stale", id: old)
         cancelled.receiveFinal("stale", id: old)
         cancelled.stop(id: fresh)
         cancelled.finalized(transcript: "", id: fresh)
-        try await Task.sleep(for: .milliseconds(30))
+        releaseCancelledCorrection?.resume()
+        releaseCancelledCorrection = nil
+        try await waitUntil { cancelledCorrectionReturned }
+        await Task.yield()
         precondition(results == [.cancelled, .completed("", usedRawFallback: false)])
 
         // Tail timeout discards partial recognition; correction deadline can only use finalized ASR.
@@ -78,7 +87,7 @@ struct VoiceSessionTests {
         let timeoutID = timeout.start()
         timeout.receiveFinal("partial", id: timeoutID)
         timeout.stop(id: timeoutID)
-        try await Task.sleep(for: .milliseconds(20))
+        try await waitUntil { !results.isEmpty }
         precondition(results == [.failed(.finalizationTimedOut)])
         results = []
         limits.tail = .seconds(1); limits.correctionWait = .milliseconds(5)
@@ -138,7 +147,7 @@ struct VoiceSessionTests {
         fallback.receiveFinal("raw", id: fallbackID)
         fallback.stop(id: fallbackID)
         fallback.finalized(transcript: "raw tail", id: fallbackID)
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitUntil { !results.isEmpty }
         precondition(results == [.completed("raw tail", usedRawFallback: true)])
 
         // The finalized transcript is canonical even if adapter fragments differed.
@@ -150,7 +159,7 @@ struct VoiceSessionTests {
         canonical.receiveFinal("raw", id: canonicalID)
         canonical.stop(id: canonicalID)
         canonical.finalized(transcript: "raw tail", id: canonicalID)
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitUntil { !results.isEmpty }
         precondition(canonicalRequests == ["raw tail"])
         precondition(results == [.completed("correct", usedRawFallback: false)])
         let configuration = AISuggestionConfiguration(baseURL: "https://api.deepseek.com/v1", apiKey: "fixture", model: "deepseek-v4-flash")

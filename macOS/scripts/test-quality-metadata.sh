@@ -37,30 +37,33 @@ build_swift_product quality-build-metadata build/quality-build-metadata release
 build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
 build/quality-build-metadata "$repo" "$app" --verify
-# The linker-produced ad-hoc signature and a later runtime re-sign use the same
-# code bytes but leave a different canonicalized Mach-O layout when stripped.
-lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
-cp "$lua_plugin" "$fixture/linker-signed.dylib"
-codesign --remove-signature "$fixture/linker-signed.dylib"
-linker_canonical=$(shasum -a 256 "$fixture/linker-signed.dylib" | awk '{print $1}')
+# Re-signing may or may not change canonical payload bytes on this toolchain.
 for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" \
   "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlow"; do
   codesign --force --options runtime --timestamp=none --sign - "$binary"
 done
 codesign --force --options runtime --timestamp=none --sign - "$app"
 codesign --verify --deep --strict "$app"
-cp "$lua_plugin" "$fixture/runtime-signed.dylib"
-codesign --remove-signature "$fixture/runtime-signed.dylib"
-runtime_canonical=$(shasum -a 256 "$fixture/runtime-signed.dylib" | awk '{print $1}')
-[[ "$linker_canonical" != "$runtime_canonical" ]] || {
-  echo 'FAIL: nested re-sign did not reproduce canonicalized Mach-O layout drift' >&2
-  exit 1
-}
-if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/re-signed-ordinary.log" 2>&1; then
-  echo 'FAIL: ordinary verification accepted re-signed nested Mach-O bytes' >&2
+build/quality-build-metadata "$repo" "$app"
+resigned_hash=$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")
+cp "$fixture/first.json" "$app/Contents/Resources/QualityBuild.json"
+if [[ "$resigned_hash" == "$(plutil -extract bundleSHA256 raw "$fixture/first.json")" ]]; then
+  build/quality-build-metadata "$repo" "$app" --verify
+elif build/quality-build-metadata "$repo" "$app" --verify > "$fixture/re-signed-ordinary.log" 2>&1; then
+  echo 'FAIL: ordinary verification accepted changed canonical bundle bytes' >&2
   exit 1
 fi
 build/quality-build-metadata "$repo" "$app" --verify-signed
+
+# Exercise the signing-sensitive digest boundary deterministically, regardless
+# of whether real re-signing changed the canonical layout on this platform.
+plutil -replace bundleSHA256 -string mismatched "$app/Contents/Resources/QualityBuild.json"
+if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/mismatched-bundle.log" 2>&1; then
+  echo 'FAIL: ordinary verification accepted a mismatched bundle digest' >&2
+  exit 1
+fi
+build/quality-build-metadata "$repo" "$app" --verify-signed
+cp "$fixture/first.json" "$app/Contents/Resources/QualityBuild.json"
 
 # Signed verification ignores only the signing-sensitive bundle digest. Every
 # other recorded provenance field remains mandatory and exact.
@@ -113,6 +116,17 @@ done
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/current-layout.json"
 build/quality-build-metadata "$repo" "$app"
 cmp "$fixture/current-layout.json" "$app/Contents/Resources/QualityBuild.json"
+build/quality-build-metadata "$repo" "$app" --verify
+# Change only executable bytes, then restore them, so rejection cannot be caused
+# by an unrelated source/provenance change elsewhere in this fixture.
+cp "$app/Contents/MacOS/InkFlow" "$fixture/unchanged-executable"
+printf 'modified executable bytes\n' > "$app/Contents/MacOS/InkFlow"
+if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/changed-payload.log" 2>&1; then
+  echo 'FAIL: ordinary verification accepted changed executable bytes' >&2
+  exit 1
+fi
+cp "$fixture/unchanged-executable" "$app/Contents/MacOS/InkFlow"
+build/quality-build-metadata "$repo" "$app" --verify
 source_hash=$(plutil -extract sourceTreeSHA256 raw "$fixture/first.json")
 ranking_source=$(plutil -extract rankingSourceSHA256 raw "$fixture/first.json")
 ranking_resources=$(plutil -extract rankingResourcesSHA256 raw "$fixture/first.json")
@@ -232,5 +246,12 @@ for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-
   cp "$fixture/originals/main.swift" "$identity_repo/macOS/DictionaryTool/main.swift"
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
   [[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+done
+# Newly introduced helpers are untracked before the delivery commit, but still
+# must participate in the build closure and dirty-state calculation.
+for helper in build-number build-summary; do
+  snapshot=$($tool "$identity_repo" --build-snapshot)
+  printf 'fixture build helper\n' > "$identity_repo/macOS/scripts/$helper.sh"
+  [[ "$($tool "$identity_repo" --build-snapshot)" != "$snapshot" ]]
 done
 echo 'PASS quality build metadata: deterministic build-input/resources hashes, clean/dirty revision, docs excluded'

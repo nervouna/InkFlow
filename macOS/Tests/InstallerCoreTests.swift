@@ -62,6 +62,96 @@ private actor Files: IFInstallerFileOperations {
 }
 
 @main struct InstallerCoreTests {
+    @MainActor private final class TrialProcesses: IFTrialProcessOperations {
+        var pids: [Int32] = [42]
+        var failure = ""
+        var launches = 0
+        func installedPIDs(at target: URL) -> [Int32] { pids }
+        func stop(_ pids: [Int32]) throws {
+            if failure == "declined" || failure == "timeout" { throw IFInputError.unavailable(failure) }
+            self.pids = failure == "restarted" ? [43] : []
+        }
+        func launchAndVerify(at target: URL, excluding: [Int32]) throws -> Int32 {
+            launches += 1
+            if failure == "launch" { throw IFInputError.unavailable("launch") }
+            pids = [99]; return 99
+        }
+    }
+    @MainActor private final class TrialSources: IFInputSourceOperations {
+        var selected = IFInputIdentity.modeID
+        var enabled = [IFInputIdentity.bundleID, IFInputIdentity.modeID, "ascii"]
+        var failure = ""
+        var enabledCalls = 0
+        var delayed = false
+        var pendingIDs: [String] = []
+        var pendingSelection: String?
+        func applyPending() {
+            enabled.append(contentsOf: pendingIDs); pendingIDs = []
+            if let pendingSelection { selected = pendingSelection; self.pendingSelection = nil }
+        }
+        func snapshot() throws -> IFInputRoster {
+            if failure == "snapshot" { throw IFInputError.unavailable("snapshot") }
+            let sources = [IFInputIdentity.bundleID, IFInputIdentity.modeID, "ascii"].map { id in
+                IFInputSource(id: id, bundleID: id == "ascii" ? "system" : IFInputIdentity.bundleID,
+                    name: id, enabled: enabled.contains(id), selectable: true, keyboardMode: true, ascii: id == "ascii")
+            }
+            return IFInputRoster(installed: sources, enabled: sources.filter(\.enabled), selectedID: selected)
+        }
+        func register(at url: URL) throws {
+            if failure == "register" { throw IFInputError.unavailable("register") }
+        }
+        func enable(_ id: String) {
+            enabledCalls += 1
+            if delayed { pendingIDs.append(id) } else { enabled.append(id) }
+        }
+        func select(_ id: String) throws {
+            if failure == "select" { throw IFInputError.unavailable("select") }
+            if delayed { pendingSelection = id } else { selected = id }
+        }
+    }
+    @MainActor static func trialTests() async throws {
+        let target = URL(fileURLWithPath: "/tmp/input methods/InkFlow.app")
+        for failure in ["declined", "timeout", "restarted"] {
+            let s = TrialSources(), p = TrialProcesses(); p.failure = failure
+            let trial = IFTrialInstallation(sources: s, processes: p)
+            do {
+                _ = try await trial.prepare(target: target, build: "12")
+                throw IFInstallerError.invalid("prepare must refuse \(failure)")
+            } catch is IFInputError {}
+            try check(p.launches == 0 && s.selected == IFInputIdentity.modeID, "refused prepare restores selection without launch")
+        }
+        let s = TrialSources(), p = TrialProcesses()
+        let lifecycle = IFTrialInstallation(sources: s, processes: p)
+        let state = try await lifecycle.prepare(target: target, build: "12")
+        try check(p.pids.isEmpty && s.selected == "ascii", "prepare returns only after old exit")
+        let pid = try await lifecycle.finish(target: target, state: state, installedBuild: "12")
+        try check(pid == 99 && s.selected == IFInputIdentity.modeID && s.enabledCalls == 0, "fresh process and original selected/enabled state")
+        for failure in ["register", "select", "launch", "build"] {
+            s.failure = failure; p.failure = failure
+            do {
+                _ = try await lifecycle.finish(target: target, state: state, installedBuild: failure == "build" ? "11" : "12")
+                throw IFInstallerError.invalid("finish must refuse \(failure)")
+            } catch is IFInputError {}
+        }
+        let firstSources = TrialSources(), firstProcesses = TrialProcesses()
+        firstSources.selected = "ascii"; firstSources.enabled = ["ascii"]; firstProcesses.pids = []
+        let first = IFTrialInstallation(sources: firstSources, processes: firstProcesses)
+        let initial = try await first.prepare(target: target, build: "12")
+        _ = try await first.finish(target: target, state: initial, installedBuild: "12")
+        try check(firstSources.selected == "ascii" && firstSources.enabledCalls == 0, "first install preserves disabled state")
+        let delayedSources = TrialSources(), delayedProcesses = TrialProcesses()
+        delayedSources.delayed = true
+        let delayed = IFTrialInstallation(sources: delayedSources, processes: delayedProcesses, pause: { delayedSources.applyPending() })
+        let delayedState = try await delayed.prepare(target: target, build: "12")
+        delayedSources.enabled = ["ascii"]
+        _ = try await delayed.finish(target: target, state: delayedState, installedBuild: "12")
+        try check(delayedSources.selected == IFInputIdentity.modeID && delayedSources.enabledCalls == 2, "delayed enable and selection readback")
+        try check(IFTrialSystemProcesses.owns(path: "/tmp/input methods/.inkflow-install.abc/previous/Contents/MacOS/InkFlow", target: target), "old staging path recognized")
+        for path in ["/tmp/harness/InkFlow.app/Contents/MacOS/InkFlow", "/tmp/input methods/.inkflow-install.abc/other/Contents/MacOS/InkFlow", "/tmp/else/.inkflow-install.abc/previous/Contents/MacOS/InkFlow"] {
+            try check(!IFTrialSystemProcesses.owns(path: path, target: target), "unrelated instance excluded")
+        }
+        print("PASS trial lifecycle: declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; scoped ownership (fake backends, no desktop mutation)")
+    }
     static func fileTests() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent("installer-test-\(UUID().uuidString)")
@@ -96,6 +186,7 @@ private actor Files: IFInstallerFileOperations {
         print("PASS real filesystem: first install, replacement, failed partial copy preserves old, cleanup, no backup, no path/version gates")
     }
     @MainActor static func main() async throws {
+        try await trialTests()
         try fileTests()
         let files = Files(), sources = Sources(), lifecycle = Lifecycle()
         let coordinator = IFInstallerCoordinator(files: files, sources: sources, lifecycle: lifecycle, pause: {})

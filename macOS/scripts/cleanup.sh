@@ -37,5 +37,5 @@ if (( ${#backups[@]} > keep )); then
   )
 fi
 echo '[always preserved]'
-echo 'build/releases and unknown failure artifacts'
+echo 'build/releases, build/build-number (shared durable counter), and unknown failure artifacts'
 [[ "$apply" == true ]] && echo 'Cleanup applied.' || echo 'Dry run only; pass --apply to remove listed cache/harness/old-backup paths.'
