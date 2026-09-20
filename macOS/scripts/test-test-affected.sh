@@ -110,6 +110,10 @@ change schemas/lua/inkflow_mixed.lua; plan
 has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'manual-input'
 
 new_case
+change schemas/lua/inkflow_input_coverage.lua; plan
+has 'engine-context'; has 'controller'; has 'quality-capture-query'; has 'dictionary-worker'; has 'bundle-fast'; has 'manual-input'
+
+new_case
 change macOS/Sources/Future.swift; plan
 has 'quality-store'; has 'dictionary-worker'; has 'workflow'; has 'manual-install'
 

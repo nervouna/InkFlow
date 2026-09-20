@@ -156,7 +156,7 @@ final class IFEngine {
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                      "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                     "lua/inkflow_ai_learning.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
                      "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
                     (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
@@ -609,13 +609,33 @@ final class IFEngine {
         let hasCustomCode = appliedPhrases.contains { $0.code == input }
         // Once a segment is selected, the immediate prefix is inside the mark.
         // Leave these remaining candidates to Rime instead of applying older document text.
-        candidateOrder = raw.hasSelectedPrefix || hasCustomCode ? Array(raw.candidates.indices) :
-            (Self.contextRanker?.order(raw.candidates, precedingText: precedingText) ?? Array(raw.candidates.indices))
+        candidateOrder = Array(raw.candidates.indices)
+        if !raw.hasSelectedPrefix, !hasCustomCode, !precedingText.isEmpty, let ranker = Self.contextRanker {
+            candidateOrder = ranker.order(raw.candidates, precedingText: precedingText,
+                                         coverage: inputCoverage(page: raw.page, count: raw.candidates.count,
+                                                                 inputLength: input.utf8.count))
+        }
         if let first = candidateOrder.first {
             _ = Self.api.pointee.highlight_candidate_on_current_page(session, first)
         }
         orderedContent = self.content(of: rawSnapshot())
         if raw.preedit.isEmpty { precedingText = "" }
+    }
+
+    private func inputCoverage(page: Int, count: Int, inputLength: Int) -> [Range<Int>]? {
+        guard page >= 0, page <= Int.max / candidateCount, (1...9).contains(count) else { return nil }
+        let offset = page * candidateCount
+        let api = Self.api.pointee
+        api.set_property(session, "inkflow_input_coverage_result", "")
+        defer {
+            api.set_property(session, "inkflow_input_coverage", "")
+            api.set_property(session, "inkflow_input_coverage_result", "")
+        }
+        // Rime delivers the property observer synchronously on this engine's main actor.
+        "\(offset),\(count)".withCString { api.set_property(session, "inkflow_input_coverage", $0) }
+        var buffer = [CChar](repeating: 0, count: 512)
+        guard api.get_property(session, "inkflow_input_coverage_result", &buffer, buffer.count) != 0 else { return nil }
+        return IFContextRanker.parseCoverage(Self.string(buffer), offset: offset, count: count, inputLength: inputLength)
     }
 
     func takeCommit(recordQuality: Bool = true) -> String {

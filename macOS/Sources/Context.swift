@@ -64,24 +64,25 @@ struct IFContextRanker: Sendable {
         longestPhrase = longest
     }
 
-    func order(_ candidates: [String], precedingText: String) -> [Int] {
+    func order(_ candidates: [String], precedingText: String, coverage: [Range<Int>]? = nil) -> [Int] {
         let original = Array(candidates.indices)
-        guard let first = candidates.first, longestPhrase > 1 else { return original }
+        guard let first = candidates.first, longestPhrase > 1,
+              let coverage, coverage.count == candidates.count,
+              coverage.allSatisfy({ $0.lowerBound >= 0 && !$0.isEmpty }) else { return original }
         let prefix = Array(precedingText.suffix(longestPhrase - 1).reversed().prefix(while: Self.isHan).reversed())
         guard !prefix.isEmpty else { return original }
-        let scores = candidates.map { candidate -> (length: Int, frequency: Int) in
-            // Candidate APIs expose no consumed-input span. Keep shorter partial choices
-            // in place by restricting promotion to the original first candidate's length.
-            guard candidate.count == first.count, candidate.allSatisfy(Self.isHan) else { return (0, 0) }
+        let eligible = original.filter {
+            coverage[$0] == coverage[0] && candidates[$0].count == first.count &&
+            candidates[$0].allSatisfy(Self.isHan)
+        }
+        let scores = candidates.enumerated().map { index, candidate -> (length: Int, frequency: Int) in
+            guard eligible.contains(index) else { return (0, 0) }
             for count in stride(from: prefix.count, through: 1, by: -1) {
                 if let frequency = frequencies[String(prefix.suffix(count)) + candidate] {
                     return (count, frequency)
                 }
             }
             return (0, 0)
-        }
-        let eligible = original.filter {
-            candidates[$0].count == first.count && candidates[$0].allSatisfy(Self.isHan)
         }
         let ranked = eligible.sorted {
             if scores[$0].length != scores[$1].length { return scores[$0].length > scores[$1].length }
@@ -91,6 +92,23 @@ struct IFContextRanker: Sendable {
         var result = original
         for (slot, candidate) in zip(eligible, ranked) { result[slot] = candidate }
         return result
+    }
+
+    /// The ephemeral bridge returns a page identity followed by native byte spans.
+    static func parseCoverage(_ value: String, offset: Int, count: Int, inputLength: Int) -> [Range<Int>]? {
+        guard offset >= 0, (1...9).contains(count), inputLength > 0 else { return nil }
+        let rows = value.split(separator: ";", omittingEmptySubsequences: false)
+        guard rows.count == count + 1, rows[0] == "\(offset),\(count)" else { return nil }
+        var ranges: [Range<Int>] = []
+        for row in rows.dropFirst() {
+            let bounds = row.split(separator: ",", omittingEmptySubsequences: false)
+            guard bounds.count == 2,
+                  bounds.allSatisfy({ !$0.isEmpty && $0.utf8.allSatisfy { (48...57).contains($0) } }),
+                  let start = Int(bounds[0]), let end = Int(bounds[1]),
+                  start < end, end <= inputLength else { return nil }
+            ranges.append(start..<end)
+        }
+        return ranges
     }
 
     private static func isHan(_ character: Character) -> Bool {

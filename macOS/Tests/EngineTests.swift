@@ -411,7 +411,7 @@ struct EngineTests {
     @MainActor static func missingEnglishResources(shared: String, user: String) throws {
         for resource in ["inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                          "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                         "lua/inkflow_ai_learning.lua"] {
+                         "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua"] {
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-missing-\(UUID().uuidString)")
             try FileManager.default.copyItem(at: URL(fileURLWithPath: shared), to: copy)
             defer { try? FileManager.default.removeItem(at: copy) }
@@ -647,7 +647,7 @@ struct EngineTests {
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
                      "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                      "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                     "lua/inkflow_ai_learning.lua",
+                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua",
                      "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
             try files.createSymbolicLink(at: directory.appendingPathComponent(name),
                                          withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))
@@ -937,6 +937,33 @@ struct EngineTests {
             engine.setPrecedingText(prefix); type(engine, input)
             return engine
         }
+        let coverage = prepared("什么", "neng", count: 9)
+        check(coverage.snapshot().candidates.first == "能",
+              "Context must not promote partial 呢 above complete 能: \(coverage.snapshot())")
+        check(coverage.key(32))
+        check(coverage.takeCommit() == "能" && coverage.snapshot().preedit.isEmpty,
+              "The complete contextual first candidate consumes neng")
+        for count in [3, 5, 9] {
+            let contextual = prepared("什么", "neng", count: count), native = prepared("", "neng", count: count)
+            check(contextual.snapshot().candidates == native.snapshot().candidates,
+                  "Same-character-length partial choices retain native order")
+            let firstPage = contextual.snapshot().candidates
+            check(contextual.key(0xff56) && contextual.snapshot().page == 1)
+            check(contextual.key(0xff55) && contextual.snapshot().candidates == firstPage,
+                  "Coverage remains aligned after paging back")
+            guard let partialIndex = firstPage.firstIndex(of: "呢") else {
+                check(false, "Expected partial 呢 on neng first page"); continue
+            }
+            contextual.highlight(partialIndex)
+            contextual.setPrecedingText("什么")
+            check(contextual.snapshot().highlight == partialIndex, "An unchanged prefix preserves explicit selection")
+            check(contextual.key(32))
+            check(contextual.takeCommit().isEmpty && contextual.snapshot().preedit == "呢ng",
+                  "Selecting the displayed partial candidate retains native unconsumed input")
+            native.select(partialIndex)
+            check(contextual.snapshot().candidates == native.snapshot().candidates,
+                  "Selected-prefix bypass preserves native remaining candidates")
+        }
         for (prefix, input, expected) in [("准备午", "can", "餐"), ("正式宣", "bu", "布"),
                                            ("最新软", "jian", "件"), ("非常感", "xie", "谢")] {
             // Emoji also occupy page slots; keep the target inside the tested page.
@@ -1051,12 +1078,25 @@ struct EngineTests {
         defer { try? FileManager.default.removeItem(at: url) }
         try "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n".write(to: url, atomically: true, encoding: .utf8)
         let ranker = try IFContextRanker(dictionary: url.path)
-        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午") == [2, 1, 0], "Longer crossing phrases precede frequency")
-        check(ranker.order(["惨", "餐", "参"], precedingText: "午") == [1, 2, 0], "Frequency then stable original order")
-        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午") == [2, 1, 0, 3],
+        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午", coverage: [0..<3, 0..<3, 0..<3]) == [2, 1, 0], "Longer crossing phrases precede frequency")
+        check(ranker.order(["惨", "餐", "参"], precedingText: "午", coverage: [0..<3, 0..<3, 0..<3]) == [1, 2, 0], "Frequency then stable original order")
+        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午", coverage: [0..<3, 0..<3, 0..<3, 0..<3]) == [2, 1, 0, 3],
               "Context reorders eligible Han candidates only within their original slots")
-        check(ranker.order(["你好", "你"], precedingText: "迷") == [0, 1], "Unequal-length choices remain in the native relative order")
-        print("PASS context ranking rules: longer match, frequency, stable ties, fixed ineligible slots, partial length guard")
+        check(ranker.order(["你好", "你"], precedingText: "迷", coverage: [0..<5, 0..<5]) == [0, 1], "Unequal-length choices remain in the native relative order")
+        for spans: [Range<Int>]? in [nil, [], [0..<3], [0..<3, 0..<1], [0..<3, 1..<4], [0..<3, 0..<0]] {
+            check(ranker.order(["惨", "餐"], precedingText: "午", coverage: spans) == [0, 1],
+                  "Unknown or different native spans must not permit context promotion")
+        }
+        check(ranker.order(["惨", "餐", "参"], precedingText: "午", coverage: [0..<3, 0..<1, 0..<3]) == [2, 1, 0],
+              "An ineligible partial candidate retains its slot while equal-span alternatives rank")
+        check(IFContextRanker.parseCoverage("9,3;0,4;0,4;0,1", offset: 9, count: 3, inputLength: 4) == [0..<4, 0..<4, 0..<1])
+        for invalid in ["", "0,3;0,4;0,4;0,1", "9,3;0,4;0,4", "9,3;0,4;0,4;0,1;0,1",
+                        "9,3;0,4;0,4;0,5", "9,3;0,4;0,4;2,1", "9,3;0,4;0,4;0,0",
+                        "9,3;0,4;0,4;-1,1", "9,3;0,4;0,4;0,+1", "9,3;0,4;0,4;0,x"] {
+            check(IFContextRanker.parseCoverage(invalid, offset: 9, count: 3, inputLength: 4) == nil,
+                  "Malformed, stale-page or truncated span metadata must fail closed")
+        }
+        print("PASS context ranking rules: equal native spans, unknown metadata fallback, strict page identity, longer match, frequency, stable ties, fixed ineligible slots")
     }
 
     @MainActor static func englishCandidates() {
