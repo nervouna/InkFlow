@@ -109,7 +109,16 @@ struct AppleVoiceRecognizerTests {
         await fixtureLifecycle()
         // Invoke the exact production tap on a detached executor, without opening a microphone.
         let input = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-        let output = AVAudioFormat(standardFormatWithSampleRate: 16000, channels: 1)!
+        guard SpeechTranscriber.isAvailable,
+              let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh_CN")) else {
+            preconditionFailure("SpeechTranscriber must support the production locale")
+        }
+        let module = SpeechTranscriber(locale: locale, transcriptionOptions: [],
+            reportingOptions: [.volatileResults, .fastResults, .alternativeTranscriptions],
+            attributeOptions: [.audioTimeRange, .transcriptionConfidence])
+        guard let output = await SpeechAnalyzer.bestAvailableAudioFormat(compatibleWith: [module]) else {
+            preconditionFailure("Speech assets must provide a compatible audio format")
+        }
         let feed = try VoiceAudioFeed(input: input, output: output)
         let tap = feed.makeTap()
         await Task.detached {
@@ -123,10 +132,12 @@ struct AppleVoiceRecognizerTests {
         feed.finish()
         var frameCount = 0
         for try await sample in feed.stream {
-            precondition(sample.buffer.format.sampleRate == 16000)
+            precondition(sample.buffer.format.sampleRate == output.sampleRate)
             frameCount += Int(sample.buffer.frameLength)
         }
-        precondition(frameCount == 1600, "Converted frame count: \(frameCount)")
+        let expectedFrameCount = Int((4800 * output.sampleRate / input.sampleRate).rounded())
+        precondition(frameCount == expectedFrameCount,
+                     "Converted frame count: \(frameCount), expected: \(expectedFrameCount)")
 
         let overflowing = try VoiceAudioFeed(input: input, output: output, capacity: 1)
         let overflowTap = overflowing.makeTap()
