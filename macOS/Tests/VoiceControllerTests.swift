@@ -418,7 +418,11 @@ struct VoiceControllerTests {
     @MainActor static func deliveryAndFallback() async {
         let h = VoiceHarness(); defer { h.close() }
         h.settings.voicePolishEnabled = true
-        h.controller.voice.correctionOverride = { _ in throw VoiceCorrectionClient.Failure.network }
+        var correctionRequests: [String] = []
+        h.controller.voice.correctionOverride = { text in
+            correctionRequests.append(text)
+            throw VoiceCorrectionClient.Failure.network
+        }
         await h.start()
         let callbacks = h.fake.callbacks!
         callbacks.onVolatile("你好🙂")
@@ -426,10 +430,14 @@ struct VoiceControllerTests {
         check(h.client.selection == NSRange(location: 7, length: 0), "UTF16 selection includes emoji surrogate pair")
         h.controller.refresh(h.client)
         check(h.client.document == "前🙂你好🙂", "Rime refresh cannot erase voice mark")
-        callbacks.onFinal("你好🙂")
+        callbacks.onFinal("你好")
+        callbacks.onFinal("🙂")
         try? await Task.sleep(for: .milliseconds(20))
+        check(correctionRequests.isEmpty, "Final ASR fragments do not start polishing before finalization")
         h.key()
         callbacks.onFinalized("你好🙂")
+        try? await Task.sleep(for: .milliseconds(20))
+        check(correctionRequests == ["你好🙂"], "The complete finalized transcript is polished exactly once")
         check(h.client.document == "前🙂你好🙂" && h.client.insertions.count == 1)
         check(h.client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0))
         check(h.client.mark.location == NSNotFound && !h.controller.voice.isActive)

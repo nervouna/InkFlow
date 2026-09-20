@@ -23,20 +23,21 @@ struct VoiceSessionTests {
         let id = session.start()
         session.receiveFinal("a", id: id)
         session.receiveFinal("b", id: id)
-        try await waitUntil { requests.count == 2 }
-        precondition(requests == ["a", "b"] && results.isEmpty)
+        try await Task.sleep(for: .milliseconds(20))
+        precondition(requests.isEmpty && results.isEmpty,
+                     "Final ASR fragments must remain local until the complete transcript is finalized")
         session.stop(id: id)
         precondition(results.isEmpty)
         session.finalized(transcript: "ab", id: id)
         try await waitUntil { !results.isEmpty }
+        precondition(requests == ["ab"], "A voice session must correct its complete finalized transcript exactly once")
         precondition(results == [.completed("AB", usedRawFallback: false)])
         session.finalized(transcript: "ab", id: id)
         precondition(results.count == 1)
-        // A later segment failure discards every earlier correction and includes the ASR tail.
+        // A whole-session correction failure preserves the complete finalized ASR transcript.
         results = []
-        let failed = VoiceSession(correct: { text in
-            if text == "b" { throw VoiceCorrectionClient.Failure.incomplete }
-            return text.uppercased()
+        let failed = VoiceSession(correct: { _ in
+            throw VoiceCorrectionClient.Failure.incomplete
         }, onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
         let failureID = failed.start()
         failed.receiveFinal("a", id: failureID)
@@ -92,6 +93,35 @@ struct VoiceSessionTests {
         deadline.receiveFinal("tail", id: deadlineID)
         deadline.finalized(transcript: "rawtail", id: deadlineID)
         precondition(results == [.completed("rawtail", usedRawFallback: true)])
+
+        // A deadline that wins after whole-transcript correction starts completes once with full raw ASR.
+        results = []
+        limits.correctionWait = .milliseconds(10)
+        var deadlineRequests: [String] = []
+        var releaseLateCorrection: CheckedContinuation<Void, Never>?
+        var lateCorrectionReturned = false
+        let lateDeadline = VoiceSession(limits: limits, correct: { text in
+            deadlineRequests.append(text)
+            await withCheckedContinuation { releaseLateCorrection = $0 }
+            lateCorrectionReturned = true
+            return "late corrected"
+        }, onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
+        let lateDeadlineID = lateDeadline.start()
+        lateDeadline.receiveFinal("raw", id: lateDeadlineID)
+        lateDeadline.receiveFinal(" tail", id: lateDeadlineID)
+        lateDeadline.stop(id: lateDeadlineID)
+        precondition(deadlineRequests.isEmpty)
+        lateDeadline.finalized(transcript: "raw tail", id: lateDeadlineID)
+        try await waitUntil { deadlineRequests == ["raw tail"] }
+        try await waitUntil { !results.isEmpty }
+        precondition(results == [.completed("raw tail", usedRawFallback: true)])
+        releaseLateCorrection?.resume()
+        releaseLateCorrection = nil
+        try await waitUntil { lateCorrectionReturned }
+        await Task.yield()
+        precondition(results == [.completed("raw tail", usedRawFallback: true)],
+                     "A late correction that ignored cancellation must not complete the session again")
+
         results = []
         limits.textUTF16 = 2
         let bounded = VoiceSession(limits: limits, onPreview: { _ in }, onRequestFinalize: { _ in },
@@ -100,18 +130,29 @@ struct VoiceSessionTests {
         bounded.receiveVolatile("abc", id: boundedID)
         precondition(results == [.failed(.boundExceeded)])
 
-        // Empty corrections and adapter final-transcript mismatches always preserve full raw ASR.
-        for replacement in ["", "correct"] {
-            results = []
-            let fallback = VoiceSession(correct: { _ in replacement }, onPreview: { _ in },
-                onRequestFinalize: { _ in }, onFinish: { results.append($0) })
-            let token = fallback.start()
-            fallback.receiveFinal("raw", id: token)
-            fallback.stop(id: token)
-            fallback.finalized(transcript: replacement.isEmpty ? "raw" : "raw tail", id: token)
-            try await Task.sleep(for: .milliseconds(10))
-            precondition(results == [.completed(replacement.isEmpty ? "raw" : "raw tail", usedRawFallback: true)])
-        }
+        // Empty corrections preserve the complete finalized raw transcript.
+        results = []
+        let fallback = VoiceSession(correct: { _ in "" }, onPreview: { _ in },
+            onRequestFinalize: { _ in }, onFinish: { results.append($0) })
+        let fallbackID = fallback.start()
+        fallback.receiveFinal("raw", id: fallbackID)
+        fallback.stop(id: fallbackID)
+        fallback.finalized(transcript: "raw tail", id: fallbackID)
+        try await Task.sleep(for: .milliseconds(10))
+        precondition(results == [.completed("raw tail", usedRawFallback: true)])
+
+        // The finalized transcript is canonical even if adapter fragments differed.
+        results = []
+        var canonicalRequests: [String] = []
+        let canonical = VoiceSession(correct: { text in canonicalRequests.append(text); return "correct" },
+            onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
+        let canonicalID = canonical.start()
+        canonical.receiveFinal("raw", id: canonicalID)
+        canonical.stop(id: canonicalID)
+        canonical.finalized(transcript: "raw tail", id: canonicalID)
+        try await Task.sleep(for: .milliseconds(10))
+        precondition(canonicalRequests == ["raw tail"])
+        precondition(results == [.completed("correct", usedRawFallback: false)])
         let configuration = AISuggestionConfiguration(baseURL: "https://api.deepseek.com/v1", apiKey: "fixture", model: "deepseek-v4-flash")
         let request = try VoiceCorrectionClient.makeRequest(text: "测试", configuration: configuration)
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]

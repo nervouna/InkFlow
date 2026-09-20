@@ -27,7 +27,7 @@ final class VoiceSession {
     private var stopped = false
     private var finalTranscript: String?
     private var segments: [String] = []
-    private var corrected: [String] = []
+    private var corrected: String?
     private var rawFallback = false
     private var worker: Task<Void, Never>?
     private var recordingTimer: Task<Void, Never>?
@@ -48,7 +48,7 @@ final class VoiceSession {
         if let id { return id }
         let token = UUID()
         id = token; stopped = false; finalTranscript = nil
-        segments = []; corrected = []; rawFallback = false
+        segments = []; corrected = nil; rawFallback = false
         recordingTimer = timer(after: limits.recording, id: token) { session in
             session.finish(.failed(.boundExceeded))
         }
@@ -71,7 +71,6 @@ final class VoiceSession {
         }
         segments.append(text)
         onPreview(segments.joined())
-        launchWorker(id: token)
     }
 
     func stop(id token: UUID) {
@@ -93,8 +92,7 @@ final class VoiceSession {
         guard transcript.utf16.count <= limits.textUTF16 else { finish(.failed(.boundExceeded)); return }
         finalTranscript = transcript
         tailTimer?.cancel(); tailTimer = nil
-        // An adapter mismatch must never cause corrected segments to omit recognized words.
-        if transcript != segments.joined() { useRawFallback() }
+        launchWorker(transcript, id: token)
         completeIfReady()
     }
 
@@ -108,25 +106,26 @@ final class VoiceSession {
         finish(.cancelled)
     }
 
-    private func launchWorker(id token: UUID) {
-        guard id == token, worker == nil, !rawFallback, let correct else { return }
+    private func launchWorker(_ transcript: String, id token: UUID) {
+        guard id == token, worker == nil, !transcript.isEmpty, !rawFallback, let correct else { return }
         worker = Task { [weak self] in
             guard let self else { return }
-            while self.id == token, !self.rawFallback, self.corrected.count < self.segments.count {
-                let index = self.corrected.count
-                do {
-                    let text = try await correct(self.segments[index])
-                    try Task.checkCancellation()
-                    guard self.id == token, !self.rawFallback else { return }
-                    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                          self.corrected.joined().utf16.count + text.utf16.count <= self.limits.textUTF16 else {
-                        self.useRawFallback(); break
-                    }
-                    self.corrected.append(text)
-                } catch {
-                    guard self.id == token, !Task.isCancelled else { return }
-                    self.useRawFallback(); break
+            do {
+                let text = try await correct(transcript)
+                try Task.checkCancellation()
+                guard self.id == token, !self.rawFallback else { return }
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      text.utf16.count <= self.limits.textUTF16 else {
+                    self.useRawFallback()
+                    self.completeIfReady()
+                    return
                 }
+                self.corrected = text
+            } catch {
+                guard self.id == token, !Task.isCancelled else { return }
+                self.useRawFallback()
+                self.completeIfReady()
+                return
             }
             guard self.id == token else { return }
             self.worker = nil
@@ -137,15 +136,15 @@ final class VoiceSession {
     private func useRawFallback() {
         rawFallback = true
         worker?.cancel(); worker = nil
-        corrected = []
+        corrected = nil
     }
 
     private func completeIfReady() {
         guard stopped, let transcript = finalTranscript else { return }
-        if correct == nil || rawFallback {
+        if correct == nil || transcript.isEmpty || rawFallback {
             finish(.completed(transcript, usedRawFallback: correct != nil && rawFallback))
-        } else if corrected.count == segments.count {
-            finish(.completed(corrected.joined(), usedRawFallback: false))
+        } else if let corrected {
+            finish(.completed(corrected, usedRawFallback: false))
         }
     }
 
@@ -156,7 +155,7 @@ final class VoiceSession {
         recordingTimer?.cancel(); recordingTimer = nil
         tailTimer?.cancel(); tailTimer = nil
         correctionTimer?.cancel(); correctionTimer = nil
-        segments = []; corrected = []; finalTranscript = nil
+        segments = []; corrected = nil; finalTranscript = nil
         onFinish(outcome)
     }
 
