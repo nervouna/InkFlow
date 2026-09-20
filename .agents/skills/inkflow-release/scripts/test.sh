@@ -5,7 +5,9 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../../../.." && pwd)
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-tests.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
-plist="$fixture/Info.plist"
+# Keep version-test data out of Info.plist at the fixture root: that layout
+# makes the adjacent executable stub fail to write stdout on the observed macOS.
+plist="$fixture/VersionFixture.plist"
 bump="$root/.agents/skills/inkflow-release/scripts/bump-version.sh"
 for spec in 'major 2.0.0' 'minor 1.10.0' 'patch 1.9.10'; do
   read -r kind expected <<< "$spec"
