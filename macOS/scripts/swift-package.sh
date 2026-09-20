@@ -14,10 +14,14 @@ build_swift_product() {
     echo "SwiftPM configuration must be debug or release." >&2
     return 2
   }
-  xcrun swift build --disable-sandbox --cache-path "$swiftpm_cache" \
-    --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch" \
+  # Every consumer must resolve CRime's headers during explicit module scanning.
+  local build_args=(--disable-sandbox --cache-path "$swiftpm_cache"
+    --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch"
     --triple "$swiftpm_triple" --configuration "$configuration" --product "$product"
-  local bin_path="$swiftpm_scratch/arm64-apple-macosx/$configuration"
+    -Xcc "-I$PWD/build/deps/dist/include")
+  xcrun swift build "${build_args[@]}" || return $?
+  local bin_path
+  bin_path=$(xcrun swift build "${build_args[@]}" --show-bin-path) || return $?
   mkdir -p "$(dirname "$output")"
   cp "$bin_path/$product" "$output"
 }
