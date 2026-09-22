@@ -2,6 +2,7 @@
 macOS/Sources/CandidatePresentation.swift
 macOS/Sources/Context.swift
 macOS/Sources/CustomPhrases.swift
+macOS/Sources/DictionaryGenerator.swift
 macOS/Sources/Engine.swift
 macOS/Sources/InputPreferences.swift
 macOS/Sources/InputRankingContext.swift

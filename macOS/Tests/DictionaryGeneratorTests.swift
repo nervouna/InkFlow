@@ -32,6 +32,7 @@ struct DictionaryGeneratorTests {
     }
     static func text(_ result: IFDictionaryGeneration) -> String { String(decoding: result.dictionary, as: UTF8.self) }
     static func main() throws {
+        try spellingGeneration()
         expect(IFDictionaryHash.gitBlob(Data("hello\n".utf8)) == "ce013625030ba8dba906f756967f9e9ca394464a", "Git blob includes byte-count header")
         expect(try IFDictionaryGenerator.normalizedReading("  LÜ\u{a0}SE  ") == "lv se", "Pinyin whitespace, case, ü normalization")
         expect(try IFDictionaryGenerator.normalizedReading("LU\u{308} SE") == "lv se", "Decomposed ü normalizes")
@@ -123,6 +124,37 @@ struct DictionaryGeneratorTests {
         print("PASS dictionary generator: normalized union, precedence, multiple readings, zero weights, log median, bucket/fallback, corrections, rejection, deterministic content/provenance")
     }
 
+    static func spellingGeneration() throws {
+        let data = Data("---\nname: pinyin_simp\n...\n来俩\tlai lia\t1\n女略\tnu lue\t2\n居\tju\t3\n赞\tzan\t4\n包\tbao\t5\n".utf8)
+        let schemas = try IFSpellingGenerator.generate(dictionary: data)
+        expect(schemas.count == 32, "Every preference profile has its own native prism schema")
+        expect(try IFSpellingGenerator.generate(dictionary: data) == schemas, "Deterministic spelling generation")
+        let reordered = Data("---\nname: pinyin_simp\n...\n# source-only change\n包\tbao\t99\n赞\tzan\t4\n居\tju\t3\n女略\tnu lue\t2\n来俩\tlai lia\t1\n".utf8)
+        expect(try IFSpellingGenerator.generate(dictionary: reordered) == schemas, "Order, weights and comments do not change spelling")
+        func guarded(_ code: String, in schemas: [String: Data], profile: Int) throws -> Bool {
+            let schema = String(decoding: schemas["inkflow_spelling_\(profile).schema.yaml"]!, as: UTF8.self)
+            guard let line = schema.components(separatedBy: "\n").first(where: { $0.contains("- erase/") }) else { return false }
+            let pattern = line.components(separatedBy: "/")[1]
+            let value = "~" + code
+            return try NSRegularExpression(pattern: pattern).firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
+        }
+        for profile in 0..<32 {
+            for code in ["lai", "lia", "lue", "lve", "ju", "jv", "zan", "bao"] {
+                expect(try guarded(code, in: schemas, profile: profile) == (profile & 2 != 0), "Protect every legal full spelling: \(profile), \(code)")
+            }
+            expect(try guarded("zhan", in: schemas, profile: profile) == (profile & 6 == 6), "Protect explicit fuzzy equivalents only in enabled profiles")
+        }
+        expect(try !guarded("boa", in: schemas, profile: 2), "A nonword typo remains available")
+        let expanded = try IFSpellingGenerator.generate(dictionary: data + Data("新读音\tboa\t1\n".utf8))
+        expect(try guarded("boa", in: expanded, profile: 2), "New dictionary syllables automatically protect formerly available typo aliases")
+        for profile in 0..<32 where profile & 2 == 0 {
+            expect(expanded["inkflow_spelling_\(profile).schema.yaml"] == schemas["inkflow_spelling_\(profile).schema.yaml"], "Typo-off profiles do not depend on the guard")
+        }
+        reject("source-format") { _ = try IFSpellingGenerator.generate(dictionary: Data("来\tlai\t1\n".utf8)) }
+        reject("invalid-reading") { _ = try IFSpellingGenerator.generate(dictionary: data + Data("坏\tb~ao\t1\n".utf8)) }
+        print("PASS spelling generator: 32 deterministic profiles, dictionary-driven full spellings, normal/fuzzy equivalents, dynamic collision set, strict parsing")
+    }
+
     static func actualSources(directory: String, legacy: String, output: String) throws {
         let sources = URL(fileURLWithPath: directory), destination = URL(fileURLWithPath: output)
         let inputs = try IFDictionaryCatalog.sources.map { spec in
@@ -139,6 +171,9 @@ struct DictionaryGeneratorTests {
                "Build CLI and shared runtime module generate identical bytes")
         expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryManifest.filename)) == result.manifest.encoded(),
                "Build CLI and shared runtime module generate identical metadata")
+        for (name, bytes) in try IFSpellingGenerator.generate(dictionary: result.dictionary) {
+            expect(try Data(contentsOf: destination.appendingPathComponent(name)) == bytes, "Build CLI and runtime spelling bytes match: \(name)")
+        }
         expect(text(result).contains("歇后语\txie hou yu\t72\n"), "Preserve Frost 歇后语 weight")
         expect(text(result).contains("肃然起敬\tsu ran qi jing\t337\n"), "Preserve Frost 肃然起敬 weight")
         print("PASS pinned corpus: \(result.manifest.entryCount) records, CLI/runtime byte parity, required term weights")

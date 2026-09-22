@@ -20,8 +20,13 @@ package enum IFDictionaryToolBootstrap {
             try result.dictionary.write(to: output.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename), options: .atomic)
             try result.manifest.encoded().write(to: output.appendingPathComponent(IFDictionaryManifest.filename), options: .atomic)
             print("Generated \(result.manifest.entryCount) entries, \(result.manifest.contentVersion)")
+        } else if arguments.count == 3, arguments[0] == "spelling" {
+            let dictionary = try Data(contentsOf: URL(fileURLWithPath: arguments[1]))
+            let output = URL(fileURLWithPath: arguments[2])
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try IFSpellingGenerator.write(dictionary: dictionary, to: output)
         } else {
-            throw IFDictionaryError("arguments", "Usage: dictionary-generator sources | generate SOURCES LEGACY CORRECTIONS OUTPUT")
+            throw IFDictionaryError("arguments", "Usage: dictionary-generator sources | generate SOURCES LEGACY CORRECTIONS OUTPUT | spelling DICTIONARY OUTPUT")
         }
     }
 }

@@ -359,6 +359,37 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         check(try store.observed(active: descriptor.manifest)[0].commit == fakeCommit, "Save proven same-content source receipts")
         check(!FileManager.default.fileExists(atPath: identicalCandidate.appendingPathComponent("cache").path), "No compile for same content")
         try store.removeCandidate(identicalCandidate)
+
+        // A new legal syllable must update the guard in downloaded and dictionary-only
+        // rebuilds, even though the app's bundled schema still has the old inventory.
+        bytes.append(Data("\n新拼写\tboa\t1\n".utf8))
+        inputs[0] = .init(receipt: .init(id: specs[0].id, commit: fakeCommit, blobSHA: IFDictionaryHash.gitBlob(bytes),
+            sha256: IFDictionaryHash.sha256(bytes), byteCount: bytes.count, recordCount: 0), data: bytes)
+        let expandedCandidate = try store.candidate()
+        let expanded = try runner.prepareBlocking(candidate: expandedCandidate, inputs: inputs)
+        check(expanded.outcome == .prepared, "A new source syllable compiles")
+        let expandedShared = expandedCandidate.appendingPathComponent("shared")
+        let expandedDictionary = try Data(contentsOf: expandedShared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
+        let expectedSchemas = try IFSpellingGenerator.generate(dictionary: expandedDictionary)
+        for (name, data) in expectedSchemas {
+            check(try Data(contentsOf: expandedShared.appendingPathComponent(name)) == data, "Download regenerates spelling schema: \(name)")
+        }
+        check(try Data(contentsOf: runtime.resources.appendingPathComponent("inkflow_spelling_2.schema.yaml")) != expectedSchemas["inkflow_spelling_2.schema.yaml"],
+              "Downloaded guard differs from the bundled dictionary inventory")
+        let reuse = root.appendingPathComponent("spelling-rebuild")
+        try FileManager.default.createDirectory(at: reuse, withIntermediateDirectories: false)
+        for name in [IFDictionaryCatalog.dictionaryFilename, IFDictionaryManifest.filename] {
+            try FileManager.default.copyItem(at: expandedShared.appendingPathComponent(name), to: reuse.appendingPathComponent(name))
+        }
+        let rebuiltCandidate = try store.candidate()
+        let rebuilt = try runner.rebuildBlocking(candidate: rebuiltCandidate, dictionaryShared: reuse)
+        check(rebuilt.outcome == .prepared, "Dictionary-only rebuild compiles with current spelling logic")
+        for (name, data) in expectedSchemas {
+            check(try Data(contentsOf: rebuiltCandidate.appendingPathComponent("shared/" + name)) == data,
+                  "Dictionary-only rebuild regenerates spelling schema: \(name)")
+        }
+        try store.removeCandidate(expandedCandidate)
+        try store.removeCandidate(rebuiltCandidate)
         let malformed = try store.candidate()
         var bad = inputs
         let badBytes = Data("not a dictionary\n".utf8)
