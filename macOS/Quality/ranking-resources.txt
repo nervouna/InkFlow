@@ -8,6 +8,7 @@ Rime/inkflow_pinyin.schema.yaml
 Rime/lua/inkflow_english.lua
 Rime/lua/inkflow_mixed.lua
 Rime/lua/inkflow_short_conflict.lua
+Rime/lua/inkflow_input_coverage.lua
 Rime/opencc/STCharacters.txt
 Rime/opencc/STPhrases.txt
 Rime/opencc/emoji.txt

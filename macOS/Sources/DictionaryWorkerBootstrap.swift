@@ -79,6 +79,12 @@ package enum IFDictionaryWorkerBootstrap {
                 to: shared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
             try IFDictionaryFiles.atomicWrite(manifest.encoded(),
                 to: shared.appendingPathComponent(IFDictionaryManifest.filename))
+            operation = "generate-spelling"
+            let spelling = try IFSpellingGenerator.generate(dictionary: dictionary)
+            for name in spelling.keys.sorted() {
+                // Keep replacement staging inside the sandbox's candidate directory.
+                try IFDictionaryFiles.atomicWrite(spelling[name]!, to: shared.appendingPathComponent(name))
+            }
             operation = "create-isolated-directories"
             let cache = try IFDictionaryFiles.child("cache", in: root)
             let compiler = try IFDictionaryFiles.child("compile-user", in: root)

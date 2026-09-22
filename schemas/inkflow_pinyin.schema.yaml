@@ -18,7 +18,7 @@ switches:
 engine:
   processors: [ascii_composer, key_binder, speller, punctuator, selector, navigator, express_editor]
   segmentors: [ascii_segmentor, abc_segmentor, punct_segmentor, fallback_segmentor]
-  translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english]
+  translators: [punct_translator, table_translator@custom_phrase, script_translator, lua_translator@*inkflow_mixed, lua_translator@*inkflow_english, lua_translator@*inkflow_input_coverage]
   filters: [simplifier@emoji_suggestion, simplifier@traditional, uniquifier, lua_filter@*inkflow_short_conflict]
 emoji_suggestion:
   opencc_config: inkflow_emoji.json
@@ -43,16 +43,7 @@ speller:
   alphabet: abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
   delimiter: " '"
   algebra:
-    - derive/^([nl])ue$/$1ve/
-    - derive/^([jqxy])u/$1v/
-    # Fuzz lowers typo-alias weights without rewriting preedit.
-    # hz/hc/hs -> zh/ch/sh; repeated initial -> single initial.
-    - fuzz/^([zcs])h/h$1/
-    - fuzz/^([bpmfdtnlgkhjqxrzcsyw])(?=[a-z])/$1$1/
-    # Common final transpositions: ign -> ing, oa -> ao, ain -> ian.
-    - fuzz/([aeiou])ng$/$1gn/
-    - fuzz/ao$/oa/
-    - fuzz/([iu])a(o|ng?)?$/a$1$2/
+    __include: 'inkflow_spelling_2.schema:/speller/algebra'
 translator:
   dictionary: pinyin_simp
   preedit_format:

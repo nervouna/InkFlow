@@ -68,7 +68,7 @@ printf 'fixture generator implementation\n' > "$fixture/macOS/Sources/Dictionary
 printf 'fixture build generator\n' > "$fixture/macOS/scripts/build-dictionary-generator.sh"
 printf 'fixture SwiftPM wrapper\n' > "$fixture/macOS/scripts/swift-package.sh"
 : > "$fixture/macOS/Data/english-technology.tsv"
-# Isolate English policy fixtures from the independently tested Chinese generator.
+# Isolate English policy fixtures from the independently tested Chinese/spelling generators.
 # This stub exists only inside this test's temporary repository.
 cat > "$fixture/macOS/scripts/prepare-chinese.sh" <<'STUB'
 #!/bin/bash
@@ -80,8 +80,16 @@ shasum -a 256 Package.swift macOS/DictionaryTool/main.swift macOS/Sources/Dictio
   macOS/scripts/build-dictionary-generator.sh macOS/scripts/swift-package.sh | shasum -a 256 | awk '{print $1}' \
   > "$1/dictionary-manifest.json"
 STUB
+# Spelling must run after the generated Chinese dictionary has been copied. The
+# shared generator's output and CLI parity are tested by test-dictionary-generator.sh.
+cat > "$fixture/macOS/scripts/prepare-spelling.sh" <<'STUB'
+#!/bin/bash
+set -euo pipefail
+test -s "$1/pinyin_simp.dict.yaml"
+STUB
 cp -R schemas/. "$fixture/schemas/"
-printf '中文\tzhong wen\t1000\n' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
+printf '%s\n' '---' 'name: pinyin_simp' '...' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
+printf '中文\tzhong wen\t1000\n' >> "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '微笑\t微笑 😊\n' > "$fixture/build/deps/emoji.txt"
 cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'DATA'
 ---

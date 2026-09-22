@@ -88,6 +88,10 @@ impact_classify() {
       impact_rule "$path" 'packaged quality identity' quality-metadata workflow
       impact_bundle=true; impact_release_tools=true ;;
 
+    schemas/lua/inkflow_input_coverage.lua)
+      impact_rule "$path" 'native candidate coverage bridge and consumers' preparation dictionary-generator deployment engine controller ai-headless voice-controller quality-capture-query dictionary-updates dictionary-activation settings startup-diagnostics
+      impact_bundle=true
+      impact_manual_add manual-input ;;
     schemas/lua/inkflow_ai_learning.lua)
       impact_rule "$path" 'native learning bridge and generated-data consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
