@@ -63,7 +63,39 @@ private final class InputCapture: @unchecked Sendable {
         }
         events.forEach { print($0) }
         inputLifecycle()
+        compositionLifecycle()
         print("PASS startup diagnostics: gated stage, monotonic delay, readiness order, failure/cancel/skip, bounded content-free correlation")
+    }
+
+    @MainActor static func compositionLifecycle() {
+        let capture = InputCapture()
+        InputDiagnostics.$observe.withValue({ capture.append($0) }) {
+            let lifecycle = IFInputLifecycleDiagnostics()
+            lifecycle.beginActivation()
+            let first = lifecycle.beginComposition()
+            precondition(lifecycle.beginComposition().id == first.id)
+            let insertion = lifecycle.insertionBegan(clientPresent: true)
+            lifecycle.deactivationEntered()
+            lifecycle.beginActivation()
+            let second = lifecycle.beginComposition()
+            lifecycle.deactivationFinished()
+            lifecycle.insertionFinished(insertion, clientPresent: true)
+            precondition(lifecycle.beginComposition().id == second.id,
+                "Old deactivation/insert return must not close a reentrant new composition")
+            lifecycle.engineAvailability(false)
+            lifecycle.engineAvailability(false)
+            lifecycle.engineAvailability(true)
+            lifecycle.engineAvailability(false)
+            lifecycle.controllerReleased()
+        }
+        let records = capture.records
+        precondition(records.filter { $0.event == .compositionBegan }.count == 2)
+        precondition(records.filter { $0.event == .compositionEnded }.count == 2)
+        let issued = records.first { $0.event == .insertionIssued }!
+        let returned = records.first { $0.event == .insertionReturned }!
+        precondition(issued.composition == returned.composition && issued.activation == returned.activation)
+        precondition(records.filter { $0.event == .engineUnavailable }.count == 2)
+        precondition(records.contains { $0.event == .compositionEnded && $0.reason == .teardown })
     }
 
     @MainActor static func inputLifecycle() {

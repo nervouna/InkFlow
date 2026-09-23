@@ -117,12 +117,14 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         associateQualityClient(client)
         let commit = engine?.takeCommit(recordQuality: false) ?? ""
         if !commit.isEmpty {
+            let insertion = inputDiagnostics.insertionBegan(clientPresent: client != nil)
             ownsMarkedText = false
             qualityInsertionDepth += 1
             defer { qualityInsertionDepth -= 1 }
             delivery = InputDeliveryDiagnostic(clientPresent: client != nil, commitInsertion: client != nil,
                                                markedTextUpdate: false, markedTextClear: false)
             client?.insertText(commit, replacementRange: NSRange(location: NSNotFound, length: 0))
+            inputDiagnostics.insertionFinished(insertion, clientPresent: client != nil)
         }
         if !commit.isEmpty || qualityInsertionDepth == 0 {
             engine?.qualityRecorder?.commitDrained(commit, insertionIssued: !commit.isEmpty && client != nil,
@@ -131,6 +133,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         IFInputRankingContext.refresh(engine, client: client, ownsMarkedText: ownsMarkedText)
         let state = engine?.snapshot() ?? EngineSnapshot()
         if !state.preedit.isEmpty {
+            inputDiagnostics.beginComposition()
             ownsMarkedText = true
             delivery = InputDeliveryDiagnostic(clientPresent: client != nil,
                                                commitInsertion: delivery.commitInsertion,
@@ -138,6 +141,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             client?.setMarkedText(state.preedit, selectionRange: NSRange(location: state.cursor, length: 0),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
         } else if ownsMarkedText {
+            inputDiagnostics.endComposition(.cleared)
             ownsMarkedText = false
             delivery = InputDeliveryDiagnostic(clientPresent: client != nil,
                                                commitInsertion: delivery.commitInsertion,
@@ -210,15 +214,18 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 applySettings()
             }
             guard let engine else {
+                inputDiagnostics.engineAvailability(false, reason: .engineMissing)
                 inputDiagnostics.finishFirstKey(firstKey, outcome: .skipped, reason: .engineMissing)
                 return false
             }
             guard engine.available else {
+                inputDiagnostics.engineAvailability(false)
                 inputDiagnostics.finishFirstKey(firstKey, outcome: .skipped, reason: .engineUnavailable)
                 return false
             }
             guard let callbackEvent, callbackEvent.type == .keyDown else { return false }
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .routing)
+            inputDiagnostics.engineAvailability(true)
             associateQualityClient(callbackClient as? IMKTextInput)
             engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             IFInputRankingContext.prepareForKey(engine, client: callbackClient as? IMKTextInput,

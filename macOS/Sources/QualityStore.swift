@@ -269,6 +269,8 @@ final class QualityStore: @unchecked Sendable {
             }
         }
         if shouldLog {
+            LocalDiagnostics.shared.submit(.init(module: .statistics, event: "qualityStoreDisabled", outcome: .failed,
+                errorDomain: .sqlite, errorCode: Int(code)))
             // No input, SQL, filesystem path, or arbitrary SQLite error text enters logs.
             NSLog("InkFlow quality recording disabled (code %d)", code)
             hooks.loggedFailure?(code)

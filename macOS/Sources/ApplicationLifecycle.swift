@@ -24,6 +24,8 @@ import AppKit
         guard cleanup == nil else { return .terminateLater }
         failure = nil
         cleanup = Task { [self] in
+            let operation = UUID()
+            LocalDiagnostics.shared.submit(.init(module: .termination, event: "cleanup", outcome: .begin, correlation: operation))
             do {
                 if !dictionariesStopped {
                     try await stopDictionaries()
@@ -33,8 +35,14 @@ import AppKit
                 if !engineStopped { stopEngine(); engineStopped = true }
                 guard await closeStore() else { throw CocoaError(.fileWriteUnknown) }
                 complete = true
+                LocalDiagnostics.shared.submit(.init(module: .termination, event: "cleanup", outcome: .completed, correlation: operation))
+                await LocalDiagnostics.shared.store?.drain()
                 sender.reply(toApplicationShouldTerminate: true)
             } catch {
+                let safe = LocalDiagnosticEvent.safeError(error)
+                LocalDiagnostics.shared.submit(.init(module: .termination, event: "cleanup", outcome: .failed,
+                    correlation: operation, errorDomain: safe.0, errorCode: safe.1))
+                await LocalDiagnostics.shared.store?.drain()
                 failure = String(describing: error)
                 NSLog("InkFlow termination cleanup failed: %@", String(describing: error))
                 cleanup = nil

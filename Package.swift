@@ -29,8 +29,8 @@ let inkFlowCoreSources = [
     "DictionaryUpdateModels.swift", "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "Engine.swift", "InputController.swift", "InputPreferences.swift",
     "PackagedCache.swift", "PackagedCacheBootstrap.swift", "QualityRecorder.swift", "QualityRecords.swift",
-    "QualityStore.swift", "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift",
-    "SmartSettingsView.swift", "StartupDiagnostics.swift", "UpdateCheckSchedule.swift", "UpdateCoordinator.swift",
+    "QualityStore.swift", "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",
+    "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift", "UpdateCheckSchedule.swift", "UpdateCoordinator.swift",
     "UpdateInstallerLauncher.swift", "UpdateService.swift", "UpdateSettingsView.swift",
 ]
 let installerCoreSources = [
@@ -48,7 +48,7 @@ let testSwiftSources = [
     "DictionaryUpdateTests.swift", "DictionaryWorkerFixture.swift", "EngineTests.swift", "InstallerCoreTests.swift",
     "InstallerWindowTests.swift", "MetadataTests.swift", "QualityCaptureTests.swift",
     "QualityControllerTimingTests.swift", "QualityIdentityTests.swift", "QualityStoreTests.swift", "QualityTimingTests.swift",
-    "ServingStartupTests.swift", "SettingsTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift",
+    "ServingStartupTests.swift", "SettingsTests.swift", "DiagnosticFeedbackModelTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift", "LocalDiagnosticsTests.swift", "DiagnosticArchiveTests.swift",
     "TerminationTests.swift", "TestSupport.swift", "UpdateTests.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceLexiconTests.swift", "VoiceControllerTests.swift",
 ]
 let testAuxiliarySources = [
@@ -100,6 +100,8 @@ let executableTestProducts: [(String, String)] = [
     ("settings-tests", "SettingsTests"),
     ("settings-ui-tests", "SettingsUITests"),
     ("startup-diagnostics-tests", "StartupDiagnosticsTests"),
+    ("local-diagnostics-tests", "LocalDiagnosticsTests"),
+    ("diagnostic-archive-tests", "DiagnosticArchiveTests"),
     ("termination-tests", "TerminationTests"),
     ("voice-session-tests", "VoiceSessionTests"),
     ("apple-voice-tests", "AppleVoiceRecognizerTests"),
@@ -295,9 +297,11 @@ let package = Package(
         executableTestTarget("QualityStoreTests", sources: ["QualityStoreTests.swift"]),
         executableTestTarget("QualityTimingTests", sources: ["QualityTimingTests.swift"]),
         executableTestTarget("ServingStartupTests", sources: ["ServingStartupTests.swift"]),
-        executableTestTarget("SettingsTests", sources: ["SettingsTests.swift", "UpdateTests.swift"]),
+        executableTestTarget("SettingsTests", sources: ["SettingsTests.swift", "UpdateTests.swift", "DiagnosticFeedbackModelTests.swift"]),
         executableTestTarget("SettingsUITests", sources: ["SettingsUITests.swift", "DictionarySettingsUITests.swift"]),
         executableTestTarget("StartupDiagnosticsTests", sources: ["StartupDiagnosticsTests.swift"]),
+        executableTestTarget("LocalDiagnosticsTests", sources: ["LocalDiagnosticsTests.swift"]),
+        executableTestTarget("DiagnosticArchiveTests", sources: ["DiagnosticArchiveTests.swift"]),
         executableTestTarget("AppleVoiceRecognizerTests", sources: ["AppleVoiceRecognizerTests.swift"]),
         executableTestTarget("VoiceSessionTests", sources: ["VoiceSessionTests.swift"]),
         executableTestTarget("VoiceLexiconTests", sources: ["VoiceLexiconTests.swift"]),

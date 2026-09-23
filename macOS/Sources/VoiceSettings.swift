@@ -10,6 +10,7 @@ final class VoicePreparation {
     private(set) var preparing = false
     private(set) var action: Action?
     private(set) var message: String
+    private var lastAuthorizationStatus: AVAuthorizationStatus?
 
     init(service: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
         self.service = service
@@ -19,7 +20,13 @@ final class VoicePreparation {
 
     func prepareIfAuthorized(status: () -> AVAuthorizationStatus = { AVCaptureDevice.authorizationStatus(for: .audio) }) async {
         guard !preparing else { return }
-        switch status() {
+        let authorization = status()
+        if authorization != lastAuthorizationStatus {
+            lastAuthorizationStatus = authorization
+            VoiceDiagnostics.emit(.authorization, id: UUID(), reason: authorization == .authorized ? .none : .permission,
+                                  outcome: authorization == .authorized ? .ready : .skipped)
+        }
+        switch authorization {
         case .notDetermined:
             action = .authorize
             message = "允许使用麦克风后，将自动准备中文识别资源。"
@@ -42,11 +49,19 @@ final class VoicePreparation {
         action = nil
         message = "正在准备中文识别资源…"
         defer { preparing = false }
+        let operation = UUID()
+        VoiceDiagnostics.emit(.resourcePreparation, id: operation, outcome: .begin)
         do {
-            try await service.prepare(requestPermission: requestPermission)
+            try await VoiceDiagnostics.$preparationID.withValue(operation) {
+                try await service.prepare(requestPermission: requestPermission)
+            }
+            VoiceDiagnostics.emit(.resourcePreparation, id: operation, reason: service.isReady ? .none : .unavailable,
+                                  outcome: service.isReady ? .ready : .unavailable)
             action = service.isReady ? nil : .retry
             message = service.isReady ? "中文语音识别已就绪。" : "语音识别尚未就绪，请重试。"
         } catch {
+            VoiceDiagnostics.emit(.resourcePreparation, id: operation, reason: VoiceDiagnostics.reason(for: error),
+                outcome: error is CancellationError ? .cancelled : .failed, error: error)
             let denied = error as? VoiceRecognitionError == .permission
             action = denied ? .openSettings : .retry
             message = denied ? "请在系统设置中允许墨流使用麦克风。" : "无法准备中文语音识别，请检查网络和系统资源后重试。"

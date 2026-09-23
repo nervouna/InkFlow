@@ -87,6 +87,10 @@ struct ControllerTests {
             controller.activateServer(client)
             check(controller.handle(keyEvent(0, "n"), client: client))
             check(controller.handle(keyEvent(0, "i"), client: client))
+            controller.commitComposition(client)
+            check(controller.handle(keyEvent(0, "h"), client: client))
+            check(controller.handle(keyEvent(0, "a"), client: client))
+            controller.commitComposition(client)
             controller.deactivateServer(client)
 
             controller.activateServer(client)
@@ -94,6 +98,7 @@ struct ControllerTests {
 
             controller.activateServer(client)
             IFEngine.stop()
+            check(!controller.handle(keyEvent(0, "sentinel-private-input"), client: client))
             check(!controller.handle(keyEvent(0, "sentinel-private-input"), client: client))
             try IFEngine.start(shared: shared, user: user)
 
@@ -129,6 +134,18 @@ struct ControllerTests {
             check(interrupted.handle(keyEvent(0, "n"), client: interruptClient))
         }
         let records = capture.records
+        let compositionStarts = records.filter { $0.event == .compositionBegan }
+        let insertionStarts = records.filter { $0.event == .insertionIssued }
+        let insertionReturns = records.filter { $0.event == .insertionReturned }
+        check(compositionStarts.count >= 2 && insertionStarts.count >= 2,
+              "Later ordinary compositions must remain visible after the first key")
+        check(insertionStarts.count == insertionReturns.count)
+        for issued in insertionStarts {
+            check(insertionReturns.contains { $0.composition == issued.composition && $0.activation == issued.activation },
+                  "Every returned insertion retains its original composition and activation")
+        }
+        check(records.filter { $0.event == .engineUnavailable }.count == 1,
+              "Repeated unavailable keys cannot flood diagnostics")
         let arrivals = records.filter { $0.event == .firstKeyEntered }
         let completions = records.filter { $0.event == .firstKeyCompleted }
         let initialCompletions = Array(completions.prefix(3))

@@ -6,6 +6,7 @@ import Speech
 
 /// Logs only fixed stage/reason names, random session IDs and elapsed milliseconds.
 enum VoiceDiagnostics {
+    @TaskLocal static var preparationID: UUID?
     static let fixtureEventDiagnostics = !(ProcessInfo.processInfo.environment["INKFLOW_VOICE_FIXTURE"] ?? "").isEmpty
     static func modifierArrival(keyCode: UInt16, flags: UInt) {
         guard fixtureEventDiagnostics else { return }
@@ -20,7 +21,7 @@ enum VoiceDiagnostics {
     static func fixture(_ stage: FixtureStage, mode: VoiceRecognitionFixture.Mode) {
         logger.notice("stage=fixture mode=\(mode.rawValue, privacy: .public) event=\(stage.rawValue, privacy: .public)")
     }
-    enum StartRejection: String { case engine, busy, secure, client, bundle, foreground, selection, proxy, stale }
+    enum StartRejection: String, DiagnosticLabel { case engine, busy, secure, client, bundle, foreground, selection, proxy, stale }
     /// One bounded timestamp per fixed reason; repeated shortcuts cannot flood the log.
     struct StartRejectionLimiter {
         private var last: [StartRejection: ContinuousClock.Instant] = [:]
@@ -31,13 +32,32 @@ enum VoiceDiagnostics {
         }
     }
     static func rejectStart(_ reason: StartRejection) {
+        LocalDiagnostics.shared.submit(.init(module: .voice, event: Stage.startRejected, outcome: .skipped, reason: reason))
         logger.notice("stage=startRejected reason=\(reason.rawValue, privacy: .public)")
     }
-    enum Stage: String { case preparing, recording, stopping, finalized, cancelled, failed, tail, correcting, corrected, submitted, fallback }
-    enum Reason: String { case none, unavailable, permission, audio, overflow, recognition, invalidRange, targetChanged, secureInput, editing, escape, deactivated, settingsChanged, engineChanged, correction }
+    enum Stage: String, DiagnosticLabel { case preparing, recording, stopping, finalized, cancelled, failed, tail, correcting, corrected, submitted, fallback, startRejected, resourcePreparation, availability, authorization, resources, insertionReturned }
+    enum Reason: String, DiagnosticLabel { case none, unavailable, permission, audio, overflow, recognition, invalidRange, targetChanged, secureInput, editing, escape, deactivated, settingsChanged, engineChanged, correction, cancellation }
     private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "voice")
-    static func emit(_ stage: Stage, id: UUID, reason: Reason = .none, milliseconds: Int = 0, sequence: Int = 0) {
-        logger.notice("session=\(id.uuidString, privacy: .public) stage=\(stage.rawValue, privacy: .public) reason=\(reason.rawValue, privacy: .public) ms=\(milliseconds) sequence=\(sequence)")
+    static func emit(_ stage: Stage, id: UUID, reason: Reason = .none, milliseconds: Int? = nil, sequence: Int? = nil,
+                     outcome: LocalDiagnosticEvent.Outcome? = nil, error: (any Error)? = nil) {
+        let result: LocalDiagnosticEvent.Outcome = outcome ?? (stage == .cancelled ? .cancelled : stage == .failed ? .failed
+            : [.preparing, .correcting, .submitted].contains(stage) ? .begin : .completed)
+        let safe = error.map(LocalDiagnosticEvent.safeError)
+        LocalDiagnostics.shared.submit(.init(module: .voice, event: stage, outcome: result, reason: reason,
+            correlation: id, elapsedMilliseconds: milliseconds.map(Double.init), errorDomain: safe?.0, errorCode: safe?.1,
+            context: .init(session: id, sequence: sequence)))
+        logger.notice("session=\(id.uuidString, privacy: .public) stage=\(stage.rawValue, privacy: .public) reason=\(reason.rawValue, privacy: .public) ms=\(milliseconds ?? 0) sequence=\(sequence ?? 0)")
+    }
+    static func reason(for error: any Error) -> Reason {
+        if error is CancellationError { return .cancellation }
+        return switch error as? VoiceRecognitionError {
+        case .overflow: .overflow
+        case .invalidRange: .invalidRange
+        case .permission: .permission
+        case .unavailable: .unavailable
+        case .audio: .audio
+        case nil: .recognition
+        }
     }
 }
 
@@ -181,19 +201,26 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
 
     /// Resource preparation never records audio; automatic startup cannot request permission.
     private static func prepareResources(requestPermission: Bool) async throws -> Preparation {
+        let operation = VoiceDiagnostics.preparationID ?? UUID()
+        VoiceDiagnostics.emit(.availability, id: operation, outcome: .begin)
         guard SpeechTranscriber.isAvailable,
               let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh_CN")) else {
             throw VoiceRecognitionError.unavailable
         }
+        VoiceDiagnostics.emit(.availability, id: operation, outcome: .ready)
+        VoiceDiagnostics.emit(.authorization, id: operation, outcome: .begin)
         let allowed = await microphoneAllowed(requestPermission: requestPermission)
         guard allowed else { throw VoiceRecognitionError.permission }
+        VoiceDiagnostics.emit(.authorization, id: operation, outcome: .ready)
         try Task.checkCancellation()
         let module = makeTranscriber(locale)
+        VoiceDiagnostics.emit(.resources, id: operation, outcome: .begin)
         if let request = try await AssetInventory.assetInstallationRequest(supporting: [module]) {
             try await request.downloadAndInstall()
         }
         try Task.checkCancellation()
         guard await AssetInventory.status(forModules: [module]) == .installed else { throw VoiceRecognitionError.unavailable }
+        VoiceDiagnostics.emit(.resources, id: operation, outcome: .ready)
         return Preparation(locale: locale)
     }
 
@@ -247,13 +274,17 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
     }
 
     func cancel() {
+        stopSession(reportCancellation: true)
+    }
+
+    private func stopSession(reportCancellation: Bool) {
         guard let token = id else { return }
         id = nil; callbacks = nil
         stopAudio(); feed?.finish(); feed = nil
         task?.cancel(); task = nil; resultTask?.cancel(); resultTask = nil
         if let analyzer { Task { await analyzer.cancelAndFinishNow() } }
         analyzer = nil
-        VoiceDiagnostics.emit(.cancelled, id: token)
+        if reportCancellation { VoiceDiagnostics.emit(.cancelled, id: token) }
     }
 
     private func run(id token: UUID, preparation: Preparation, snapshot: VoiceLexiconSnapshot) async throws {
@@ -344,16 +375,10 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
     private func fail(id token: UUID, error: any Error) {
         guard id == token else { return }
         let callback = callbacks?.onFailure
-        let reason: VoiceDiagnostics.Reason = switch error as? VoiceRecognitionError {
-        case .overflow: .overflow
-        case .invalidRange: .invalidRange
-        case .permission: .permission
-        case .unavailable: .unavailable
-        case .audio: .audio
-        case nil: .recognition
-        }
-        cancel()
-        VoiceDiagnostics.emit(.failed, id: token, reason: reason, milliseconds: elapsed())
+        let reason = VoiceDiagnostics.reason(for: error)
+        stopSession(reportCancellation: false)
+        VoiceDiagnostics.emit(error is CancellationError ? .cancelled : .failed,
+            id: token, reason: reason, milliseconds: elapsed(), error: error)
         callback?()
     }
     private func elapsed() -> Int {

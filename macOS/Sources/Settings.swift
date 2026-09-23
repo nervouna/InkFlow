@@ -205,13 +205,16 @@ struct SettingsView: View {
     @ObservedObject var settings: IFSettings
     var dictionaries: IFDictionaryCoordinator?
     let feedbackReporter: FeedbackReporter
+    let diagnosticDependencies: DiagnosticFeedbackDependencies
     @State private var section: SettingsSection?
 
     init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil,
-         initialSection: SettingsSection = .defaultSection, feedbackReporter: FeedbackReporter = .live) {
+         initialSection: SettingsSection = .defaultSection, feedbackReporter: FeedbackReporter = .live,
+         diagnosticDependencies: DiagnosticFeedbackDependencies = .live) {
         self.settings = settings
         self.dictionaries = dictionaries
         self.feedbackReporter = feedbackReporter
+        self.diagnosticDependencies = diagnosticDependencies
         _section = State(initialValue: initialSection)
     }
 
@@ -234,7 +237,7 @@ struct SettingsView: View {
         } detail: {
             Group {
                 if section == .about { AboutSettingsView() }
-                else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter) }
+                else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter, diagnosticDependencies: diagnosticDependencies) }
                 else if section == .appearance { appearance }
                 else if section == .shortcuts { ShortcutsSettingsView(shortcuts: settings.shortcuts) }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }

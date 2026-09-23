@@ -263,7 +263,8 @@ final class IFInputControllerVoice {
                 VoiceDiagnostics.emit(.corrected, id: id, milliseconds: Int(duration.seconds * 1000 + duration.attoseconds / 1_000_000_000_000_000), sequence: index)
                 return result
             } catch {
-                if !Task.isCancelled { VoiceDiagnostics.emit(.fallback, id: id, reason: .correction, sequence: index) }
+                VoiceDiagnostics.emit(Task.isCancelled || error is CancellationError ? .cancelled : .fallback,
+                    id: id, reason: .correction, sequence: index, error: error)
                 throw error
             }
         } }
@@ -403,6 +404,7 @@ final class IFInputControllerVoice {
             // Model ownership is gone before the client callback; nested commit/finish cannot insert twice.
             VoiceDiagnostics.emit(.submitted, id: id)
             owned.client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+            VoiceDiagnostics.emit(.insertionReturned, id: id)
             guard epoch == deliveryEpoch else { return }
             controller?.statusPresentation?.hide()
             if fallback { show(.voiceFallback, client: owned.client) }

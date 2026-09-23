@@ -11,7 +11,7 @@ for script in dependencies prepare-rime test-quality-identity test-quality-store
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
   test-dictionary-updates test-dictionary-activation test-serving-startup test-termination test-installer-core \
   test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-statistics test-ai-statistics-query test-ai-runtime test-ai-learning test-ai-headless \
-  test-startup-diagnostics test-test-runner test-test-affected test-workflow; do
+  test-startup-diagnostics test-local-diagnostics test-diagnostic-archive test-test-runner test-test-affected test-workflow; do
   cat > "$fixture/macOS/scripts/$script.sh" <<'STUB'
 #!/bin/bash
 set -euo pipefail
@@ -112,7 +112,7 @@ cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
 for required in test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
-  test-dictionary-activation test-serving-startup test-startup-diagnostics test-termination \
+  test-dictionary-activation test-serving-startup test-startup-diagnostics test-local-diagnostics test-diagnostic-archive test-termination \
   test-installer-core test-test-runner test-test-affected test-workflow; do
   [[ $(grep -c "^$required " "$INKFLOW_RUNNER_LOG") == 1 ]]
 done

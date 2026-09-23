@@ -493,7 +493,10 @@ final class IFEngine {
     }
 
     private func reportConfigurationError(_ message: String) {
-        if configurationError != message { NSLog("InkFlow input settings: %@", message) }
+        if configurationError != message {
+            LocalDiagnostics.shared.submit(.init(module: .input, event: "configurationFailed", outcome: .failed))
+            NSLog("InkFlow input settings: %@", message)
+        }
         configurationError = message
     }
 

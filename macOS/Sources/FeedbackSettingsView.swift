@@ -2,12 +2,14 @@ import SwiftUI
 
 struct FeedbackSettingsView: View {
     let reporter: FeedbackReporter
+    var diagnosticDependencies: DiagnosticFeedbackDependencies = .live
 
     @State private var includesLogs = false
     @State private var isPreparing = false
     @State private var statusMessage: String?
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 12) {
             Button("在 GitHub 提交反馈", systemImage: "exclamationmark.bubble", action: submitFeedback)
                 .buttonStyle(.borderedProminent)
@@ -27,10 +29,12 @@ struct FeedbackSettingsView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("settings.feedback.status")
             }
-            Spacer()
+            Divider().padding(.vertical, 4)
+            DiagnosticFeedbackView(dependencies: diagnosticDependencies)
         }
         .padding(20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
     }
 
     private func submitFeedback() {
