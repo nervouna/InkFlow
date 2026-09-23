@@ -13,7 +13,9 @@ impact_manual_add() {
   local item existing found
   for item in "$@"; do
     found=false
-    for existing in "${impact_manual[@]}"; do [[ $existing != "$item" ]] || found=true; done
+    if [[ ${#impact_manual[@]} -gt 0 ]]; then
+      for existing in "${impact_manual[@]}"; do [[ $existing != "$item" ]] || found=true; done
+    fi
     $found || impact_manual+=("$item")
   done
 }

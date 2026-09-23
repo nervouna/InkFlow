@@ -30,14 +30,20 @@ impact_reset
 paths=()
 while IFS= read -r -d '' path; do
   duplicate=false
-  for existing in "${paths[@]}"; do [[ $existing != "$path" ]] || duplicate=true; done
+  if [[ ${#paths[@]} -gt 0 ]]; then
+    for existing in "${paths[@]}"; do [[ $existing != "$path" ]] || duplicate=true; done
+  fi
   if ! $duplicate; then paths+=("$path"); impact_classify_git "$path" "${from_commit:-HEAD}"; fi
 done < "$scratch/paths"
 impact_expand
 printf 'Changed paths (%s):\n' "${#paths[@]}"
-for path in "${paths[@]}"; do printf '  %q\n' "$path"; done
+if [[ ${#paths[@]} -gt 0 ]]; then
+  for path in "${paths[@]}"; do printf '  %q\n' "$path"; done
+fi
 printf 'Units: %s\n' "${test_units[*]:-none}"
-for reason in "${impact_reasons[@]}"; do printf 'Reason: %s\n' "$reason"; done
+if [[ ${#impact_reasons[@]} -gt 0 ]]; then
+  for reason in "${impact_reasons[@]}"; do printf 'Reason: %s\n' "$reason"; done
+fi
 steps=(diff-check)
 if $impact_bundle || test_units_need_app; then
   steps+=(build)
