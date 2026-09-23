@@ -14,14 +14,13 @@ loaded into Python.
 Run from the repository root:
 
 ```sh
-python_bin=$(mise which python)
 ai_query=macOS/Tools/ai-statistics.py
 quality_query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
-"$python_bin" "$ai_query" summary --since 2026-09-09 --until 2026-09-10 --format json
-"$python_bin" "$ai_query" list --model YOUR_REQUESTED_MODEL --limit 20 --format json
-"$python_bin" "$ai_query" inspect ATTEMPT_ID --format json \
+python3 "$ai_query" summary --since 2026-09-09 --until 2026-09-10 --format json
+python3 "$ai_query" list --model YOUR_REQUESTED_MODEL --limit 20 --format json
+python3 "$ai_query" inspect ATTEMPT_ID --format json \
   --quality-db "$HOME/Library/Application Support/InkFlow/quality.sqlite3"
-"$python_bin" "$quality_query" timing --since 2026-09-09 --format json
+python3 "$quality_query" timing --since 2026-09-09 --format json
 ```
 
 AI defaults to `~/Library/Application Support/InkFlow/ai-statistics.sqlite3`;

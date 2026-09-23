@@ -64,18 +64,17 @@ Release verification builds once, runs `test.sh all` once and one deep bundle ch
 
 ## Portable Python query checks
 
-On macOS, `test-quality-query.sh` and `test-ai-statistics-query.sh` invoke the
-installed `devbox` launcher and its prebuilt Apple-container development image.
-The container runtime must be running. Linux executes these checks with its own
-`python3`; host Python and mise are not required for these two entry points.
+`test-quality-query.sh` and `test-ai-statistics-query.sh` use `python3` from `PATH`
+on macOS and Linux. Set `INKFLOW_PYTHON` to another Python executable name or path
+when needed; both query suites use only the standard library. No container or
+project Python environment is required.
 
-The selected repository is the only mounted source directory. Explicit AI writer
-fixture directories may be repository-relative or absolute paths inside this
-repository; absolute paths are canonicalized and translated before forwarding.
-Paths outside the repository are rejected rather than mounting additional data. The existing Swift
-capture/writer tests still run on macOS and create synthetic evidence beneath
-`build/`; query tests consume those same files through the project mount.
+Explicit AI writer fixture directories may be relative or absolute paths. The
+existing Swift capture/writer tests run on macOS and create synthetic evidence
+beneath `build/`; query tests read those files directly.
+
 `test-ai-statistics.sh` supplies the AI writer fixture pair, while the quality
 capture/query unit owns fresh engine evidence for `--require-engine`. Existing
 fixtures do not replace fresh writer/capture checks when their production code
-changes. No production telemetry database or credentials are mounted separately.
+changes. These test entry points use synthetic fixtures, not production telemetry
+databases or credentials.

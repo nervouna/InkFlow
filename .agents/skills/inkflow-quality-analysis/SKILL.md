@@ -7,16 +7,15 @@ description: Query InkFlow's locally recorded input quality, summarize candidate
 
 Use the read-only [query script](scripts/quality.py). It uses Python's standard
 library and defaults to `~/Library/Application Support/InkFlow/quality.sqlite3`.
-Resolve the existing interpreter with `mise which python`; no dependency setup is
-needed. Run commands from this repository root, or use the script's absolute path.
+Use `python3` from `PATH`; no dependency setup is needed. Run commands from this
+repository root, or use the script's absolute path.
 
 ```sh
-python_bin=$(mise which python)
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
-"$python_bin" "$query" summary --format json
-"$python_bin" "$query" ranking-issues --format json
-"$python_bin" "$query" inspect COMPOSITION_ID --format json
-"$python_bin" "$query" timing --format json
+python3 "$query" summary --format json
+python3 "$query" ranking-issues --format json
+python3 "$query" inspect COMPOSITION_ID --format json
+python3 "$query" timing --format json
 ```
 
 For a quick quality overview, use `summary`. For repeatedly choosing another
