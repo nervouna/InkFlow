@@ -66,6 +66,25 @@ local function update(memory, code, text, commits)
   return wrote and updated and finished
 end
 
+local function seed_overflow(memory, code, text)
+  if not memory:start_session() then return false end
+  local written, updated = pcall(function()
+    for value = 0, 511 do
+      local entry = DictEntry()
+      entry.text = "Bulk" .. tostring(value)
+      entry.custom_code = string.format("a%c%c%c ",
+        97 + math.floor(value / 676), 97 + math.floor(value / 26) % 26, 97 + value % 26)
+      if not memory:update_userdict(entry, 1, "") then return false end
+    end
+    local entry = DictEntry()
+    entry.text = text
+    entry.custom_code = code .. " "
+    return memory:update_userdict(entry, 1, "")
+  end)
+  local finished = memory:finish_session()
+  return written and updated and finished
+end
+
 function M.init(env)
   env.shared = Memory(env.engine, env.engine.schema, "inkflow_contract_shared")
   env.voice = Memory(env.engine, env.engine.schema, "inkflow_contract_voice")
@@ -105,6 +124,13 @@ function M.init(env)
       local commits = tonumber(extra)
       if commits ~= 1 and commits ~= -1 then set_result(context, "invalid"); return end
       local called, updated = with_memory(env, namespace, function(fresh) return update(fresh, code, text, commits) end)
+      set_result(context, called and updated and "ok" or "failed")
+      return
+    end
+    if operation == "batch" then
+      local called, updated = with_memory(env, namespace, function(fresh)
+        return seed_overflow(fresh, code, text)
+      end)
       set_result(context, called and updated and "ok" or "failed")
       return
     end

@@ -61,6 +61,8 @@ mixed:
   preedit_format:
     - xform/([nl])v/$1ü/
     - xform/([jqxy])v/$1u/
+mixed_personal:
+  max_input_length: 64
 key_binder:
   bindings:
     - { when: has_menu, accept: minus, send: Page_Up }

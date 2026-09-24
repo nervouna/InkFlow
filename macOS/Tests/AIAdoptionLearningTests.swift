@@ -27,6 +27,11 @@ struct AIAdoptionLearningTests {
             print("PASS keyboard English learning \(scenario)")
             return
         }
+        if scenario.hasPrefix("mixed-") {
+            try mixedPersonalEnglish(engine: engine, scenario: scenario)
+            print("PASS mixed personal English \(scenario)")
+            return
+        }
         let initialVoice = engine.readVoiceLexicon(generation: 1, revision: 1)
         check(initialVoice.availability == .available, "Bundled Lua supports bounded user dictionary lookup")
         let words = [("xingmoliang", "星墨量"), ("xingmolan", "星墨蓝"), ("xingmohai", "星墨海"), ("xingmohao", "星墨好")]
@@ -218,9 +223,132 @@ struct AIAdoptionLearningTests {
         case "contract-personal-seed":
             check(request("update\tshared\tplugin\tPrivatePlugin\t1") == "ok", "Seed a personal-only exact record")
             expectEntry("shared", "plugin", "PrivatePlugin", "Personal exact seed persists")
+        case "contract-mixed-seed":
+            for (code, text) in [("codex", "Codex"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
+                                 ("offline", "offline"), ("can", "can")] {
+                check(request("update\tshared\t\(code)\t\(text)\t1") == "ok", "Seed mixed personal exact record \(text)")
+                expectEntry("shared", code, text, "Mixed personal exact seed persists")
+            }
+            check(request("update\tshared\tcodex\tCODEX\t1") == "ok",
+                  "Seed a second display variant for one exact code")
+            check(request("batch\tshared\tzzoverflow\tOverflow") == "ok",
+                  "Seed an exact record after 512 earlier dictionary keys")
+            expectEntry("shared", "zzoverflow", "Overflow", "Exact records after 512 keys remain queryable")
+        case "contract-mixed-verify":
+            let codex = query("shared", "codex")
+            check(codex.hasPrefix("ok\t2\t") && codex.contains("\tCodex\tcodex\t1")
+                    && codex.contains("\tCODEX\tcodex\t1"),
+                  "All exact display variants remain unchanged: \(codex)")
+            for (code, text) in [("swiftui", "SwiftUI"), ("cpp", "C++"),
+                                 ("offline", "offline"), ("can", "can")] {
+                let result = query("shared", code)
+                check(result == "ok\t1\t\(text)\t\(code)\t1",
+                      "Mixed display and selection must not update shared learning: \(result)")
+            }
+            expectEntry("shared", "zzoverflow", "Overflow", "Mixed lookup has no first-512 admission cutoff")
+            expectAbsent("shared", "offli", "Mixed personal lookup never creates a completion record")
         default:
             check(false, "Unknown learning contract scenario")
         }
+    }
+
+    @MainActor private static func mixedPersonalEnglish(engine: IFEngine, scenario: String) throws {
+        check(["mixed-read", "mixed-restart", "mixed-bounded"].contains(scenario), "Unknown mixed personal scenario")
+
+        func allCandidates() -> [String] {
+            var result: [String] = []
+            for _ in 0..<1000 {
+                let page = engine.snapshot()
+                result += page.candidates
+                engine.key(0xff56)
+                if engine.snapshot().page == page.page {
+                    for _ in 0..<page.page { engine.key(0xff55) }
+                    return result
+                }
+            }
+            check(false, "Mixed personal candidate enumeration must terminate")
+            return result
+        }
+
+        func candidates(_ input: String) -> [String] {
+            engine.clear(); type(engine, input)
+            let result = allCandidates()
+            engine.clear()
+            return result
+        }
+
+        if scenario == "mixed-bounded" {
+            let boundary = "awoyongofflinehenhao"
+            check(boundary.utf8.count == 20 && candidates(boundary).contains { $0.contains("offline") },
+                  "Personal lookup remains active at the configured composition bound")
+            check(!candidates("a" + boundary).contains { $0.contains("offline") },
+                  "Overlong composition fails closed without personal dictionary lookup")
+            return
+        }
+
+        let exactCases = [
+            ("codexhenhao", "Codex很好"),
+            ("woyongswiftuihenhao", "我用SwiftUI很好"),
+            ("woyongcpp", "我用C++"),
+            ("offlinehenhao", "offline很好"),
+            ("zzoverflowhenhao", "Overflow很好")
+        ]
+        for (input, expected) in exactCases {
+            let result = candidates(input)
+            check(result.contains(expected), "Personal exact mixed candidate \(input) -> \(expected): \(result)")
+            check(result.filter { $0 == expected }.count == 1, "Personal/static mixed candidates deduplicate \(expected)")
+        }
+        let codexVariants = candidates("codexhenhao")
+        check(codexVariants.contains("Codex很好") && codexVariants.contains("CODEX很好"),
+              "Non-predictive lookup returns every display for one personal exact code")
+        check(!candidates("helloofflineworldhenhao").contains("helloofflineworld很好"),
+              "Personal exact spans cannot join adjacent public words into one unadmitted ASCII run")
+
+        let noCompletion = candidates("offlihenhao")
+        check(!noCompletion.contains("offline很好"), "Personal mixed records do not provide prefix completion")
+
+        engine.clear(); type(engine, "woyongcpx"); engine.key(0xff08); type(engine, "p")
+        check(allCandidates().contains("我用C++"), "Backspace editing preserves personal symbol candidate")
+        engine.clear(); type(engine, "woyongcpx"); engine.key(0xff51); engine.key(0xff08); type(engine, "p")
+        engine.key(0xffff); type(engine, "p")
+        check(allCandidates().contains("我用C++"), "Cursor editing preserves personal symbol candidate")
+        engine.clear()
+
+        type(engine, "woyongcpp")
+        let selectable = allCandidates()
+        guard let cpp = selectable.firstIndex(of: "我用C++") else {
+            check(false, "Personal mixed candidate remains selectable across pages")
+            return
+        }
+        for _ in 0..<(cpp / 9) { engine.key(0xff56) }
+        engine.select(cpp % 9)
+        check(engine.takeCommit() == "我用C++" && engine.snapshot().preedit.isEmpty,
+              "Selecting displayed personal mixed text commits native candidate exactly")
+        engine.key(0xff09)
+
+        engine.setConfiguration(candidateCount: 9,
+                                customPhrases: [CustomPhrase(id: UUID(), code: "codexhenhao", text: "自定义词")],
+                                inputPreferences: .init())
+        type(engine, "codexhenhao")
+        check(engine.snapshot().candidates.first == "自定义词", "Custom phrase keeps explicit priority")
+        check(allCandidates().contains("Codex很好"), "Custom phrase coexists with personal mixed candidate")
+        engine.clear()
+
+        type(engine, "can")
+        check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+              "Personal short English does not replace complete Chinese coverage")
+        engine.clear(); type(engine, "canpin")
+        check(engine.snapshot().candidates.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+              "Personal short English does not split a Chinese continuation")
+        check(!allCandidates().contains { $0.contains("can") },
+              "Legal Pinyin continuation does not expose a personal short-word split")
+        engine.clear(); type(engine, "nihao")
+        check(engine.snapshot().candidates.first == "你好", "Personal mixed lookup preserves Chinese baseline")
+        engine.clear()
+
+        type(engine, "UnknownCamelToken")
+        check(engine.key(0xff0d) && engine.takeCommit() == "UnknownCamelToken",
+              "Unknown camel-case Return commits raw input without mixed synthesis")
     }
 
     @MainActor private static func keyboardEnglishLearning(engine: IFEngine, user: String, scenario: String) throws {

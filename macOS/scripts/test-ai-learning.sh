@@ -77,3 +77,12 @@ awk -F '\t' -v paged="$paged" '
   END { if (hello != 1 || computer != 1 || private != 1 || caseful != 1 || paged_count != 1) exit 1 }
 ' "$english_user/keyboard-english.txt"
 echo 'PASS canonical keyboard English learning: first/repeated/negative/restart, paging/editing, dedup, exact/completion, fidelity, private exact admission, short conflicts, Chinese baseline'
+
+mixed_user="$user_dir/mixed-user"
+mkdir -p "$mixed_user"
+build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-seed
+build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" mixed-bounded
+build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-read
+build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-restart
+build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-verify
+echo 'PASS mixed personal English: shared exact lookup, initial/internal/final, restart, no completion, fidelity, editing, paging, dedup, selection, collisions, custom phrases'

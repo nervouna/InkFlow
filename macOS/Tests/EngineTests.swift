@@ -347,8 +347,10 @@ struct EngineTests {
                 check(false, "Missing representative technology source row: \(display)"); return
             }
             selectCandidate(display, input: code, engine: engine)
+            engine.key(0xff09)
         }
         selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
+        engine.key(0xff09)
         type(engine, "swiftui")
         for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
             let candidates = allCandidates(engine)
@@ -356,12 +358,17 @@ struct EngineTests {
             engine.key(0xff08)
         }
         engine.clear()
-        for input in ["woapi", "apihenhao", "wocpp", "wotypec", "claudecodehenhao"] {
+        for (input, expected) in [("woapi", "API"), ("apihenhao", "API"),
+                                  ("wocpp", "C++"), ("wotypec", "Type-C")] {
             type(engine, input)
-            check(!allCandidates(engine).contains { $0.contains("API") || $0.contains("C++") || $0.contains("Type-C") || $0.contains("Claude Code") },
-                  "Short/punctuated/spaced technical aliases do not bypass mixed structural restrictions")
+            check(allCandidates(engine).contains { $0.contains(expected) },
+                  "Selected personal ASCII run bypasses public mixed structural restrictions: \(input)")
             engine.clear()
         }
+        type(engine, "claudecodehenhao")
+        check(!allCandidates(engine).contains { $0.contains("Claude Code") },
+              "A spaced personal phrase is not a single mixed ASCII run")
+        engine.clear()
         engine.setConfiguration(candidateCount: 5, customPhrases: [CustomPhrase(id: UUID(), code: "api", text: "我的接口")])
         engine.setPrecedingText("调用")
         type(engine, "api")
