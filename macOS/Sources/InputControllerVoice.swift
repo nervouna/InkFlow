@@ -203,7 +203,7 @@ final class IFInputControllerVoice {
             if !isDelivering || !held { resetGesture() }
             guard isActive else { return false }
             if event.keyCode == UInt16(kVK_Escape) {
-                let passesToSelectedTextHost = selectedTextTransaction && ownsVoiceMark
+                let passesToSelectedTextHost = selectedTextTransaction
                 cancel(.escape)
                 return !passesToSelectedTextHost
             }
@@ -248,6 +248,7 @@ final class IFInputControllerVoice {
         // TSMDocumentAccess is optional. Unknown selection is not an inability to type.
         let selection = captured.client.selectedRange()
         guard epoch == expected else { reject(.stale); return }
+        guard !controller.secureInput() else { reject(.secure); return }
         let unknownSelection = selection.location == NSNotFound && (selection.length == NSNotFound || selection.length == 0)
         guard unknownSelection || AIClientAnchor.valid(selection) else {
             reject(.selection); return

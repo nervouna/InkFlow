@@ -65,6 +65,8 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var testBundleIdentifierProvider: (() -> String?)?
     package var testClientID: String? = "inkflow.recording-client"
     package var testIdentifierProvider: (() -> String?)?
+    package var bundleIdentifierReads = 0
+    package var uniqueIdentifierReads = 0
     package var document: String?
     package var selection = NSRange(location: NSNotFound, length: 0)
     package var reportedSelection: NSRange?
@@ -133,12 +135,14 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package func selectMode(_ identifier: String!) {}
     package func supportsUnicode() -> Bool { true }
     package func bundleIdentifier() -> String! {
+        bundleIdentifierReads += 1
         if let testBundleIdentifierProvider { return testBundleIdentifierProvider() }
         return testBundleID
     }
     package func windowLevel() -> CGWindowLevel { 0 }
     package func supportsProperty(_ property: TSMDocumentPropertyTag) -> Bool { false }
     package func uniqueClientIdentifierString() -> String! {
+        uniqueIdentifierReads += 1
         if let testIdentifierProvider { return testIdentifierProvider() }
         return testClientID
     }

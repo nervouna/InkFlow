@@ -114,6 +114,7 @@ struct VoiceControllerTests {
         await reportedSelectionMismatch()
         await foreignMarkedTextGuard()
         await secureMarkedTextGuard()
+        await secureSelectedRangeStart()
         await zeroLengthForeignMarkedTextGuard()
         await selectedTextTargetLoss()
         await startRejectionDiagnostics()
@@ -711,6 +712,17 @@ struct VoiceControllerTests {
                   "Escape remains consumed for a voice mark that did not replace selected text")
             check(!plain.controller.voice.isActive)
         }
+        do {
+            let selected = VoiceHarness(); defer { selected.close() }
+            selected.client.selection = NSRange(location: 0, length: 1)
+            await selected.start()
+            let mutations = selected.client.mutations.count
+            check(!selected.controller.handle(keyEvent(53, ""), client: selected.client),
+                  "Escape passes to the host for selected-text voice before the first preview")
+            check(!selected.controller.voice.isActive && selected.client.mutations.count == mutations,
+                  "Pre-preview selected-text Escape cancels without a client write")
+            check(selected.controller.engine?.snapshot().preedit.isEmpty == true)
+        }
         let h = VoiceHarness(); defer { h.close() }
         h.client.document = "A😀BC"
         h.client.selection = NSRange(location: 1, length: 3)
@@ -759,6 +771,7 @@ struct VoiceControllerTests {
             check(h.client.markedRangeReads == 0,
                   "Secure ordinary input and voice shortcuts never read markedRange")
             check(!h.controller.voice.isActive && h.fake.starts == 0)
+            h.controller.engine?.clear()
         }
         do {
             let h = VoiceHarness(); defer { h.close() }
@@ -769,6 +782,7 @@ struct VoiceControllerTests {
             _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
             check(h.client.markedRangeReads == 1 && h.client.selectedRangeReads == 0 && h.client.requests.isEmpty,
                   "A secure transition inside foreign-mark routing blocks all later document reads")
+            h.controller.engine?.clear()
         }
         do {
             let h = VoiceHarness(); defer { h.close() }
@@ -784,7 +798,33 @@ struct VoiceControllerTests {
                   h.client.markedRangeReads == readsAtTransition?.marked &&
                   h.client.requests.count == readsAtTransition?.strings,
                   "A secure transition inside client identity lookup blocks later context reads")
+            h.controller.engine?.clear()
         }
+    }
+
+    @MainActor static func secureSelectedRangeStart() async {
+        let h = VoiceHarness(); defer { h.close() }
+        var reasons: [VoiceDiagnostics.StartRejection] = []
+        var readsAtTransition: (marked: Int, bundle: Int, identifier: Int, strings: Int)?
+        h.controller.voice.reportStartRejection = { reasons.append($0) }
+        h.client.onSelectedRange = {
+            h.client.onSelectedRange = nil
+            readsAtTransition = (h.client.markedRangeReads, h.client.bundleIdentifierReads,
+                                 h.client.uniqueIdentifierReads, h.client.requests.count)
+            h.secure = true
+        }
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(reasons.last == .secure && !h.controller.voice.isActive && h.fake.starts == 0,
+              "Secure activation inside selectedRange rejects voice start before ownership")
+        check(h.status.visible == nil && !h.status.values.contains(.voiceRecordingToggle) &&
+              !h.status.values.contains(.voiceRecordingHold),
+              "Reentrant secure rejection never presents recording status")
+        check(readsAtTransition != nil && h.client.markedRangeReads == readsAtTransition?.marked &&
+              h.client.bundleIdentifierReads == readsAtTransition?.bundle &&
+              h.client.uniqueIdentifierReads == readsAtTransition?.identifier &&
+              h.client.requests.count == readsAtTransition?.strings,
+              "No client read follows a selectedRange callback that activates secure input")
     }
 
     @MainActor static func zeroLengthForeignMarkedTextGuard() async {
