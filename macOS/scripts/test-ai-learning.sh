@@ -54,3 +54,26 @@ build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-re
 (cd "$contract_user" && "$manager" -e inkflow_shared_english shared.txt)
 (cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
 echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
+
+english_negative_user="$user_dir/english-negative-user"
+mkdir -p "$english_negative_user"
+build/ai-adoption-learning-tests "$shared" "$english_negative_user" english-negative
+build/ai-adoption-learning-tests "$contract_shared" "$english_negative_user" contract-keyboard-negative
+
+english_user="$user_dir/english-user"
+mkdir -p "$english_user"
+build/ai-adoption-learning-tests "$shared" "$english_user" english-write
+build/ai-adoption-learning-tests "$contract_shared" "$english_user" contract-keyboard-read
+build/ai-adoption-learning-tests "$contract_shared" "$english_user" contract-personal-seed
+build/ai-adoption-learning-tests "$shared" "$english_user" english-read
+(cd "$english_user" && "$manager" -e inkflow_shared_english keyboard-english.txt)
+IFS= read -r paged < "$english_user/expected-paged-english.txt"
+awk -F '\t' -v paged="$paged" '
+  $1 == "hello" { if ($2 != "hello" || $3 != 3) exit 1; hello++ }
+  $1 == "computer" { if ($2 != "computer" || $3 != 1) exit 1; computer++ }
+  $1 == "PrivatePlugin" { if ($2 != "plugin" || $3 != 2) exit 1; private++ }
+  $1 == "Hello" { if ($2 != "hello" || $3 != 1) exit 1; caseful++ }
+  $1 == paged { if ($2 != paged || $3 != 1) exit 1; paged_count++ }
+  END { if (hello != 1 || computer != 1 || private != 1 || caseful != 1 || paged_count != 1) exit 1 }
+' "$english_user/keyboard-english.txt"
+echo 'PASS canonical keyboard English learning: first/repeated/negative/restart, paging/editing, dedup, exact/completion, fidelity, private exact admission, short conflicts, Chinese baseline'

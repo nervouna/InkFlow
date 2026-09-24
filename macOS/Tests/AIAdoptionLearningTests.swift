@@ -22,6 +22,11 @@ struct AIAdoptionLearningTests {
             print("PASS Rime learning contract \(scenario)")
             return
         }
+        if scenario.hasPrefix("english-") {
+            try keyboardEnglishLearning(engine: engine, user: user, scenario: scenario)
+            print("PASS keyboard English learning \(scenario)")
+            return
+        }
         let initialVoice = engine.readVoiceLexicon(generation: 1, revision: 1)
         check(initialVoice.availability == .available, "Bundled Lua supports bounded user dictionary lookup")
         let words = [("xingmoliang", "星墨量"), ("xingmolan", "星墨蓝"), ("xingmohai", "星墨海"), ("xingmohao", "星墨好")]
@@ -101,7 +106,9 @@ struct AIAdoptionLearningTests {
             check(candidates("zhangwei").first == existing, "Existing preference persists")
             let files = try FileManager.default.contentsOfDirectory(atPath: user)
             check(files.contains("pinyin_simp.userdb"))
-            check(!files.contains(where: { $0.hasSuffix(".userdb") && $0 != "pinyin_simp.userdb" }), "Only existing userdb")
+            check(files.contains("inkflow_shared_english.userdb"), "Named shared English user dictionary is independent")
+            check(!files.contains(where: { $0.hasSuffix(".userdb") && $0 != "pinyin_simp.userdb" && $0 != "inkflow_shared_english.userdb" }),
+                  "AI adoption does not create unrelated user dictionaries")
         }
         engine.clear()
         IFEngine.signalIdle()
@@ -195,8 +202,148 @@ struct AIAdoptionLearningTests {
             check(files.contains("pinyin_simp.userdb"), "Original Chinese user dictionary remains")
             check(files.contains("inkflow_shared_english.userdb"), "Shared English namespace is independent")
             check(files.contains("inkflow_voice_alias.userdb"), "Voice alias namespace is independent")
+        case "contract-keyboard-negative":
+            for code in ["email", "world", "apple", "community", "nihao"] {
+                expectAbsent("shared", code, "Display, Return, cancellation, paging, editing, and Chinese selection must not learn \(code)")
+            }
+        case "contract-keyboard-read":
+            let hello = query("shared", "hello")
+            check(hello.hasPrefix("ok\t2\t") && hello.contains("\thello\thello\t3") && hello.contains("\tHello\thello\t1"),
+                  "Caseful display variants share the normalized lowercase code: \(hello)")
+            expectEntry("shared", "computer", "computer", "Completion selection learns its canonical full code")
+            for (code, text) in [("swiftui", "SwiftUI"), ("cpp", "C++"), ("typec", "Type-C"),
+                                 ("claudecode", "Claude Code"), ("dotnet", ".NET"), ("can", "can")] {
+                expectEntry("shared", code, text, "Selected case/symbol/short-conflict candidate persists")
+            }
+        case "contract-personal-seed":
+            check(request("update\tshared\tplugin\tPrivatePlugin\t1") == "ok", "Seed a personal-only exact record")
+            expectEntry("shared", "plugin", "PrivatePlugin", "Personal exact seed persists")
         default:
             check(false, "Unknown learning contract scenario")
+        }
+    }
+
+    @MainActor private static func keyboardEnglishLearning(engine: IFEngine, user: String, scenario: String) throws {
+        func allCandidates() -> [String] {
+            var result: [String] = []
+            for _ in 0..<1000 {
+                let page = engine.snapshot()
+                result += page.candidates
+                engine.key(0xff56)
+                if engine.snapshot().page == page.page {
+                    for _ in 0..<page.page { engine.key(0xff55) }
+                    return result
+                }
+            }
+            check(false, "English candidate enumeration must terminate")
+            return result
+        }
+        func select(_ text: String, input: String) {
+            engine.clear(); type(engine, input)
+            for _ in 0..<1000 {
+                let page = engine.snapshot()
+                if let index = page.candidates.firstIndex(of: text) {
+                    engine.select(index)
+                    check(engine.takeCommit() == text, "Selected English candidate keeps exact display \(input) -> \(text)")
+                    engine.key(0xff09)
+                    return
+                }
+                engine.key(0xff56)
+                if engine.snapshot().page == page.page { break }
+            }
+            check(false, "Missing English candidate \(input) -> \(text)")
+        }
+
+        switch scenario {
+        case "english-negative":
+            engine.clear(); type(engine, "plugin")
+            check(!allCandidates().contains("plugin"), "An excluded public exact word does not bypass the Zipf gate")
+            engine.clear()
+            type(engine, "email")
+            check(allCandidates().contains("email"), "Display-only English fixture")
+            engine.clear()
+            type(engine, "email")
+            guard let email = engine.snapshot().candidates.firstIndex(of: "email") else { check(false, "Undo English fixture"); return }
+            engine.select(email); check(engine.takeCommit() == "email"); engine.key(0xff08)
+            type(engine, "world")
+            check(engine.key(0xff0d) && engine.takeCommit() == "world", "Return commits raw English without selecting a candidate")
+            type(engine, "apple"); check(engine.key(0xff1b))
+            check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty, "Cancel English without learning")
+            type(engine, "comm"); check(engine.key(0xff56)); engine.clear()
+            type(engine, "hellp"); check(engine.key(0xff08)); type(engine, "o"); engine.clear()
+            type(engine, "nihao")
+            let chinese = engine.snapshot().candidates
+            guard let index = chinese.firstIndex(of: "你好") else { check(false, "Chinese baseline fixture"); return }
+            engine.select(index); check(engine.takeCommit() == "你好"); engine.key(0xff09)
+            engine.setConfiguration(candidateCount: 9,
+                                    customPhrases: [CustomPhrase(id: UUID(), code: "email", text: "email")],
+                                    inputPreferences: .init())
+            type(engine, "email")
+            check(engine.snapshot().candidates.first == "email", "Same-text custom phrase shadows standalone English")
+            engine.select(0); check(engine.takeCommit() == "email"); engine.key(0xff09)
+        case "english-write":
+            engine.clear(); type(engine, "emai")
+            let email = allCandidates()
+            check(email.firstIndex(of: "email")! < email.firstIndex(of: "emails")!, "Exact English remains before completion")
+            check(Set(email).count == email.count, "Static English candidates are deduplicated")
+            engine.clear()
+
+            select("hello", input: "hello")
+            select("hello", input: "hello")
+            engine.clear(); type(engine, "hellp"); check(engine.key(0xff08)); type(engine, "o")
+            guard let hello = engine.snapshot().candidates.firstIndex(of: "hello") else { check(false, "Edited hello candidate"); return }
+            engine.select(hello); check(engine.takeCommit() == "hello"); engine.key(0xff09)
+            select("computer", input: "comput")
+            for (input, text) in [("Hello", "Hello"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
+                                  ("typec", "Type-C"), ("claudecode", "Claude Code"), ("dotnet", ".NET")] {
+                select(text, input: input)
+            }
+            engine.clear(); type(engine, "comm")
+            let first = engine.snapshot().candidates
+            check(engine.key(0xff56), "Page through English completions before selection")
+            let second = engine.snapshot().candidates
+            check(!second.isEmpty && second != first, "English paging fixture has a second page")
+            let paged = second[0]
+            check(engine.key(49) && engine.takeCommit() == paged, "Select an English completion from a later page")
+            engine.key(0xff09)
+            try (paged + "\n").write(toFile: user + "/expected-paged-english.txt", atomically: true, encoding: .utf8)
+
+            engine.clear(); type(engine, "can")
+            let conflict = engine.snapshot().candidates
+            check(conflict.first != "can" && conflict.firstIndex(of: "can") != nil, "Chinese remains first for a short conflict")
+            engine.select(conflict.firstIndex(of: "can")!); check(engine.takeCommit() == "can"); engine.key(0xff09)
+            engine.clear(); type(engine, "nihao")
+            check(engine.snapshot().candidates.first == "你好", "English learning does not change the Chinese baseline")
+            engine.clear()
+        case "english-read":
+            engine.clear(); type(engine, "plugin")
+            let personal = allCandidates()
+            check(personal.contains("PrivatePlugin"), "A personal exact record may bypass the public Zipf gate")
+            check(personal.filter { $0 == "PrivatePlugin" }.count == 1, "Personal exact records are deduplicated")
+            select("PrivatePlugin", input: "plugin")
+            engine.clear(); type(engine, "comput")
+            let completion = allCandidates()
+            check(completion.firstIndex(of: "computer")! < completion.firstIndex(of: "computers")!, "Restart preserves exact-before-completion")
+            check(completion.filter { $0 == "computer" }.count == 1, "Personal/static rows merge without duplicates")
+            engine.clear()
+            for (input, text) in [("Hello", "Hello"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
+                                  ("typec", "Type-C"), ("claudecode", "Claude Code"), ("dotnet", ".NET")] {
+                type(engine, input)
+                check(allCandidates().contains(text), "Restart keeps selected English fidelity \(input) -> \(text)")
+                engine.clear()
+            }
+            type(engine, "hello")
+            check(allCandidates().contains("Hello"), "Lowercase normalized code recalls the selected caseful display after restart")
+            engine.clear()
+            let paged = try String(contentsOfFile: user + "/expected-paged-english.txt", encoding: .utf8)
+                .trimmingCharacters(in: .newlines)
+            type(engine, "comm")
+            check(allCandidates().contains(paged), "Paged selection remains reachable after restart")
+            engine.clear(); type(engine, "nihao")
+            check(engine.snapshot().candidates.first == "你好", "Restart keeps ordinary Chinese ranking")
+            engine.clear()
+        default:
+            check(false, "Unknown keyboard English scenario")
         }
     }
 }
