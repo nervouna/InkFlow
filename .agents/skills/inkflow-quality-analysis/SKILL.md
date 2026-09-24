@@ -21,8 +21,10 @@ python3 "$query" timing --format json
 ```
 
 For a routine quality review, use `trend`. Default to 7 days for a short operational
-check and 28 days for a broader review. Present the SVG chart and summarize daily,
-7-day rolling and 28-day rolling rates. Keep generated charts in a task-owned
+check and 28 days for a broader review. Present the SVG chart and summarize Top1 and
+Top3 selection rates for daily, 7-day rolling and 28-day rolling windows. Both rates
+share the same validated known-display-rank denominator; Top3 means display rank 1–3.
+Keep generated charts in a task-owned
 temporary directory unless the user requests a durable artifact.
 
 Calendar date is the primary statistical axis. App versions are annotations at
@@ -59,7 +61,7 @@ full fingerprint; its meaning has not changed. Revision UUIDs and shortened
 prefixes do not match. Dates mean local midnight; `--until` is exclusive. Use
 explicit offsets for timestamp precision.
 
-Report the database/time scope, valid and unknown evidence, daily and rolling
+Report the database/time scope, valid and unknown evidence, daily and rolling Top1/Top3
 denominators, version markers, output-kind coverage and all four identity coverage
 sections. Never combine quality rates across measurement fingerprints; an unknown
 measurement fingerprint is its own unavailable cohort. Inspect supporting compositions before

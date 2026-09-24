@@ -73,7 +73,7 @@ empty collection. Null is `null` in JSON/CSV and `N/A` in tables. Rates are frac
 in [0,1], not percentages. Empty groups/lists are valid. Pooled coverage is a
 whole-filter description; configuration or text-kind comparisons use the separate
 groups rather than treating the pooled rate as a causal quality score. Pooled raw
-counts remain available, but `top1_rate` and `top1_match_rate` are null unless the
+counts remain available, but `top1_rate`, `top3_rate` and `top1_match_rate` are null unless the
 entire pooled cohort has exactly one known measurement fingerprint. The adjacent
 `quality_rate_status` says whether rates are available, cross-measurement,
 unknown-measurement, or without measurement evidence. Each known single-measurement
@@ -97,6 +97,7 @@ cancelled and interrupted. Unknown paths never become successful choices.
 | comparable | known_rank with validated selected prefix and a matching-generation first-page snapshot with actual first candidate |
 | first_page_unavailable | known_rank minus comparable; absent, mismatched or invalid-prefix first-page evidence |
 | top1_selected / top1_rate | Known displayed rank 1 count / known_rank |
+| top3_selected / top3_rate | Known displayed rank 1–3 count / known_rank; shares the Top1 denominator |
 | top1_matches / top1_match_rate | Selected text equals actual first-page top1 count / comparable |
 | mean_display_rank | Mean among known_rank |
 | mean_native_rank | Mean of available, internally consistent native ranks among known_rank |
