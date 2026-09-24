@@ -58,7 +58,9 @@ def fixture(path):
         fp, ranking, settings, measurement, build = values
         insert(db, 'config_revisions', id=rid, fingerprint=fp, created_at=STAMP,
                applied_config_json=json.dumps({'revision': rid}),
-               build_metadata_json=json.dumps({'sourceRevision': build, 'raw': rid}),
+               build_metadata_json=json.dumps({
+                   'sourceRevision': build, 'appVersion': '1.1' if rid == 'rev3' else '1.0',
+                   'appBuild': '2' if rid == 'rev3' else '1', 'raw': rid}),
                engine_version='1.17.0', metric_rule_version=1,
                ranking_fingerprint=ranking, settings_fingerprint=settings,
                measurement_fingerprint=measurement, build_identity=build)
@@ -176,6 +178,42 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(result['recording_runs']['scope'], 'whole_db_lifetime_unfiltered')
         self.assertEqual(result['recording_runs']['totals']['droppedQueue'], 3)
 
+    def test_trend_is_calendar_continuous_rolls_counts_and_marks_versions(self):
+        previous = os.environ.get('TZ')
+        chart = Path(self.temp.name) / 'trend.svg'
+        try:
+            os.environ['TZ']='Asia/Taipei'; time.tzset()
+            result = self.result('trend', '--days', '7', '--until', '2026-09-08', '--chart', str(chart))
+        finally:
+            if previous is None: os.environ.pop('TZ',None)
+            else: os.environ['TZ']=previous
+            time.tzset()
+        self.assertEqual(result['window']['days'], 7)
+        self.assertEqual(result['window']['first_day'], '2026-09-01')
+        self.assertEqual(result['window']['last_day'], '2026-09-07')
+        overall = result['series']['overall']
+        self.assertEqual([point['date'] for point in overall], [
+            '2026-09-01','2026-09-02','2026-09-03','2026-09-04',
+            '2026-09-05','2026-09-06','2026-09-07'])
+        self.assertTrue(all(point['daily']['decisions'] == 0 for point in overall[:-1]))
+        self.assertEqual(overall[-1]['daily']['decisions'], 20)
+        self.assertEqual(overall[-1]['rolling_7d']['decisions'], 20)
+        self.assertEqual(overall[-1]['rolling_28d']['decisions'], 20)
+        self.assertEqual({marker['app_version'] for marker in result['version_markers']}, {'1.0','1.1'})
+        self.assertEqual(result['attribution'], 'version_markers_only_not_statistical_partitions')
+        self.assertTrue(chart.is_file())
+        self.assertIn('<svg', chart.read_text())
+
+    def test_trend_uses_latest_measurement_and_reports_exclusions(self):
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE config_revisions SET measurement_fingerprint='measurement-B' WHERE id='rev2'")
+        result = self.result('trend', '--days', '7', '--until', '2026-09-08')
+        daily = result['series']['overall'][-1]['daily']
+        self.assertIsNotNone(daily['top1_rate'])
+        self.assertEqual(daily['quality_rate_status'], 'available_within_measurement_fingerprint')
+        self.assertEqual(result['metric_scope']['rule_fingerprint'], 'measurement-A')
+        self.assertEqual(result['metric_scope']['excluded_decisions'], 1)
+
     def test_issues_grouping_and_inspect_ids(self):
         result = self.result('ranking-issues')
         self.assertEqual(len(result['issues']), 1)
@@ -242,7 +280,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(revision['build_identity'], 'build-A')
         self.assertEqual(revision['fingerprint'], 'fingerprint-A')
         self.assertEqual(revision['applied_config'], {'revision': 'rev1'})
-        self.assertEqual(revision['build_metadata'], {'sourceRevision': 'build-A', 'raw': 'rev1'})
+        self.assertEqual(revision['build_metadata'], {
+            'sourceRevision': 'build-A', 'appVersion': '1.0', 'appBuild': '1', 'raw': 'rev1'})
         self.assertEqual(revision['engine_version'], '1.17.0')
         self.assertEqual(revision['metric_rule_version'], 1)
         self.assertEqual(inspected['identity_coverage']['cohort'], 'returned_configuration_revisions')

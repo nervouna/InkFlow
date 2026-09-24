@@ -1,6 +1,6 @@
 ---
 name: inkflow-quality-analysis
-description: Query InkFlow's locally recorded input quality, summarize candidate ranking coverage, find recurring first-choice versus chosen pairs, and inspect composition evidence. Use for recorded evidence questions, not ranking changes or live input diagnosis.
+description: Review InkFlow's locally recorded input quality with 7-day or 28-day calendar trends, rolling metrics, version annotations, charts, recurring candidate choices, and composition evidence. Use for recorded quality evidence, not ranking changes or live input diagnosis.
 ---
 
 # InkFlow Quality Analysis
@@ -12,13 +12,29 @@ repository root, or use the script's absolute path.
 
 ```sh
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
+python3 "$query" trend --days 7 --chart /tmp/inkflow-quality-7d.svg --format json
+python3 "$query" trend --days 28 --chart /tmp/inkflow-quality-28d.svg --format json
 python3 "$query" summary --format json
 python3 "$query" ranking-issues --format json
 python3 "$query" inspect COMPOSITION_ID --format json
 python3 "$query" timing --format json
 ```
 
-For a quick quality overview, use `summary`. For repeatedly choosing another
+For a routine quality review, use `trend`. Default to 7 days for a short operational
+check and 28 days for a broader review. Present the SVG chart and summarize daily,
+7-day rolling and 28-day rolling rates. Keep generated charts in a task-owned
+temporary directory unless the user requests a durable artifact.
+
+Calendar date is the primary statistical axis. App versions are annotations at
+their first observed input time and are attribution clues, not cohort boundaries or
+causal proof. Do not split routine metrics by ranking, settings or build fingerprint.
+Use fingerprints only for forensic filtering or integrity diagnosis. A measurement
+fingerprint is the internal identifier for a statistical-rule version and remains a
+hard compatibility boundary because the denominator meaning may change. In user-facing
+reports call this the “metric definition” or “统计口径”, not “measurement identity”;
+never publish a combined rate across measurement fingerprints.
+
+Use `summary` for detailed coverage or forensic identity inspection. For repeatedly choosing another
 candidate over first-page top1, use `ranking-issues` (default at least 3 occurrences,
 50 groups). For a concrete example, use an issue's `composition_ids` with `inspect`;
 use `--min-count 1` when the user requests individual cases. Read
@@ -33,17 +49,19 @@ statistics, use `macOS/Tools/ai-statistics.py`; read
 [its contract](../../../macOS/AI_STATISTICS.md) before interpreting its rates or
 inspecting the deliberately retained 30-day AI samples.
 
-All commands accept `--db`, `--since`, `--until`, `--app`, `--config`,
+Most commands accept `--db`, `--since`, `--until`, `--app`, `--config`,
 `--ranking-config`, `--kind` and `--format table|json|csv` after the command. Time
-defaults to all saved history. `--ranking-config` requires an exact ranking
+defaults to all saved history. `trend` derives `--since` from `--days` (default 28),
+accepts an optional exclusive local-date `--until`, and can write an SVG with
+`--chart PATH`. `--ranking-config` requires an exact ranking
 fingerprint. The compatibility option `--config` still requires the exact legacy
 full fingerprint; its meaning has not changed. Revision UUIDs and shortened
 prefixes do not match. Dates mean local midnight; `--until` is exclusive. Use
 explicit offsets for timestamp precision.
 
-Report the database/time scope, valid and unknown evidence, all four identity
-coverage sections, ranking and measurement groups, and output-kind groups with the
-result. Never combine quality rates across measurement fingerprints; an unknown
+Report the database/time scope, valid and unknown evidence, daily and rolling
+denominators, version markers, output-kind coverage and all four identity coverage
+sections. Never combine quality rates across measurement fingerprints; an unknown
 measurement fingerprint is its own unavailable cohort. Inspect supporting compositions before
 attributing a recurring pair to a ranking problem. `insertText` issuance and
 candidate-list requests are recorded facts; they do not prove document acceptance

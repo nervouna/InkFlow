@@ -13,6 +13,10 @@ database or empty filter result, exits 0. Help is available at each command.
 - `summary`: pooled raw coverage counts, separate ranking-fingerprint/measurement-
   fingerprint/text-kind/presentation groups, exact displayed-rank counts, identity
   coverage, and separately scoped recorder statistics.
+- `trend`: the primary routine-report command. It returns a continuous local-calendar
+  series, recomputed 7-day and 28-day rolling metrics, output-kind series, version
+  markers and identity coverage. `--days` defaults to 28. `--chart PATH` writes a
+  self-contained SVG without modifying the database.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
 - `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, and
@@ -48,6 +52,18 @@ compositions in full; a mixed composition's other decisions are excluded from
 decision aggregates. Inspect follows the same rule and explicitly returns all
 commits for context. Multiple decisions may link to one commit, so decision,
 composition and commit totals have different units.
+
+`trend --days N` derives an inclusive start from an exclusive local-calendar
+`--until`; without `--until`, it includes today as the final partial day. It emits
+empty calendar days instead of dropping them. Rolling rates are ratios of summed
+numerators and denominators, never averages of daily percentages. App version,
+build and source revision are traceability metadata. The chart annotates each app
+version at its first observed decision time. Versions do not partition the statistical
+series and markers do not prove causality.
+The trend selects the latest known compatible metric definition in the window,
+reports included and excluded decision counts, and does not mix older or unknown
+metric definitions into its rates. User-facing reports call this the statistical
+rule or `统计口径`; the underlying measurement fingerprint is diagnostic metadata.
 
 JSON is a nested object with `command`, `filters` and command data. Table output is
 a vertical `FIELD | VALUE` table, retaining complete fingerprints and escaped
@@ -157,7 +173,9 @@ engine API does not provide reliable candidate source or consumed-input spans.
 
 The worker persists four independent identities. `ranking_fingerprint` covers the
 engine, audited offline ranking source/resources, and ranking-affecting applied
-settings; it is the default quality grouping key. `settings_fingerprint` covers the
+settings. It is forensic provenance, not the primary time-series dimension; generated
+resource bytes can change without establishing a semantic ranking-policy change.
+`settings_fingerprint` covers the
 complete applied configuration. `measurement_fingerprint` covers database schema,
 metric and collection rule versions. `build_identity` covers the complete build
 metadata and is traceability context only. The legacy `fingerprint` remains

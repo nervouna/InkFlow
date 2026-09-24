@@ -4,6 +4,7 @@ import argparse
 from contextlib import closing
 import csv
 from datetime import date, datetime, time, timedelta, timezone
+from html import escape
 import json
 from pathlib import Path
 import sqlite3
@@ -132,11 +133,14 @@ def ctes(args):
     WITH selected_compositions AS (
         SELECT c.* FROM compositions c WHERE {composition_filter}
     ), base AS (
-        SELECT d.*, r.fingerprint,
+        SELECT d.*, c.started_at AS composition_started_at, r.fingerprint,
           COALESCE(r.ranking_fingerprint,'unknown') AS ranking_fingerprint,
           r.settings_fingerprint,
           COALESCE(r.measurement_fingerprint,'unknown') AS measurement_fingerprint,
           r.build_identity, m.insertion_issued,
+          json_extract(r.build_metadata_json,'$.appVersion') AS app_version,
+          json_extract(r.build_metadata_json,'$.appBuild') AS app_build,
+          json_extract(r.build_metadata_json,'$.sourceRevision') AS source_revision,
           json_extract(d.snapshot_json,'$.presentation') AS presentation,
           json_extract(d.snapshot_json,'$.rawInput') AS raw_input,
           json_extract(d.snapshot_json,'$.caret') AS caret,
@@ -284,6 +288,184 @@ def summary(db, args):
                 recording_runs=dict(scope='whole_db_lifetime_unfiltered',
                     totals=rows(db, 'SELECT COUNT(*) AS runs,' + run_sql + ' FROM recording_runs')[0],
                     statuses=rows(db, 'SELECT status,error_code,COUNT(*) AS runs FROM recording_runs GROUP BY status,error_code')))
+
+
+TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',
+                  'first_page_unavailable', 'top1_selected', 'top1_matches')
+
+
+def trend_metric(items):
+    result = {key: sum(item.get(key, 0) for item in items) for key in TREND_COUNTERS}
+    measurements = {}
+    for item in items:
+        for identity, count in item.get('_measurements', {}).items():
+            measurements[identity] = measurements.get(identity, 0) + count
+    known = {identity for identity, count in measurements.items() if identity != 'unknown' and count}
+    unknown = measurements.get('unknown', 0)
+    if not result['decisions']:
+        status = 'unavailable_without_measurement_evidence'
+    elif len(known) == 1 and not unknown:
+        status = 'available_within_measurement_fingerprint'
+    elif not known:
+        status = 'unavailable_unknown_measurement_fingerprint'
+    else:
+        status = 'unavailable_across_measurement_fingerprints'
+    result['top1_rate'] = (result['top1_selected'] / result['known_rank']
+                           if result['known_rank'] and status == 'available_within_measurement_fingerprint' else None)
+    result['top1_match_rate'] = (result['top1_matches'] / result['comparable']
+                                 if result['comparable'] and status == 'available_within_measurement_fingerprint' else None)
+    result['quality_rate_status'] = status
+    result['measurement_fingerprints'] = sorted(known)
+    result['unknown_measurement_decisions'] = unknown
+    return result
+
+
+def trend_bounds(args):
+    if args.since is not None:
+        raise QueryError('trend derives --since from --days; omit --since.')
+    if args.until is None:
+        exclusive_day = datetime.now().astimezone().date() + timedelta(days=1)
+    else:
+        local = datetime.fromisoformat(args.until.replace('Z', '+00:00')).astimezone()
+        if local.timetz().replace(tzinfo=None) != time():
+            raise QueryError('trend --until must be a local calendar date boundary.')
+        exclusive_day = local.date()
+    first_day = exclusive_day - timedelta(days=args.days)
+    args.since = timestamp(first_day.isoformat())
+    args.until = timestamp(exclusive_day.isoformat())
+    return first_day, exclusive_day
+
+
+def trend(db, args):
+    first_day, exclusive_day = trend_bounds(args)
+    sql, parameters = ctes(args)
+    fields = ','.join([
+        'COUNT(*) AS decisions',
+        "COALESCE(SUM(valid),0) AS valid",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL),0) AS known_rank",
+        "COALESCE(SUM(valid AND display_rank IS NULL),0) AS unknown_rank",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND first_page_top1 IS NOT NULL),0) AS comparable",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL),0) AS first_page_unavailable",
+        "COALESCE(SUM(valid AND display_rank=1),0) AS top1_selected",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND selected_text=first_page_top1),0) AS top1_matches",
+    ])
+    grouped = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,
+        text_kind,measurement_fingerprint,{fields} FROM observations
+        GROUP BY local_day,text_kind,measurement_fingerprint ORDER BY local_day,text_kind,measurement_fingerprint""", parameters)
+    latest_measurement = db.execute(sql + """SELECT measurement_fingerprint FROM observations
+        WHERE measurement_fingerprint!='unknown'
+        ORDER BY composition_started_at DESC,occurred_at DESC,id DESC LIMIT 1""", parameters).fetchone()
+    measurement_identity = latest_measurement['measurement_fingerprint'] if latest_measurement else None
+    total_decisions = sum(row['decisions'] for row in grouped)
+    included_decisions = sum(row['decisions'] for row in grouped
+                             if row['measurement_fingerprint'] == measurement_identity)
+    raw = {'overall': {}, **{kind: {} for kind in KINDS}}
+    for row in grouped:
+        if row['measurement_fingerprint'] != measurement_identity:
+            continue
+        for series in ('overall', row['text_kind']):
+            day = raw[series].setdefault(row['local_day'], {key: 0 for key in TREND_COUNTERS})
+            for key in TREND_COUNTERS:
+                day[key] += row[key]
+            measurements = day.setdefault('_measurements', {})
+            measurements[row['measurement_fingerprint']] = measurements.get(row['measurement_fingerprint'], 0) + row['decisions']
+    days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(args.days)]
+    series = {}
+    for name, values in raw.items():
+        raw_points = [values.get(day, {**{key: 0 for key in TREND_COUNTERS}, '_measurements': {}}) for day in days]
+        points = []
+        for index, day in enumerate(days):
+            points.append(dict(date=day, daily=trend_metric([raw_points[index]]),
+                rolling_7d=trend_metric(raw_points[max(0, index-6):index+1]),
+                rolling_28d=trend_metric(raw_points[max(0, index-27):index+1])))
+        series[name] = points
+    markers = rows(db, sql + """SELECT app_version,
+        MIN(composition_started_at) AS first_seen,MAX(composition_started_at) AS last_seen,
+        COUNT(*) AS decisions,COUNT(DISTINCT app_build) AS build_count,
+        COUNT(DISTINCT source_revision) AS source_revision_count
+        FROM observations WHERE app_version IS NOT NULL
+        GROUP BY app_version ORDER BY first_seen,app_version""", parameters)
+    for marker in markers:
+        marker['local_day'] = datetime.fromisoformat(
+            marker['first_seen'].replace('Z', '+00:00')).astimezone().date().isoformat()
+    return dict(window=dict(days=args.days, first_day=days[0], last_day=days[-1],
+                            since=args.since, until=args.until, until_exclusive=True),
+                attribution='version_markers_only_not_statistical_partitions',
+                metric_scope=dict(rule_fingerprint=measurement_identity,
+                    policy='latest_compatible_metric_rules', included_decisions=included_decisions,
+                    excluded_decisions=total_decisions-included_decisions,
+                    excluded_unknown_decisions=sum(row['decisions'] for row in grouped
+                                                   if row['measurement_fingerprint'] == 'unknown')),
+                series=series, version_markers=markers,
+                identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'))
+
+
+def write_trend_svg(result, path):
+    path = Path(path).expanduser().resolve()
+    if not path.parent.is_dir():
+        raise QueryError(f'Chart output directory does not exist: {path.parent}')
+    overall = result['series']['overall']
+    width, height = 1200, 760
+    left, right, top = 82, 40, 78
+    plot_width = width-left-right
+    rate_top, rate_height = top, 390
+    bars_top, bars_height = 545, 125
+    def x(index):
+        return left + (plot_width * index / max(1, len(overall)-1))
+    values = [100*point[key]['top1_rate'] for point in overall for key in ('daily','rolling_7d','rolling_28d')
+              if point[key]['top1_rate'] is not None]
+    y_min = max(0, min(values, default=80)-3)
+    def y(value):
+        return rate_top + rate_height * (100-value) / max(1, 100-y_min)
+    def polyline(key, color, width_value):
+        segments, current = [], []
+        for index, point in enumerate(overall):
+            value = point[key]['top1_rate']
+            if value is None:
+                if current: segments.append(current); current=[]
+            else:
+                current.append(f'{x(index):.1f},{y(100*value):.1f}')
+        if current: segments.append(current)
+        return ''.join(f'<polyline points="{" ".join(segment)}" fill="none" stroke="{color}" stroke-width="{width_value}" stroke-linejoin="round" stroke-linecap="round"/>' for segment in segments)
+    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+           '<rect width="100%" height="100%" fill="#fbfbfd"/>',
+           '<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#202124}.muted{fill:#687078}.grid{stroke:#dfe3e8;stroke-width:1}.version{stroke:#9a67d8;stroke-width:1.5;stroke-dasharray:5 5}</style>',
+           '<text x="82" y="38" font-size="24" font-weight="700">InkFlow input quality trend</text>',
+           f'<text x="82" y="61" font-size="13" class="muted">{escape(result["window"]["first_day"])} to {escape(result["window"]["last_day"])} · daily continuity · versions are annotations</text>']
+    for tick in range(int(y_min//5*5), 101, 5):
+        yy = y(tick)
+        if rate_top-1 <= yy <= rate_top+rate_height+1:
+            svg += [f'<line class="grid" x1="{left}" y1="{yy:.1f}" x2="{width-right}" y2="{yy:.1f}"/>',
+                    f'<text x="{left-12}" y="{yy+4:.1f}" text-anchor="end" font-size="11" class="muted">{tick}%</text>']
+    for index, point in enumerate(overall):
+        value = point['daily']['top1_rate']
+        if value is not None:
+            svg.append(f'<circle cx="{x(index):.1f}" cy="{y(100*value):.1f}" r="2.5" fill="#9aa0a6" opacity="0.72"/>')
+    svg += [polyline('rolling_28d', '#7b61a8', 3.2), polyline('rolling_7d', '#1677d2', 3.2)]
+    markers_by_day = {}
+    for marker in result['version_markers']:
+        markers_by_day.setdefault(marker['local_day'], []).append(marker)
+    day_index = {point['date']: index for index, point in enumerate(overall)}
+    for marker_index, (day, markers) in enumerate(markers_by_day.items()):
+        if day not in day_index: continue
+        xx = x(day_index[day])
+        svg.append(f'<line class="version" x1="{xx:.1f}" y1="{rate_top}" x2="{xx:.1f}" y2="{bars_top+bars_height}"/>')
+        label = '/'.join(sorted({str(item['app_version']) for item in markers}))
+        svg.append(f'<text x="{xx+5:.1f}" y="{rate_top+16+(marker_index%3)*15}" font-size="11" fill="#7651a8">v{escape(label)}</text>')
+    maximum = max((point['daily']['valid'] for point in overall), default=0) or 1
+    bar_width = max(2, plot_width/max(1, len(overall))*0.65)
+    for index, point in enumerate(overall):
+        bar_height = bars_height*point['daily']['valid']/maximum
+        svg.append(f'<rect x="{x(index)-bar_width/2:.1f}" y="{bars_top+bars_height-bar_height:.1f}" width="{bar_width:.1f}" height="{bar_height:.1f}" rx="2" fill="#87b9e8"/>')
+        if index % max(1, len(overall)//7) == 0 or index == len(overall)-1:
+            svg.append(f'<text x="{x(index):.1f}" y="{bars_top+bars_height+24}" text-anchor="middle" font-size="11" class="muted">{escape(point["date"][5:])}</text>')
+    svg += [f'<text x="{left}" y="{bars_top-14}" font-size="13" font-weight="600">Daily valid selections</text>',
+            '<circle cx="780" cy="38" r="3" fill="#9aa0a6"/><text x="790" y="42" font-size="12">daily</text>',
+            '<line x1="850" y1="38" x2="878" y2="38" stroke="#1677d2" stroke-width="3"/><text x="885" y="42" font-size="12">7-day rolling</text>',
+            '<line x1="1000" y1="38" x2="1028" y2="38" stroke="#7b61a8" stroke-width="3"/><text x="1035" y="42" font-size="12">28-day rolling</text>',
+            '</svg>']
+    path.write_text(''.join(svg), encoding='utf-8')
+    return path
 
 
 def ranking_issues(db, args):
@@ -458,13 +640,17 @@ def render(result, output_format):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest='command', required=True)
-    for command in ('summary', 'ranking-issues', 'inspect', 'timing'):
+    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing'):
         sub = commands.add_parser(command)
         if command == 'inspect':
             sub.add_argument('composition_id', help='Composition ID returned by ranking-issues')
         if command == 'ranking-issues':
             sub.add_argument('--min-count', type=positive, default=3)
             sub.add_argument('--limit', type=positive, default=50)
+        if command == 'trend':
+            sub.add_argument('--days', type=positive, default=28,
+                             help='Local calendar days ending before --until; default 28')
+            sub.add_argument('--chart', type=Path, help='Write a self-contained SVG trend chart')
         sub.add_argument('--db', type=Path, default=DEFAULT_DB, help=f'Default: {DEFAULT_DB}')
         sub.add_argument('--since', type=timestamp, help='Inclusive composition start: local YYYY-MM-DD or ISO time with offset')
         sub.add_argument('--until', type=timestamp, help='Exclusive composition start boundary; same syntax as --since')
@@ -484,10 +670,13 @@ def main(argv=None):
             raise QueryError('--since must be earlier than the exclusive --until boundary.')
         with closing(connect(args.db)) as db:
             db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
-            result = {'summary': summary, 'ranking-issues': ranking_issues, 'inspect': inspect, 'timing': timing}[args.command](db, args)
+            result = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues,
+                      'inspect': inspect, 'timing': timing}[args.command](db, args)
+        if args.command == 'trend' and args.chart is not None:
+            result['chart_path'] = str(write_trend_svg(result, args.chart))
         result = dict(command=args.command, filters={k: str(v) if isinstance(v, Path) else v
                       for k, v in vars(args).items()
-                      if k in ('db','since','until','app','config','ranking_config','kind')}, **result)
+                      if k in ('db','since','until','app','config','ranking_config','kind','days')}, **result)
         render(result, args.format)
         return 0
     except SystemExit as error:
