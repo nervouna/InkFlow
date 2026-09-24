@@ -62,6 +62,8 @@ impact_classify() {
     .agents/skills/inkflow-release/*)
       impact_rule "$path" 'release workflow' workflow
       impact_release_tools=true ;;
+    .agents/skills/inkflow-quality-analysis/*|macOS/Tests/QualityQueryTests.py|macOS/scripts/test-quality-query.sh)
+      impact_rule "$path" 'input quality analysis skill' quality-capture-query ;;
     *.md|docs/*|LICENSE|LICENSE.*|NOTICE)
       impact_rule "$path" 'documentation: diff check only' ;;
     macOS/scripts/probe-imk-candidate-lifetime.sh|macOS/scripts/diagnostics/IMKCandidateLifetimeProbe.m)

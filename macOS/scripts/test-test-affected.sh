@@ -45,6 +45,11 @@ new_case
 change 'docs/a note.md'; plan --run
 has 'Units: none'; [[ ! -s "$INKFLOW_AFFECTED_LOG" ]]
 
+new_case
+change '.agents/skills/inkflow-quality-analysis/scripts/quality.py'; plan
+has 'Units: quality-capture-query'; has 'input quality analysis skill'
+not_has 'complete non-GUI coverage'; not_has 'Preparation: build.sh'
+
 for input in '--unknown' '--from'; do
   if plan "$input"; then exit 1; else [[ $? == 2 ]]; fi
 done
