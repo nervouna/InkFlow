@@ -64,7 +64,10 @@ local function personal_matches(input, env)
                 and entry.text and entry.text:match("^[!-~]+$")
                 and not seen[key] then
               seen[key] = true
-              matches[#matches + 1] = { first = first, last = last, code = code, text = entry.text }
+              matches[#matches + 1] = {
+                first = first, last = last, code = code, text = entry.text,
+                commits = math.min(3, entry.commit_count)
+              }
             end
           end
         end
@@ -99,7 +102,7 @@ local function yield_personal(input, segment, env)
             and not candidate.text:sub(last + 1, last + 1):find("[A-Za-z]")
             and candidate.text:find("[\128-\255]") then
           local text = candidate.text:sub(1, first - 1) .. match.text .. candidate.text:sub(last + 1)
-          local shadow = ShadowCandidate(candidate, "mixed_personal", text, "", true)
+          local shadow = ShadowCandidate(candidate, "mixed_personal_" .. tostring(match.commits), text, "", true)
           shadow.quality = -0.5
           yield(shadow)
         end
@@ -123,8 +126,9 @@ function M.func(input, segment, env)
           and admitted_ascii_runs(candidate.text, input, env) then
         -- Native Chinese wins when it covers the same input. A complete mixed
         -- sentence can still lead a shorter Chinese translation via Rime's span order.
-        candidate.quality = -0.5
-        yield(candidate)
+        local shadow = ShadowCandidate(candidate, "mixed_exact", candidate.text, candidate.comment or "", true)
+        shadow.quality = -0.5
+        yield(shadow)
       end
     end
   end

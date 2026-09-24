@@ -1,28 +1,16 @@
--- Promote exact English only for explicit short conflicts, after Chinese first.
+-- Keep one admitted exact English candidate visible behind the native first
+-- candidate before Rime paginates. Swift owns the final evidence ranking.
 local M = {}
-
-function M.init(env)
-  env.conflicts = {}
-  local config = env.engine.schema.config
-  local path = "inkflow_short_conflict/inputs"
-  for index = 0, config:get_list_size(path) - 1 do
-    local input = config:get_string(path .. "/@" .. index)
-    if input then env.conflicts[input] = true end
-  end
-end
 
 function M.func(input, env)
   local raw = env.engine.context.input
-  if not env.conflicts[raw] then
-    for candidate in input:iter() do yield(candidate) end
-    return
-  end
-
   local first, exact, remaining = nil, nil, {}
   for candidate in input:iter() do
+    local candidate_type = candidate.type or ""
     if not first then
       first = candidate
-    elseif not exact and candidate.text == raw
+    elseif not exact and (candidate_type == "english_exact"
+            or candidate_type:match("^english_personal_[123]$"))
         and candidate.start == 0 and candidate._end == #raw then
       exact = candidate
     else

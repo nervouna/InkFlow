@@ -223,6 +223,9 @@ struct AIAdoptionLearningTests {
         case "contract-personal-seed":
             check(request("update\tshared\tplugin\tPrivatePlugin\t1") == "ok", "Seed a personal-only exact record")
             expectEntry("shared", "plugin", "PrivatePlugin", "Personal exact seed persists")
+        case "contract-ranking-seed":
+            check(request("update\tshared\tcodex\tCodex\t1") == "ok", "Seed one unambiguous ranking record")
+            expectEntry("shared", "codex", "Codex", "Ranking seed persists")
         case "contract-mixed-seed":
             for (code, text) in [("codex", "Codex"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
                                  ("offline", "offline"), ("can", "can")] {
@@ -253,7 +256,7 @@ struct AIAdoptionLearningTests {
     }
 
     @MainActor private static func mixedPersonalEnglish(engine: IFEngine, scenario: String) throws {
-        check(["mixed-read", "mixed-restart", "mixed-bounded"].contains(scenario), "Unknown mixed personal scenario")
+        check(["mixed-read", "mixed-restart", "mixed-bounded", "mixed-ranking-read"].contains(scenario), "Unknown mixed personal scenario")
 
         func allCandidates() -> [String] {
             var result: [String] = []
@@ -283,6 +286,29 @@ struct AIAdoptionLearningTests {
                   "Personal lookup remains active at the configured composition bound")
             check(!candidates("a" + boundary).contains { $0.contains("offline") },
                   "Overlong composition fails closed without personal dictionary lookup")
+            return
+        }
+
+        if scenario == "mixed-ranking-read" {
+            type(engine, "women")
+            check(engine.snapshot().candidates.first == "我们", "Neutral evidence keeps Chinese first")
+            engine.clear()
+            engine.setPrecedingText("正在使用 Swift ")
+            type(engine, "codex")
+            check(engine.snapshot().candidates.first == "Codex",
+                  "Personal exact English may lead in bounded technical context: \(engine.snapshot().candidates)")
+            check(engine.snapshot().candidates.firstIndex(of: "Codex")! < engine.snapshot().candidates.firstIndex(of: "Codex CLI")!,
+                  "Exact personal English remains ahead of public completion")
+            check(engine.key(32) && engine.takeCommit() == "Codex",
+                  "Space selects the displayed evidence-ranked candidate through native mapping")
+            engine.setPrecedingText("正在使用 Swift ")
+            type(engine, "codey"); engine.key(0xff08); type(engine, "x")
+            check(engine.snapshot().candidates.first == "Codex", "Editing recomputes bounded evidence ranking")
+            engine.clear(); type(engine, "codex")
+            check(engine.snapshot().candidates.first != "Codex", "Clearing invalidates stale technical context")
+            let isolated = IFEngine()!
+            type(isolated, "codex")
+            check(isolated.snapshot().candidates.first != "Codex", "Technical context remains session-local")
             return
         }
 

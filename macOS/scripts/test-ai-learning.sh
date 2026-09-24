@@ -80,6 +80,10 @@ echo 'PASS canonical keyboard English learning: first/repeated/negative/restart,
 
 mixed_user="$user_dir/mixed-user"
 mkdir -p "$mixed_user"
+ranking_user="$user_dir/ranking-user"
+mkdir -p "$ranking_user"
+build/ai-adoption-learning-tests "$contract_shared" "$ranking_user" contract-ranking-seed
+build/ai-adoption-learning-tests "$shared" "$ranking_user" mixed-ranking-read
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-seed
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" mixed-bounded
 build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-read

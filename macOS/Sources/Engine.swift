@@ -613,10 +613,11 @@ final class IFEngine {
         // Once a segment is selected, the immediate prefix is inside the mark.
         // Leave these remaining candidates to Rime instead of applying older document text.
         candidateOrder = Array(raw.candidates.indices)
-        if !raw.hasSelectedPrefix, !hasCustomCode, !precedingText.isEmpty, let ranker = Self.contextRanker {
+        if !raw.hasSelectedPrefix, !hasCustomCode, let ranker = Self.contextRanker {
+            let metadata = inputRankingMetadata(page: raw.page, count: raw.candidates.count,
+                                                inputLength: input.utf8.count)
             candidateOrder = ranker.order(raw.candidates, precedingText: precedingText,
-                                         coverage: inputCoverage(page: raw.page, count: raw.candidates.count,
-                                                                 inputLength: input.utf8.count))
+                                         metadata: metadata)
         }
         if let first = candidateOrder.first {
             _ = Self.api.pointee.highlight_candidate_on_current_page(session, first)
@@ -625,7 +626,8 @@ final class IFEngine {
         if raw.preedit.isEmpty { precedingText = "" }
     }
 
-    private func inputCoverage(page: Int, count: Int, inputLength: Int) -> [Range<Int>]? {
+    private func inputRankingMetadata(page: Int, count: Int,
+                                      inputLength: Int) -> [IFCandidateRankingMetadata]? {
         guard page >= 0, page <= Int.max / candidateCount, (1...9).contains(count) else { return nil }
         let offset = page * candidateCount
         let api = Self.api.pointee
@@ -638,7 +640,8 @@ final class IFEngine {
         "\(offset),\(count)".withCString { api.set_property(session, "inkflow_input_coverage", $0) }
         var buffer = [CChar](repeating: 0, count: 512)
         guard api.get_property(session, "inkflow_input_coverage_result", &buffer, buffer.count) != 0 else { return nil }
-        return IFContextRanker.parseCoverage(Self.string(buffer), offset: offset, count: count, inputLength: inputLength)
+        return IFContextRanker.parseMetadata(Self.string(buffer), offset: offset, count: count,
+                                             inputLength: inputLength)
     }
 
     func takeCommit(recordQuality: Bool = true) -> String {

@@ -108,7 +108,9 @@ function M.func(input, segment, env)
     -- native memorize transaction persist the canonical lowercase lookup code.
     if entry.code then dictionary_entry.custom_code = entry.code .. " " end
     local phrase = Phrase(env.memory, "english", segment.start, segment._end, dictionary_entry)
-    local candidate = ShadowCandidate(phrase:toCandidate(), "english", entry.text, "", true)
+    local candidate_type = entry.exact and "english_exact" or "english_completion"
+    if entry.personal then candidate_type = "english_personal_" .. tostring(math.min(3, entry.commits)) end
+    local candidate = ShadowCandidate(phrase:toCandidate(), candidate_type, entry.text, "", true)
     -- Native Chinese wins equal input coverage, including an unfinished final
     -- syllable. This entire stream still keeps its source-frequency order.
     candidate.quality = -1
