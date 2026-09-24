@@ -51,6 +51,7 @@ struct SettingsTests {
         check(settings.candidateCount == 5 && settings.fontSize == 14)
         try customPhrases(defaults: defaults, settings: settings)
         try voicePolishRules()
+        try voicePolishApplicationDescriptor()
         UpdateTests.run()
         try await feedbackReports()
         await DiagnosticFeedbackModelTests.run()
@@ -393,6 +394,27 @@ struct SettingsTests {
               "Corrupt custom phrases must not suppress valid rule loading")
 
         print("PASS voice polish rules: normalization, exact match, CRUD, enable, 100/4000 UTF-16 bounds, multiline, controls, byte preservation, round-trip, corrupt and independent loading")
+    }
+
+    @MainActor static func voicePolishApplicationDescriptor() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "inkflow-app-fixture-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let app = root.appending(path: "Fixture.app")
+        let contents = app.appending(path: "Contents")
+        try FileManager.default.createDirectory(at: contents, withIntermediateDirectories: true)
+        let plist: NSDictionary = ["CFBundleIdentifier": "com.example.Fixture", "CFBundleDisplayName": " Fixture App "]
+        check(plist.write(to: contents.appending(path: "Info.plist"), atomically: true))
+        let descriptor = try VoicePolishApplicationPicker.descriptor(at: app)
+        check(descriptor.bundleIdentifier == "com.example.Fixture" && descriptor.displayName == "Fixture App")
+
+        let invalid = root.appending(path: "Invalid.app")
+        let invalidContents = invalid.appending(path: "Contents")
+        try FileManager.default.createDirectory(at: invalidContents, withIntermediateDirectories: true)
+        check(((["CFBundleName": "Invalid"] as NSDictionary)
+            .write(to: invalidContents.appending(path: "Info.plist"), atomically: true)))
+        rejects { _ = try VoicePolishApplicationPicker.descriptor(at: invalid) }
+        rejects { _ = try VoicePolishApplicationPicker.descriptor(at: root.appending(path: "NotAnApp.txt")) }
+        print("PASS voice polish application descriptor: temporary app bundle identity, display-name normalization and invalid selection rejection")
     }
 
     @MainActor static func rejects(_ operation: () throws -> Void) {

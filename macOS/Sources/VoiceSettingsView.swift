@@ -6,6 +6,8 @@ struct VoiceSettingsView: View {
 
     var showShortcuts: () -> Void = {}
     var showAIService: () -> Void = {}
+    var pickApplication: VoicePolishApplicationPicker.Action = VoicePolishApplicationPicker.pick
+    @State private var showingPolishRules = false
 
     var body: some View {
         Form {
@@ -39,6 +41,8 @@ struct VoiceSettingsView: View {
                     .accessibilityIdentifier("voice.polish")
                 Button("配置 AI 服务", action: showAIService)
                     .accessibilityIdentifier("voice.aiService")
+                Button("管理应用规则", systemImage: "slider.horizontal.3", action: showPolishRules)
+                    .accessibilityIdentifier("voice.polishRules")
             }
         }
         .formStyle(.grouped)
@@ -47,7 +51,11 @@ struct VoiceSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             refreshPreparation()
         }
+        .sheet(isPresented: $showingPolishRules) {
+            VoicePolishRulesView(settings: settings, pickApplication: pickApplication)
+        }
     }
 
     private func refreshPreparation() { Task { await settings.voice.prepareIfAuthorized() } }
+    private func showPolishRules() { showingPolishRules = true }
 }
