@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 #if SWIFT_PACKAGE
 @testable import InkFlowInstallerCore
 @testable import InkFlowInputSources
@@ -186,6 +187,25 @@ private actor Files: IFInstallerFileOperations {
         print("PASS real filesystem: first install, replacement, failed partial copy preserves old, cleanup, no backup, no path/version gates")
     }
     @MainActor static func main() async throws {
+        let child = Process()
+        let input = Pipe()
+        child.executableURL = URL(fileURLWithPath: "/bin/cat")
+        child.standardInput = input
+        child.standardOutput = FileHandle.nullDevice
+        try child.run()
+        let pid = child.processIdentifier
+        try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid), "live process must block replacement")
+        try input.fileHandleForWriting.close()
+        child.waitUntilExit()
+        try check(IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid), "exited process must not time out when AppKit state is stale")
+        for status: Int32 in [0, EPERM, EINVAL] {
+            try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid, probe: { _ in status }), "unknown or live process status must block replacement")
+        }
+        for invalid: pid_t in [-1, 0] {
+            try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: invalid, probe: { _ in fatalError("invalid PID must not be probed") }), "invalid PID cannot prove exit")
+        }
+        try check(IFSystemLifecycle.hasExited(applicationTerminated: true, processID: -1, probe: { _ in fatalError("confirmed exit needs no probe") }), "AppKit-confirmed exit remains sufficient")
+        print("PASS installer exit observation: live child, exited child with stale AppKit state, permission/unknown errors, invalid PIDs")
         try await trialTests()
         try fileTests()
         let files = Files(), sources = Sources(), lifecycle = Lifecycle()
