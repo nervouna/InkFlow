@@ -37,6 +37,7 @@ COUNTERS = {
     'comparable': 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NOT NULL',
     'first_page_unavailable': 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL',
     'top1_selected': 'valid AND display_rank=1',
+    'top3_selected': 'valid AND display_rank BETWEEN 1 AND 3',
     'top1_matches': 'valid AND display_rank IS NOT NULL AND selected_text=first_page_top1',
     'truncated': 'page_history_truncated=1',
 }
@@ -201,6 +202,7 @@ def aggregate_sql():
 
 def rates(row, status=None):
     row['top1_rate'] = row['top1_selected'] / row['known_rank'] if row['known_rank'] else None
+    row['top3_rate'] = row['top3_selected'] / row['known_rank'] if row['known_rank'] else None
     row['top1_match_rate'] = row['top1_matches'] / row['comparable'] if row['comparable'] else None
     if status is None:
         status = ('unavailable_unknown_measurement_fingerprint'
@@ -208,6 +210,7 @@ def rates(row, status=None):
                   else 'available_within_measurement_fingerprint')
     if status != 'available_within_measurement_fingerprint':
         row['top1_rate'] = None
+        row['top3_rate'] = None
         row['top1_match_rate'] = None
     row['quality_rate_status'] = status
     return row
@@ -291,7 +294,7 @@ def summary(db, args):
 
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',
-                  'first_page_unavailable', 'top1_selected', 'top1_matches')
+                  'first_page_unavailable', 'top1_selected', 'top3_selected', 'top1_matches')
 
 
 def trend_metric(items):
@@ -311,6 +314,8 @@ def trend_metric(items):
     else:
         status = 'unavailable_across_measurement_fingerprints'
     result['top1_rate'] = (result['top1_selected'] / result['known_rank']
+                           if result['known_rank'] and status == 'available_within_measurement_fingerprint' else None)
+    result['top3_rate'] = (result['top3_selected'] / result['known_rank']
                            if result['known_rank'] and status == 'available_within_measurement_fingerprint' else None)
     result['top1_match_rate'] = (result['top1_matches'] / result['comparable']
                                  if result['comparable'] and status == 'available_within_measurement_fingerprint' else None)
@@ -347,6 +352,7 @@ def trend(db, args):
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND first_page_top1 IS NOT NULL),0) AS comparable",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL),0) AS first_page_unavailable",
         "COALESCE(SUM(valid AND display_rank=1),0) AS top1_selected",
+        "COALESCE(SUM(valid AND display_rank BETWEEN 1 AND 3),0) AS top3_selected",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND selected_text=first_page_top1),0) AS top1_matches",
     ])
     grouped = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,
@@ -412,25 +418,27 @@ def write_trend_svg(result, path):
     bars_top, bars_height = 545, 125
     def x(index):
         return left + (plot_width * index / max(1, len(overall)-1))
-    values = [100*point[key]['top1_rate'] for point in overall for key in ('daily','rolling_7d','rolling_28d')
-              if point[key]['top1_rate'] is not None]
+    values = [100*point[key][metric] for point in overall
+              for key in ('daily','rolling_7d','rolling_28d')
+              for metric in ('top1_rate','top3_rate') if point[key][metric] is not None]
     y_min = max(0, min(values, default=80)-3)
     def y(value):
         return rate_top + rate_height * (100-value) / max(1, 100-y_min)
-    def polyline(key, color, width_value):
+    def polyline(key, metric, color, width_value, dash=None):
         segments, current = [], []
         for index, point in enumerate(overall):
-            value = point[key]['top1_rate']
+            value = point[key][metric]
             if value is None:
                 if current: segments.append(current); current=[]
             else:
                 current.append(f'{x(index):.1f},{y(100*value):.1f}')
         if current: segments.append(current)
-        return ''.join(f'<polyline points="{" ".join(segment)}" fill="none" stroke="{color}" stroke-width="{width_value}" stroke-linejoin="round" stroke-linecap="round"/>' for segment in segments)
+        dash_value = f' stroke-dasharray="{dash}"' if dash else ''
+        return ''.join(f'<polyline points="{" ".join(segment)}" fill="none" stroke="{color}" stroke-width="{width_value}"{dash_value} stroke-linejoin="round" stroke-linecap="round"/>' for segment in segments)
     svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
            '<rect width="100%" height="100%" fill="#fbfbfd"/>',
            '<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#202124}.muted{fill:#687078}.grid{stroke:#dfe3e8;stroke-width:1}.version{stroke:#9a67d8;stroke-width:1.5;stroke-dasharray:5 5}</style>',
-           '<text x="82" y="38" font-size="24" font-weight="700">InkFlow input quality trend</text>',
+           '<text x="82" y="38" font-size="24" font-weight="700">InkFlow Top1 and Top3 selection trend</text>',
            f'<text x="82" y="61" font-size="13" class="muted">{escape(result["window"]["first_day"])} to {escape(result["window"]["last_day"])} · daily continuity · versions are annotations</text>']
     for tick in range(int(y_min//5*5), 101, 5):
         yy = y(tick)
@@ -438,10 +446,16 @@ def write_trend_svg(result, path):
             svg += [f'<line class="grid" x1="{left}" y1="{yy:.1f}" x2="{width-right}" y2="{yy:.1f}"/>',
                     f'<text x="{left-12}" y="{yy+4:.1f}" text-anchor="end" font-size="11" class="muted">{tick}%</text>']
     for index, point in enumerate(overall):
-        value = point['daily']['top1_rate']
-        if value is not None:
-            svg.append(f'<circle cx="{x(index):.1f}" cy="{y(100*value):.1f}" r="2.5" fill="#9aa0a6" opacity="0.72"/>')
-    svg += [polyline('rolling_28d', '#7b61a8', 3.2), polyline('rolling_7d', '#1677d2', 3.2)]
+        top1 = point['daily']['top1_rate']
+        top3 = point['daily']['top3_rate']
+        if top1 is not None:
+            svg.append(f'<circle cx="{x(index):.1f}" cy="{y(100*top1):.1f}" r="2.5" fill="#9aa0a6" opacity="0.72"/>')
+        if top3 is not None:
+            svg.append(f'<circle cx="{x(index):.1f}" cy="{y(100*top3):.1f}" r="2.8" fill="none" stroke="#d97706" stroke-width="1.4" opacity="0.82"/>')
+    svg += [polyline('rolling_28d', 'top1_rate', '#1677d2', 2.8, '8 5'),
+            polyline('rolling_7d', 'top1_rate', '#1677d2', 3.2),
+            polyline('rolling_28d', 'top3_rate', '#d97706', 2.8, '8 5'),
+            polyline('rolling_7d', 'top3_rate', '#d97706', 3.2)]
     markers_by_day = {}
     for marker in result['version_markers']:
         markers_by_day.setdefault(marker['local_day'], []).append(marker)
@@ -460,9 +474,11 @@ def write_trend_svg(result, path):
         if index % max(1, len(overall)//7) == 0 or index == len(overall)-1:
             svg.append(f'<text x="{x(index):.1f}" y="{bars_top+bars_height+24}" text-anchor="middle" font-size="11" class="muted">{escape(point["date"][5:])}</text>')
     svg += [f'<text x="{left}" y="{bars_top-14}" font-size="13" font-weight="600">Daily valid selections</text>',
-            '<circle cx="780" cy="38" r="3" fill="#9aa0a6"/><text x="790" y="42" font-size="12">daily</text>',
-            '<line x1="850" y1="38" x2="878" y2="38" stroke="#1677d2" stroke-width="3"/><text x="885" y="42" font-size="12">7-day rolling</text>',
-            '<line x1="1000" y1="38" x2="1028" y2="38" stroke="#7b61a8" stroke-width="3"/><text x="1035" y="42" font-size="12">28-day rolling</text>',
+            '<line x1="620" y1="31" x2="648" y2="31" stroke="#1677d2" stroke-width="3"/><text x="655" y="35" font-size="11">Top1</text>',
+            '<line x1="710" y1="31" x2="738" y2="31" stroke="#d97706" stroke-width="3"/><text x="745" y="35" font-size="11">Top3</text>',
+            '<circle cx="816" cy="31" r="2.8" fill="#6b7280"/><text x="826" y="35" font-size="11">daily</text>',
+            '<line x1="890" y1="31" x2="918" y2="31" stroke="#6b7280" stroke-width="3"/><text x="925" y="35" font-size="11">7-day</text>',
+            '<line x1="1000" y1="31" x2="1028" y2="31" stroke="#6b7280" stroke-width="3" stroke-dasharray="8 5"/><text x="1035" y="35" font-size="11">28-day</text>',
             '</svg>']
     path.write_text(''.join(svg), encoding='utf-8')
     return path

@@ -160,11 +160,13 @@ class QueryTests(unittest.TestCase):
                      and g['text_kind']=='chinese' and g['presentation']=='candidates_requested')
         expected = dict(decisions=17, committed=12, unknown=1, reverted=1, edited=1, cancelled=1,
                         interrupted=1, regular_not_issued=1, valid=10, known_rank=9, unknown_rank=1,
-                        comparable=7, first_page_unavailable=2, top1_selected=1, top1_matches=1,
+                        comparable=7, first_page_unavailable=2, top1_selected=1, top3_selected=1,
+                        top1_matches=1,
                         truncated=1, dropped_page_count=2)
         for key, value in expected.items():
             self.assertEqual(group[key], value, key)
         self.assertAlmostEqual(group['top1_rate'], 1/9)
+        self.assertAlmostEqual(group['top3_rate'], 1/9)
         self.assertAlmostEqual(group['top1_match_rate'], 1/7)
         self.assertEqual(group['mean_display_rank'], 33/9)
         ranks = [r for r in result['rank_counts'] if r['ranking_fingerprint']=='ranking-A'
@@ -175,8 +177,41 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(hidden['regular_issued'], 1)
         self.assertEqual(hidden['valid'], 0)
         self.assertIsNone(hidden['top1_rate'])
+        self.assertIsNone(hidden['top3_rate'])
         self.assertEqual(result['recording_runs']['scope'], 'whole_db_lifetime_unfiltered')
         self.assertEqual(result['recording_runs']['totals']['droppedQueue'], 3)
+
+    def test_top3_uses_the_known_rank_denominator_and_includes_ranks_two_and_three(self):
+        with sqlite3.connect(self.db) as db:
+            for cid, rank in [('a', 2), ('b', 3)]:
+                snapshot = json.loads(db.execute(
+                    "SELECT snapshot_json FROM candidate_decisions WHERE composition_id=?", (cid,)
+                ).fetchone()[0])
+                snapshot['page'] = 0
+                snapshot['highlightedDisplayIndex'] = rank - 1
+                snapshot['candidates'] = [
+                    dict(text='使' if display_rank == rank else f'候{display_rank}',
+                         displayIndex=display_rank - 1, displayRank=display_rank,
+                         nativeIndex=display_rank - 1, nativeRank=display_rank)
+                    for display_rank in range(1, rank + 1)
+                ]
+                db.execute("""UPDATE candidate_decisions SET selected_display_index=?,
+                    snapshot_json=?,first_page_json=? WHERE composition_id=?""",
+                    (rank - 1, json.dumps(snapshot, ensure_ascii=False),
+                     json.dumps(snapshot, ensure_ascii=False), cid))
+        result = self.result()
+        group = next(g for g in result['groups'] if g['ranking_fingerprint']=='ranking-A'
+                     and g['measurement_fingerprint']=='measurement-A'
+                     and g['text_kind']=='chinese' and g['presentation']=='candidates_requested')
+        self.assertEqual(group['known_rank'], 9)
+        self.assertEqual(group['top1_selected'], 1)
+        self.assertEqual(group['top3_selected'], 3)
+        self.assertAlmostEqual(group['top1_rate'], 1/9)
+        self.assertAlmostEqual(group['top3_rate'], 3/9)
+        trend = self.result('trend', '--days', '7', '--until', '2026-09-08')
+        daily = trend['series']['overall'][-1]['daily']
+        self.assertEqual(daily['top3_selected'], result['coverage']['top3_selected'])
+        self.assertAlmostEqual(daily['top3_rate'], result['coverage']['top3_rate'])
 
     def test_trend_is_calendar_continuous_rolls_counts_and_marks_versions(self):
         previous = os.environ.get('TZ')
@@ -202,7 +237,10 @@ class QueryTests(unittest.TestCase):
         self.assertEqual({marker['app_version'] for marker in result['version_markers']}, {'1.0','1.1'})
         self.assertEqual(result['attribution'], 'version_markers_only_not_statistical_partitions')
         self.assertTrue(chart.is_file())
-        self.assertIn('<svg', chart.read_text())
+        chart_text = chart.read_text()
+        self.assertIn('<svg', chart_text)
+        self.assertIn('Top1', chart_text)
+        self.assertIn('Top3', chart_text)
 
     def test_trend_uses_latest_measurement_and_reports_exclusions(self):
         with sqlite3.connect(self.db) as db:
@@ -295,6 +333,7 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(unknown['measurement_fingerprint'], 'unknown')
         self.assertEqual(unknown['decisions'], 1)
         self.assertIsNone(unknown['top1_rate'])
+        self.assertIsNone(unknown['top3_rate'])
         self.assertEqual(unknown['quality_rate_status'], 'unavailable_unknown_measurement_fingerprint')
         self.assertEqual(result['coverage']['quality_rate_status'],
                          'unavailable_across_measurement_fingerprints')
@@ -309,6 +348,7 @@ class QueryTests(unittest.TestCase):
                        "metric_rule_version=2 WHERE id='rev2'")
         result = self.result()
         self.assertIsNone(result['coverage']['top1_rate'])
+        self.assertIsNone(result['coverage']['top3_rate'])
         self.assertIsNone(result['coverage']['top1_match_rate'])
         self.assertEqual(result['coverage']['quality_rate_status'], 'unavailable_across_measurement_fingerprints')
         groups = [g for g in result['groups'] if g['ranking_fingerprint']=='ranking-A'
@@ -362,6 +402,7 @@ class QueryTests(unittest.TestCase):
         result = self.result(db=empty)
         self.assertEqual(result['coverage']['valid'],0)
         self.assertIsNone(result['coverage']['top1_rate'])
+        self.assertIsNone(result['coverage']['top3_rate'])
         self.assertEqual(result['groups'],[])
         missing=Path(self.temp.name)/'missing.sqlite3'
         self.assertIn('does not exist',self.run_cli('summary',db=missing,success=False))
