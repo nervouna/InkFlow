@@ -264,10 +264,10 @@ if ! git -C "$identity_repo" diff --cached --quiet; then
   git -C "$identity_repo" commit -qm 'fixture resolved dependency lock'
 fi
 tool="$PWD/build/quality-build-metadata"
-before=$($tool "$identity_repo" --build-snapshot)
+before=$("$tool" "$identity_repo" --build-snapshot)
 [[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
 printf 'documentation only\n' >> "$identity_repo/README.md"
-[[ "$($tool "$identity_repo" --build-snapshot)" == "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
 cp "$identity_repo/Package.resolved" "$fixture/Package.resolved"
 python3 - "$identity_repo/Package.resolved" <<'PY'
 import json
@@ -279,29 +279,29 @@ lock = json.loads(path.read_text())
 lock["pins"][0]["state"]["revision"] = "0" * 40
 path.write_text(json.dumps(lock, indent=2) + "\n")
 PY
-[[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
 cp "$fixture/Package.resolved" "$identity_repo/Package.resolved"
-[[ "$($tool "$identity_repo" --build-snapshot)" == "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
 mkdir "$fixture/originals"
 cp "$identity_repo/macOS/Sources/Engine.swift" "$fixture/originals/Engine.swift"
 cp "$identity_repo/macOS/scripts/quality-metadata.sh" "$fixture/originals/quality-metadata.sh"
 cp "$identity_repo/macOS/scripts/build-dictionary-generator.sh" "$fixture/originals/build-dictionary-generator.sh"
 cp "$identity_repo/macOS/DictionaryTool/main.swift" "$fixture/originals/main.swift"
 printf 'build input\n' >> "$identity_repo/macOS/Sources/Engine.swift"
-[[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
 for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh macOS/DictionaryTool/main.swift; do
   cp "$fixture/originals/Engine.swift" "$identity_repo/macOS/Sources/Engine.swift"
   cp "$fixture/originals/quality-metadata.sh" "$identity_repo/macOS/scripts/quality-metadata.sh"
   cp "$fixture/originals/build-dictionary-generator.sh" "$identity_repo/macOS/scripts/build-dictionary-generator.sh"
   cp "$fixture/originals/main.swift" "$identity_repo/macOS/DictionaryTool/main.swift"
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
-  [[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
 done
 # Newly introduced helpers are untracked before the delivery commit, but still
 # must participate in the build closure and dirty-state calculation.
 for helper in build-number build-summary; do
-  snapshot=$($tool "$identity_repo" --build-snapshot)
+  snapshot=$("$tool" "$identity_repo" --build-snapshot)
   printf 'fixture build helper\n' > "$identity_repo/macOS/scripts/$helper.sh"
-  [[ "$($tool "$identity_repo" --build-snapshot)" != "$snapshot" ]]
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]]
 done
 echo 'PASS quality build metadata: deterministic build-input/resources hashes, clean/dirty revision, docs excluded'
