@@ -260,7 +260,9 @@ cp Package.resolved "$identity_repo/Package.resolved"
 git -C "$identity_repo" config user.name 'InkFlow Tests'
 git -C "$identity_repo" config user.email 'tests@invalid'
 git -C "$identity_repo" add Package.resolved
-git -C "$identity_repo" commit -qm 'fixture resolved dependency lock'
+if ! git -C "$identity_repo" diff --cached --quiet; then
+  git -C "$identity_repo" commit -qm 'fixture resolved dependency lock'
+fi
 tool="$PWD/build/quality-build-metadata"
 before=$($tool "$identity_repo" --build-snapshot)
 [[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
