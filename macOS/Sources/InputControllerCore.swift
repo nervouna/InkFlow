@@ -100,10 +100,11 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     }
 
     override func refresh(_ client: IMKTextInput?) {
-        _ = refreshWithInputDiagnostics(client)
+        _ = refreshWithInputDiagnostics(client, secureInput: secureInput)
     }
 
-    private func refreshWithInputDiagnostics(_ client: IMKTextInput?) -> InputDeliveryDiagnostic {
+    private func refreshWithInputDiagnostics(_ client: IMKTextInput?,
+                                             secureInput: () -> Bool) -> InputDeliveryDiagnostic {
         var delivery = InputDeliveryDiagnostic(clientPresent: client != nil, commitInsertion: false,
                                                markedTextUpdate: false, markedTextClear: false)
         guard !voice.blocksRime else { return delivery }
@@ -131,7 +132,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                                                   clientID: client?.uniqueClientIdentifierString())
         }
         IFInputRankingContext.refresh(engine, client: client, ownsMarkedText: ownsMarkedText,
-                                      secureInput: secureInput())
+                                      secureInput: secureInput)
         let state = engine?.snapshot() ?? EngineSnapshot()
         if !state.preedit.isEmpty {
             inputDiagnostics.beginComposition()
@@ -194,14 +195,15 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 modeModifierArmed = nil
                 return finishFirstKey(true, .voiceHandled)
             }
-            if voice.hasForeignMarkedText(callbackClient as? IMKTextInput) {
+            let entered = qualityClock.monotonic()
+            let secureInput = secureInput()
+            if voice.hasForeignMarkedText(callbackClient as? IMKTextInput, secureInput: secureInput) {
                 modeModifierArmed = nil
                 return finishFirstKey(false, .voiceDeliveringPassThrough)
             }
-            let entered = qualityClock.monotonic()
             if let callbackEvent, callbackEvent.type == .flagsChanged {
                 associateQualityClient(callbackClient as? IMKTextInput)
-                engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
+                engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput)
                 return handleModeShift(callbackEvent, client: callbackClient as? IMKTextInput, capturedAt: entered)
             }
             modeModifierArmed = nil
@@ -232,15 +234,16 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .routing)
             inputDiagnostics.engineAvailability(true)
             associateQualityClient(callbackClient as? IMKTextInput)
-            engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
+            engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput)
             IFInputRankingContext.prepareForKey(engine, client: callbackClient as? IMKTextInput,
-                                                ownsMarkedText: ownsMarkedText, secureInput: secureInput())
+                                                ownsMarkedText: ownsMarkedText, secureInput: self.secureInput)
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .context)
             let handled = engine.event(callbackEvent, capturedAt: entered)
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .rime)
             if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .commit)
-            let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput)
+            let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput,
+                                                       secureInput: self.secureInput)
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .refresh)
             return finishFirstKey(handled, .rime, delivery: delivery)
         }

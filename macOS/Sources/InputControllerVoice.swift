@@ -222,10 +222,11 @@ final class IFInputControllerVoice {
         guard engine.snapshot().preedit.isEmpty, !controller.ownsMarkedText else {
             reject(.busy); return
         }
-        guard !controller.secureInput() else {
+        let secureInput = controller.secureInput()
+        guard !secureInput else {
             reject(.secure); return
         }
-        guard !hasForeignMarkedText(client) else { reject(.busy); return }
+        guard !hasForeignMarkedText(client, secureInput: secureInput) else { reject(.busy); return }
         guard IFEngine.allSessionsIdle else {
             reject(.busy); return
         }
@@ -332,9 +333,10 @@ final class IFInputControllerVoice {
         cancel(.editing)
     }
 
-    func hasForeignMarkedText(_ client: IMKTextInput?) -> Bool {
-        guard controller?.secureInput() == false, !isActive, !isDelivering,
-              controller?.ownsMarkedText != true, let client else { return false }
+    func hasForeignMarkedText(_ client: IMKTextInput?, secureInput capturedSecureInput: Bool? = nil) -> Bool {
+        guard !isActive, !isDelivering, controller?.ownsMarkedText != true else { return false }
+        let secureInput = capturedSecureInput ?? controller?.secureInput() ?? true
+        guard !secureInput, let client else { return false }
         let range = client.markedRange()
         return range.location >= 0 && range.location != NSNotFound
     }

@@ -62,13 +62,17 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var insertionCallback: (() -> Void)?
     package var onMutation: (() -> Void)?
     package var testBundleID: String? = "inkflow.recording-client"
+    package var testBundleIdentifierProvider: (() -> String?)?
     package var testClientID: String? = "inkflow.recording-client"
     package var testIdentifierProvider: (() -> String?)?
     package var document: String?
     package var selection = NSRange(location: NSNotFound, length: 0)
     package var reportedSelection: NSRange?
     package var mark = NSRange(location: NSNotFound, length: 0)
+    package var selectedRangeReads = 0
     package var markedRangeReads = 0
+    package var onSelectedRange: (() -> Void)?
+    package var onMarkedRange: (() -> Void)?
     package var contextAvailable = true
     package var updatesActualRange = true
     package var requests: [NSRange] = []
@@ -108,8 +112,12 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         onMutation?()
         replace(text, marked: true, cursor: selectionRange, requested: replacementRange)
     }
-    package func selectedRange() -> NSRange { reportedSelection ?? selection }
-    package func markedRange() -> NSRange { markedRangeReads += 1; return mark }
+    package func selectedRange() -> NSRange {
+        selectedRangeReads += 1; onSelectedRange?(); return reportedSelection ?? selection
+    }
+    package func markedRange() -> NSRange {
+        markedRangeReads += 1; onMarkedRange?(); return mark
+    }
     package func attributedSubstring(from range: NSRange) -> NSAttributedString! { nil }
     package func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
     package func characterIndex(for point: NSPoint, tracking mappingMode: IMKLocationToOffsetMappingMode,
@@ -124,7 +132,10 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package func overrideKeyboard(withKeyboardNamed name: String!) {}
     package func selectMode(_ identifier: String!) {}
     package func supportsUnicode() -> Bool { true }
-    package func bundleIdentifier() -> String! { testBundleID }
+    package func bundleIdentifier() -> String! {
+        if let testBundleIdentifierProvider { return testBundleIdentifierProvider() }
+        return testBundleID
+    }
     package func windowLevel() -> CGWindowLevel { 0 }
     package func supportsProperty(_ property: TSMDocumentPropertyTag) -> Bool { false }
     package func uniqueClientIdentifierString() -> String! {

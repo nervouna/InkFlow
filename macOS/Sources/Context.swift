@@ -7,10 +7,16 @@ enum IFPrecedingText {
 
     @MainActor static func read(from client: IMKTextInput?, ownsMarkedText: Bool,
                                 secureInput: Bool = IsSecureEventInputEnabled()) -> String {
-        guard !secureInput, let client else { return "" }
+        read(from: client, ownsMarkedText: ownsMarkedText, secureInput: { secureInput })
+    }
+
+    @MainActor static func read(from client: IMKTextInput?, ownsMarkedText: Bool,
+                                secureInput: () -> Bool) -> String {
+        guard !secureInput(), let client else { return "" }
         let selection = client.selectedRange()
-        guard valid(selection) else { return "" }
+        guard !secureInput(), valid(selection) else { return "" }
         let mark = client.markedRange()
+        guard !secureInput() else { return "" }
         let anchor: Int
         if ownsMarkedText {
             guard valid(mark), mark.length > 0, selection.location >= mark.location,
@@ -24,7 +30,7 @@ enum IFPrecedingText {
         guard anchor > 0 else { return "" }
         let request = NSRange(location: max(0, anchor - limit), length: min(anchor, limit))
         var actual = request
-        guard let text = client.string(from: request, actualRange: &actual), valid(actual),
+        guard !secureInput(), let text = client.string(from: request, actualRange: &actual), !secureInput(), valid(actual),
               actual.length == text.utf16.count,
               actual.location >= max(0, request.location - 1), actual.location < anchor,
               NSMaxRange(actual) >= anchor, NSMaxRange(actual) - anchor <= 1

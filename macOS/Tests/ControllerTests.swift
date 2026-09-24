@@ -718,6 +718,27 @@ struct ControllerTests {
         check(IFPrecedingText.read(from: nil, ownsMarkedText: false, secureInput: false).isEmpty)
         client.contextAvailable = false; client.selection = NSRange(location: 5, length: 0)
         check(read(client).isEmpty)
+        let reentrant = RecordingClient(document: "前缀")
+        var secure = false
+        reentrant.onSelectedRange = { secure = true }
+        check(IFPrecedingText.read(from: reentrant, ownsMarkedText: false,
+                                   secureInput: { secure }).isEmpty)
+        check(reentrant.markedRangeReads == 0 && reentrant.requests.isEmpty,
+              "A secure transition in selectedRange blocks later marked-range and string reads")
+        secure = false; reentrant.onSelectedRange = nil
+        reentrant.onMarkedRange = { secure = true }
+        check(IFPrecedingText.read(from: reentrant, ownsMarkedText: false,
+                                   secureInput: { secure }).isEmpty)
+        check(reentrant.requests.isEmpty,
+              "A secure transition in markedRange blocks the later string read")
+        secure = false; reentrant.onMarkedRange = nil
+        reentrant.substringResponse = { range in
+            secure = true
+            return ("前缀", range)
+        }
+        check(IFPrecedingText.read(from: reentrant, ownsMarkedText: false,
+                                   secureInput: { secure }).isEmpty,
+              "Text returned while secure input activates is discarded")
         print("PASS context reading: bounded UTF-16, emoji, selection, owned/foreign marks, adjusted/unmodified/malformed ranges, nil/unavailable/secure clients")
     }
 

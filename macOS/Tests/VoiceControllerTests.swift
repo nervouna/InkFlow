@@ -749,15 +749,42 @@ struct VoiceControllerTests {
     }
 
     @MainActor static func secureMarkedTextGuard() async {
-        let h = VoiceHarness(); defer { h.close() }
-        h.client.mark = NSRange(location: 1, length: 1)
-        h.secure = true
-        _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
-        h.key()
-        try? await Task.sleep(for: .milliseconds(20))
-        check(h.client.markedRangeReads == 0,
-              "Secure ordinary input and voice shortcuts never read markedRange")
-        check(!h.controller.voice.isActive && h.fake.starts == 0)
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.client.mark = NSRange(location: 1, length: 1)
+            h.secure = true
+            _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
+            h.key()
+            try? await Task.sleep(for: .milliseconds(20))
+            check(h.client.markedRangeReads == 0,
+                  "Secure ordinary input and voice shortcuts never read markedRange")
+            check(!h.controller.voice.isActive && h.fake.starts == 0)
+        }
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.client.onMarkedRange = {
+                h.client.onMarkedRange = nil
+                h.secure = true
+            }
+            _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
+            check(h.client.markedRangeReads == 1 && h.client.selectedRangeReads == 0 && h.client.requests.isEmpty,
+                  "A secure transition inside foreign-mark routing blocks all later document reads")
+        }
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            var readsAtTransition: (selected: Int, marked: Int, strings: Int)?
+            h.client.testBundleIdentifierProvider = {
+                h.client.testBundleIdentifierProvider = nil
+                readsAtTransition = (h.client.selectedRangeReads, h.client.markedRangeReads, h.client.requests.count)
+                h.secure = true
+                return h.client.testBundleID
+            }
+            _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
+            check(readsAtTransition != nil && h.client.selectedRangeReads == readsAtTransition?.selected &&
+                  h.client.markedRangeReads == readsAtTransition?.marked &&
+                  h.client.requests.count == readsAtTransition?.strings,
+                  "A secure transition inside client identity lookup blocks later context reads")
+        }
     }
 
     @MainActor static func zeroLengthForeignMarkedTextGuard() async {
