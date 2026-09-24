@@ -83,7 +83,7 @@ impact_classify() {
     macOS/Tests/AI*|macOS/scripts/test-ai-*.sh)
       impact_rule "$path" 'AI test domain' ai ;;
 
-    macOS/Sources/VoiceLexicon.swift)
+    macOS/Sources/VoiceLexicon.swift|macOS/Sources/VoiceLearning.swift)
       impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/*Voice*.swift)
@@ -105,6 +105,10 @@ impact_classify() {
       impact_manual_add manual-input ;;
     schemas/lua/inkflow_ai_learning.lua)
       impact_rule "$path" 'native learning bridge and generated-data consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
+    schemas/lua/inkflow_english.lua)
+      impact_rule "$path" 'English and voice learning bridge' engine-english voice-lexicon voice-controller ai-learning preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/PackagedCache*|macOS/Tools/PackagedCacheTool.swift|macOS/Resources/*)

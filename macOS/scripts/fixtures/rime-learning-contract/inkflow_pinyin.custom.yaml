@@ -16,4 +16,9 @@ patch:
     user_dict: inkflow_voice_alias
     enable_completion: false
     enable_sentence: false
+  voice_learning:
+    dictionary: easy_en
+    user_dict: inkflow_voice_alias
+    enable_completion: false
+    enable_sentence: false
   mixed_personal/max_input_length: 20

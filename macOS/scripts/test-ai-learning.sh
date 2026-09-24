@@ -55,6 +55,18 @@ build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-re
 (cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
 echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
 
+voice_user="$user_dir/voice-correction-user"
+mkdir -p "$voice_user"
+build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-write
+build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-read
+(cd "$voice_user" && "$manager" -e inkflow_shared_english voice-shared.txt)
+(cd "$voice_user" && "$manager" -e inkflow_voice_alias voice-alias.txt)
+awk -F '\t' '$1 == "Codex" && $2 == "codex" && $3 == 1 { found++ } END { if (found != 1) exit 1 }' \
+  "$voice_user/voice-shared.txt"
+awk -F '\t' '$1 == "Codex" && $2 == "codux" && $3 == 1 { found++ } END { if (found != 1) exit 1 }' \
+  "$voice_user/voice-alias.txt"
+echo 'PASS voice correction storage: canonical shared English plus isolated exact voice alias, restart and count'
+
 english_negative_user="$user_dir/english-negative-user"
 mkdir -p "$english_negative_user"
 build/ai-adoption-learning-tests "$shared" "$english_negative_user" english-negative

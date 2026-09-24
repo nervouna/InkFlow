@@ -3,3 +3,8 @@
 patch:
   engine/translators/+:
     - lua_translator@*inkflow_ai_learning
+  voice_learning:
+    dictionary: easy_en
+    user_dict: inkflow_voice_alias
+    enable_completion: false
+    enable_sentence: false

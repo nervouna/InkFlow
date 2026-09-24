@@ -114,8 +114,16 @@ change macOS/Sources/VoiceLexicon.swift; plan
 has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
 
 new_case
+change macOS/Sources/VoiceLearning.swift; plan
+has 'voice-session'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
+
+new_case
 change schemas/lua/inkflow_ai_learning.lua; plan
 has 'voice-lexicon'; has 'ai-learning'; has 'ai-headless'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
+
+new_case
+change schemas/lua/inkflow_english.lua; plan
+has 'engine-english'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
 
 new_case
 change macOS/scripts/fixtures/rime-learning-contract/inkflow_learning_contract.lua; plan

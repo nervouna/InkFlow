@@ -32,6 +32,11 @@ struct AIAdoptionLearningTests {
             print("PASS mixed personal English \(scenario)")
             return
         }
+        if scenario.hasPrefix("voice-correction-") {
+            try voiceCorrectionLearning(engine: engine, user: user, scenario: scenario)
+            print("PASS voice correction learning \(scenario)")
+            return
+        }
         let initialVoice = engine.readVoiceLexicon(generation: 1, revision: 1)
         check(initialVoice.availability == .available, "Bundled Lua supports bounded user dictionary lookup")
         let words = [("xingmoliang", "星墨量"), ("xingmolan", "星墨蓝"), ("xingmohai", "星墨海"), ("xingmohao", "星墨好")]
@@ -126,6 +131,48 @@ struct AIAdoptionLearningTests {
               "Teardown clears all learned content")
         check(IFEngine.voiceLexicon.snapshot.generation != generation, "Teardown invalidates snapshot generation")
         print("PASS AI learning \(writing ? "write" : "restart"): novel words, preference, abbreviated/incomplete/typo, prefix, ambiguity")
+    }
+
+    @MainActor private static func voiceCorrectionLearning(engine: IFEngine, user: String,
+                                                            scenario: String) throws {
+        check(["voice-correction-write", "voice-correction-read"].contains(scenario),
+              "Unknown voice correction scenario")
+        func candidates(_ input: String) -> [String] {
+            engine.clear(); type(engine, input)
+            var result: [String] = []
+            for _ in 0..<100 {
+                let page = engine.snapshot()
+                result += page.candidates
+                engine.key(0xff56)
+                if engine.snapshot().page == page.page { break }
+            }
+            engine.clear()
+            return result
+        }
+
+        check(candidates("nihao").first == "你好", "Voice learning preserves the Chinese baseline")
+        if scenario == "voice-correction-write" {
+            check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")),
+                  "One attributable correction updates both Rime namespaces")
+            check(!engine.learnVoiceCorrection(.init(sourceCode: "co dux", canonicalText: "Codex")),
+                  "Malformed source aliases fail closed")
+        }
+        let aliases = engine.readVoiceAliases(generation: 7, revision: 9)
+        check(aliases.availability == .available && aliases.generation == 7 && aliases.revision == 9,
+              "Voice aliases are a bounded available snapshot")
+        check(aliases.entries.contains { $0.code == "codux" && $0.text == "Codex" && $0.commits == 1 },
+              "The exact voice-only alias is readable with its native count")
+        check(VoiceAliasRewriter.apply("用 codux，配合。", snapshot: aliases) == "用 Codex，配合。",
+              "Restarted voice aliases apply at exact token boundaries")
+        check(VoiceAliasRewriter.apply("mycodux coduxx", snapshot: aliases) == "mycodux coduxx",
+              "Voice aliases never expand a partial Latin token")
+        check(candidates("codex").contains("Codex"),
+              "The canonical display is persisted to shared keyboard English")
+        check(!candidates("codux").contains("Codex"),
+              "A voice-only alias never leaks into keyboard completion")
+        let files = try FileManager.default.contentsOfDirectory(atPath: user)
+        check(files.contains("inkflow_shared_english.userdb") && files.contains("inkflow_voice_alias.userdb"),
+              "Voice correction uses the two named Rime user dictionaries")
     }
 
     @MainActor private static func learningContract(engine: IFEngine, user: String, scenario: String) throws {

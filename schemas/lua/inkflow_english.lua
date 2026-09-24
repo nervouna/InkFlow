@@ -1,6 +1,48 @@
 -- Use Rime's compiled English dictionary, but rank across completion lengths.
 local M = {}
 
+local function update(memory, code, text, commits)
+  if not memory:start_session() then return false end
+  local written, result = pcall(function()
+    local entry = DictEntry()
+    entry.text = text
+    entry.custom_code = code .. " "
+    return memory:update_userdict(entry, commits, "")
+  end)
+  local finished = memory:finish_session()
+  return written and result and finished
+end
+
+local function with_voice(env, operation)
+  local memory
+  local called, result = pcall(function()
+    memory = Memory(env.engine, env.engine.schema, "voice_learning")
+    return operation(memory)
+  end)
+  if memory then memory:disconnect() end
+  return called, result
+end
+
+local function voice_aliases(memory)
+  if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
+  local iterator = memory.user_dict:lookup_words("", true, 513)
+  local rows, bytes = {}, 3
+  for entry in iterator:iter() do
+    local code = entry.custom_code and entry.custom_code:gsub(" +$", "")
+    local text = entry.text
+    if entry.commit_count > 0 then
+      if not code or not code:match("^[a-z]+$") or #code > 64
+          or not text or not text:match("^[A-Za-z]+$") or #text > 64 then return "unknown" end
+      local row = code .. "\t" .. text .. "\t" .. tostring(entry.commit_count)
+      bytes = bytes + #row + 1
+      if #rows == 512 or bytes > 65536 then return "unknown" end
+      rows[#rows + 1] = row
+    end
+  end
+  table.sort(rows)
+  return "ok\n" .. table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
+end
+
 local function entry_code(memory, entry)
   local code = entry.custom_code
   if not code or code == "" then
@@ -28,9 +70,40 @@ function M.init(env)
     end
     return false
   end)
+  env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
+    if name == "inkflow_voice_aliases" then
+      if context:get_property(name) == "" then return end
+      local ok, result = with_voice(env, voice_aliases)
+      context:set_property("inkflow_voice_aliases_result", ok and result or "unknown")
+      return
+    end
+    if name ~= "inkflow_voice_learning" then return end
+    local payload = context:get_property(name)
+    if payload == "" then return end
+    local source, canonical, text = payload:match("^([a-z]+)\t([a-z]+)\t([A-Za-z]+)$")
+    if not source or not canonical or #source > 64 or #canonical > 64 or #text > 64 then
+      context:set_property("inkflow_voice_learning_result", "failed")
+      return
+    end
+    if not update(env.memory, canonical, text, 1) then
+      context:set_property("inkflow_voice_learning_result", "failed")
+      return
+    end
+    local voiceCalled, voiceUpdated = with_voice(env, function(memory)
+      return update(memory, source, text, 1)
+    end)
+    if not voiceCalled or not voiceUpdated then
+      -- Best-effort compensation avoids strengthening only the shared record.
+      update(env.memory, canonical, text, -1)
+      context:set_property("inkflow_voice_learning_result", "failed")
+      return
+    end
+    context:set_property("inkflow_voice_learning_result", "ok")
+  end)
 end
 
 function M.fini(env)
+  env.connection:disconnect()
   env.memory:disconnect()
 end
 
