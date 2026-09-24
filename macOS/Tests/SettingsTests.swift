@@ -50,6 +50,7 @@ struct SettingsTests {
         settings.candidateCount = 1; settings.fontSize = 15
         check(settings.candidateCount == 5 && settings.fontSize == 14)
         try customPhrases(defaults: defaults, settings: settings)
+        try voicePolishRules()
         UpdateTests.run()
         try await feedbackReports()
         await DiagnosticFeedbackModelTests.run()
@@ -284,6 +285,114 @@ struct SettingsTests {
         }
         defaults.removeObject(forKey: "customPhrases")
         print("PASS custom phrase settings: CRUD, normalized codes, shared codes, Unicode, duplicates, control characters, round-trip IDs, malformed data preserved")
+    }
+
+    @MainActor static func voicePolishRules() throws {
+        let isolated = IsolatedSettings(); defer { isolated.cleanup() }
+        let defaults = isolated.defaults, settings = isolated.settings
+        check(settings.voicePolishRules.isEmpty && settings.voicePolishRulesLoadError == nil)
+        check(settings.enabledVoicePolishRule(for: "com.openai.codex") == nil)
+
+        let codex = try settings.saveVoicePolishRule(bundleIdentifier: "com.openai.codex",
+            displayName: " Codex ", isEnabled: true, prompt: "  Use headings when useful.  ")
+        check(codex.id == "com.openai.codex" && codex.bundleIdentifier == "com.openai.codex")
+        check(codex.displayName == "Codex" && codex.prompt == "Use headings when useful.")
+        check(settings.enabledVoicePolishRule(for: "com.openai.codex") == codex)
+        check(VoicePolishRule.enabledRule(in: settings.voicePolishRules, matching: "com.openai.codex") == codex)
+        check(settings.enabledVoicePolishRule(for: "COM.OPENAI.CODEX") == nil,
+              "Bundle identifier matching must remain exact and case-sensitive")
+
+        try settings.setVoicePolishRuleEnabled(bundleIdentifier: codex.id, enabled: false)
+        check(settings.enabledVoicePolishRule(for: codex.id) == nil)
+        let edited = try settings.saveVoicePolishRule(originalBundleIdentifier: codex.id,
+            bundleIdentifier: codex.id, displayName: "Codex Desktop", isEnabled: true,
+            prompt: "First line\nSecond line")
+        check(edited.prompt == "First line\nSecond line" && settings.voicePolishRules == [edited])
+        check(IFSettings(defaults: defaults).voicePolishRules == [edited], "Rules must round-trip through Data storage")
+
+        let saved = defaults.data(forKey: "voicePolishRules")!
+        rejects { _ = try settings.saveVoicePolishRule(bundleIdentifier: codex.id,
+            displayName: "Duplicate", isEnabled: true, prompt: "Duplicate") }
+        rejects { _ = try settings.saveVoicePolishRule(originalBundleIdentifier: "missing.app",
+            bundleIdentifier: "missing.app", displayName: "Missing", isEnabled: true, prompt: "Missing") }
+        rejects { try settings.setVoicePolishRuleEnabled(bundleIdentifier: "missing.app", enabled: true) }
+        rejects { try settings.deleteVoicePolishRule(bundleIdentifier: "missing.app") }
+        for bundleIdentifier in ["", " ", ".bad", "bad.", "bad id", "bad/id", "应用.id",
+                                 String(repeating: "a", count: VoicePolishRule.maximumBundleIdentifierUTF16 + 1)] {
+            rejects { _ = try settings.saveVoicePolishRule(bundleIdentifier: bundleIdentifier,
+                displayName: "Invalid", isEnabled: true, prompt: "Prompt") }
+        }
+        for displayName in ["", "  ", "Bad\nName", "Bad\tName",
+                            String(repeating: "a", count: VoicePolishRule.maximumDisplayNameUTF16 + 1)] {
+            rejects { _ = try settings.saveVoicePolishRule(bundleIdentifier: "test.\(UUID().uuidString)",
+                displayName: displayName, isEnabled: true, prompt: "Prompt") }
+        }
+        for prompt in ["", "  ", "a\tb", "a\rb", "a\0b", "a\u{7f}b"] {
+            rejects { _ = try settings.saveVoicePolishRule(bundleIdentifier: "test.\(UUID().uuidString)",
+                displayName: "Invalid", isEnabled: true, prompt: prompt) }
+        }
+        check(defaults.data(forKey: "voicePolishRules") == saved,
+              "Every rejected rule mutation must preserve the exact stored bytes")
+
+        let maximumPrompt = String(repeating: "😀", count: VoicePolishRule.maximumPromptUTF16 / 2)
+        let boundary = try VoicePolishRule.validated(bundleIdentifier: "test.boundary", displayName: "Boundary",
+                                                     isEnabled: true, prompt: maximumPrompt)
+        check(boundary.prompt.utf16.count == 4_000)
+        rejects { _ = try VoicePolishRule.validated(bundleIdentifier: "test.too-long", displayName: "Too Long",
+            isEnabled: true, prompt: maximumPrompt + "a") }
+
+        var oneHundred: [VoicePolishRule] = []
+        for index in 0..<VoicePolishRule.maximumRuleCount {
+            oneHundred.append(try .validated(bundleIdentifier: "test.app.\(index)", displayName: "App \(index)",
+                                             isEnabled: index.isMultiple(of: 2), prompt: "Rule \(index)"))
+        }
+        try VoicePolishRule.validate(oneHundred)
+        rejects { try VoicePolishRule.validate(oneHundred + [boundary]) }
+        rejects { try VoicePolishRule.validate([edited, edited]) }
+        let differentlyCased = try VoicePolishRule.validated(bundleIdentifier: "COM.OPENAI.CODEX",
+            displayName: "Different Exact Identifier", isEnabled: true, prompt: "Exact only")
+        try VoicePolishRule.validate([edited, differentlyCased])
+
+        try settings.deleteVoicePolishRule(bundleIdentifier: edited.id)
+        check(settings.voicePolishRules.isEmpty && IFSettings(defaults: defaults).voicePolishRules.isEmpty)
+
+        defaults.removeObject(forKey: "voicePolishRules")
+        let missingRules = IFSettings(defaults: defaults)
+        check(missingRules.voicePolishRules.isEmpty && missingRules.voicePolishRulesLoadError == nil,
+              "A missing rule key remains compatible with existing preferences")
+        let independentPhrase = try missingRules.saveCustomPhrase(code: "ok", text: "短语")
+        check(IFSettings(defaults: defaults).customPhrases == [independentPhrase],
+              "A missing rule key must not suppress custom phrase loading")
+
+        let invalidRule = VoicePolishRule(bundleIdentifier: "bad id", displayName: "Invalid",
+                                          isEnabled: true, prompt: "Prompt")
+        let badRuleValues: [Any] = ["not data", Data("broken rules".utf8),
+            try JSONEncoder().encode([invalidRule]), try JSONEncoder().encode([edited, edited]),
+            try JSONEncoder().encode(oneHundred + [boundary])]
+        for bad in badRuleValues {
+            defaults.set(bad, forKey: "voicePolishRules")
+            let corruptRules = IFSettings(defaults: defaults)
+            check(corruptRules.voicePolishRules.isEmpty && corruptRules.voicePolishRulesLoadError != nil)
+            check(corruptRules.customPhrases == [independentPhrase],
+                  "Corrupt rules must not suppress valid custom phrase loading")
+            rejects { _ = try corruptRules.saveVoicePolishRule(bundleIdentifier: "test.recovery",
+                displayName: "Recovery", isEnabled: true, prompt: "Do not overwrite") }
+            check((defaults.object(forKey: "voicePolishRules") as! NSObject).isEqual(bad),
+                  "Corrupt rule storage must remain untouched for recovery")
+        }
+
+        defaults.set(Data("broken phrases".utf8), forKey: "customPhrases")
+        defaults.removeObject(forKey: "voicePolishRules")
+        let corruptPhrases = IFSettings(defaults: defaults)
+        check(corruptPhrases.customPhrases.isEmpty && corruptPhrases.customPhrasesLoadError != nil)
+        let independentRule = try corruptPhrases.saveVoicePolishRule(bundleIdentifier: "test.independent",
+            displayName: "Independent", isEnabled: true, prompt: "Still load rules")
+        let independentReload = IFSettings(defaults: defaults)
+        check(independentReload.voicePolishRules == [independentRule]
+              && independentReload.customPhrasesLoadError != nil,
+              "Corrupt custom phrases must not suppress valid rule loading")
+
+        print("PASS voice polish rules: normalization, exact match, CRUD, enable, 100/4000 UTF-16 bounds, multiline, controls, byte preservation, round-trip, corrupt and independent loading")
     }
 
     @MainActor static func rejects(_ operation: () throws -> Void) {
