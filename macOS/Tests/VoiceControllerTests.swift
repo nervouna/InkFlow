@@ -103,6 +103,7 @@ struct VoiceControllerTests {
         await stopDuringPreviewDelivery()
         await activationBeforeDeactivation()
         await activationDuringInitialCapture()
+        try await applicationPolishRouting()
         await deliveryAndFallback()
         await cancellationAndIdentity()
         await reentrancy()
@@ -335,7 +336,7 @@ struct VoiceControllerTests {
     @MainActor static func fixtureBypassesCorrection() async {
         let h = VoiceHarness(voiceService: VoiceRecognitionFixture(mode: .final)); defer { h.close() }
         h.settings.voicePolishEnabled = true
-        h.controller.voice.correctionOverride = { _ in
+        h.controller.voice.correctionOverride = { _, _ in
             preconditionFailure("Fixture must never invoke correction or network transport")
         }
         h.key()
@@ -426,9 +427,9 @@ struct VoiceControllerTests {
     @MainActor static func deliveryAndFallback() async {
         let h = VoiceHarness(); defer { h.close() }
         h.settings.voicePolishEnabled = true
-        var correctionRequests: [String] = []
-        h.controller.voice.correctionOverride = { text in
-            correctionRequests.append(text)
+        var correctionRequests: [(String, VoicePolishPrompt.Style)] = []
+        h.controller.voice.correctionOverride = { text, style in
+            correctionRequests.append((text, style))
             throw VoiceCorrectionClient.Failure.network
         }
         await h.start()
@@ -445,13 +446,75 @@ struct VoiceControllerTests {
         h.key()
         callbacks.onFinalized("你好🙂")
         try? await Task.sleep(for: .milliseconds(20))
-        check(correctionRequests == ["你好🙂"], "The complete finalized transcript is polished exactly once")
+        check(correctionRequests.count == 1 && correctionRequests[0].0 == "你好🙂"
+              && correctionRequests[0].1 == .defaultStyle,
+              "The complete finalized transcript is polished exactly once with the default style")
         check(h.client.document == "前🙂你好🙂" && h.client.insertions.count == 1)
         check(h.client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0))
         check(h.client.mark.location == NSNotFound && !h.controller.voice.isActive)
         callbacks.onFinalized("过期")
         check(h.client.insertions.count == 1 && h.status.values.contains(.voiceFallback))
         check(h.client.lengthReads == 0 && h.client.requests.isEmpty, "Voice never reads document content or length")
+    }
+
+    @MainActor static func applicationPolishRouting() async throws {
+        func configuredHarness(appBundleID: String = "inkflow.recording-client",
+                               ruleBundleID: String = "inkflow.recording-client",
+                               enabled: Bool = true, prompt: String = "Custom style") throws -> VoiceHarness {
+            let h = VoiceHarness()
+            h.app = .init(bundleID: appBundleID, pid: 77)
+            h.client.testBundleID = appBundleID
+            h.settings.voicePolishEnabled = true
+            _ = try h.settings.saveVoicePolishRule(bundleIdentifier: ruleBundleID, displayName: "Target App",
+                                                   isEnabled: enabled, prompt: prompt)
+            return h
+        }
+
+        for scenario in ["enabled", "disabled", "unmatched", "caseMismatch"] {
+            let h: VoiceHarness
+            switch scenario {
+            case "disabled": h = try configuredHarness(enabled: false)
+            case "unmatched": h = try configuredHarness(ruleBundleID: "other.app")
+            case "caseMismatch": h = try configuredHarness(appBundleID: "INKFLOW.RECORDING-CLIENT")
+            default: h = try configuredHarness()
+            }
+            defer { h.close() }
+            var requests: [(String, VoicePolishPrompt.Style)] = []
+            h.controller.voice.correctionOverride = { text, style in requests.append((text, style)); return text }
+            await h.start()
+            h.key(); h.fake.callbacks?.onFinalized("完整转写")
+            try? await Task.sleep(for: .milliseconds(20))
+            let expected: VoicePolishPrompt.Style = scenario == "enabled" ? .custom("Custom style") : .defaultStyle
+            check(requests.count == 1 && requests[0].0 == "完整转写" && requests[0].1 == expected,
+                  "\(scenario) resolves one exact session style")
+        }
+
+        let snapshot = try configuredHarness(prompt: "Style at start"); defer { snapshot.close() }
+        var snapshotRequests: [(String, VoicePolishPrompt.Style)] = []
+        snapshot.controller.voice.correctionOverride = { text, style in
+            snapshotRequests.append((text, style)); return text
+        }
+        await snapshot.start()
+        // Isolate the closure snapshot from the controller's existing policy of cancelling
+        // every active voice session on a general settings-change notification.
+        NotificationCenter.default.removeObserver(snapshot.controller, name: .settingsDidChange,
+                                                  object: snapshot.settings)
+        _ = try snapshot.settings.saveVoicePolishRule(originalBundleIdentifier: "inkflow.recording-client",
+            bundleIdentifier: "inkflow.recording-client", displayName: "Target App", isEnabled: true,
+            prompt: "Style changed later")
+        snapshot.key(); snapshot.fake.callbacks?.onFinalized("快照转写")
+        try? await Task.sleep(for: .milliseconds(20))
+        check(snapshotRequests.count == 1 && snapshotRequests[0].1 == .custom("Style at start"),
+              "A running voice session retains the style resolved from its captured starting target")
+
+        let disabled = VoiceHarness(); defer { disabled.close() }
+        var disabledRequests = 0
+        disabled.controller.voice.correctionOverride = { _, _ in disabledRequests += 1; return "unexpected" }
+        await disabled.start()
+        disabled.key(); disabled.fake.callbacks?.onFinalized("离线原文")
+        try? await Task.sleep(for: .milliseconds(20))
+        check(disabledRequests == 0 && disabled.client.document == "前🙂离线原文",
+              "Global polishing off makes no correction request and commits the full raw transcript")
     }
 
     @MainActor static func cancellationAndIdentity() async {
@@ -627,7 +690,7 @@ struct VoiceControllerTests {
     @MainActor static func correctingCancellation() async {
         let h = VoiceHarness(); defer { h.close() }
         h.settings.voicePolishEnabled = true
-        h.controller.voice.correctionOverride = { _ in
+        h.controller.voice.correctionOverride = { _, _ in
             try await Task.sleep(for: .seconds(30)); return "迟到润色"
         }
         await h.start()

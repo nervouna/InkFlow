@@ -14,6 +14,7 @@ struct VoiceForeground: Equatable {
 /// Voice owns its mark separately from Rime. All client calls can reenter this object.
 @MainActor
 final class IFInputControllerVoice {
+    typealias CorrectionOverride = @MainActor (String, VoicePolishPrompt.Style) async throws -> String
     private struct Target {
         let client: IMKTextInput
         let proxy: ObjectIdentifier
@@ -43,7 +44,7 @@ final class IFInputControllerVoice {
     var foreground: @MainActor () -> VoiceForeground? = VoiceForeground.current
     var currentClient: (() -> IMKTextInput?)?
     var lexicon: () -> VoiceLexiconSnapshot = { IFEngine.voiceLexicon.snapshot }
-    var correctionOverride: VoiceSession.Correction?
+    var correctionOverride: CorrectionOverride?
     var isActive: Bool { token != nil || starting }
     var isDelivering: Bool { deliveryDepth > 0 }
     var blocksRime: Bool { isActive || isDelivering }
@@ -246,6 +247,13 @@ final class IFInputControllerVoice {
         guard epoch == expected else { reject(.stale); return }
         target = captured; nativeGeneration = snapshot.generation; stopped = false; ownsVoiceMark = false
         let configuration = controller.settings.smart.configuration
+        let style: VoicePolishPrompt.Style
+        if let rule = controller.settings.enabledVoicePolishRule(for: captured.app.bundleID) {
+            style = .custom(rule.prompt)
+        } else {
+            style = .defaultStyle
+        }
+        let correctionOverride = correctionOverride
         let polish = controller.settings.voicePolishEnabled && !(controller.settings.voice.service is VoiceRecognitionFixture)
         var sequence = 0
         var correct: VoiceSession.Correction?
@@ -256,8 +264,11 @@ final class IFInputControllerVoice {
             VoiceDiagnostics.emit(.correcting, id: id, sequence: index)
             do {
                 let result: String
-                if let injected = self.correctionOverride { result = try await injected(text) }
-                else { result = try await VoiceCorrectionClient().correct(text: text, configuration: configuration) }
+                if let correctionOverride { result = try await correctionOverride(text, style) }
+                else {
+                    result = try await VoiceCorrectionClient().correct(text: text, style: style,
+                                                                        configuration: configuration)
+                }
                 try Task.checkCancellation()
                 let duration = started.duration(to: .now).components
                 VoiceDiagnostics.emit(.corrected, id: id, milliseconds: Int(duration.seconds * 1000 + duration.attoseconds / 1_000_000_000_000_000), sequence: index)
