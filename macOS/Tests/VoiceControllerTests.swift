@@ -109,9 +109,16 @@ struct VoiceControllerTests {
         await externalClientCommit()
         await synchronousDeactivation()
         await gatesAndSettings()
+        await selectedTextDelivery()
+        await selectedTextRollback()
+        await reportedSelectionMismatch()
+        await foreignMarkedTextGuard()
+        await secureMarkedTextGuard()
+        await zeroLengthForeignMarkedTextGuard()
+        await selectedTextTargetLoss()
         await startRejectionDiagnostics()
         await correctingCancellation()
-        print("PASS voice controller: hold/toggle, UTF16 marks, exact-once fallback, target ownership, reentrancy and independent settings")
+        print("PASS voice controller: selected-text transactions, hold/toggle, UTF16 marks, exact-once fallback, target ownership, reentrancy and independent settings")
     }
 
     @MainActor static func voiceChordEvent(_ down: Bool, flags: NSEvent.ModifierFlags = [.control, .option],
@@ -615,13 +622,193 @@ struct VoiceControllerTests {
         h.controller.voice.lexicon = { .unknown() }; h.key()
         check(h.status.values.last == .voiceLexiconWaiting && !h.controller.voice.isActive)
         h.controller.voice.lexicon = { .init(generation: 1, revision: 0, availability: .available, entries: []) }
-        h.client.selection = NSRange(location: 0, length: 1); h.key()
-        check(h.status.values.last == .voiceSelectionUnsupported && h.client.document == "前🙂")
-        h.client.selection = NSRange(location: 3, length: 0)
         check(h.controller.handle(keyEvent(0, "n"), client: h.client), "Ordinary offline key remains handled")
         h.key()
         check(!h.controller.voice.isActive && h.controller.engine?.snapshot().preedit.isEmpty == false)
         h.controller.engine?.clear()
+    }
+
+    @MainActor static func selectedTextDelivery() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.document = "A😀BC"
+        h.client.selection = NSRange(location: 1, length: 3)
+        await h.start()
+        let callbacks = h.fake.callbacks!
+        check(h.client.requests.isEmpty, "Selected text is not read before preview delivery")
+        callbacks.onVolatile("一")
+        callbacks.onVolatile("二😀")
+        check(h.client.document == "A二😀C" && h.client.mark == NSRange(location: 1, length: 3),
+              "Successive previews replace the same selected UTF-16 span")
+        h.key(); callbacks.onFinalized("完成")
+        check(h.client.document == "A完成C" && h.client.insertions.count == 1,
+              "The final transcript replaces the selected text exactly once")
+        check(h.client.insertions[0].replacementRange == NSRange(location: NSNotFound, length: 0))
+        check(h.client.requests.isEmpty && h.client.lengthReads == 0,
+              "Selected text is never read for success delivery")
+    }
+
+    @MainActor static func selectedTextRollback() async {
+        for outcome in 0..<5 {
+            let h = VoiceHarness(); defer { h.close() }
+            h.client.document = "A😀BC"
+            h.client.selection = NSRange(location: 1, length: 3)
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onVolatile("草稿")
+            var preview = h.client.document
+            var selection = h.client.selection
+            var mark = h.client.mark
+            var mutations = h.client.mutations.count
+            switch outcome {
+            case 0: h.controller.voice.cancel(.escape)
+            case 1: callbacks.onFailure()
+            case 2: h.key(); callbacks.onFinalized("")
+            case 3: h.controller.commitComposition(h.client)
+            default:
+                callbacks.onFinal("最终")
+                preview = h.client.document
+                selection = h.client.selection
+                mark = h.client.mark
+                mutations = h.client.mutations.count
+                h.key()
+                h.fake.onCancel = {
+                    h.fake.onCancel = nil
+                    h.controller.voice.cancel(.escape)
+                }
+                callbacks.onFinalized("最终")
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+            check(h.client.document == preview && h.client.selection == selection && h.client.mark == mark,
+                  "Unbound selected-text cancellation preserves the host preview for outcome \(outcome)")
+            check(h.client.mutations.count == mutations && h.client.insertions.isEmpty,
+                  "Unbound selected-text cancellation performs no second write for outcome \(outcome)")
+            check(h.client.requests.isEmpty && h.client.lengthReads == 0)
+            check(!h.controller.voice.isActive)
+        }
+    }
+
+    @MainActor static func reportedSelectionMismatch() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.document = "浮层"
+        h.client.selection = NSRange(location: 2, length: 0)
+        h.client.reportedSelection = NSRange(location: 0, length: 1)
+        await h.start()
+        check(h.client.requests.isEmpty, "Cross-surface reported text is never read")
+        let callbacks = h.fake.callbacks!
+        callbacks.onVolatile("实时")
+        check(h.client.document == "浮层实时", "Host-reported selection does not redirect focused preview delivery")
+        h.key(); callbacks.onFinalized("提交")
+        check(h.client.document == "浮层提交" && h.client.insertions.count == 1,
+              "Focused target receives one final insertion despite a cross-surface reported selection")
+    }
+
+    @MainActor static func foreignMarkedTextGuard() async {
+        do {
+            let plain = VoiceHarness(); defer { plain.close() }
+            await plain.start()
+            plain.fake.callbacks?.onVolatile("草稿")
+            check(plain.controller.handle(keyEvent(53, ""), client: plain.client),
+                  "Escape remains consumed for a voice mark that did not replace selected text")
+            check(!plain.controller.voice.isActive)
+        }
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.document = "A😀BC"
+        h.client.selection = NSRange(location: 1, length: 3)
+        await h.start()
+        h.fake.callbacks?.onVolatile("保留")
+        let mutationsBeforeEscape = h.client.mutations.count
+        check(!h.controller.handle(keyEvent(53, ""), client: h.client),
+              "Escape passes through to the host after cancelling a selected-text voice mark")
+        check(!h.controller.voice.isActive && h.client.mutations.count == mutationsBeforeEscape,
+              "Escape cancellation performs no second mutation")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == true,
+              "Rime remains idle while selected-text Escape is handed to the host")
+        let document = h.client.document
+        let mutations = h.client.mutations.count
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(!h.controller.voice.isActive && h.fake.starts == 1,
+              "A host mark safely blocks a second voice session")
+        check(!h.controller.handle(keyEvent(0, "n"), client: h.client),
+              "Ordinary input passes to the host while its mark exists")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == true,
+              "Rime remains idle while the host mark exists")
+        check(h.client.document == document && h.client.mutations.count == mutations,
+              "The foreign-mark guard never clears or rewrites the host mark")
+        h.client.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
+                               replacementRange: NSRange(location: NSNotFound, length: 0))
+        check(h.controller.handle(keyEvent(0, "n"), client: h.client),
+              "Ordinary input resumes after the host naturally ends its mark")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == false)
+        h.controller.engine?.clear()
+        h.controller.refresh(h.client)
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(h.controller.voice.isActive && h.fake.starts == 2,
+              "Voice starts again after the host naturally ends its mark")
+    }
+
+    @MainActor static func secureMarkedTextGuard() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.mark = NSRange(location: 1, length: 1)
+        h.secure = true
+        _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(h.client.markedRangeReads == 0,
+              "Secure ordinary input and voice shortcuts never read markedRange")
+        check(!h.controller.voice.isActive && h.fake.starts == 0)
+    }
+
+    @MainActor static func zeroLengthForeignMarkedTextGuard() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.mark = NSRange(location: 2, length: 0)
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(!h.controller.voice.isActive && h.fake.starts == 0,
+              "A finite zero-length host mark blocks voice start")
+        check(!h.controller.handle(keyEvent(0, "n"), client: h.client),
+              "A finite zero-length host mark passes ordinary input to the host")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == true,
+              "Rime remains idle for a finite zero-length host mark")
+        h.client.mark = NSRange(location: NSNotFound, length: 0)
+        check(h.controller.handle(keyEvent(0, "n"), client: h.client),
+              "Ordinary input resumes after the host mark becomes NSNotFound")
+        h.controller.engine?.clear()
+        h.controller.refresh(h.client)
+        h.key()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(h.controller.voice.isActive && h.fake.starts == 1,
+              "Voice resumes after the host mark becomes NSNotFound")
+    }
+
+    @MainActor static func selectedTextTargetLoss() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.client.document = "A😀BC"
+        h.client.selection = NSRange(location: 1, length: 3)
+        await h.start()
+        let callbacks = h.fake.callbacks!
+        callbacks.onVolatile("旧草稿")
+        let oldPreview = h.client.document
+        let other = RecordingClient(document: "新字段")
+        other.testBundleID = h.client.testBundleID
+        h.focused = other
+        _ = h.controller.voice.validate()
+        callbacks.onFinalized("迟到")
+        check(h.client.document == oldPreview && other.document == "新字段",
+              "Target loss never restores or submits text into either stale or newly focused clients")
+        check(h.client.insertions.isEmpty && other.mutations.isEmpty)
+
+        let deactivated = VoiceHarness(); defer { deactivated.close() }
+        deactivated.client.document = "A😀BC"
+        deactivated.client.selection = NSRange(location: 1, length: 3)
+        await deactivated.start()
+        deactivated.fake.callbacks?.onVolatile("旧草稿")
+        let deactivatedPreview = deactivated.client.document
+        let mutationCount = deactivated.client.mutations.count
+        deactivated.controller.deactivateServer(deactivated.client)
+        check(deactivated.client.document == deactivatedPreview && deactivated.client.mutations.count == mutationCount,
+              "Lifecycle loss does not restore or clear a selected-text preview in the stale client")
     }
 
     @MainActor static func correctingCancellation() async {

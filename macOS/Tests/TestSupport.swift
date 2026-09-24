@@ -68,6 +68,7 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var selection = NSRange(location: NSNotFound, length: 0)
     package var reportedSelection: NSRange?
     package var mark = NSRange(location: NSNotFound, length: 0)
+    package var markedRangeReads = 0
     package var contextAvailable = true
     package var updatesActualRange = true
     package var requests: [NSRange] = []
@@ -108,7 +109,7 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         replace(text, marked: true, cursor: selectionRange, requested: replacementRange)
     }
     package func selectedRange() -> NSRange { reportedSelection ?? selection }
-    package func markedRange() -> NSRange { mark }
+    package func markedRange() -> NSRange { markedRangeReads += 1; return mark }
     package func attributedSubstring(from range: NSRange) -> NSAttributedString! { nil }
     package func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
     package func characterIndex(for point: NSPoint, tracking mappingMode: IMKLocationToOffsetMappingMode,

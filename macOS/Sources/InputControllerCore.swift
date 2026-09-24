@@ -130,7 +130,8 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             engine?.qualityRecorder?.commitDrained(commit, insertionIssued: !commit.isEmpty && client != nil,
                                                   clientID: client?.uniqueClientIdentifierString())
         }
-        IFInputRankingContext.refresh(engine, client: client, ownsMarkedText: ownsMarkedText)
+        IFInputRankingContext.refresh(engine, client: client, ownsMarkedText: ownsMarkedText,
+                                      secureInput: secureInput())
         let state = engine?.snapshot() ?? EngineSnapshot()
         if !state.preedit.isEmpty {
             inputDiagnostics.beginComposition()
@@ -193,6 +194,10 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                 modeModifierArmed = nil
                 return finishFirstKey(true, .voiceHandled)
             }
+            if voice.hasForeignMarkedText(callbackClient as? IMKTextInput) {
+                modeModifierArmed = nil
+                return finishFirstKey(false, .voiceDeliveringPassThrough)
+            }
             let entered = qualityClock.monotonic()
             if let callbackEvent, callbackEvent.type == .flagsChanged {
                 associateQualityClient(callbackClient as? IMKTextInput)
@@ -229,7 +234,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             associateQualityClient(callbackClient as? IMKTextInput)
             engine.qualityRecorder?.setTimingCaptureEnabled(!secureInput())
             IFInputRankingContext.prepareForKey(engine, client: callbackClient as? IMKTextInput,
-                                                ownsMarkedText: ownsMarkedText)
+                                                ownsMarkedText: ownsMarkedText, secureInput: secureInput())
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .context)
             let handled = engine.event(callbackEvent, capturedAt: entered)
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .rime)

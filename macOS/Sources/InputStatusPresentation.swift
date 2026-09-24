@@ -8,7 +8,7 @@ enum InputStatus: Equatable {
     case chinesePunctuation
     case englishPunctuation
     case voiceRecordingHold, voiceRecordingToggle, voiceCorrecting, voiceFallback, voiceFailed
-    case voiceNotReady, voiceLexiconWaiting, voiceSelectionUnsupported
+    case voiceNotReady, voiceLexiconWaiting
 
     var persistent: Bool { [.voiceRecordingHold, .voiceRecordingToggle, .voiceCorrecting].contains(self) }
 
@@ -27,7 +27,6 @@ enum InputStatus: Equatable {
         case .voiceFailed: "语音未完成，已取消"
         case .voiceNotReady: "请在设置的「语音」页准备识别"
         case .voiceLexiconWaiting: "词库正在准备，请稍后重试"
-        case .voiceSelectionUnsupported: "请取消文字选择后再开始语音"
         }
     }
 }

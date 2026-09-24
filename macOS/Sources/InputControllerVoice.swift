@@ -26,11 +26,13 @@ final class IFInputControllerVoice {
     private weak var controller: IFInputControllerShell?
     private var target: Target?
     private var cleanupPending: Target?
+    private var cleanupLeavesMarkedText = false
     private var epoch: UInt64 = 0
     private var token: UUID?
     private var session: VoiceSession?
     private var startTask: Task<Void, Never>?
     private var ownsVoiceMark = false
+    private var selectedTextTransaction = false
     private var held = false
     private var stopped = false
     private var pendingStop: UUID?
@@ -74,7 +76,9 @@ final class IFInputControllerVoice {
         beginDelivery()
         defer { endDelivery() }
         guard epoch == capturedEpoch else { return }
+        let hadSelectedText = selectedTextTransaction
         cancel(.deactivated)
+        guard !hadSelectedText else { return }
         guard epoch == capturedEpoch &+ 1, controller?.secureInput() == false else { return }
         sender.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
                              replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -198,7 +202,11 @@ final class IFInputControllerVoice {
             // A reentrant edit is passed through; retain the held key's release edge.
             if !isDelivering || !held { resetGesture() }
             guard isActive else { return false }
-            if event.keyCode == UInt16(kVK_Escape) { cancel(.escape); return true }
+            if event.keyCode == UInt16(kVK_Escape) {
+                let passesToSelectedTextHost = selectedTextTransaction && ownsVoiceMark
+                cancel(.escape)
+                return !passesToSelectedTextHost
+            }
             if !isDelivering { cancel(.editing) }
         }
         return false
@@ -217,6 +225,7 @@ final class IFInputControllerVoice {
         guard !controller.secureInput() else {
             reject(.secure); return
         }
+        guard !hasForeignMarkedText(client) else { reject(.busy); return }
         guard IFEngine.allSessionsIdle else {
             reject(.busy); return
         }
@@ -242,9 +251,10 @@ final class IFInputControllerVoice {
         guard unknownSelection || AIClientAnchor.valid(selection) else {
             reject(.selection); return
         }
-        guard unknownSelection || selection.length == 0 else { reject(.selection); show(.voiceSelectionUnsupported, client: client); return }
         guard epoch == expected else { reject(.stale); return }
-        target = captured; nativeGeneration = snapshot.generation; stopped = false; ownsVoiceMark = false
+        target = captured
+        selectedTextTransaction = !unknownSelection && selection.length > 0
+        nativeGeneration = snapshot.generation; stopped = false; ownsVoiceMark = false
         let configuration = controller.settings.smart.configuration
         let polish = controller.settings.voicePolishEnabled && !(controller.settings.voice.service is VoiceRecognitionFixture)
         var sequence = 0
@@ -322,6 +332,13 @@ final class IFInputControllerVoice {
         cancel(.editing)
     }
 
+    func hasForeignMarkedText(_ client: IMKTextInput?) -> Bool {
+        guard controller?.secureInput() == false, !isActive, !isDelivering,
+              controller?.ownsMarkedText != true, let client else { return false }
+        let range = client.markedRange()
+        return range.location >= 0 && range.location != NSNotFound
+    }
+
     @discardableResult func validate() -> Bool {
         guard let expected = target, token != nil else { return false }
         guard controller?.engine?.available == true, lexicon().generation == nativeGeneration,
@@ -350,17 +367,21 @@ final class IFInputControllerVoice {
         held = false
         guard isActive || isDelivering else {
             // A lifecycle callback can arrive inside service.cancel after token removal.
-            if reason == .deactivated { epoch &+= 1; cleanupPending = nil }
+            if reason == .deactivated || reason == .targetChanged || reason == .secureInput {
+                epoch &+= 1; cleanupPending = nil; cleanupLeavesMarkedText = false
+            }
             return
         }
         let oldToken = token, oldModel = session, oldTarget = ownsVoiceMark ? target : nil
+        let oldSelectedTextTransaction = selectedTextTransaction
         epoch &+= 1; token = nil; session = nil; target = nil; starting = false; held = false
         let cancellationEpoch = epoch
         ownsVoiceMark = false
+        selectedTextTransaction = false
         pendingStop = nil
         startTask?.cancel(); startTask = nil
         let lostTarget = reason == .deactivated || reason == .targetChanged || reason == .secureInput
-        if lostTarget { cleanupPending = nil }
+        if lostTarget { cleanupPending = nil; cleanupLeavesMarkedText = false }
         if let oldToken {
             oldModel?.cancel(id: oldToken)
             controller?.settings.voice.service.cancel()
@@ -370,7 +391,11 @@ final class IFInputControllerVoice {
         guard epoch == cancellationEpoch else { return }
         controller?.statusPresentation?.hide()
         if !lostTarget, epoch == cancellationEpoch, let oldTarget {
-            if isDelivering { cleanupPending = oldTarget }
+            if isDelivering {
+                cleanupPending = oldTarget
+                cleanupLeavesMarkedText = oldSelectedTextTransaction
+            }
+            else if oldSelectedTextTransaction { return }
             else { clearMark(oldTarget) }
         }
     }
@@ -387,20 +412,22 @@ final class IFInputControllerVoice {
             beginDelivery()
             defer { endDelivery() }
             cleanupPending = ownsVoiceMark ? owned : nil
+            cleanupLeavesMarkedText = ownsVoiceMark && selectedTextTransaction
             resetGesture()
             epoch &+= 1; token = nil; session = nil; target = nil; held = false
             ownsVoiceMark = false
+            selectedTextTransaction = false
             pendingStop = nil
             startTask?.cancel(); startTask = nil
             let deliveryEpoch = epoch
             controller?.settings.voice.service.cancel()
             guard epoch == deliveryEpoch else { return }
             guard let actual = readTarget(epoch: deliveryEpoch), owned.sameIdentity(actual) else {
-                cleanupPending = nil
+                cleanupPending = nil; cleanupLeavesMarkedText = false
                 controller?.statusPresentation?.hide()
                 return
             }
-            cleanupPending = nil
+            cleanupPending = nil; cleanupLeavesMarkedText = false
             // Model ownership is gone before the client callback; nested commit/finish cannot insert twice.
             VoiceDiagnostics.emit(.submitted, id: id)
             owned.client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -420,7 +447,10 @@ final class IFInputControllerVoice {
         deliveryDepth = max(0, deliveryDepth - 1)
         if deliveryDepth == 0 { deliveryEngine?.endDelivery(); deliveryEngine = nil }
         if deliveryDepth == 0, let pending = cleanupPending {
-            cleanupPending = nil; clearMark(pending)
+            let leaveMarkedText = cleanupLeavesMarkedText
+            cleanupPending = nil; cleanupLeavesMarkedText = false
+            if leaveMarkedText { /* The host owns this mark; do not perform a second write. */ }
+            else { clearMark(pending) }
         }
         if deliveryDepth == 0, let pending = pendingStop {
             pendingStop = nil
