@@ -22,6 +22,15 @@ printf input > "$repo/macOS/Sources/input"
 printf entry > "$repo/macOS/DictionaryTool/main.swift"
 printf old > "$repo/build/InkFlow.app/Contents/sentinel"
 touch "$repo/build/deps/dist/lib/librime.1.17.0.dylib" "$repo/build/deps/dist/lib/rime-plugins/librime-lua.dylib"
+sparkle_framework="$repo/build/swiftpm/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+mkdir -p "$sparkle_framework/Versions/B/Resources" \
+  "$sparkle_framework/Versions/B/XPCServices/Installer.xpc" \
+  "$sparkle_framework/Versions/B/XPCServices/Downloader.xpc" "$sparkle_framework/Versions/B/Updater.app"
+printf helper > "$sparkle_framework/Versions/B/Autoupdate"
+printf framework > "$sparkle_framework/Versions/B/Sparkle"
+ln -s B "$sparkle_framework/Versions/Current"
+ln -s Versions/Current/Sparkle "$sparkle_framework/Sparkle"
+ln -s Versions/Current/Resources "$sparkle_framework/Resources"
 for name in dependencies prepare-packaged-cache; do printf '#!/bin/bash\nexit 0\n' > "$repo/macOS/scripts/$name.sh"; done
 cat > "$repo/macOS/scripts/prepare-chinese.sh" <<'STUB'
 #!/bin/bash
@@ -52,6 +61,7 @@ cat > "$repo/macOS/scripts/build-dictionary-worker.sh" <<'STUB'
 mkdir -p "$(dirname "$1")"; printf worker > "$1"; chmod +x "$1"
 STUB
 cat > "$repo/macOS/scripts/swift-package.sh" <<'STUB'
+swiftpm_scratch="$PWD/build/swiftpm"
 build_swift_product() {
   if [[ "$1" == quality-build-metadata ]]; then
     cat > "$2" <<'TOOL'
@@ -122,6 +132,10 @@ chmod +x "$repo/macOS/scripts/"*.sh
   [[ $(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist) == "$second" ]]
   [[ -s build/dictionary-sources/fresh.yaml ]]
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]]
+  [[ -s build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate ]]
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc ]]
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc ]]
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app ]]
   [[ -z $(find build -maxdepth 1 -name 'app-stage.*' -print) ]]
 )
 echo 'PASS build workflow: cold source bootstrap, staging assembly, drift rejection, old-bundle preservation and fresh replacement'

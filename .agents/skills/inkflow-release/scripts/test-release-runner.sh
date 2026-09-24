@@ -18,6 +18,16 @@ setup_fixture() {
   base="$fixture/$name"; seed="$base/seed"; bare="$base/origin.git"; repo="$base/repo"; bin="$base/bin"; external="$base/external"
   mkdir -p "$seed/.agents/skills/inkflow-release/scripts" "$seed/macOS/scripts" "$seed/build" "$bin" "$external"
   cp "$runner_source" "$seed/.agents/skills/inkflow-release/scripts/release-runner.sh"
+  cat > "$seed/.agents/skills/inkflow-release/scripts/release-appcast.sh" <<'STUB'
+#!/bin/bash
+set -eu
+[[ "$1" == generate ]] || exit 92
+version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
+build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
+dir="build/releases/InkFlow-$version-$build"
+[[ -e "$dir/appcast.xml" ]] || printf 'fixture signed appcast\n' > "$dir/appcast.xml"
+echo "appcast:$2" >> "$EVENTS"
+STUB
   cp "$root/macOS/scripts/release-build.sh" "$seed/macOS/scripts/"
   chmod +x "$seed/.agents/skills/inkflow-release/scripts/release-runner.sh"
   printf 'build/\n' > "$seed/.gitignore"
@@ -32,16 +42,18 @@ STUB
 printf '%s\n' core bundle-deep
 [[ '$manual' != true ]] || echo manual-install
 STUB
-  cat > "$seed/.agents/skills/inkflow-release/scripts/package.sh" <<'STUB'
+cat > "$seed/.agents/skills/inkflow-release/scripts/package.sh" <<'STUB'
 #!/bin/bash
 set -eu
 [[ "$1" == finish ]] || exit 92
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist); build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
 dir="build/releases/InkFlow-$version-$build"; scratch=$(mktemp -d "$dir/assembly.XXXXXX")
 echo fixture-dmg > "$scratch/InkFlow-$version-$build-arm64.dmg"
+echo fixture-sparkle-zip > "$scratch/InkFlow-$version-$build-arm64.zip"
 echo package-finish-attempt >> "$EVENTS"
 if [[ ${PACKAGE_FAIL_ONCE:-0} == 1 && ! -e "$PACKAGE_STATE/failed-once" ]]; then mkdir -p "$PACKAGE_STATE"; touch "$PACKAGE_STATE/failed-once"; exit 73; fi
 ln "$scratch/InkFlow-$version-$build-arm64.dmg" "$dir/InkFlow-$version-$build-arm64.dmg"
+ln "$scratch/InkFlow-$version-$build-arm64.zip" "$dir/InkFlow-$version-$build-arm64.zip"
 echo package-finish >> "$EVENTS"
 STUB
   cat > "$seed/.agents/skills/inkflow-release/scripts/notary.sh" <<'STUB'
@@ -149,14 +161,15 @@ run_fail() { if run_ok; then echo "Unexpected success: $base" >&2; exit 1; fi; }
 accept_install() { printf 'Release-Installation-Acceptance: version=1.2.3 build=7 releaseCommit=%s dmgSHA256=%s scope=installation-upgrade result=pass\n' "$(git -C "$repo" rev-parse HEAD)" "$(shasum -a 256 "$release/InkFlow-1.2.3-7-arm64.dmg" | awk '{print $1}')" >> "$repo/build/release-notes.md"; }
 
 setup_fixture happy false; run_ok
-[[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 2 && $(grep -c '^publish$' "$SIDE_EFFECTS") == 1 ]]
+[[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 && $(grep -c '^publish$' "$SIDE_EFFECTS") == 1 ]]
+awk '/^appcast:/{a=NR} /^gh:release create /{c=NR} /^upload:/{u=NR} END{exit !(a>0 && a<c && c<u)}' "$EVENTS" "$SIDE_EFFECTS"
 [[ $(grep -c '^submit-args:.*--no-s3-acceleration' "$EVENTS") == 2 ]]
 [[ $(grep -c '^submit-args:.*--force' "$EVENTS") == 2 ]]
 grep -Fxq 'gh:repo view fixture/inkflow --json nameWithOwner --jq .nameWithOwner' "$EVENTS"
 cmp "$GH_STATE/body" "$repo/build/public-release-notes.md"; if grep -Fq 'INTERNAL SECRET PLACEHOLDER' "$GH_STATE/body"; then exit 1; fi
 effects=$(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}'); run_ok
 [[ $(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}') == "$effects" ]]
-[[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^staple:' "$EVENTS") == 2 ]]
+[[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^staple:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 ]]
 grep -Fq 'gh:release view v1.2.3 --repo fixture/inkflow --json body --template {{.body}}' "$EVENTS"
 echo 'PASS: happy path and completed continue are exactly-once'
 
@@ -209,7 +222,7 @@ echo 'PASS: final receipt remains bound to the accepted submission ID'
 setup_fixture finish-crash false; export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH=1; run_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_FINISH
 [[ -f "$release/InkFlow-1.2.3-7-arm64.dmg" && -f "$release/dmg-build.intent.plist" && ! -e "$release/dmg-build.plist" && ! -e "$release/dmg-receipt.plist" ]]
 run_ok
-[[ $(grep -c '^package-finish$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 && $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 2 ]]
+[[ $(grep -c '^package-finish$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 && $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 ]]
 [[ -f "$release/dmg-receipt.plist" ]]
 echo 'PASS: post-finish pre-receipt crash adopts only the fully verified intended DMG'
 
@@ -225,7 +238,7 @@ echo replacement > "$base/replacement.dmg"; mv -f "$base/replacement.dmg" "$rele
 echo 'PASS: replaced post-crash DMG is rejected before DMG submission or upload'
 
 setup_fixture failed-finish-retry false; export PACKAGE_FAIL_ONCE=1; run_fail; [[ ! -e "$release/InkFlow-1.2.3-7-arm64.dmg" && $(find "$release" -maxdepth 1 -type d -name 'assembly.*' | wc -l) -eq 1 ]]; run_ok; unset PACKAGE_FAIL_ONCE
-[[ $(grep -c '^package-finish-attempt$' "$EVENTS") == 2 && $(grep -c '^package-finish$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 && $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 2 ]]
+[[ $(grep -c '^package-finish-attempt$' "$EVENTS") == 2 && $(grep -c '^package-finish$' "$EVENTS") == 1 && $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 1 && $(grep -c '^submit:InkFlow-1.2.3-7-arm64.dmg$' "$EVENTS") == 1 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 ]]
 [[ $(find "$release" -maxdepth 1 -type d -name 'assembly.*' | wc -l) -eq 2 && -f "$release/dmg-build.plist" ]]
 echo 'PASS: failed finish assembly is retained while the unique successful retry is bound'
 
@@ -238,7 +251,7 @@ setup_fixture arbitrary-dmg false; echo arbitrary > "$release/InkFlow-1.2.3-7-ar
 [[ ! -e "$release/dmg-build.intent.plist" && ! -s "$SIDE_EFFECTS" ]]; if grep -Eq '^submit:|^package-finish$' "$EVENTS"; then exit 1; fi
 echo 'PASS: arbitrary preexisting DMG without pre-finish intent is rejected before effects'
 
-setup_fixture manual true; run_fail; [[ $(cat "$GH_STATE/draft") == true ]]; [[ $(find "$GH_STATE/assets" -type f | wc -l) -eq 2 ]]; accept_install; run_ok; [[ $(cat "$GH_STATE/draft") == false ]]
+setup_fixture manual true; run_fail; [[ $(cat "$GH_STATE/draft") == true ]]; [[ $(find "$GH_STATE/assets" -type f | wc -l) -eq 4 ]]; accept_install; run_ok; [[ $(cat "$GH_STATE/draft") == false ]]
 echo 'PASS: installation gate preserves draft and publishes after bound acceptance'
 
 setup_fixture asset-conflict false; mkdir -p "$GH_STATE/assets"; touch "$GH_STATE/exists"; echo v1.2.3 > "$GH_STATE/tag"; echo 'InkFlow 1.2.3' > "$GH_STATE/name"; echo true > "$GH_STATE/draft"; cp "$repo/build/public-release-notes.md" "$GH_STATE/body"; echo wrong > "$GH_STATE/assets/InkFlow-1.2.3-7-arm64.dmg"; run_fail; [[ $(cat "$GH_STATE/assets/InkFlow-1.2.3-7-arm64.dmg") == wrong ]]

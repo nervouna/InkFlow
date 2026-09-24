@@ -39,6 +39,18 @@ cp build/deps/dist/lib/rime-plugins/librime-lua.dylib "$app/Contents/Frameworks/
 bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
 build_swift_product InkFlow "$app/Contents/MacOS/InkFlow" debug
+sparkle_framework_source="$swiftpm_scratch/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+[[ -d "$sparkle_framework_source" && -s "$sparkle_framework_source/Versions/B/Sparkle" ]] || {
+  echo "Sparkle 2.10.0 arm64 framework artifact is missing: $sparkle_framework_source" >&2
+  exit 1
+}
+ditto "$sparkle_framework_source" "$app/Contents/Frameworks/Sparkle.framework"
+[[ -L "$app/Contents/Frameworks/Sparkle.framework/Sparkle" \
+  && -L "$app/Contents/Frameworks/Sparkle.framework/Resources" \
+  && -L "$app/Contents/Frameworks/Sparkle.framework/Versions/Current" ]] || {
+  echo 'Sparkle.framework copy did not preserve its versioned symlinks.' >&2
+  exit 1
+}
 bash macOS/scripts/build-dictionary-worker.sh "$app/Contents/MacOS/InkFlowDictionaryWorker"
 bash macOS/scripts/prepare-packaged-cache.sh "$app"
 INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/quality-metadata.sh "$app"

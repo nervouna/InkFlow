@@ -55,7 +55,7 @@ impact_classify() {
   local path=$1
   # Producers share the content-free record contract in addition to their own feature behavior.
   case "$path" in
-    macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/UpdateCoordinator.swift|macOS/Sources/VoiceSettings.swift)
+    macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
       impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
   esac
   case "$path" in
@@ -127,10 +127,13 @@ impact_classify() {
       impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/AvailableUpdate.swift|macOS/Sources/GitHubRelease*.swift|macOS/Sources/SemanticVersion.swift|macOS/Sources/Update*.swift)
-      impact_rule "$path" 'automatic application update domain' settings
+      impact_rule "$path" 'Sparkle updater settings and legacy preference migration' settings
       impact_manual_add manual-settings manual-install ;;
     macOS/Sources/*SettingsView.swift|macOS/Sources/InputPreferences.swift)
       impact_rule "$path" 'settings domain' settings engine-options controller ai-runtime voice-controller
+      impact_manual_add manual-input manual-settings ;;
+    macOS/Sources/InputController.swift)
+      impact_rule "$path" 'input-source update menu and Settings integration' controller settings
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/EngineAI.swift)
       impact_rule "$path" 'engine and AI learning integration' engine controller ai-headless ai-learning voice-controller quality-capture-query
@@ -155,6 +158,10 @@ impact_classify() {
     macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 
+    macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/main.swift)
+      impact_rule "$path" 'Sparkle updater integration, bootstrap and application settings' settings local-diagnostics termination
+      impact_bundle=true; impact_release_tools=true
+      impact_manual_add manual-settings ;;
     macOS/Sources/Application*|macOS/Sources/main.swift)
       impact_rule "$path" 'application lifecycle: complete non-GUI coverage'
       impact_all=true; impact_manual_add manual-input manual-settings ;;
@@ -169,10 +176,10 @@ impact_classify() {
       impact_all=true ;;
     macOS/scripts/test-groups.sh|macOS/scripts/test.sh|macOS/scripts/test-affected.sh|macOS/scripts/test-impact.sh|macOS/scripts/test-test-*.sh)
       impact_rule "$path" 'test runner' runner workflow ;;
-    macOS/scripts/test-workflow.sh|macOS/scripts/test-release-*.sh|macOS/scripts/release-*.sh|macOS/scripts/test-install.sh|macOS/scripts/test-cleanup.sh|macOS/scripts/cleanup.sh)
+    macOS/scripts/test-workflow.sh|macOS/scripts/test-release-*.sh|macOS/scripts/release-*.sh|macOS/scripts/test-install.sh|macOS/scripts/test-build-workflow.sh|macOS/scripts/test-cleanup.sh|macOS/scripts/cleanup.sh)
       impact_rule "$path" 'workflow helpers' workflow
       impact_release_tools=true ;;
-    macOS/scripts/build.sh|macOS/scripts/build-number.sh|macOS/scripts/build-summary.sh|macOS/scripts/build-icon.sh|macOS/scripts/dependencies.sh|macOS/scripts/swift-package.sh|macOS/scripts/swift-test.sh|macOS/scripts/check-bundle.sh|macOS/scripts/verify-developer-id.sh|macOS/scripts/test-build-workflow.sh|macOS/scripts/test-dependencies-cache.sh|macOS/DeveloperID.entitlements)
+    macOS/scripts/build.sh|macOS/scripts/build-number.sh|macOS/scripts/build-summary.sh|macOS/scripts/build-icon.sh|macOS/scripts/dependencies.sh|macOS/scripts/swift-package.sh|macOS/scripts/swift-test.sh|macOS/scripts/check-bundle.sh|macOS/scripts/sparkle-signing.sh|macOS/scripts/test-sparkle-signing.sh|macOS/scripts/verify-developer-id.sh|macOS/scripts/test-build-workflow.sh|macOS/scripts/test-dependencies-cache.sh|macOS/DeveloperID.entitlements)
       impact_rule "$path" 'build and package workflow' workflow
       impact_bundle=true; impact_release_tools=true ;;
     macOS/Tests/*|macOS/scripts/test-*.sh)

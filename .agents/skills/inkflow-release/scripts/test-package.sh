@@ -9,7 +9,9 @@ scripts="$repo/.agents/skills/inkflow-release/scripts"
 mkdir -p "$scripts" "$repo/macOS/scripts" "$repo/macOS/Installer" "$repo/macOS/Shared" \
   "$repo/build/InkFlow.app/Contents/MacOS" "$repo/build/release-verification" "$fixture/bin"
 cp "$root/.agents/skills/inkflow-release/scripts/"{package,release-config}.sh "$scripts/"
-cp "$root/macOS/scripts/release-build.sh" "$repo/macOS/scripts/"
+cp "$root/macOS/scripts/release-build.sh" "$root/macOS/scripts/sparkle-signing.sh" "$repo/macOS/scripts/"
+source "$repo/macOS/scripts/sparkle-signing.sh"
+while IFS= read -r component; do mkdir -p "$component"; done < <(sparkle_components "$repo/build/InkFlow.app")
 cp "$root/macOS/Info.plist" "$repo/macOS/Info.plist"
 cp "$root/macOS/DeveloperID.entitlements" "$repo/macOS/DeveloperID.entitlements"
 printf 'fixture package\n' > "$repo/Package.swift"
@@ -126,7 +128,7 @@ echo fixture-dmg > "${!#}"
 STUB
 cat > "$fixture/bin/ditto" <<'STUB'
 #!/bin/bash
-if [[ "${MALFORMED_PAYLOAD:-0}" == 1 && "${!#}" == */assembly.*/InkFlow.zip ]]; then
+if [[ "${MALFORMED_PAYLOAD:-0}" == 1 && "${!#}" == */assembly.*/InkFlow-*-arm64.zip ]]; then
   printf 'invalid zip' > "${!#}"
 else
   /usr/bin/ditto "$@"
@@ -159,6 +161,7 @@ version=$(plutil -extract CFBundleShortVersionString raw "$repo/macOS/Info.plist
 build=$allocated_build
 output="$repo/build/releases/InkFlow-$version-$build"
 dmg="$output/InkFlow-$version-$build-arm64.dmg"
+update_zip="$output/InkFlow-$version-$build-arm64.zip"
 package() { bash "$scripts/package.sh" "$@" > "$fixture/result.log" 2>&1; }
 reject() {
   if package "$@"; then echo "Unexpected success: $*" >&2; exit 1; fi
@@ -188,7 +191,7 @@ if grep -q 'build-installer\|dmg\|staple-validate' "$EVENTS"; then exit 1; fi
 awk '/^sign:.*InkFlow.app$/{s=NR} /^verify:.*payload\/InkFlow.app$/{v=NR} /^bundle:--fast --signed /{b=NR} END{exit !(s<v && v<b)}' "$EVENTS"
 # Nested signing order is preserved.
 sed -n 's/^sign:.*\///p' "$EVENTS" > "$fixture/sign-order"
-printf '%s\n' librime-lua.dylib librime.1.dylib InkFlowDictionaryWorker InkFlow.app > "$fixture/expected"
+printf '%s\n' librime-lua.dylib librime.1.dylib InkFlowDictionaryWorker Installer.xpc Downloader.xpc Autoupdate Updater.app Sparkle.framework InkFlow.app > "$fixture/expected"
 cmp "$fixture/sign-order" "$fixture/expected"
 shasum "$output/inputmethod-submission.zip" > "$fixture/submission.sha"
 reject prepare
@@ -231,7 +234,28 @@ rmdir "$output/finishing"
 # Fixture probe failure represents malformed payload; production runs the actual loader.
 : > "$EVENTS"
 package finish
-[[ -f "$dmg" ]]
+[[ -f "$dmg" && -f "$update_zip" ]]
+python3 - "$update_zip" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    names = [name for name in archive.namelist() if name.rstrip("/")]
+roots = {name.split("/", 1)[0] for name in names}
+payload = {name.rstrip("/") for name in names if name.startswith("InkFlow.app/")}
+sidecars = [name for name in names if name.startswith("__MACOSX/")]
+assert payload and "InkFlow.app" in roots and not roots - {"InkFlow.app", "__MACOSX"}
+for name in sidecars:
+    relative = name.removeprefix("__MACOSX/")
+    if relative in {"", "InkFlow.app"}:
+        continue
+    assert relative.startswith("InkFlow.app/")
+    relative = relative.rstrip("/")
+    parent, separator, leaf = relative.rpartition("/")
+    counterpart = f"{parent}/{leaf[2:]}" if leaf.startswith("._") else relative
+    assert counterpart in payload
+assert "InkFlow.app/Contents/Info.plist" in names
+PY
 shasum -c "$fixture/submission.sha"
 [[ $(grep -Fxc 'bundle:--fast' "$EVENTS") == 0 ]]
 [[ $(grep -c '^bundle:--fast --signed ' "$EVENTS") == 1 ]]
@@ -251,4 +275,4 @@ awk '/staple-validate/{s=NR} /build-installer/{b=NR} /check-payload/{p=NR} /^dmg
 printf unknown > "$dmg"
 reject finish
 [[ $(cat "$dmg") == unknown ]]
-echo 'PASS: package phases, nested signing order, stapled fresh ZIP, identity/version/signature/closure/probe gates and no-clobber'
+echo 'PASS: package phases, nested signing order, stapled Sparkle ZIP and legacy Installer DMG, identity/version/signature/closure/probe gates and no-clobber'

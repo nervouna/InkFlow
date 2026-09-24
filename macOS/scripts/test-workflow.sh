@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 bash macOS/scripts/test-release-verification.sh
 bash macOS/scripts/test-release-receipt.sh
+bash macOS/scripts/test-sparkle-signing.sh
 bash macOS/scripts/test-install.sh
 bash macOS/scripts/test-dependencies-cache.sh
 bash macOS/scripts/test-build-workflow.sh

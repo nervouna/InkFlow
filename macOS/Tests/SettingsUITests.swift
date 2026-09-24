@@ -176,11 +176,16 @@ struct SettingsUITests {
         let server = IMKServer(name: name, bundleIdentifier: name)!
         let candidateLifetime = NativeCandidateLifetime(server: server)
         defer { withExtendedLifetime(candidateLifetime) {} }
-        let preferences = IFSettingsWindowController(settings: settings)
+        let updaterState = SettingsUpdaterState()
+        let preferences = IFSettingsWindowController(settings: settings, updaterAccess: updaterState.access)
         let controller = InkFlowInputController(server: server, delegate: nil, client: nil,
                                                 settings: settings, settingsWindow: preferences)!
         let item = controller.menu()!.items.first { $0.action == #selector(InkFlowInputController.showPreferences(_:)) }!
         check(item.action == #selector(InkFlowInputController.showPreferences(_:)))
+        let updateItem = controller.menu()!.items.first { $0.action == #selector(InkFlowInputController.checkForUpdates(_:)) }!
+        check(updateItem.title == "检查更新…" && updateItem.isEnabled)
+        controller.doCommand(by: updateItem.action!, command: [kIMKCommandMenuItemName: updateItem])
+        check(updaterState.manualChecks == 1, "The input-source menu uses the injected updater action")
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         let window = preferences.window!
         waitForFocus(window)
@@ -217,7 +222,7 @@ struct SettingsUITests {
         checkFeedbackAndAbout(window, settings: settings)
         checkCustomPhrasesLayout(window, settings: settings)
         checkInputLayout(window, settings: settings)
-        checkUpdateSettings(window, settings: settings)
+        checkUpdateSettings(window, settings: settings, updaterState: updaterState)
         checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
@@ -280,9 +285,12 @@ struct SettingsUITests {
         window.close()
     }
 
-    @MainActor static func checkUpdateSettings(_ window: NSWindow, settings: IFSettings) {
-        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .updates))
-        window.setContentSize(NSSize(width: 700, height: 380))
+    @MainActor private static func checkUpdateSettings(_ window: NSWindow, settings: IFSettings,
+                                                       updaterState: SettingsUpdaterState) {
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(
+            settings: settings, updaterAccess: updaterState.access, initialSection: .updates
+        ))
+        window.setContentSize(NSSize(width: 700, height: 420))
         drainEvents()
         checkMinimumSize(window)
         check(window.title == "更新")
@@ -309,17 +317,33 @@ struct SettingsUITests {
         check(checkToggle["role"] as? String == "AXCheckBox" && checkToggle["value"] as? Int == 0)
         check(downloadToggle["role"] as? String == "AXCheckBox" && downloadToggle["enabled"] as? Bool == false)
         press("settings.updates.check")
-        check(settings.automaticUpdateChecksEnabled && control("settings.updates.download")["enabled"] as? Bool == true)
+        check(updaterState.access.automaticallyChecksForUpdates
+              && control("settings.updates.download")["enabled"] as? Bool == true)
         press("settings.updates.download")
-        check(settings.automaticUpdateDownloadsEnabled)
+        check(updaterState.access.automaticallyDownloadsUpdates)
+        let checksBeforeSettingsAction = updaterState.manualChecks
+        press("settings.updates.check-now")
+        check(updaterState.manualChecks == checksBeforeSettingsAction + 1,
+              "Settings uses Sparkle's standard user-initiated check")
+
+        // A standard Sparkle UI change must invalidate the view and read the same public property.
+        updaterState.access.automaticallyDownloadsUpdates = false
+        updaterState.access.updaterPreferencesDidChange()
+        drainEvents()
+        updaterState.access.automaticallyDownloadsUpdates = true
+        updaterState.access.updaterPreferencesDidChange()
+        drainEvents()
+        check(control("settings.updates.download")["value"] as? Int == 1,
+              "The preference view reflects an external Sparkle preference change")
+
         press("settings.updates.check")
-        check(!settings.automaticUpdateChecksEnabled && settings.automaticUpdateDownloadsEnabled
+        check(!updaterState.access.automaticallyChecksForUpdates && updaterState.access.automaticallyDownloadsUpdates
               && control("settings.updates.download")["enabled"] as? Bool == false,
               "Disabling checks preserves the user's automatic-download choice")
-        settings.automaticUpdateDownloadsEnabled = false
+        updaterState.access.automaticallyDownloadsUpdates = false
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         drainEvents()
-        print("PASS update settings layout: two native toggles, default-off state, dependency, actions and persistence")
+        print("PASS update settings layout: Sparkle-backed preferences, default-off state, daily schedule copy, standard actions and KVO refresh")
     }
 
     @MainActor static func checkFeedbackAndAbout(_ window: NSWindow, settings: IFSettings) {
@@ -963,4 +987,22 @@ final class FeedbackUIState {
     var openedURLs: [URL] = []
 
     func recordCollection() { logCollections += 1 }
+}
+
+@MainActor
+private final class SettingsUpdaterState {
+    var automaticChecks = false
+    var automaticDownloads = false
+    var manualChecks = 0
+
+    lazy var access = IFUpdaterAccess(
+        readAutomaticChecks: { [weak self] in self?.automaticChecks ?? false },
+        writeAutomaticChecks: { [weak self] in self?.automaticChecks = $0 },
+        readAutomaticDownloads: { [weak self] in self?.automaticDownloads ?? false },
+        writeAutomaticDownloads: { [weak self] in self?.automaticDownloads = $0 },
+        readAllowsAutomaticUpdates: { [weak self] in self?.automaticChecks ?? false },
+        readCanCheckForUpdates: { true },
+        performCheckForUpdates: { [weak self] in self?.manualChecks += 1 },
+        performStartUpdater: {}
+    )
 }

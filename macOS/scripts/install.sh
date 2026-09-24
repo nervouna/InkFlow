@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 # Process and TIS observations must come from the real login session.
 /bin/ps -p "$$" -o pid= >/dev/null || { echo 'Desktop process access unavailable; input-source state is unknown. Run installation outside the restricted sandbox.' >&2; exit 1; }
+source macOS/scripts/sparkle-signing.sh
 app="$PWD/build/InkFlow.app"
 mode="${1:-}"
 case "$mode" in
@@ -21,10 +22,12 @@ codesign --force "${signing[@]}" "$app/Contents/Frameworks/rime-plugins/librime-
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
 [[ -x "$app/Contents/MacOS/InkFlowDictionaryWorker" ]] || { echo "Missing dictionary helper; rebuild InkFlow first." >&2; exit 1; }
 codesign --force "${signing[@]}" "$app/Contents/MacOS/InkFlowDictionaryWorker"
+sign_sparkle "$app" "${signing[@]}"
 codesign --force "${signing[@]}" --entitlements "$entitlements" "$app"
 codesign --verify --deep --strict "$app"
 metadata=$(codesign -dvvv "$app" 2>&1)
 if [[ "$mode" == --developer-id ]]; then
+  verify_sparkle_developer_id "$app" T7976FL2LP
   [[ "$metadata" == *'TeamIdentifier=T7976FL2LP'* ]] || { echo 'Unexpected signing team.' >&2; exit 1; }
   [[ "$metadata" == *'Authority=Developer ID Application:'* ]] || { echo 'Expected Developer ID Application signature.' >&2; exit 1; }
 fi

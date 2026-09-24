@@ -1,7 +1,7 @@
 import InputMethodKit
 
 package enum InkFlowApplicationBootstrap {
-    @MainActor package static func run() -> Int32 {
+    @MainActor package static func run(updaterAccess: IFUpdaterAccess) -> Int32 {
         autoreleasepool {
             let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
             LocalDiagnostics.shared.activate(directory: user.appendingPathComponent("Diagnostics"),
@@ -26,11 +26,11 @@ package enum InkFlowApplicationBootstrap {
                 return .init(store: store, runtime: runtime, user: user, services: .init(client: .init(), worker: worker))
             }, logger: IFDictionaryCoordinator.persistentLogger)
             dictionaries.bootstrapForServing(runtime: .bundled(helper: helper), user: user)
-            IFSettingsWindowController.sharedController.dictionaries = dictionaries
-            let currentVersion = (bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
-                .flatMap(IFSemanticVersion.init)
-            let updates = currentVersion.map { IFUpdateCoordinator(settings: .sharedSettings, currentVersion: $0) }
-            updates?.start()
+            let settingsWindow = IFSettingsWindowController.sharedController
+            settingsWindow.dictionaries = dictionaries
+            settingsWindow.updaterAccess = updaterAccess
+            _ = IFSettings.sharedSettings.migrateLegacyAutomaticUpdateChecks(to: updaterAccess)
+            updaterAccess.startUpdater()
             let lifecycle = IFApplicationLifecycle(stopDictionaries: { try await dictionaries.shutdown() },
                 stopEngine: { IFEngine.stop() },
                 closeStore: {
@@ -64,8 +64,7 @@ package enum InkFlowApplicationBootstrap {
             startup.end(processSpan)
             let eventLoop = startup.begin(.eventLoop)
             DispatchQueue.main.async { startup.end(eventLoop) }
-            withExtendedLifetime((server, candidateLifetime, dictionaries, lifecycle, statisticsStore, updates)) { NSApp.run() }
-            updates?.stop()
+            withExtendedLifetime((server, candidateLifetime, dictionaries, lifecycle, statisticsStore, updaterAccess)) { NSApp.run() }
             return 0
         }
     }

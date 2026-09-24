@@ -32,7 +32,8 @@ struct QualityBuildMetadataTool {
         let verify = option != nil
         let signedVerification = option == "--verify-signed"
         let resourceFiles = try regularFiles(root: resources, excluding: [output])
-        let bundleFiles = try regularFiles(root: app, excluding: [output], excludingCodeSignatureArtifacts: true)
+        let bundleFiles = try regularFiles(root: app, excluding: [output], excludingCodeSignatureArtifacts: true,
+                                           allowingSparkleFrameworkSymlinks: true)
         let rankingSources = try manifest(root.appendingPathComponent("macOS/Quality/ranking-sources.txt"), root: root,
                                           requireTracked: true)
         let rankingResources = try manifest(root.appendingPathComponent("macOS/Quality/ranking-resources.txt"), root: resources,
@@ -129,7 +130,7 @@ struct QualityBuildMetadataTool {
     }
 
     private static func isBuildInput(_ path: String) -> Bool {
-        if ["Package.swift", "macOS/Info.plist"].contains(path) { return true }
+        if ["Package.swift", "Package.resolved", "macOS/Info.plist"].contains(path) { return true }
         let prefixes = ["macOS/Sources/", "macOS/Quality/", "macOS/SwiftPM/", "macOS/DictionaryWorker/", "macOS/DictionaryTool/", "macOS/Tools/", "macOS/Resources/",
             "macOS/Design/", "macOS/Data/", "macOS/config/", "macOS/Licenses/", "schemas/"]
         if prefixes.contains(where: path.hasPrefix) { return true }
@@ -141,7 +142,8 @@ struct QualityBuildMetadataTool {
     }
 
     private static func regularFiles(root: URL, excluding: Set<URL>,
-                                     excludingCodeSignatureArtifacts: Bool = false) throws -> [String] {
+                                     excludingCodeSignatureArtifacts: Bool = false,
+                                     allowingSparkleFrameworkSymlinks: Bool = false) throws -> [String] {
         try FileManager.default.subpathsOfDirectory(atPath: root.path).compactMap { path in
             if excludingCodeSignatureArtifacts && (path.split(separator: "/").contains("_CodeSignature")
                 || path == "Contents/CodeResources") {
@@ -150,7 +152,26 @@ struct QualityBuildMetadataTool {
             let url = root.appendingPathComponent(path).standardizedFileURL
             if excluding.contains(url) { return nil }
             let type = try FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType
-            if type == .typeSymbolicLink { throw Failure("Bundle symlinks are unsupported by quality metadata: \(path)") }
+            if type == .typeSymbolicLink {
+                let frameworkPrefix = "Contents/Frameworks/Sparkle.framework/"
+                guard allowingSparkleFrameworkSymlinks, path.hasPrefix(frameworkPrefix) else {
+                    throw Failure("Bundle symlinks are unsupported by quality metadata: \(path)")
+                }
+                let destination = try FileManager.default.destinationOfSymbolicLink(atPath: url.path)
+                let frameworkRoot = root.appendingPathComponent("Contents/Frameworks/Sparkle.framework")
+                    .standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
+                let lexicalDestination = url.deletingLastPathComponent()
+                    .appendingPathComponent(destination).standardizedFileURL
+                let resolvedDestination = lexicalDestination.resolvingSymlinksInPath().standardizedFileURL
+                guard !destination.hasPrefix("/"), !destination.split(separator: "/").contains(".."),
+                      lexicalDestination.path.hasPrefix(root.appendingPathComponent("Contents/Frameworks/Sparkle.framework")
+                        .standardizedFileURL.path + "/"),
+                      resolvedDestination.path.hasPrefix(frameworkRoot.path + "/"),
+                      FileManager.default.fileExists(atPath: url.path) else {
+                    throw Failure("Unsafe or broken Sparkle.framework symlink: \(path) -> \(destination)")
+                }
+                return path
+            }
             return type == .typeRegular ? path : nil
         }
     }

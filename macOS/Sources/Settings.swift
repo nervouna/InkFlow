@@ -1,5 +1,85 @@
 import AppKit
+import Combine
 import SwiftUI
+
+@MainActor
+package final class IFUpdaterAccess: ObservableObject {
+    private let readAutomaticChecks: @MainActor () -> Bool
+    private let writeAutomaticChecks: @MainActor (Bool) -> Void
+    private let readAutomaticDownloads: @MainActor () -> Bool
+    private let writeAutomaticDownloads: @MainActor (Bool) -> Void
+    private let readAllowsAutomaticUpdates: @MainActor () -> Bool
+    private let readCanCheckForUpdates: @MainActor () -> Bool
+    private let performCheckForUpdates: @MainActor () -> Void
+    private let performStartUpdater: @MainActor () -> Void
+    private var observations: [NSKeyValueObservation] = []
+    @Published private var preferenceRevision = 0
+
+    package init(readAutomaticChecks: @escaping @MainActor () -> Bool,
+                 writeAutomaticChecks: @escaping @MainActor (Bool) -> Void,
+                 readAutomaticDownloads: @escaping @MainActor () -> Bool,
+                 writeAutomaticDownloads: @escaping @MainActor (Bool) -> Void,
+                 readAllowsAutomaticUpdates: @escaping @MainActor () -> Bool,
+                 readCanCheckForUpdates: @escaping @MainActor () -> Bool,
+                 performCheckForUpdates: @escaping @MainActor () -> Void,
+                 performStartUpdater: @escaping @MainActor () -> Void) {
+        self.readAutomaticChecks = readAutomaticChecks
+        self.writeAutomaticChecks = writeAutomaticChecks
+        self.readAutomaticDownloads = readAutomaticDownloads
+        self.writeAutomaticDownloads = writeAutomaticDownloads
+        self.readAllowsAutomaticUpdates = readAllowsAutomaticUpdates
+        self.readCanCheckForUpdates = readCanCheckForUpdates
+        self.performCheckForUpdates = performCheckForUpdates
+        self.performStartUpdater = performStartUpdater
+    }
+
+    package var automaticallyChecksForUpdates: Bool {
+        get { readAutomaticChecks() }
+        set { writeAutomaticChecks(newValue) }
+    }
+
+    package var automaticallyDownloadsUpdates: Bool {
+        get { readAutomaticDownloads() }
+        set { writeAutomaticDownloads(newValue) }
+    }
+
+    package var allowsAutomaticUpdates: Bool { readAllowsAutomaticUpdates() }
+    package var canCheckForUpdates: Bool { readCanCheckForUpdates() }
+    package func checkForUpdates() { performCheckForUpdates() }
+    package func startUpdater() { performStartUpdater() }
+
+    package func retainObservation(_ observation: NSKeyValueObservation) {
+        observations.append(observation)
+    }
+
+    package func updaterPreferencesDidChange() {
+        preferenceRevision &+= 1
+    }
+}
+
+package enum IFUpdateDiagnosticOutcome: Sendable {
+    case begin, ready, completed, failed, cancelled, skipped, handled
+}
+
+package enum IFUpdateDiagnostics {
+    package static func record(event: StaticString, outcome: IFUpdateDiagnosticOutcome,
+                               reason: StaticString? = nil, correlation: UUID?,
+                               elapsedMilliseconds: Double? = nil, error: (any Error)? = nil) {
+        let diagnosticOutcome: LocalDiagnosticEvent.Outcome = switch outcome {
+        case .begin: .begin
+        case .ready: .ready
+        case .completed: .completed
+        case .failed: .failed
+        case .cancelled: .cancelled
+        case .skipped: .skipped
+        case .handled: .handled
+        }
+        let safeError = error.map(LocalDiagnosticEvent.safeError)
+        LocalDiagnostics.shared.submit(.init(module: .update, event: event, outcome: diagnosticOutcome,
+            reason: reason, correlation: correlation, elapsedMilliseconds: elapsedMilliseconds,
+            errorDomain: safeError?.0, errorCode: safeError?.1))
+    }
+}
 
 extension Notification.Name {
     static let settingsDidChange = Notification.Name("IFSettingsDidChange")
@@ -112,16 +192,18 @@ final class IFSettings: ObservableObject {
         get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "thunderMode") }
     }
-    var automaticUpdateChecksEnabled: Bool {
-        get { integer(for: "automaticUpdateChecksEnabled", allowed: [0, 1], fallback: 0) != 0 }
-        set { set(newValue ? 1 : 0, for: "automaticUpdateChecksEnabled") }
+    @discardableResult
+    func migrateLegacyAutomaticUpdateChecks(to updater: IFUpdaterAccess) -> Bool? {
+        let migrationKey = "sparkleAutomaticChecksMigrationCompleted"
+        guard defaults.object(forKey: migrationKey) == nil else { return nil }
+
+        let legacyValue = defaults.object(forKey: "automaticUpdateChecksEnabled") as? NSNumber
+        let migratedValue = legacyValue == NSNumber(value: 1)
+        updater.automaticallyChecksForUpdates = migratedValue
+        updater.automaticallyDownloadsUpdates = false
+        defaults.set(true, forKey: migrationKey)
+        return migratedValue
     }
-    var automaticUpdateDownloadsEnabled: Bool {
-        get { integer(for: "automaticUpdateDownloadsEnabled", allowed: [0, 1], fallback: 0) != 0 }
-        set { set(newValue ? 1 : 0, for: "automaticUpdateDownloadsEnabled") }
-    }
-    var lastAutomaticUpdateCheck: Date? { defaults.object(forKey: "lastAutomaticUpdateCheck") as? Date }
-    func recordAutomaticUpdateCheck(at date: Date) { defaults.set(date, forKey: "lastAutomaticUpdateCheck") }
     var voicePolishEnabled: Bool {
         get { integer(for: "voicePolishEnabled", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "voicePolishEnabled") }
@@ -204,15 +286,18 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     @ObservedObject var settings: IFSettings
     var dictionaries: IFDictionaryCoordinator?
+    var updaterAccess: IFUpdaterAccess?
     let feedbackReporter: FeedbackReporter
     let diagnosticDependencies: DiagnosticFeedbackDependencies
     @State private var section: SettingsSection?
 
     init(settings: IFSettings, dictionaries: IFDictionaryCoordinator? = nil,
+         updaterAccess: IFUpdaterAccess? = nil,
          initialSection: SettingsSection = .defaultSection, feedbackReporter: FeedbackReporter = .live,
          diagnosticDependencies: DiagnosticFeedbackDependencies = .live) {
         self.settings = settings
         self.dictionaries = dictionaries
+        self.updaterAccess = updaterAccess
         self.feedbackReporter = feedbackReporter
         self.diagnosticDependencies = diagnosticDependencies
         _section = State(initialValue: initialSection)
@@ -244,7 +329,10 @@ struct SettingsView: View {
                 else if section == .smart { SmartSettingsView(settings: settings, smart: settings.smart) }
                 else if section == .voice { VoiceSettingsView(settings: settings, shortcuts: settings.shortcuts, showShortcuts: { section = .shortcuts }, showAIService: { section = .smart }) }
                 else if section == .dictionaries { DictionarySettingsView(coordinator: dictionaries) }
-                else if section == .updates { UpdateSettingsView(settings: settings) }
+                else if section == .updates {
+                    if let updaterAccess { UpdateSettingsView(updaterAccess: updaterAccess) }
+                    else { EmptyView() }
+                }
                 else { input }
             }
             .frame(minHeight: 0, maxHeight: .infinity)
@@ -375,6 +463,7 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         return item
     }()
     var dictionaries: IFDictionaryCoordinator?
+    var updaterAccess: IFUpdaterAccess?
 
     func windowWillClose(_ notification: Notification) {
         dictionaries?.presentationClosed()
@@ -382,8 +471,9 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     }
     private let settings: IFSettings
 
-    init(settings: IFSettings) {
+    init(settings: IFSettings, updaterAccess: IFUpdaterAccess? = nil) {
         self.settings = settings
+        self.updaterAccess = updaterAccess
         super.init(window: nil)
     }
 
@@ -398,7 +488,9 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         window.toolbarStyle = .unified
         window.collectionBehavior = [.fullScreenNone, .fullScreenDisallowsTiling]
         window.isReleasedWhenClosed = false
-        window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, dictionaries: dictionaries))
+        window.contentViewController = SettingsHostingController(rootView: SettingsView(
+            settings: settings, dictionaries: dictionaries, updaterAccess: updaterAccess
+        ))
         window.setContentSize(NSSize(width: 700, height: 450))
         self.window = window
         window.delegate = self

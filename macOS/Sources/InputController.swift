@@ -138,6 +138,9 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             traditional.indentationLevel = 0
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
             menu.addItem(.separator())
+            let checkForUpdates = menu.addItem(withTitle: "检查更新…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+            checkForUpdates.target = self
+            checkForUpdates.isEnabled = settingsWindow.updaterAccess?.canCheckForUpdates ?? false
             menu.addItem(withTitle: "打开设置", action: #selector(showPreferences(_:)), keyEquivalent: "").target = self
             ai.addMenuItem(to: menu, target: self, action: #selector(toggleSmartPrediction(_:)))
             for item in menu.items where !item.isSeparatorItem { item.indentationLevel = 0 }
@@ -149,6 +152,10 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     nonisolated override func showPreferences(_ sender: Any!) {
         // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }
+    }
+
+    @objc nonisolated func checkForUpdates(_ sender: Any?) {
+        MainActor.assumeIsolated { settingsWindow.updaterAccess?.checkForUpdates() }
     }
 
     @objc nonisolated func toggleSmartPrediction(_ sender: Any!) {

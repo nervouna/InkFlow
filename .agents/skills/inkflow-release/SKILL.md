@@ -5,7 +5,7 @@ description: Execute or resume an InkFlow macOS release end to end from a clean 
 
 # InkFlow release
 
-Deliver a public GitHub Release containing a signed, notarized DMG and SHA-256 checksum. Use `main` and an annotated `vX.Y.Z` tag; do not maintain a `release` branch.
+Deliver a public GitHub Release containing the signed and notarized Installer DMG plus its legacy SHA-256 checksum, a Sparkle-signed ZIP containing only `InkFlow.app`, and the generated `appcast.xml`. Use `main` and an annotated `vX.Y.Z` tag; do not maintain a `release` branch.
 
 ## Release command contract
 
@@ -104,10 +104,14 @@ bash .agents/skills/inkflow-release/scripts/release-runner.sh continue
 ```
 
 This is the only operative outer command for notarizing and stapling the payload,
-finishing and verifying the DMG, notarizing and stapling the DMG, generating its
-checksum, tagging and atomically pushing the verified commit, creating or reusing
-the draft GitHub Release, uploading and downloading its assets for byte comparison,
-and publishing it. Do not invoke those upload or publication operations separately.
+finishing and verifying the legacy Installer DMG and app-only Sparkle ZIP,
+notarizing and stapling the DMG, generating and validating the EdDSA appcast and
+legacy DMG checksum, tagging and atomically pushing the verified commit, creating
+or reusing the draft GitHub Release, uploading all assets before publication,
+downloading them for byte comparison, and publishing it. The runner uses the
+locked Sparkle `generate_appcast` tool and local Keychain account configured for
+Sparkle signing; it creates no delta archives. Do not invoke upload or publication
+operations separately.
 The runner retains submission intents, responses, receipts, hashes and release
 state, and is resumable and idempotent: after interruption or a recoverable
 failure, inspect the retained diagnostic, resolve the cause, and run the same
@@ -149,7 +153,7 @@ Stop on the first failed gate and report the last successful step, version/build
 
 - Before the release commit: preserve the plist change and reuse the same version; do not package uncommitted bytes.
 - After the release commit but before a successful prepare: verify it matches the recorded source and package inputs before retrying. `package.sh prepare` refuses an existing output directory. If prepare failed before a usable submission ZIP, inspect and move that failed directory to a unique backup before retrying the same version.
-- After prepare: do not manually replay internal stages. Retain the ZIP, app, submission state, assemblies, DMG, final receipt, tag and draft, then rerun only the stable `release-runner.sh continue` command. A process crash may leave an ownership lock; establish that no runner or packager is active before removing only the proven stale lock. The runner recovers a uniquely identifiable lost submission, reuses a valid post-stapling receipt, matching remote state and missing assets, and blocks zero or ambiguous submission matches, mismatching assets/tags or drifted notes without resubmitting unknown remote state, clobbering or overwriting a published version.
+- After prepare: do not manually replay internal stages. Retain the notarization ZIP, app, submission state, assemblies, Installer DMG, Sparkle ZIP, appcast receipt, final receipt, tag and draft, then rerun only the stable `release-runner.sh continue` command. A process crash may leave an ownership lock; establish that no runner or packager is active before removing only the proven stale lock. The runner recovers a uniquely identifiable lost submission, reuses valid post-stapling receipts, matching remote state and missing assets, and blocks zero or ambiguous submission matches, mismatching assets/tags or drifted notes without resubmitting unknown remote state, clobbering or overwriting a published version.
 - If source/artifact provenance cannot be recovered, stop and explain the gap instead of certifying old bytes. Never silently omit required release verification or notarization.
 
 ## Primary command references
@@ -157,3 +161,4 @@ Stop on the first failed gate and report the last successful step, version/build
 - [SemVer](https://semver.org/)
 - [Apple notarization workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow); installed `xcrun notarytool --help`, `xcrun stapler --help`, `hdiutil create -help`.
 - GitHub CLI [create](https://cli.github.com/manual/gh_release_create), [upload](https://cli.github.com/manual/gh_release_upload), [edit](https://cli.github.com/manual/gh_release_edit).
+- Sparkle [publishing](https://sparkle-project.org/documentation/publishing/) and [security](https://sparkle-project.org/documentation/).

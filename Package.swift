@@ -20,7 +20,6 @@ let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
     "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
-    "AvailableUpdate.swift", "GitHubRelease.swift", "GitHubReleaseAsset.swift", "SemanticVersion.swift",
     "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLexicon.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
     "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
     "ThunderPanel.swift", "ThunderPresentation.swift",
@@ -30,8 +29,8 @@ let inkFlowCoreSources = [
     "DictionaryWorkerRunner.swift", "Engine.swift", "InputController.swift", "InputPreferences.swift",
     "PackagedCache.swift", "PackagedCacheBootstrap.swift", "QualityRecorder.swift", "QualityRecords.swift",
     "QualityStore.swift", "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",
-    "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift", "UpdateCheckSchedule.swift", "UpdateCoordinator.swift",
-    "UpdateInstallerLauncher.swift", "UpdateService.swift", "UpdateSettingsView.swift",
+    "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift",
+    "UpdateSettingsView.swift",
 ]
 let installerCoreSources = [
     "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
@@ -121,6 +120,9 @@ let package = Package(
         .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
         .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
     ] + executableTestProducts.map { .executable(name: $0.0, targets: [$0.1]) },
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+    ],
     targets: [
         .target(
             name: "CRime",
@@ -168,7 +170,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "InkFlowApp",
-            dependencies: ["InkFlowCore"],
+            dependencies: ["InkFlowCore", .product(name: "Sparkle", package: "Sparkle")],
             path: "macOS/Sources",
             exclude: inkFlowCoreSources + ["NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
             sources: ["main.swift"],

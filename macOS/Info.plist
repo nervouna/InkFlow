@@ -73,6 +73,18 @@
 	<string>墨流使用麦克风在本机将语音转换为文字。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<false/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/nervouna/InkFlow/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>8HurcnBo9InIlJCDwu40TG/iVhq6aGSWUo9LFZtNlUg=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 	<key>TISIconIsTemplate</key>
 	<true/>
 	<key>TISInputSourceID</key>

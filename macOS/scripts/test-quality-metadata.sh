@@ -223,14 +223,62 @@ if build/quality-build-metadata "$repo" "$app" > "$fixture/broken-macho.log" 2>&
   echo 'FAIL: invalid Mach-O signature canonicalization was accepted' >&2
   exit 1
 fi
+rm "$app/Contents/Resources/broken-macho.bin"
+
+# Sparkle uses a versioned framework with internal symlinks. Hash each link's
+# relative target, and reject a link whose lexical or resolved destination exits
+# the framework boundary.
+sparkle_fixture="$app/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$sparkle_fixture/Versions/B"
+printf 'fixture Sparkle framework payload\n' > "$sparkle_fixture/Versions/B/Sparkle"
+ln -s B "$sparkle_fixture/Versions/Current"
+ln -s Versions/Current/Sparkle "$sparkle_fixture/Sparkle"
+build/quality-build-metadata "$repo" "$app"
+cp "$app/Contents/Resources/QualityBuild.json" "$fixture/sparkle-symlinks.json"
+build/quality-build-metadata "$repo" "$app" --verify
+sparkle_hash=$(plutil -extract bundleSHA256 raw "$fixture/sparkle-symlinks.json")
+rm "$sparkle_fixture/Sparkle"
+ln -s Versions/B/Sparkle "$sparkle_fixture/Sparkle"
+build/quality-build-metadata "$repo" "$app"
+[[ "$sparkle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+rm "$sparkle_fixture/Sparkle"
+ln -s ../../../../../../outside "$sparkle_fixture/Sparkle"
+if build/quality-build-metadata "$repo" "$app" > "$fixture/escaping-sparkle-link.log" 2>&1; then
+  echo 'FAIL: escaping Sparkle.framework symlink was accepted' >&2
+  exit 1
+fi
+grep -Fq 'Unsafe or broken Sparkle.framework symlink' "$fixture/escaping-sparkle-link.log"
+rm "$sparkle_fixture/Sparkle"
+ln -s Versions/Current/Sparkle "$sparkle_fixture/Sparkle"
+cp "$fixture/sparkle-symlinks.json" "$app/Contents/Resources/QualityBuild.json"
+build/quality-build-metadata "$repo" "$app" --verify
 echo 'PASS quality build metadata: deterministic layered hashes, AI boundary, and fail-closed manifests'
 
 identity_repo="$fixture/identity-repo"
 git clone --quiet --shared --no-hardlinks "$PWD" "$identity_repo"
+cp Package.resolved "$identity_repo/Package.resolved"
+git -C "$identity_repo" config user.name 'InkFlow Tests'
+git -C "$identity_repo" config user.email 'tests@invalid'
+git -C "$identity_repo" add Package.resolved
+git -C "$identity_repo" commit -qm 'fixture resolved dependency lock'
 tool="$PWD/build/quality-build-metadata"
 before=$($tool "$identity_repo" --build-snapshot)
 [[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
 printf 'documentation only\n' >> "$identity_repo/README.md"
+[[ "$($tool "$identity_repo" --build-snapshot)" == "$before" ]]
+cp "$identity_repo/Package.resolved" "$fixture/Package.resolved"
+python3 - "$identity_repo/Package.resolved" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+lock = json.loads(path.read_text())
+lock["pins"][0]["state"]["revision"] = "0" * 40
+path.write_text(json.dumps(lock, indent=2) + "\n")
+PY
+[[ "$($tool "$identity_repo" --build-snapshot)" != "$before" ]]
+cp "$fixture/Package.resolved" "$identity_repo/Package.resolved"
 [[ "$($tool "$identity_repo" --build-snapshot)" == "$before" ]]
 mkdir "$fixture/originals"
 cp "$identity_repo/macOS/Sources/Engine.swift" "$fixture/originals/Engine.swift"

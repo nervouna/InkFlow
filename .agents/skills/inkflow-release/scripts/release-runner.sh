@@ -69,6 +69,8 @@ release_dir="$root/build/releases/InkFlow-$version-$build"
 payload_zip="$release_dir/inputmethod-submission.zip"
 payload_app="$release_dir/payload/InkFlow.app"
 dmg="$release_dir/InkFlow-$version-$build-arm64.dmg"
+sparkle_update_zip="$release_dir/InkFlow-$version-$build-arm64.zip"
+sparkle_appcast="$release_dir/appcast.xml"
 checksum="$release_dir/SHA256SUMS"
 state="$release_dir/release-state.plist"
 notes="$root/build/public-release-notes.md"
@@ -112,13 +114,15 @@ payload_sha=$(sha256 "$payload_zip")
 notes_sha=$(sha256 "$notes")
 if [[ -f "$state" && ! -L "$state" ]]; then
   previous_tag=$(plist_get "$state" previousTag)
-  require_equal "$(plist_get "$state" schema)" 1 'Unknown release state schema.'
+  require_equal "$(plist_get "$state" schema)" 2 'Unknown release state schema.'
   require_equal "$(plist_get "$state" releaseCommit)" "$release_commit" 'Release commit drifted from state.'
   require_equal "$(plist_get "$state" version)" "$version" 'Version drifted from state.'
   require_equal "$(plist_get "$state" build)" "$build" 'Build drifted from state.'
   require_equal "$(plist_get "$state" tag)" "$tag" 'Tag drifted from state.'
   require_equal "$(plist_get "$state" sourcePlistSHA256)" "$source_sha" 'Source plist drifted from state.'
   require_equal "$(plist_get "$state" payloadZIPSHA256)" "$payload_sha" 'Payload ZIP drifted from state.'
+  require_equal "$(plist_get "$state" sparkleUpdateZIPName)" "$(basename "$sparkle_update_zip")" 'Sparkle update ZIP name drifted from state.'
+  require_equal "$(plist_get "$state" sparkleFeedURL)" "$(plutil -extract SUFeedURL raw macOS/Info.plist)" 'Sparkle feed URL drifted from state.'
   require_equal "$(plist_get "$state" notesPath)" "$notes" 'Release notes path drifted from state.'
   require_equal "$(plist_get "$state" notesSHA256)" "$notes_sha" 'Release notes drifted from state.'
   require_equal "$(plist_get "$state" repo)" "$repo" 'Observed repository conflicts with state.'
@@ -133,7 +137,7 @@ else
   plan=$(bash macOS/scripts/release-verification.sh --plan-only --from "$previous_tag")
   manual_install=false
   printf '%s\n' "$plan" | grep -Fxq manual-install && manual_install=true
-  write_plist "$state" schema 1 releaseCommit "$release_commit" version "$version" build "$build" tag "$tag" previousTag "$previous_tag" repo "$repo" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" notesPath "$notes" notesSHA256 "$notes_sha" manualInstallNeeded "$manual_install"
+  write_plist "$state" schema 2 releaseCommit "$release_commit" version "$version" build "$build" tag "$tag" previousTag "$previous_tag" repo "$repo" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" sparkleUpdateZIPName "$(basename "$sparkle_update_zip")" sparkleFeedURL "$(plutil -extract SUFeedURL raw macOS/Info.plist)" notesPath "$notes" notesSHA256 "$notes_sha" manualInstallNeeded "$manual_install"
 fi
 state_sha=$(sha256 "$state")
 manual_install=$(plist_get "$state" manualInstallNeeded)
@@ -247,17 +251,19 @@ if [[ -e "$dmg_build_intent" && ( ! -f "$dmg_build_intent" || -L "$dmg_build_int
 if [[ -e "$dmg_build_response" && ( ! -f "$dmg_build_response" || -L "$dmg_build_response" ) ]]; then fail 'Untrusted DMG build binding path.'; fi
 if [[ ! -f "$dmg_build_intent" ]]; then
   [[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Existing DMG has no immutable pre-finish intent.'
-  write_plist "$dmg_build_intent" stateSHA256 "$state_sha" releaseCommit "$release_commit" expectedDMGPath "$dmg" expectedDMGName "$(basename "$dmg")" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" installerReceiptSHA256 "$(sha256 "$receipt")" preexistingAssemblies "$(assembly_snapshot)"
+  [[ ! -e "$sparkle_update_zip" && ! -L "$sparkle_update_zip" ]] || fail 'Existing Sparkle update ZIP has no immutable pre-finish intent.'
+  write_plist "$dmg_build_intent" stateSHA256 "$state_sha" releaseCommit "$release_commit" expectedDMGPath "$dmg" expectedDMGName "$(basename "$dmg")" expectedSparkleUpdateZIPName "$(basename "$sparkle_update_zip")" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" installerReceiptSHA256 "$(sha256 "$receipt")" preexistingAssemblies "$(assembly_snapshot)"
 fi
 require_equal "$(plist_get "$dmg_build_intent" stateSHA256)" "$state_sha" 'DMG build intent does not match release state.'
 require_equal "$(plist_get "$dmg_build_intent" releaseCommit)" "$release_commit" 'DMG build intent commit mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" expectedDMGPath)" "$dmg" 'DMG build intent path mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" expectedDMGName)" "$(basename "$dmg")" 'DMG build intent name mismatch.'
+require_equal "$(plist_get "$dmg_build_intent" expectedSparkleUpdateZIPName)" "$(basename "$sparkle_update_zip")" 'Sparkle ZIP build intent name mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" sourcePlistSHA256)" "$source_sha" 'DMG build intent source plist mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" payloadZIPSHA256)" "$payload_sha" 'DMG build intent payload ZIP mismatch.'
 require_equal "$(plist_get "$dmg_build_intent" installerReceiptSHA256)" "$(sha256 "$receipt")" 'DMG build intent installer receipt mismatch.'
 bind_dmg_build() {
-  local candidates candidate count assembled intent_sha
+  local candidates candidate count assembled assembled_update intent_sha
   intent_sha=$(sha256 "$dmg_build_intent")
   if [[ -e "$dmg_build_response" || -L "$dmg_build_response" ]]; then
     [[ -f "$dmg_build_response" && ! -L "$dmg_build_response" ]] || fail 'Untrusted DMG build binding path.'
@@ -277,12 +283,22 @@ bind_dmg_build() {
     candidate=$(cat "$candidates"); rm -f "$candidates"
     assembled="$candidate/$(basename "$dmg")"
     [[ -f "$assembled" && ! -L "$assembled" && "$assembled" -ef "$dmg" ]] || fail 'Final DMG is not the hard-linked output of the unique new package assembly.'
-    write_plist "$dmg_build_response" intentSHA256 "$intent_sha" assemblyPath "$candidate" assembledDMGSHA256 "$(sha256 "$assembled")" submittedDMGSHA256 "$(sha256 "$dmg")" submittedDMGCDHash "$(dmg_cdhash "$dmg")"
+    assembled_update="$candidate/$(basename "$sparkle_update_zip")"
+    [[ -f "$assembled_update" && ! -L "$assembled_update" ]] || fail 'Bound package assembly is missing the Sparkle ZIP.'
+    if [[ ! -e "$sparkle_update_zip" && ! -L "$sparkle_update_zip" ]]; then ln "$assembled_update" "$sparkle_update_zip"; fi
+    [[ -f "$sparkle_update_zip" && ! -L "$sparkle_update_zip" && "$assembled_update" -ef "$sparkle_update_zip" ]] || fail 'Sparkle ZIP is not the hard-linked output of the unique package assembly.'
+    write_plist "$dmg_build_response" intentSHA256 "$intent_sha" assemblyPath "$candidate" assembledDMGSHA256 "$(sha256 "$assembled")" submittedDMGSHA256 "$(sha256 "$dmg")" assembledUpdateZIPSHA256 "$(sha256 "$assembled_update")" submittedUpdateZIPSHA256 "$(sha256 "$sparkle_update_zip")" submittedDMGCDHash "$(dmg_cdhash "$dmg")"
   fi
   assembled="$candidate/$(basename "$dmg")"
+  assembled_update="$candidate/$(basename "$sparkle_update_zip")"
   [[ -d "$candidate" && ! -L "$candidate" && -f "$assembled" && ! -L "$assembled" && "$assembled" -ef "$dmg" ]] || fail 'Bound package assembly no longer owns the final DMG hard link.'
+  [[ -f "$assembled_update" && ! -L "$assembled_update" ]] || fail 'Bound package assembly no longer owns the Sparkle ZIP.'
+  if [[ ! -e "$sparkle_update_zip" && ! -L "$sparkle_update_zip" ]]; then ln "$assembled_update" "$sparkle_update_zip"; fi
+  [[ -f "$sparkle_update_zip" && ! -L "$sparkle_update_zip" && "$assembled_update" -ef "$sparkle_update_zip" ]] || fail 'Final Sparkle ZIP is not the bound package assembly output.'
   require_equal "$(plist_get "$dmg_build_response" assembledDMGSHA256)" "$(sha256 "$assembled")" 'Assembled DMG drifted from build binding.'
   require_equal "$(plist_get "$dmg_build_response" submittedDMGSHA256)" "$(sha256 "$dmg")" 'Submitted DMG drifted from build binding.'
+  require_equal "$(plist_get "$dmg_build_response" assembledUpdateZIPSHA256)" "$(sha256 "$assembled_update")" 'Assembled Sparkle ZIP drifted from build binding.'
+  require_equal "$(plist_get "$dmg_build_response" submittedUpdateZIPSHA256)" "$(sha256 "$sparkle_update_zip")" 'Sparkle ZIP drifted from package binding.'
   require_equal "$(plist_get "$dmg_build_response" submittedDMGCDHash)" "$(dmg_cdhash "$dmg")" 'Submitted DMG CDHash drifted from build binding.'
 }
 verify_accepted_dmg_submission() {
@@ -387,6 +403,10 @@ else
   verify_final_dmg_receipt
 fi
 
+if [[ ! -f "$dmg_build_response" ]]; then bind_dmg_build; fi
+[[ -f "$sparkle_update_zip" && ! -L "$sparkle_update_zip" ]] || fail 'Missing bound Sparkle update ZIP.'
+bash .agents/skills/inkflow-release/scripts/release-appcast.sh generate "$previous_tag"
+
 dmg_name=$(basename "$dmg")
 expected_checksum="$(sha256 "$dmg")  $dmg_name"
 if [[ -f "$checksum" && ! -L "$checksum" ]]; then require_equal "$(cat "$checksum")" "$expected_checksum" 'SHA256SUMS conflicts with final DMG.'
@@ -423,11 +443,13 @@ else
   rm -f "$absence"
   gh release create "$tag" --repo "$repo" --verify-tag --draft --title "InkFlow $version" --notes-file "$notes"
 fi
+sparkle_update_zip_name=$(basename "$sparkle_update_zip")
+sparkle_appcast_name=$(basename "$sparkle_appcast")
 asset_names=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | LC_ALL=C sort)
 for existing in $asset_names; do
-  [[ "$existing" == "$dmg_name" || "$existing" == SHA256SUMS ]] || fail "Unexpected existing Release asset: $existing"
+  [[ "$existing" == "$dmg_name" || "$existing" == SHA256SUMS || "$existing" == "$sparkle_update_zip_name" || "$existing" == "$sparkle_appcast_name" ]] || fail "Unexpected existing Release asset: $existing"
 done
-for asset in "$dmg" "$checksum"; do
+for asset in "$dmg" "$checksum" "$sparkle_update_zip" "$sparkle_appcast"; do
   name=$(basename "$asset")
   if printf '%s\n' "$asset_names" | grep -Fxq "$name"; then
     check_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-asset-check.XXXXXX")
@@ -439,9 +461,11 @@ for asset in "$dmg" "$checksum"; do
   fi
 done
 download=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-download.XXXXXX")
-gh release download "$tag" --repo "$repo" --pattern "$dmg_name" --pattern SHA256SUMS --dir "$download"
+gh release download "$tag" --repo "$repo" --pattern "$dmg_name" --pattern SHA256SUMS --pattern "$sparkle_update_zip_name" --pattern "$sparkle_appcast_name" --dir "$download"
 cmp "$dmg" "$download/$dmg_name" || fail 'Downloaded DMG differs from local bytes.'
 cmp "$checksum" "$download/SHA256SUMS" || fail 'Downloaded checksum differs from local bytes.'
+cmp "$sparkle_update_zip" "$download/$sparkle_update_zip_name" || fail 'Downloaded Sparkle ZIP differs from local bytes.'
+cmp "$sparkle_appcast" "$download/$sparkle_appcast_name" || fail 'Downloaded Sparkle appcast differs from local bytes.'
 (cd "$download" && shasum -a 256 -c SHA256SUMS)
 rm -rf "$download"
 
@@ -457,9 +481,9 @@ elif [[ "$is_draft" != false ]]; then fail "Unknown GitHub draft state: $is_draf
 require_equal "$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft)" false 'GitHub Release is still a draft.'
 require_equal "$(gh release view "$tag" --repo "$repo" --json tagName --jq .tagName)" "$tag" 'Final GitHub Release tag mismatch.'
 final_assets=$(gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' | LC_ALL=C sort)
-require_equal "$final_assets" "$(printf '%s\n' SHA256SUMS "$dmg_name" | LC_ALL=C sort)" 'Final GitHub asset set mismatch.'
+require_equal "$final_assets" "$(printf '%s\n' SHA256SUMS "$dmg_name" "$sparkle_update_zip_name" "$sparkle_appcast_name" | LC_ALL=C sort)" 'Final GitHub asset set mismatch.'
 require_equal "$(git ls-remote origin "refs/tags/$tag^{}" | awk 'NR==1{print $1}')" "$release_commit" 'Remote annotated tag does not peel to release commit.'
 require_equal "$(git ls-remote origin refs/heads/main | awk 'NR==1{print $1}')" "$release_commit" 'Remote main does not equal the release commit.'
 url=$(gh release view "$tag" --repo "$repo" --json url --jq .url)
-echo "PASS release $tag build $build: $dmg_name"
+echo "PASS release $tag build $build: $dmg_name, $sparkle_update_zip_name, $sparkle_appcast_name"
 echo "$url"
