@@ -78,6 +78,8 @@ impact_classify() {
     macOS/Sources/AI*|macOS/Sources/InputControllerAI.swift)
       impact_rule "$path" 'AI feature domain' ai voice-session settings
       impact_manual_add manual-input manual-settings ;;
+    macOS/scripts/fixtures/rime-learning-contract/*)
+      impact_rule "$path" 'test-only bundled Rime learning contract' ai-learning ;;
     macOS/Tests/AI*|macOS/scripts/test-ai-*.sh)
       impact_rule "$path" 'AI test domain' ai ;;
 

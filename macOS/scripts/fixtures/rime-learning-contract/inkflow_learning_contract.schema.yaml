@@ -1,0 +1,6 @@
+schema:
+  schema_id: inkflow_learning_contract
+  name: InkFlow learning contract fixture
+  version: '1'
+translator:
+  dictionary: inkflow_learning_contract

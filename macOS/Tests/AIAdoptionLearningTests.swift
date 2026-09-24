@@ -8,7 +8,8 @@ import InkFlowTestSupport
 struct AIAdoptionLearningTests {
     @MainActor static func main() async throws {
         let shared = CommandLine.arguments[1], user = CommandLine.arguments[2]
-        let writing = CommandLine.arguments[3] == "write"
+        let scenario = CommandLine.arguments[3]
+        let writing = scenario == "write"
         let readsDuringUndo = CommandLine.arguments.count < 5 || CommandLine.arguments[4] != "no-voice-read"
         let bootstrap = ContinuousClock.now
         try IFEngine.start(shared: shared, user: user)
@@ -16,6 +17,11 @@ struct AIAdoptionLearningTests {
         defer { IFEngine.stop() }
         let engine = IFEngine()!
         engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: .init())
+        if scenario.hasPrefix("contract-") {
+            try learningContract(engine: engine, user: user, scenario: scenario)
+            print("PASS Rime learning contract \(scenario)")
+            return
+        }
         let initialVoice = engine.readVoiceLexicon(generation: 1, revision: 1)
         check(initialVoice.availability == .available, "Bundled Lua supports bounded user dictionary lookup")
         let words = [("xingmoliang", "星墨量"), ("xingmolan", "星墨蓝"), ("xingmohai", "星墨海"), ("xingmohao", "星墨好")]
@@ -108,5 +114,89 @@ struct AIAdoptionLearningTests {
               "Teardown clears all learned content")
         check(IFEngine.voiceLexicon.snapshot.generation != generation, "Teardown invalidates snapshot generation")
         print("PASS AI learning \(writing ? "write" : "restart"): novel words, preference, abbreviated/incomplete/typo, prefix, ambiguity")
+    }
+
+    @MainActor private static func learningContract(engine: IFEngine, user: String, scenario: String) throws {
+        check(IFEngine.version == "1.17.0", "Learning contract is pinned to bundled librime 1.17.0")
+        let api = IFEngine.api.pointee
+        func request(_ value: String) -> String {
+            api.set_property(engine.session, "inkflow_learning_contract_result", "")
+            value.withCString { api.set_property(engine.session, "inkflow_learning_contract", $0) }
+            var result = [CChar](repeating: 0, count: 4096)
+            check(api.get_property(engine.session, "inkflow_learning_contract_result", &result, result.count) != 0,
+                  "Learning contract probe must return a result")
+            return IFEngine.string(result)
+        }
+        func query(_ namespace: String, _ code: String) -> String {
+            request("query\t\(namespace)\t\(code)")
+        }
+        func expectAbsent(_ namespace: String, _ code: String, _ reason: String) {
+            check(query(namespace, code) == "ok\t0", reason)
+        }
+        func expectEntry(_ namespace: String, _ code: String, _ text: String, _ reason: String) {
+            let result = query(namespace, code)
+            check(result.hasPrefix("ok\t1\t\(text)\t\(code)\t"), "\(reason): \(result)")
+        }
+        func display(_ namespace: String, _ code: String, _ text: String, select: Bool) {
+            check(request("candidate\t\(namespace)\t\(code)\t\(text)") == "ok", "Configure test Phrase")
+            engine.clear(); type(engine, code)
+            let candidates = engine.snapshot().candidates
+            guard let index = candidates.firstIndex(of: text) else {
+                check(false, "Missing case-preserving contract candidate \(text): \(candidates)")
+                return
+            }
+            if select {
+                api.set_property(engine.session, "inkflow_learning_contract_result", "")
+                engine.select(index)
+                check(engine.takeCommit() == text, "Selected ShadowCandidate keeps display case")
+                // Close Rime's ordinary undo window before querying durable state.
+                engine.key(0xff09)
+                var result = [CChar](repeating: 0, count: 128)
+                let available = api.get_property(engine.session, "inkflow_learning_contract_result", &result, result.count) != 0
+                check(available && IFEngine.string(result) == "selected", "Memory.memorize must learn selected Phrase")
+            } else {
+                engine.clear()
+            }
+        }
+
+        switch scenario {
+        case "contract-seed":
+            engine.clear(); type(engine, "nihao"); engine.select(0)
+            check(!engine.takeCommit().isEmpty, "Seed the original Chinese user dictionary")
+            engine.key(0xff09)
+        case "contract-write":
+            display("shared", "qzxsharedprobe", "CoDeXProbe", select: false)
+            expectAbsent("shared", "qzxsharedprobe", "Displaying a Phrase must not learn")
+            check(request("reject\tshared\tqzxrejected\tRejectedWord") == "rejected", "Rejected update result")
+            expectAbsent("shared", "qzxrejected", "Rejected update must not learn")
+            check(request("ambiguous\tvoice\tqzxambiguous\tFirst\tSecond") == "ambiguous", "Ambiguous update result")
+            expectAbsent("voice", "qzxambiguous", "Ambiguous update must not learn")
+
+            display("shared", "qzxsharedprobe", "CoDeXProbe", select: true)
+            display("voice", "qzxvoiceprobe", "SwiftUIVoice", select: true)
+
+            for (namespace, code, text) in [("shared", "arbitrarysharedcode", "CasePreserved"),
+                                             ("voice", "codux", "Codex")] {
+                check(request("update\t\(namespace)\t\(code)\t\(text)\t1") == "ok", "Explicit update \(namespace)")
+                expectEntry(namespace, code, text, "Explicit update query \(namespace)")
+                check(request("update\t\(namespace)\t\(code)\t\(text)\t-1") == "ok", "Explicit undo \(namespace)")
+                expectAbsent(namespace, code, "Explicit undo removes \(namespace) entry")
+            }
+        case "contract-read":
+            expectEntry("shared", "qzxsharedprobe", "CoDeXProbe", "Shared entry persists after reopen")
+            expectEntry("voice", "qzxvoiceprobe", "SwiftUIVoice", "Voice entry persists after reopen")
+            expectAbsent("voice", "qzxsharedprobe", "Shared entry never leaks into voice aliases")
+            expectAbsent("shared", "qzxvoiceprobe", "Voice alias never leaks into shared English")
+            expectAbsent("shared", "arbitrarysharedcode", "Shared undo persists after reopen")
+            expectAbsent("voice", "codux", "Voice undo persists after reopen")
+            expectAbsent("shared", "qzxrejected", "Rejected update remains absent after reopen")
+            expectAbsent("voice", "qzxambiguous", "Ambiguous update remains absent after reopen")
+            let files = try FileManager.default.contentsOfDirectory(atPath: user)
+            check(files.contains("pinyin_simp.userdb"), "Original Chinese user dictionary remains")
+            check(files.contains("inkflow_shared_english.userdb"), "Shared English namespace is independent")
+            check(files.contains("inkflow_voice_alias.userdb"), "Voice alias namespace is independent")
+        default:
+            check(false, "Unknown learning contract scenario")
+        }
     }
 }

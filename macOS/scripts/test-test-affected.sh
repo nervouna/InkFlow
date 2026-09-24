@@ -118,6 +118,10 @@ change schemas/lua/inkflow_ai_learning.lua; plan
 has 'voice-lexicon'; has 'ai-learning'; has 'ai-headless'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
 
 new_case
+change macOS/scripts/fixtures/rime-learning-contract/inkflow_learning_contract.lua; plan
+has 'Units: ai-learning'; not_has 'manual-input'; not_has 'manual-settings'; not_has 'bundle-fast'
+
+new_case
 change schemas/lua/inkflow_mixed.lua; plan
 has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'manual-input'
 

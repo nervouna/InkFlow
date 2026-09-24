@@ -38,3 +38,19 @@ echo 'PASS voice native reads: identical export with/without attempted reads dur
 echo 'PASS canonical userdb export: correct full codes only; exact adoption counts; no raw typo/abbreviation'
 echo 'PASS ordinary learning: immediate Backspace undoes commits before/after AI callbacks; retained commit learns once'
 echo 'PASS fresh AI learning deployment: active schema patch, new shared data, userdb write/restart/read'
+
+contract_shared="$user_dir/contract-shared"
+ditto "$shared" "$contract_shared"
+cp macOS/scripts/fixtures/rime-learning-contract/*.yaml "$contract_shared/"
+cp macOS/scripts/fixtures/rime-learning-contract/inkflow_learning_contract.lua "$contract_shared/lua/"
+contract_user="$user_dir/contract-user"
+mkdir -p "$contract_user"
+build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-seed
+(cd "$contract_user" && "$manager" -e pinyin_simp pinyin-before.txt)
+build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-write
+(cd "$contract_user" && "$manager" -e pinyin_simp pinyin-after.txt)
+cmp "$contract_user/pinyin-before.txt" "$contract_user/pinyin-after.txt"
+build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-read
+(cd "$contract_user" && "$manager" -e inkflow_shared_english shared.txt)
+(cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
+echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
