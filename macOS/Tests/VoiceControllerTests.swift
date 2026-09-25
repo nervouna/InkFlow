@@ -113,10 +113,10 @@ struct VoiceControllerTests {
         await selectedTextDelivery()
         await selectedTextRollback()
         await reportedSelectionMismatch()
-        await foreignMarkedTextGuard()
+        await selectedTextEscapeCancellation()
         await secureMarkedTextGuard()
         await secureSelectedRangeStart()
-        await zeroLengthForeignMarkedTextGuard()
+        await preeditClearRecovery()
         await selectedTextTargetLoss()
         await startRejectionDiagnostics()
         await correctingCancellation()
@@ -1262,7 +1262,7 @@ struct VoiceControllerTests {
               "Focused target receives one final insertion despite a cross-surface reported selection")
     }
 
-    @MainActor static func foreignMarkedTextGuard() async {
+    @MainActor static func selectedTextEscapeCancellation() async {
         do {
             let plain = VoiceHarness(); defer { plain.close() }
             await plain.start()
@@ -1294,29 +1294,6 @@ struct VoiceControllerTests {
               "Escape cancellation performs no second mutation")
         check(h.controller.engine?.snapshot().preedit.isEmpty == true,
               "Rime remains idle while selected-text Escape is handed to the host")
-        let document = h.client.document
-        let mutations = h.client.mutations.count
-        h.key()
-        try? await Task.sleep(for: .milliseconds(20))
-        check(!h.controller.voice.isActive && h.fake.starts == 1,
-              "A host mark safely blocks a second voice session")
-        check(!h.controller.handle(keyEvent(0, "n"), client: h.client),
-              "Ordinary input passes to the host while its mark exists")
-        check(h.controller.engine?.snapshot().preedit.isEmpty == true,
-              "Rime remains idle while the host mark exists")
-        check(h.client.document == document && h.client.mutations.count == mutations,
-              "The foreign-mark guard never clears or rewrites the host mark")
-        h.client.setMarkedText("", selectionRange: NSRange(location: 0, length: 0),
-                               replacementRange: NSRange(location: NSNotFound, length: 0))
-        check(h.controller.handle(keyEvent(0, "n"), client: h.client),
-              "Ordinary input resumes after the host naturally ends its mark")
-        check(h.controller.engine?.snapshot().preedit.isEmpty == false)
-        h.controller.engine?.clear()
-        h.controller.refresh(h.client)
-        h.key()
-        try? await Task.sleep(for: .milliseconds(20))
-        check(h.controller.voice.isActive && h.fake.starts == 2,
-              "Voice starts again after the host naturally ends its mark")
     }
 
     @MainActor static func secureMarkedTextGuard() async {
@@ -1330,17 +1307,6 @@ struct VoiceControllerTests {
             check(h.client.markedRangeReads == 0,
                   "Secure ordinary input and voice shortcuts never read markedRange")
             check(!h.controller.voice.isActive && h.fake.starts == 0)
-            h.controller.engine?.clear()
-        }
-        do {
-            let h = VoiceHarness(); defer { h.close() }
-            h.client.onMarkedRange = {
-                h.client.onMarkedRange = nil
-                h.secure = true
-            }
-            _ = h.controller.handle(keyEvent(0, "n"), client: h.client)
-            check(h.client.markedRangeReads == 1 && h.client.selectedRangeReads == 0 && h.client.requests.isEmpty,
-                  "A secure transition inside foreign-mark routing blocks all later document reads")
             h.controller.engine?.clear()
         }
         do {
@@ -1386,26 +1352,42 @@ struct VoiceControllerTests {
               "No client read follows a selectedRange callback that activates secure input")
     }
 
-    @MainActor static func zeroLengthForeignMarkedTextGuard() async {
+    @MainActor static func preeditClearRecovery() async {
         let h = VoiceHarness(); defer { h.close() }
-        h.client.mark = NSRange(location: 2, length: 0)
-        h.key()
-        try? await Task.sleep(for: .milliseconds(20))
-        check(!h.controller.voice.isActive && h.fake.starts == 0,
-              "A finite zero-length host mark blocks voice start")
-        check(!h.controller.handle(keyEvent(0, "n"), client: h.client),
-              "A finite zero-length host mark passes ordinary input to the host")
-        check(h.controller.engine?.snapshot().preedit.isEmpty == true,
-              "Rime remains idle for a finite zero-length host mark")
-        h.client.mark = NSRange(location: NSNotFound, length: 0)
         check(h.controller.handle(keyEvent(0, "n"), client: h.client),
-              "Ordinary input resumes after the host mark becomes NSNotFound")
+              "Initial Chinese key creates an InkFlow preedit")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == false)
+
         h.controller.engine?.clear()
         h.controller.refresh(h.client)
+        h.client.mark = NSRange(location: h.client.selection.location, length: 0)
+
+        check(h.controller.handle(keyEvent(0, "n"), client: h.client),
+              "Chinese input resumes after the client clears InkFlow preedit")
+        check(h.controller.engine?.snapshot().preedit.isEmpty == false,
+              "A stale finite zero-length marked range does not block Rime")
+
+        h.controller.engine?.clear()
+        h.controller.refresh(h.client)
+        h.client.mark = NSRange(location: h.client.selection.location, length: 0)
+        let asciiBefore = h.controller.engine!.requestedASCIIMode
+        check(h.controller.handle(modifierEvent(56, .shift), client: h.client))
+        check(h.controller.handle(modifierEvent(56), client: h.client))
+        check(h.controller.engine!.requestedASCIIMode != asciiBefore,
+              "Standalone Left Shift resumes after the client clears InkFlow preedit")
+
+        h.client.mark = NSRange(location: h.client.selection.location, length: 0)
         h.key()
         try? await Task.sleep(for: .milliseconds(20))
         check(h.controller.voice.isActive && h.fake.starts == 1,
-              "Voice resumes after the host mark becomes NSNotFound")
+              "Right Shift voice resumes after the client clears InkFlow preedit")
+
+        h.controller.voice.cancel()
+        h.client.mark = NSRange(location: h.client.selection.location, length: 0)
+        h.hold()
+        try? await Task.sleep(for: .milliseconds(20))
+        check(h.controller.voice.isActive && h.fake.starts == 2,
+              "Right Shift hold resumes after the client clears InkFlow preedit")
     }
 
     @MainActor static func selectedTextTargetLoss() async {

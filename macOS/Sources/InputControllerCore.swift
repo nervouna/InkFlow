@@ -207,10 +207,6 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             }
             let entered = qualityClock.monotonic()
             let secureInput = secureInput()
-            if voice.hasForeignMarkedText(callbackClient as? IMKTextInput, secureInput: secureInput) {
-                modeModifierArmed = nil
-                return finishFirstKey(false, .voiceDeliveringPassThrough)
-            }
             if let callbackEvent, callbackEvent.type == .flagsChanged {
                 associateQualityClient(callbackClient as? IMKTextInput)
                 engine?.qualityRecorder?.setTimingCaptureEnabled(!secureInput)
