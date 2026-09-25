@@ -20,7 +20,7 @@ let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
     "AIPronunciation.swift", "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
-    "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLexicon.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
+    "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLexicon.swift", "VoicePolishApplicationPicker.swift", "VoicePolishPrompt.swift", "VoicePolishRule.swift", "VoicePolishRuleEditor.swift", "VoicePolishRuleRow.swift", "VoicePolishRulesView.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "EngineAI.swift", "InputControllerAI.swift",
     "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
     "ThunderPanel.swift", "ThunderPresentation.swift",
     "CustomPhrases.swift", "DictionaryCoordinator.swift", "DictionaryGenerator.swift", "DictionaryModels.swift",

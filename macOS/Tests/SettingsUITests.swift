@@ -224,6 +224,7 @@ struct SettingsUITests {
         checkInputLayout(window, settings: settings)
         checkUpdateSettings(window, settings: settings, updaterState: updaterState)
         checkSmartSettings(window, server: server, controller: controller, settings: settings, defaults: defaults)
+        checkVoicePolishRulesLayout(window, settings: settings)
         window.close()
         controller.doCommand(by: item.action, command: [kIMKCommandMenuItemName: item])
         waitForFocus(window)
@@ -678,6 +679,120 @@ struct SettingsUITests {
         drainEvents()
         window.setContentSize(NSSize(width: 700, height: 450))
         print("PASS personalization layout: native table/buttons at minimum/enlarged sizes, empty state, edit/delete disabled without selection")
+    }
+
+    @MainActor static func checkVoicePolishRulesLayout(_ window: NSWindow, settings: IFSettings) {
+        var picks = [
+            VoicePolishApplicationPicker.Descriptor(bundleIdentifier: "com.openai.codex", displayName: "Codex"),
+            VoicePolishApplicationPicker.Descriptor(bundleIdentifier: "com.openai.codex", displayName: "Codex")
+        ]
+        window.contentViewController = NSHostingController(rootView: VoiceSettingsView(
+            settings: settings, shortcuts: settings.shortcuts,
+            pickApplication: { picks.isEmpty ? nil : picks.removeFirst() }
+        ))
+        window.setContentSize(NSSize(width: 700, height: 560))
+        drainEvents()
+
+        func element(_ identifier: String) -> [String: Any]? {
+            IFAccessibilityTree(window).first { $0["id"] as? String == identifier }
+        }
+        func require(_ identifier: String) -> [String: Any] {
+            guard let found = element(identifier) else {
+                for item in IFAccessibilityTree(window) { print("AX voice rules \(item)") }
+                check(false, "Missing voice rule control: \(identifier)")
+                return [:]
+            }
+            return found
+        }
+        func press(_ identifier: String) {
+            check(IFPressAccessibility(window, identifier), "Native voice rule action: \(identifier)")
+            drainEvents()
+        }
+        func replaceText(_ identifier: String, with value: String) {
+            let control = require(identifier)
+            guard let frame = (control["frame"] as? NSValue)?.rectValue else {
+                check(false, "Voice rule field has no frame: \(identifier)"); return
+            }
+            let screenPoint = NSPoint(x: frame.midX, y: frame.midY)
+            var eventWindow = window
+            while let sheet = eventWindow.attachedSheet,
+                  sheet.frame.contains(screenPoint) {
+                eventWindow = sheet
+            }
+            let location = eventWindow.convertPoint(fromScreen: screenPoint)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                NSApp.postEvent(NSEvent.mouseEvent(with: type, location: location, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: eventWindow.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!, atStart: false)
+            }
+            drainEvents(seconds: 0.05)
+            guard let editor = eventWindow.firstResponder as? NSTextView else {
+                check(false, "Voice rule field did not receive a native field editor: \(identifier)"); return
+            }
+            editor.insertText(value, replacementRange: NSRange(location: 0, length: editor.string.utf16.count))
+            drainEvents()
+        }
+
+        check(require("voice.polishRules")["role"] as? String == "AXButton")
+        press("voice.polishRules")
+        check(require("voice.polishRules.list")["role"] != nil)
+        check(require("voice.polishRules.empty")["role"] != nil)
+        check(require("voice.polishRules.add")["label"] as? String == "添加应用")
+        check(require("voice.polishRules.count")["value"] as? String == "0 条"
+              || require("voice.polishRules.count")["label"] as? String == "0 条")
+
+        press("voice.polishRules.add")
+        check(require("voice.polishRules.editor.prompt")["value"] as? String == "")
+        check(require("voice.polishRules.editor.enabled")["role"] as? String == "AXCheckBox")
+        for identifier in ["voice.polishRules.editor.cancel", "voice.polishRules.editor.save"] {
+            check(require(identifier)["role"] as? String == "AXButton")
+        }
+        let multiline = "Use concise headings.\nKeep each paragraph short."
+        replaceText("voice.polishRules.editor.prompt", with: multiline)
+        press("voice.polishRules.editor.save")
+        check(settings.voicePolishRules.first?.prompt == multiline)
+        check(require("voice.polishRules.row.com.openai.codex")["role"] != nil)
+        check(require("voice.polishRules.enable.com.openai.codex")["role"] as? String == "AXButton")
+        check(require("voice.polishRules.edit.com.openai.codex")["label"] as? String == "编辑 Codex")
+        check(require("voice.polishRules.delete.com.openai.codex")["label"] as? String == "删除 Codex")
+        check(element("voice.polishRules.empty") == nil)
+
+        press("voice.polishRules.enable.com.openai.codex")
+        check(settings.voicePolishRules.first?.isEnabled == false)
+        press("voice.polishRules.enable.com.openai.codex")
+        check(settings.voicePolishRules.first?.isEnabled == true)
+
+        _ = try? settings.saveVoicePolishRule(bundleIdentifier: "com.tencent.xinWeChat", displayName: "微信",
+            isEnabled: true, prompt: "Keep it conversational.")
+        drainEvents()
+        check(require("voice.polishRules.row.com.tencent.xinWeChat")["role"] != nil)
+        let count = require("voice.polishRules.count")
+        check(count["value"] as? String == "2 条" || count["label"] as? String == "2 条")
+
+        press("voice.polishRules.edit.com.openai.codex")
+        check(require("voice.polishRules.editor.prompt")["value"] as? String == multiline,
+              "Edit opens with the saved multiline prompt")
+        check(require("voice.polishRules.editor.delete")["role"] as? String == "AXButton")
+        press("voice.polishRules.editor.cancel")
+        press("voice.polishRules.add")
+        check(require("voice.polishRules.editor.prompt")["value"] as? String == multiline,
+              "Selecting a duplicate application opens its existing rule")
+        replaceText("voice.polishRules.editor.prompt", with: "")
+        press("voice.polishRules.editor.save")
+        check(require("voice.polishRules.editor.error")["role"] != nil)
+        replaceText("voice.polishRules.editor.prompt", with: "Updated\nPrompt")
+        press("voice.polishRules.editor.save")
+        check(settings.voicePolishRules.first { $0.bundleIdentifier == "com.openai.codex" }?.prompt == "Updated\nPrompt")
+        press("voice.polishRules.delete.com.openai.codex")
+        check(settings.voicePolishRules.map(\.bundleIdentifier) == ["com.tencent.xinWeChat"])
+        check(element("voice.polishRules.row.com.openai.codex") == nil)
+        press("voice.polishRules.done")
+        let dismissalDeadline = Date.now.addingTimeInterval(2)
+        while window.attachedSheet != nil && Date.now < dismissalDeadline {
+            drainEvents(seconds: 0.05)
+        }
+        check(window.attachedSheet == nil, "Voice rule manager sheet dismisses before the next Settings case")
+        print("PASS voice polish rules UI: manager/empty/rows/count, injected picker, enable, edit, multiline validation, duplicate edit, save and delete")
     }
 
     @MainActor static func checkSmartSettings(_ window: NSWindow, server: IMKServer, controller: InkFlowInputController,

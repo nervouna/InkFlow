@@ -163,11 +163,40 @@ struct VoiceSessionTests {
         precondition(canonicalRequests == ["raw tail"])
         precondition(results == [.completed("correct", usedRawFallback: false)])
         let configuration = AISuggestionConfiguration(baseURL: "https://api.deepseek.com/v1", apiKey: "fixture", model: "deepseek-v4-flash")
-        let request = try VoiceCorrectionClient.makeRequest(text: "测试", configuration: configuration)
+        let request = try VoiceCorrectionClient.makeRequest(text: "测试", style: .defaultStyle,
+                                                            configuration: configuration)
         let body = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+        let messages = body["messages"] as! [[String: String]]
         precondition(request.url!.path == "/v1/chat/completions")
         precondition((body["thinking"] as? [String: String]) == ["type": "disabled"])
         precondition(body["stream"] as? Bool == false)
+        precondition(messages.count == 2 && messages.map { $0["role"]! } == ["system", "user"])
+        precondition(messages[0]["content"]!.contains(VoicePolishPrompt.immutableContract))
+        precondition(messages[0]["content"]!.contains(VoicePolishPrompt.defaultStyle))
+        precondition(messages[0]["content"]!.contains("不加标题"),
+                     "The conservative default style retains the existing no-heading policy")
+        precondition(!messages[0]["content"]!.contains("测试"), "Transcript content must not be interpolated into the system message")
+        precondition(messages[1] == ["role": "user", "content": "测试"],
+                     "The transcript must remain the sole user message")
+        let customStyle = "Organize long dictation into short paragraphs and useful headings."
+        let customRequest = try VoiceCorrectionClient.makeRequest(text: "用户完整转写", style: .custom(customStyle),
+            configuration: configuration)
+        let customBody = try JSONSerialization.jsonObject(with: customRequest.httpBody!) as! [String: Any]
+        let customMessages = customBody["messages"] as! [[String: String]]
+        precondition(customMessages.count == 2 && customMessages.map { $0["role"]! } == ["system", "user"])
+        precondition(customMessages[0]["content"]!.contains(VoicePolishPrompt.immutableContract))
+        precondition(customMessages[0]["content"]!.contains(customStyle))
+        precondition(!customMessages[0]["content"]!.contains(VoicePolishPrompt.defaultStyle),
+                     "A custom style replaces rather than appends the conservative default style")
+        precondition(!customMessages[0]["content"]!.contains("不加标题"),
+                     "A custom headings style must not inherit the default no-heading restriction")
+        precondition(!customMessages[0]["content"]!.contains("用户完整转写"))
+        precondition(customMessages[1] == ["role": "user", "content": "用户完整转写"])
+        for metadata in ["com.openai.codex", "Codex", "pid=77", "/Applications/Codex.app", "window title"] {
+            precondition(!request.httpBody!.contains(Data(metadata.utf8))
+                         && !customRequest.httpBody!.contains(Data(metadata.utf8)),
+                         "Application metadata must not enter the voice correction request")
+        }
         for finish in ["length", "content_filter", "null"] {
             let data = Data("{\"choices\":[{\"finish_reason\":\"\(finish)\",\"message\":{\"content\":\"partial\"}}]}".utf8)
             do { _ = try VoiceCorrectionClient.decode(data); preconditionFailure("Accepted incomplete response") }
@@ -183,19 +212,21 @@ struct VoiceSessionTests {
                                     ("https://example.org/custom/api", "https://example.org/custom/api/chat/completions"),
                                     ("https://example.org/v1/chat/completions/", "https://example.org/v1/chat/completions")] {
             let config = AISuggestionConfiguration(baseURL: baseURL, apiKey: "ollama", model: "local-model")
-            let generic = try VoiceCorrectionClient.makeRequest(text: "测试", configuration: config)
+            let generic = try VoiceCorrectionClient.makeRequest(text: "测试", style: .defaultStyle,
+                                                                configuration: config)
             let genericBody = try JSONSerialization.jsonObject(with: generic.httpBody!) as! [String: Any]
             precondition(config.isComplete && generic.url?.absoluteString == endpoint)
             precondition(generic.value(forHTTPHeaderField: "Authorization") == "Bearer ollama")
             precondition(genericBody["thinking"] == nil, "Generic services do not receive DeepSeek-only fields")
         }
-        let otherModel = try VoiceCorrectionClient.makeRequest(text: "测试",
+        let otherModel = try VoiceCorrectionClient.makeRequest(text: "测试", style: .defaultStyle,
             configuration: .init(baseURL: "https://api.deepseek.com", apiKey: "fixture", model: "other-model"))
         let otherModelBody = try JSONSerialization.jsonObject(with: otherModel.httpBody!) as! [String: Any]
         precondition(otherModelBody["thinking"] == nil)
         for baseURL in ["file:///tmp/model", "https://user:password@example.org", "https://example.org?key=fixture", "https://example.org/#fragment"] {
             do {
-                _ = try VoiceCorrectionClient.makeRequest(text: "test", configuration: .init(baseURL: baseURL, apiKey: "fixture", model: "model"))
+                _ = try VoiceCorrectionClient.makeRequest(text: "test", style: .defaultStyle,
+                    configuration: .init(baseURL: baseURL, apiKey: "fixture", model: "model"))
                 preconditionFailure("Accepted unsupported endpoint")
             } catch { precondition(error as? VoiceCorrectionClient.Failure == .invalidConfiguration) }
         }

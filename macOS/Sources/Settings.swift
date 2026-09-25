@@ -114,6 +114,8 @@ final class IFSettings: ObservableObject {
     let voice: VoicePreparation
     private(set) var customPhrases: [CustomPhrase] = []
     private(set) var customPhrasesLoadError: String?
+    private(set) var voicePolishRules: [VoicePolishRule] = []
+    private(set) var voicePolishRulesLoadError: String?
     @Published var inputSettingsError: String?
 
     init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
@@ -122,6 +124,11 @@ final class IFSettings: ObservableObject {
         shortcuts = KeyboardShortcuts(defaults: defaults)
         voice = VoicePreparation(service: voiceService)
         smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
+        loadCustomPhrases()
+        loadVoicePolishRules()
+    }
+
+    private func loadCustomPhrases() {
         guard let stored = defaults.object(forKey: "customPhrases") else { return }
         do {
             guard let data = stored as? Data else { throw CustomPhraseError("数据格式无效。") }
@@ -130,6 +137,18 @@ final class IFSettings: ObservableObject {
             customPhrases = phrases
         } catch {
             customPhrasesLoadError = "无法读取已保存的自定义短语，原数据已保留。请先恢复偏好设置的备份。"
+        }
+    }
+
+    private func loadVoicePolishRules() {
+        guard let stored = defaults.object(forKey: "voicePolishRules") else { return }
+        do {
+            guard let data = stored as? Data else { throw VoicePolishRuleError("数据格式无效。") }
+            let rules = try JSONDecoder().decode([VoicePolishRule].self, from: data)
+            try VoicePolishRule.validate(rules)
+            voicePolishRules = rules
+        } catch {
+            voicePolishRulesLoadError = "无法读取已保存的语音润色规则，原数据已保留。请先恢复偏好设置的备份。"
         }
     }
 
@@ -161,6 +180,55 @@ final class IFSettings: ObservableObject {
         objectWillChange.send()
         defaults.set(data, forKey: "customPhrases")
         customPhrases = phrases
+        NotificationCenter.default.post(name: .settingsDidChange, object: self)
+    }
+
+    @discardableResult
+    func saveVoicePolishRule(originalBundleIdentifier: String? = nil, bundleIdentifier: String,
+                             displayName: String, isEnabled: Bool, prompt: String) throws -> VoicePolishRule {
+        let rule = try VoicePolishRule.validated(bundleIdentifier: bundleIdentifier, displayName: displayName,
+                                                 isEnabled: isEnabled, prompt: prompt)
+        var updated = voicePolishRules
+        if let originalBundleIdentifier {
+            guard let index = updated.firstIndex(where: { $0.bundleIdentifier == originalBundleIdentifier }) else {
+                throw VoicePolishRuleError("要编辑的应用规则已不存在。")
+            }
+            updated[index] = rule
+        } else {
+            updated.append(rule)
+        }
+        try persistVoicePolishRules(updated)
+        return rule
+    }
+
+    func setVoicePolishRuleEnabled(bundleIdentifier: String, enabled: Bool) throws {
+        guard let rule = voicePolishRules.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            throw VoicePolishRuleError("要修改的应用规则已不存在。")
+        }
+        guard rule.isEnabled != enabled else { return }
+        _ = try saveVoicePolishRule(originalBundleIdentifier: bundleIdentifier,
+            bundleIdentifier: rule.bundleIdentifier, displayName: rule.displayName,
+            isEnabled: enabled, prompt: rule.prompt)
+    }
+
+    func deleteVoicePolishRule(bundleIdentifier: String) throws {
+        guard voicePolishRules.contains(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            throw VoicePolishRuleError("要删除的应用规则已不存在。")
+        }
+        try persistVoicePolishRules(voicePolishRules.filter { $0.bundleIdentifier != bundleIdentifier })
+    }
+
+    func enabledVoicePolishRule(for bundleIdentifier: String) -> VoicePolishRule? {
+        VoicePolishRule.enabledRule(in: voicePolishRules, matching: bundleIdentifier)
+    }
+
+    private func persistVoicePolishRules(_ rules: [VoicePolishRule]) throws {
+        if let voicePolishRulesLoadError { throw VoicePolishRuleError(voicePolishRulesLoadError) }
+        try VoicePolishRule.validate(rules)
+        let data = try JSONEncoder().encode(rules)
+        objectWillChange.send()
+        defaults.set(data, forKey: "voicePolishRules")
+        voicePolishRules = rules
         NotificationCenter.default.post(name: .settingsDidChange, object: self)
     }
 
