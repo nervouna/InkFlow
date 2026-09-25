@@ -115,7 +115,15 @@ has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controll
 
 new_case
 change macOS/Sources/VoiceLearning.swift; plan
-has 'voice-session'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
+has 'voice-session'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'quality-store'; has 'manual-input'
+
+new_case
+change macOS/Sources/InputControllerVoice.swift; plan
+has 'voice-controller'; has 'quality-store'; has 'quality-capture-query'; has 'manual-input'
+
+new_case
+change macOS/Sources/DictionarySettings.swift; plan
+has 'settings'; has 'ai-learning'; has 'engine-english'; has 'voice-controller'; has 'manual-settings'
 
 new_case
 change schemas/lua/inkflow_ai_learning.lua; plan

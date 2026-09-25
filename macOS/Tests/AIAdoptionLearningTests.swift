@@ -135,7 +135,7 @@ struct AIAdoptionLearningTests {
 
     @MainActor private static func voiceCorrectionLearning(engine: IFEngine, user: String,
                                                             scenario: String) throws {
-        check(["voice-correction-write", "voice-correction-read"].contains(scenario),
+        check(["voice-correction-write", "voice-correction-read", "voice-correction-clear", "voice-correction-cleared-read"].contains(scenario),
               "Unknown voice correction scenario")
         func candidates(_ input: String) -> [String] {
             engine.clear(); type(engine, input)
@@ -151,15 +151,38 @@ struct AIAdoptionLearningTests {
         }
 
         check(candidates("nihao").first == "你好", "Voice learning preserves the Chinese baseline")
-        if scenario == "voice-correction-write" {
+        if scenario == "voice-correction-write" || scenario == "voice-correction-clear" {
             check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")),
                   "One attributable correction updates both Rime namespaces")
+            if scenario == "voice-correction-clear" {
+                check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")),
+                      "Reset fixture retains arbitrary prior commit counts")
+                engine.clear(); type(engine, "ni")
+                check(!IFEngine.clearPersonalEnglishLearning(), "Active composition blocks the destructive lifecycle action")
+                engine.clear()
+                check(engine.readVoiceAliases().entries.contains { $0.code == "codux" && $0.commits == 2 },
+                      "Blocked reset changes neither English namespace")
+            }
             check(!engine.learnVoiceCorrection(.init(sourceCode: "co dux", canonicalText: "Codex")),
                   "Malformed source aliases fail closed")
         }
         let aliases = engine.readVoiceAliases(generation: 7, revision: 9)
         check(aliases.availability == .available && aliases.generation == 7 && aliases.revision == 9,
               "Voice aliases are a bounded available snapshot")
+        if scenario == "voice-correction-clear" {
+            engine.clear(); type(engine, "ceshi"); engine.select(0)
+            check(engine.takeCommit() == "测试", "Seed unrelated ordinary Chinese learning")
+            engine.key(0xff09)
+            check(IFEngine.clearPersonalEnglishLearning(), "Explicit lifecycle action clears both English namespaces")
+            check(engine.readVoiceAliases().entries.isEmpty, "Voice alias namespace is empty immediately after clear")
+            check(candidates("world").contains("world"), "Reset never deletes the public English dictionary")
+            return
+        }
+        if scenario == "voice-correction-cleared-read" {
+            check(aliases.entries.isEmpty, "Cleared voice aliases stay empty after restart")
+            check(candidates("ceshi").first == "测试", "Clearing English learning preserves Chinese userdb")
+            return
+        }
         check(aliases.entries.contains { $0.code == "codux" && $0.text == "Codex" && $0.commits == 1 },
               "The exact voice-only alias is readable with its native count")
         check(VoiceAliasRewriter.apply("用 codux，配合。", snapshot: aliases) == "用 Codex，配合。",
@@ -168,6 +191,11 @@ struct AIAdoptionLearningTests {
               "Voice aliases never expand a partial Latin token")
         check(candidates("codex").contains("Codex"),
               "The canonical display is persisted to shared keyboard English")
+        engine.clear(); type(engine, "codex")
+        let personal = engine.qualitySnapshot().candidates.first { $0.text == "Codex" }
+        check(personal?.source == "personal_exact_english" && personal?.consumedInputStart == 0 && personal?.consumedInputEnd == 5,
+              "Canonical personal exact evidence reaches quality capture without dictionary text metadata")
+        engine.clear()
         check(!candidates("codux").contains("Codex"),
               "A voice-only alias never leaks into keyboard completion")
         let files = try FileManager.default.contentsOfDirectory(atPath: user)

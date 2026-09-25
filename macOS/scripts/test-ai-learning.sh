@@ -67,6 +67,18 @@ awk -F '\t' '$1 == "Codex" && $2 == "codux" && $3 == 1 { found++ } END { if (fou
   "$voice_user/voice-alias.txt"
 echo 'PASS voice correction storage: canonical shared English plus isolated exact voice alias, restart and count'
 
+clear_user="$user_dir/voice-correction-clear-user"
+mkdir -p "$clear_user"
+build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-clear
+build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-cleared-read
+(cd "$clear_user" && "$manager" -e inkflow_shared_english cleared-shared.txt)
+(cd "$clear_user" && "$manager" -e inkflow_voice_alias cleared-alias.txt)
+(cd "$clear_user" && "$manager" -e pinyin_simp retained-pinyin.txt)
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-shared.txt"
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-alias.txt"
+awk -F '\t' '$1 == "测试" && $2 == "ce shi" && $3 == 1 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/retained-pinyin.txt"
+echo 'PASS English learning reset: both named namespaces clear across restart; pinyin userdb remains'
+
 english_negative_user="$user_dir/english-negative-user"
 mkdir -p "$english_negative_user"
 build/ai-adoption-learning-tests "$shared" "$english_negative_user" english-negative

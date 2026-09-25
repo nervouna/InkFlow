@@ -2,6 +2,26 @@ import Foundation
 
 @MainActor
 extension IFEngine {
+    /// Explicit lifecycle action. It touches only the two named English memories;
+    /// public dictionaries and the ordinary pinyin_simp user dictionary stay open.
+    @discardableResult
+    static func clearPersonalEnglishLearning() -> Bool {
+        guard ready, allSessionsIdle else { return false }
+        let temporary = liveSessions.isEmpty ? IFEngine() : nil
+        guard let engine = liveSessions.first(where: \.available), allSessionsIdle else { return false }
+        let api = Self.api.pointee
+        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
+        api.set_property(engine.session, "inkflow_clear_english_learning", "clear")
+        api.set_property(engine.session, "inkflow_clear_english_learning", "")
+        var result = [CChar](repeating: 0, count: 16)
+        let read = api.get_property(engine.session, "inkflow_clear_english_learning_result", &result, result.count)
+        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
+        let cleared = read != 0 && Self.string(result) == "ok"
+        if cleared { voiceLexicon.markDirty(); signalIdle() }
+        withExtendedLifetime(temporary) {}
+        return cleared
+    }
+
     @discardableResult
     func learnVoiceCorrection(_ correction: VoiceLearnedCorrection) -> Bool {
         let canonical = correction.canonicalText.lowercased()

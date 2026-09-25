@@ -118,6 +118,16 @@ private func createV1Database(at url: URL) throws {
         """)
 }
 
+private func createV2Database(at url: URL) throws {
+    try createV1Database(at: url)
+    let writer = try Reader(url, writable: true)
+    for column in ["ranking_fingerprint", "settings_fingerprint", "measurement_fingerprint", "build_identity"] {
+        try writer.execute("ALTER TABLE config_revisions ADD COLUMN \(column) TEXT")
+        try writer.execute("CREATE INDEX revisions_\(column) ON config_revisions(\(column))")
+    }
+    try writer.execute("PRAGMA user_version=2")
+}
+
 @main
 struct QualityStoreTests {
     static func main() async throws {
@@ -149,13 +159,13 @@ struct QualityStoreTests {
         let reader = try Reader(url)
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1", "decision persisted")
         expect(try reader.scalar("PRAGMA journal_mode") == "delete", "rollback journal")
-        expect(try reader.scalar("PRAGMA user_version") == "2", "schema v2")
-        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "5",
-               "schema v2 keeps the five-table contract")
+        expect(try reader.scalar("PRAGMA user_version") == "3", "schema v3")
+        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "6",
+               "schema v3 adds one owned event table")
         expect(try reader.scalar("SELECT ranking_fingerprint IS NOT NULL AND settings_fingerprint IS NOT NULL AND measurement_fingerprint IS NOT NULL AND build_identity IS NOT NULL FROM config_revisions") == "1",
                "new revisions persist every layered identity")
         let expectedFingerprints = try QualityFingerprints.make(configuration: record.revisions[0].configuration,
-            build: metadata, engineVersion: "test-engine", databaseSchemaVersion: 2,
+            build: metadata, engineVersion: "test-engine", databaseSchemaVersion: QualityLimits.databaseSchemaVersion,
             metricRuleVersion: QualityLimits.metricRuleVersion,
             collectionRuleVersion: QualityLimits.collectionRuleVersion)
         expect(try reader.rows("SELECT ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity FROM config_revisions").first ==
@@ -188,6 +198,8 @@ struct QualityStoreTests {
         try await configurationBudgetsAndReferences()
         try await fatalFaults()
         try await v1Migration()
+        try await effectivenessEvents()
+        try await malformedSchemaTopology()
         try await identityFailures()
         try await schemaAndOpenFailures()
         try await metadataAndRevisions()
@@ -218,6 +230,66 @@ private final class Counter: @unchecked Sendable {
 }
 
 private extension QualityStoreTests {
+    static func effectivenessEvents() async throws {
+        let url = try makeURL("effectiveness")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let events = [
+            QualityEffectivenessEvent(source: .voiceSession, event: .finalized),
+            QualityEffectivenessEvent(source: .voiceCorrection, event: .detected, milliseconds: 350),
+            QualityEffectivenessEvent(source: .voiceCorrection, event: .learned),
+            QualityEffectivenessEvent(source: .voiceAlias, event: .hit, count: 2),
+            QualityEffectivenessEvent(source: .voiceAlias, event: .laterReuse),
+            QualityEffectivenessEvent(source: .canonicalLexicon, event: .hit),
+            QualityEffectivenessEvent(source: .canonicalLexicon, event: .laterReuse),
+            QualityEffectivenessEvent(source: .voiceCorrection, event: .rejected, reason: .immediateUndo),
+        ]
+        for event in events { expect(store.submit(event) == .accepted, "content-free event accepted") }
+        expect(store.submit(.init(source: .voiceAlias, event: .hit, count: 0)) == .invalid,
+               "invalid numeric event fails before the worker")
+        expect(store.submit(.init(source: .voiceSession, event: .learned)) == .invalid,
+               "invalid source/event pairing fails before the worker")
+        expect(store.submit(.init(source: .voiceSession, event: .finalized,
+                                  occurredAt: Date(timeIntervalSinceNow: -100 * 86_400))) == .accepted,
+               "old event reaches bounded retention")
+        await store.flush()
+        let reader = try Reader(url)
+        expect(try reader.scalar("PRAGMA user_version") == "3", "effectiveness events migrate quality schema to v3")
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == String(events.count),
+               "all current source-aware events persist and aged evidence is pruned")
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events WHERE event='rejected' AND reason='immediate_undo'") == "1",
+               "bounded rejection reason persists")
+        let columns = try reader.rows("SELECT name FROM pragma_table_info('effectiveness_events')").flatMap { $0 }
+        for forbidden in ["text", "input", "candidate", "document", "transcript", "correction"] {
+            expect(!columns.contains(where: { $0.contains(forbidden) }), "effectiveness schema stores no \(forbidden) content")
+        }
+        await store.close()
+        let failedURL = try makeURL("effectiveness-failure")
+        defer { try? FileManager.default.removeItem(at: failedURL.deletingLastPathComponent()) }
+        let failed = QualityStore(url: failedURL, engineVersion: "test", buildMetadata: metadata,
+            hooks: .init(fault: { $0 == .beforeCommit ? SQLITE_IOERR : nil }))
+        expect(failed.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
+               "effectiveness producer never waits for writer success")
+        await failed.flush()
+        expect(failed.statistics().disabled && failed.statistics().errors == 1,
+               "effectiveness writer failure disables measurement only")
+        expect(try Reader(failedURL).scalar("SELECT count(*) FROM effectiveness_events") == "0",
+               "failed effectiveness transaction leaves no partial evidence")
+        let v2URL = try makeURL("effectiveness-v2")
+        defer { try? FileManager.default.removeItem(at: v2URL.deletingLastPathComponent()) }
+        try createV2Database(at: v2URL)
+        let migrated = QualityStore(url: v2URL, engineVersion: "test", buildMetadata: metadata)
+        expect(migrated.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
+               "v2 database accepts deferred v3 migration")
+        await migrated.close()
+        let migratedReader = try Reader(v2URL)
+        expect(try migratedReader.scalar("PRAGMA user_version") == "3" &&
+               migratedReader.scalar("SELECT count(*) FROM effectiveness_events") == "1" &&
+               migratedReader.scalar("SELECT count(*) FROM compositions WHERE id='legacy-composition'") == "1",
+               "v2 rows survive the additive effectiveness migration")
+        print("PASS quality effectiveness: content-free source events, numeric bounds and rejection reasons")
+    }
+
     static func v1Migration() async throws {
         let url = try makeURL("v1-migration")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
@@ -226,9 +298,9 @@ private extension QualityStoreTests {
         expect(store.submit(fixture("after-migration")) == .accepted, "migration stays off producer path")
         await store.close()
         let reader = try Reader(url)
-        expect(try reader.scalar("PRAGMA user_version") == "2", "strict v1 migrates to v2")
-        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "5",
-               "migration keeps exactly five owned tables")
+        expect(try reader.scalar("PRAGMA user_version") == "3", "strict v1 migrates to v3")
+        expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'sqlite_sequence'") == "6",
+               "migration keeps five legacy tables and adds only effectiveness events")
         expect(try reader.scalar("SELECT fingerprint FROM config_revisions WHERE id='legacy-revision'") == "legacy-fingerprint",
                "legacy fingerprint remains exact")
         expect(try reader.scalar("SELECT ranking_fingerprint IS NULL AND settings_fingerprint IS NULL AND measurement_fingerprint IS NULL AND build_identity IS NULL FROM config_revisions WHERE id='legacy-revision'") == "1",
@@ -255,6 +327,57 @@ private extension QualityStoreTests {
         expect(try Data(contentsOf: rollbackURL) == before, "failed migration leaves v1 bytes unchanged")
 
         print("PASS quality store: atomic v1 migration, exact rows, NULL legacy layers and rollback")
+    }
+
+    static func malformedSchemaTopology() async throws {
+        func reject(_ label: String, version: Int, mutation: String) async throws {
+            let url = try makeURL("malformed-\(label)")
+            defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+            if version == 1 { try createV1Database(at: url) }
+            else if version == 2 { try createV2Database(at: url) }
+            else {
+                let seed = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+                await seed.close()
+            }
+            do {
+                let writer = try Reader(url, writable: true)
+                try writer.execute(mutation)
+            }
+            let before = try Data(contentsOf: url)
+            let topologyBefore: [[String]]
+            do {
+                let reader = try Reader(url)
+                topologyBefore = try reader.rows(
+                    "SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name")
+                expect(try reader.scalar("PRAGMA user_version") == String(version),
+                       "Fixture keeps requested schema version")
+            }
+            let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+            expect(store.submit(fixture("malformed-\(label)")) == .accepted,
+                   "Malformed topology detection stays off the producer path")
+            await store.close()
+            expect(store.statistics().disabled, "Malformed \(label) topology disables measurement")
+            expect(try Data(contentsOf: url) == before, "Rejected \(label) leaves database bytes unchanged")
+            let reader = try Reader(url)
+            expect(try reader.scalar("PRAGMA user_version") == String(version),
+                   "Rejected \(label) leaves schema version unchanged")
+            expect(try reader.rows(
+                "SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name") == topologyBefore,
+                   "Rejected \(label) leaves topology unchanged")
+        }
+
+        try await reject("v1-missing-table", version: 1, mutation: "DROP TABLE candidate_decisions")
+        try await reject("v1-extra-table", version: 1, mutation: "CREATE TABLE unexpected_table (id INTEGER)")
+        try await reject("v1-extra-column", version: 1,
+                         mutation: "ALTER TABLE recording_runs ADD COLUMN unexpected TEXT")
+        try await reject("v1-extra-index", version: 1,
+                         mutation: "CREATE INDEX unexpected_index ON recording_runs(status)")
+        try await reject("v2-missing-index", version: 2, mutation: "DROP INDEX revisions_build_identity")
+        try await reject("v2-extra-column", version: 2,
+                         mutation: "ALTER TABLE config_revisions ADD COLUMN unexpected TEXT")
+        try await reject("v3-extra-table", version: 3, mutation: "CREATE TABLE unexpected_table (id INTEGER)")
+        try await reject("v3-missing-index", version: 3, mutation: "DROP INDEX effectiveness_time_source")
+        print("PASS quality store: malformed v1/v2 migration and v3 topology reject without mutation")
     }
 
     static func identityFailures() async throws {

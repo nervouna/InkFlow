@@ -40,6 +40,7 @@ final class QualityStore: @unchecked Sendable {
     private let lock = NSLock()
     private var pending: [(sequence: Int, envelope: QualityEnvelope, bytes: Int)] = []
     private var inFlight = 0
+    private var effectivenessInFlight = 0
     private var acceptedSequence = 0
     private var scheduled = false
     private var accepting = true
@@ -99,12 +100,37 @@ final class QualityStore: @unchecked Sendable {
             pending.append((acceptedSequence, bounded, bytes))
             stats.bufferedBytes += bytes
             stats.peakBufferedBytes = max(stats.peakBufferedBytes, stats.bufferedBytes)
-            stats.buffered = pending.count + inFlight
+            stats.buffered = pending.count + inFlight + effectivenessInFlight
             stats.peakBuffered = max(stats.peakBuffered, stats.buffered)
             if bounded.composition.pageHistoryTruncated { stats.truncatedEnvelopes += 1 }
             scheduleIfFull()
             return .accepted
         }
+    }
+
+    /// Small, content-free counters share the utility worker but not composition envelopes.
+    /// The producer never waits for SQLite and a failed writer only disables measurement.
+    @discardableResult
+    func submit(_ event: QualityEffectivenessEvent) -> QualitySubmission {
+        guard event.isValid else {
+            lock.withLock { stats.submitted += 1; stats.droppedInvalid += 1 }
+            return .invalid
+        }
+        let accepted = lock.withLock { () -> Bool in
+            stats.submitted += 1
+            guard accepting && !stats.disabled else { stats.droppedDisabled += 1; return false }
+            guard effectivenessInFlight < QualityLimits.bufferedEffectivenessEvents else {
+                stats.droppedQueue += 1
+                return false
+            }
+            effectivenessInFlight += 1
+            stats.buffered = pending.count + inFlight + effectivenessInFlight
+            stats.peakBuffered = max(stats.peakBuffered, stats.buffered)
+            return true
+        }
+        guard accepted else { return statsDisabled ? .disabled : .queueFull }
+        queue.async { [weak self] in self?.write(event) }
+        return .accepted
     }
 
     /// Active recorders call this once when their core exceeds the same 64 KiB cap.
@@ -215,7 +241,7 @@ final class QualityStore: @unchecked Sendable {
             lock.withLock {
                 inFlight -= batch.count
                 stats.bufferedBytes -= retainedBatch.reduce(0) { $0 + $1.bytes }
-                stats.buffered = pending.count + inFlight
+                stats.buffered = pending.count + inFlight + effectivenessInFlight
             }
         }
         guard startIfNeeded() else {
@@ -234,6 +260,24 @@ final class QualityStore: @unchecked Sendable {
                 stats.truncatedEnvelopes += outcome.truncated
             }
         } catch { handle(error, count: batch.count) }
+    }
+
+
+    private func write(_ event: QualityEffectivenessEvent) {
+        defer {
+            lock.withLock {
+                effectivenessInFlight -= 1
+                stats.buffered = pending.count + inFlight + effectivenessInFlight
+            }
+        }
+        guard startIfNeeded() else {
+            lock.withLock { stats.droppedDisabled += 1 }
+            return
+        }
+        do {
+            try database.write(event)
+            lock.withLock { stats.written += 1 }
+        } catch { handle(error, count: 1) }
     }
 
     private func saveRunStatistics() {
@@ -259,7 +303,7 @@ final class QualityStore: @unchecked Sendable {
             stats.droppedDisabled += pending.count
             stats.bufferedBytes -= pending.reduce(0) { $0 + $1.bytes }
             pending.removeAll()
-            stats.buffered = inFlight
+            stats.buffered = inFlight + effectivenessInFlight
             return true
         }
         if let reason = databaseError?.identityFailure {
@@ -362,10 +406,11 @@ private final class QualityDatabase: @unchecked Sendable {
                     try validateSchema()
                     return
                 }
-                for sql in Self.creationOrder(schema: Self.schemaV2) { try execute(sql) }
+                for sql in Self.creationOrder(schema: Self.schemaV3) { try execute(sql) }
                 for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
                     try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
                 }
+                try validateTopology(version: "3")
                 try execute("PRAGMA application_id = \(Self.applicationID)")
                 try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
                 try execute("COMMIT")
@@ -375,34 +420,44 @@ private final class QualityDatabase: @unchecked Sendable {
         guard identity == String(Self.applicationID) else {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
-        if version == "1" {
-            try migrateV1()
+        if version == "1" || version == "2" {
+            try migrate(from: version)
             return
         }
         guard version == String(QualityLimits.databaseSchemaVersion) else {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
+        try validateTopology(version: version)
     }
 
-    private func migrateV1() throws {
+    private func migrate(from _: String) throws {
         try execute("BEGIN IMMEDIATE")
         do {
             let lockedVersion = try scalar("PRAGMA user_version")
             let lockedIdentity = try scalar("PRAGMA application_id")
             if lockedVersion == String(QualityLimits.databaseSchemaVersion), lockedIdentity == String(Self.applicationID) {
+                try validateTopology(version: lockedVersion)
                 rollback()
                 return
             }
-            guard lockedVersion == "1", lockedIdentity == String(Self.applicationID) else {
+            guard ["1", "2"].contains(lockedVersion), lockedIdentity == String(Self.applicationID) else {
                 throw QualityDatabaseError(code: Self.unsupportedSchema)
             }
-            try execute("ALTER TABLE config_revisions ADD COLUMN ranking_fingerprint TEXT")
-            try execute("ALTER TABLE config_revisions ADD COLUMN settings_fingerprint TEXT")
-            try execute("ALTER TABLE config_revisions ADD COLUMN measurement_fingerprint TEXT")
-            try execute("ALTER TABLE config_revisions ADD COLUMN build_identity TEXT")
-            for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
-                try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
+            // Legacy ownership must be exact before the first ALTER/CREATE. Unknown
+            // objects or columns belong to another writer and are never repaired.
+            try validateTopology(version: lockedVersion)
+            if lockedVersion == "1" {
+                try execute("ALTER TABLE config_revisions ADD COLUMN ranking_fingerprint TEXT")
+                try execute("ALTER TABLE config_revisions ADD COLUMN settings_fingerprint TEXT")
+                try execute("ALTER TABLE config_revisions ADD COLUMN measurement_fingerprint TEXT")
+                try execute("ALTER TABLE config_revisions ADD COLUMN build_identity TEXT")
+                for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
+                    try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
+                }
             }
+            try execute(Self.effectivenessTable)
+            try execute(Self.effectivenessTimeIndex)
+            try validateTopology(version: "3")
             try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
             try inject(.beforeMigrationCommit)
             try execute("COMMIT")
@@ -419,6 +474,36 @@ private final class QualityDatabase: @unchecked Sendable {
             if leftTable != rightTable { return leftTable }
             return left < right
         }.map { schema[$0]! }
+    }
+
+    private func validateTopology(version: String) throws {
+        guard let columns = Self.tableColumns[version] else {
+            throw QualityDatabaseError(code: Self.unsupportedSchema)
+        }
+        var indexes = Self.baseIndexColumns
+        if version != "1" {
+            for (name, column) in Self.layeredIndexes { indexes[name] = [column] }
+        }
+        if version == "3" { indexes["effectiveness_time_source"] = ["occurred_at", "source", "event"] }
+        var expectedObjects = columns.keys.map { ["table", $0] }
+        expectedObjects.append(contentsOf: indexes.keys.map { ["index", $0] })
+        expectedObjects.sort {
+            if $0[0] == $1[0] { return $0[1] < $1[1] }
+            return $0[0] < $1[0]
+        }
+        let actualObjects = try query("""
+            SELECT type,name FROM sqlite_master
+            WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name
+            """)
+        guard actualObjects == expectedObjects else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
+        for (table, expected) in columns {
+            let actual = try query("PRAGMA table_info('\(table)')").map { $0[1] }
+            guard actual == expected else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
+        }
+        for (index, expected) in indexes {
+            let actual = try query("PRAGMA index_info('\(index)')").map { $0[2] }
+            guard actual == expected else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
+        }
     }
 
     func write(_ batch: [QualityEnvelope]) throws -> (written: Int, oversized: Int, truncated: Int) {
@@ -443,6 +528,21 @@ private final class QualityDatabase: @unchecked Sendable {
             try inject(.beforeCommit)
             try execute("COMMIT")
             return (accepted.count, oversized, truncated)
+        } catch { rollback(); throw error }
+    }
+
+    func write(_ event: QualityEffectivenessEvent) throws {
+        guard event.isValid else { throw QualityDatabaseError(code: SQLITE_CONSTRAINT) }
+        try execute("BEGIN IMMEDIATE")
+        do {
+            try execute("INSERT INTO effectiveness_events (run_id, occurred_at, source, event, reason, count, milliseconds) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        [.text(runID), .text(QualityJSON.timestamp(event.occurredAt)), .text(event.source.rawValue),
+                         .text(event.event.rawValue), .optional(event.reason?.rawValue), .integer(event.count),
+                         .optional(event.milliseconds)])
+            try execute("DELETE FROM effectiveness_events WHERE julianday(occurred_at) < julianday('now', '-\(QualityLimits.effectivenessRetentionDays) days')")
+            try execute("DELETE FROM effectiveness_events WHERE id NOT IN (SELECT id FROM effectiveness_events ORDER BY id DESC LIMIT \(QualityLimits.effectivenessRetentionRows))")
+            try inject(.beforeCommit)
+            try execute("COMMIT")
         } catch { rollback(); throw error }
     }
 
@@ -652,6 +752,39 @@ private final class QualityDatabase: @unchecked Sendable {
         "revisions_build_identity": "build_identity"
     ]
 
+    private static let baseIndexColumns: [String: [String]] = [
+        "compositions_time_app": ["started_at", "app_bundle_id"],
+        "decisions_composition": ["composition_id"],
+        "revisions_fingerprint": ["fingerprint"]
+    ]
+
+    private static let tableColumns: [String: [String: [String]]] = {
+        let common: [String: [String]] = [
+            "recording_runs": ["id", "started_at", "ended_at", "status", "engine_version",
+                               "build_metadata_json", "metric_rule_version", "stats_json", "error_code"],
+            "compositions": ["id", "run_id", "started_at", "ended_at", "app_bundle_id", "client_id",
+                             "outcome", "page_history_truncated", "dropped_page_count", "outcome_reason",
+                             "operations_json"],
+            "commits": ["id", "composition_id", "issued_at", "text", "kind", "insertion_issued", "client_id"],
+            "candidate_decisions": ["id", "composition_id", "config_revision_id", "commit_id", "occurred_at",
+                                    "sequence", "trigger", "outcome", "selected_display_index", "selected_text",
+                                    "text_kind", "snapshot_json", "first_page_json", "visited_pages_json",
+                                    "page_history_truncated", "dropped_page_count", "operations_json",
+                                    "regular_ranked_selection", "matches_custom_phrase", "unknown_rank_reason",
+                                    "path_reason"]
+        ]
+        let v1Revision = ["id", "fingerprint", "created_at", "applied_config_json", "build_metadata_json",
+                          "engine_version", "metric_rule_version"]
+        let v2Revision = v1Revision + ["ranking_fingerprint", "settings_fingerprint",
+                                      "measurement_fingerprint", "build_identity"]
+        var v1 = common; v1["config_revisions"] = v1Revision
+        var v2 = common; v2["config_revisions"] = v2Revision
+        var v3 = v2
+        v3["effectiveness_events"] = ["id", "run_id", "occurred_at", "source", "event", "reason", "count",
+                                      "milliseconds"]
+        return ["1": v1, "2": v2, "3": v3]
+    }()
+
     private static let schemaV2: [String: String] = {
         var schema = schemaV1
         schema["config_revisions"] = """
@@ -663,6 +796,25 @@ private final class QualityDatabase: @unchecked Sendable {
             measurement_fingerprint TEXT, build_identity TEXT
         )
         """
+        return schema
+    }()
+
+    private static let effectivenessTable = """
+        CREATE TABLE effectiveness_events (
+            id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES recording_runs(id),
+            occurred_at TEXT NOT NULL, source TEXT NOT NULL, event TEXT NOT NULL, reason TEXT,
+            count INTEGER NOT NULL CHECK(count BETWEEN 1 AND 64),
+            milliseconds INTEGER CHECK(milliseconds BETWEEN 0 AND 60000),
+            CHECK((event = 'rejected' AND reason IS NOT NULL) OR (event != 'rejected' AND reason IS NULL))
+        )
+        """
+    private static let effectivenessTimeIndex =
+        "CREATE INDEX effectiveness_time_source ON effectiveness_events(occurred_at, source, event)"
+
+    private static let schemaV3: [String: String] = {
+        var schema = schemaV2
+        schema["effectiveness_events"] = effectivenessTable
+        schema["effectiveness_time_source"] = effectivenessTimeIndex
         return schema
     }()
 }

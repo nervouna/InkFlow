@@ -604,6 +604,48 @@ struct QualityCaptureTests {
         recorder.commitDrained("同", insertionIssued: true, clientID: "synthetic")
         await store.flush()
         check(db.decisions().last!["selected_display_index"] == "0")
+        var personal = page("codex")
+        personal.candidates[0] = QualityCandidate(text: "Codex", displayIndex: 0, displayRank: 1,
+            nativeIndex: 0, nativeRank: 1, source: "personal_exact_english",
+            consumedInputStart: 0, consumedInputEnd: 5)
+        recorder.presented(personal, revision: revision, panelShowIssued: true)
+        recorder.presented(personal, revision: revision, panelShowIssued: true)
+        await store.flush()
+        check(db.rows("SELECT source,event,count FROM effectiveness_events ORDER BY id") == [
+            ["source": "canonical_lexicon", "event": "hit", "count": "1"],
+        ], "A displayed personal exact opportunity emits one deduplicated hit without a commit")
+        recorder.willMutate(personal, revision: revision, action: .select(0, .space, false))
+        var partial = personal
+        partial.selectedPrefix = "Codex"
+        recorder.didMutate(partial, handled: true)
+        recorder.willMutate(partial, revision: revision, action: .key(120, 0))
+        var editedPersonal = personal
+        editedPersonal.rawInput = "codexx"
+        editedPersonal.caret = 6
+        recorder.didMutate(editedPersonal, handled: true)
+        recorder.presented(personal, revision: revision, panelShowIssued: true)
+        await store.flush()
+        check(db.rows("SELECT event,SUM(count) AS count FROM effectiveness_events GROUP BY event ORDER BY event") == [
+            ["event": "hit", "count": "1"],
+        ], "Editing and pending-selection invalidation do not reopen dedupe within composition A")
+        recorder.willMutate(personal, revision: revision, action: .select(0, .space, false))
+        recorder.didMutate(page(""), handled: true)
+        recorder.commitDrained("Codex", insertionIssued: true, clientID: "synthetic")
+        await store.flush()
+        check(db.rows("SELECT event,SUM(count) AS count FROM effectiveness_events GROUP BY event ORDER BY event") == [
+            ["event": "hit", "count": "1"],
+            ["event": "later_reuse", "count": "1"],
+        ], "Only the proven commit adds canonical later-reuse evidence for composition A")
+        recorder.presented(personal, revision: revision, panelShowIssued: true)
+        recorder.presented(personal, revision: revision, panelShowIssued: true)
+        recorder.willMutate(personal, revision: revision, action: .select(0, .space, false))
+        recorder.didMutate(page(""), handled: true)
+        recorder.commitDrained("Codex", insertionIssued: true, clientID: "synthetic")
+        await store.flush()
+        check(db.rows("SELECT event,SUM(count) AS count FROM effectiveness_events GROUP BY event ORDER BY event") == [
+            ["event": "hit", "count": "2"],
+            ["event": "later_reuse", "count": "2"],
+        ], "Composition B gets a fresh deduped opportunity and two proven commits never exceed 100 percent reuse")
         for index in 0..<70 {
             var snapshot = page("tong", "", index)
             snapshot.candidates[0].text = String(repeating: "字", count: 80)

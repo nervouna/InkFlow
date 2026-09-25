@@ -230,7 +230,9 @@ struct VoiceControllerTests {
             h.controller.voice.learningObservationDelay = .zero
             h.controller.voice.learningUndoGrace = .zero
             var learned: [VoiceLearnedCorrection] = []
+            var events: [QualityEffectivenessEvent] = []
             h.controller.voice.learnCorrection = { learned.append($0); return true }
+            h.controller.voice.recordEffectiveness = { events.append($0) }
             await finish(h, raw: "codux")
             check(h.client.document == "前🙂codux" && h.client.insertions.count == 1,
                   "Raw finalized voice text inserts exactly once before observation")
@@ -243,6 +245,10 @@ struct VoiceControllerTests {
             for _ in 0..<10 { await Task.yield() }
             check(learned == [.init(sourceCode: "codux", canonicalText: "Codex")],
                   "One attributable local Latin substitution learns once off the key event")
+            check(events.contains { $0.source == .voiceSession && $0.event == .finalized } &&
+                  events.contains { $0.source == .voiceCorrection && $0.event == .detected } &&
+                  events.contains { $0.source == .voiceCorrection && $0.event == .learned },
+                  "Finalization, detection and successful learning emit content-free evidence")
             check(h.client.insertions.count == 1, "Learning never inserts a second copy")
         }
 
@@ -252,9 +258,57 @@ struct VoiceControllerTests {
                 .init(generation: 1, revision: 1, availability: .available,
                       entries: [.init(code: "codux", text: "Codex", commits: 1)])
             }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
             await finish(h, raw: "用 codux。")
             check(h.client.document == "前🙂用 Codex。" && h.client.insertions.count == 1,
                   "Exact token-boundary voice aliases apply before insertion without duplication")
+            check(events.contains { $0.source == .voiceAlias && $0.event == .hit && $0.count == 1 } &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .laterReuse && $0.count == 1 },
+                  "Alias application emits numeric hit and later-reuse evidence without token content")
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.settings.voicePolishEnabled = true
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available,
+                      entries: [.init(code: "codux", text: "Codex", commits: 1)])
+            }
+            h.controller.voice.correctionOverride = { text in
+                try await Task.sleep(for: .seconds(1))
+                return text
+            }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("用 codux。")
+            h.key()
+            callbacks.onFinalized("用 codux。")
+            for _ in 0..<10 { await Task.yield() }
+            h.controller.voice.cancel(.cancellation)
+            check(h.client.insertions.isEmpty &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .hit } &&
+                  !events.contains { $0.source == .voiceAlias && $0.event == .laterReuse },
+                  "A matched alias cancelled before insertion is a hit but not later reuse")
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.settings.voicePolishEnabled = true
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available,
+                      entries: [.init(code: "codux", text: "Codex", commits: 1)])
+            }
+            h.controller.voice.correctionOverride = { _ in "用产品。" }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await finish(h, raw: "用 codux。")
+            check(h.client.document == "前🙂用产品。" &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .hit } &&
+                  !events.contains { $0.source == .voiceAlias && $0.event == .laterReuse },
+                  "AI polish that removes the alias cannot count as later reuse")
         }
 
         for interruption in ["undo", "deactivate", "ordinary"] {
@@ -287,7 +341,9 @@ struct VoiceControllerTests {
         h.controller.voice.aliasLexicon = { .init(generation: 1, revision: 1, availability: .available, entries: []) }
         h.controller.voice.learningObservationDelay = .milliseconds(350)
         var learned: [VoiceLearnedCorrection] = []
+        var events: [QualityEffectivenessEvent] = []
         h.controller.voice.learnCorrection = { learned.append($0); return true }
+        h.controller.voice.recordEffectiveness = { events.append($0) }
         await h.start()
         let callbacks = h.fake.callbacks!
         callbacks.onFinal("codux")
@@ -305,6 +361,10 @@ struct VoiceControllerTests {
         check(!h.controller.voice.hasPendingCorrection, "Command-Z discards the detected correction immediately")
         try? await Task.sleep(for: .milliseconds(1100))
         check(learned.isEmpty, "Command-Z after detection must prevent both Rime namespace updates")
+        check(events.contains { $0.source == .voiceCorrection && $0.event == .detected } &&
+              events.contains { $0.source == .voiceCorrection && $0.event == .rejected && $0.reason == .immediateUndo } &&
+              !events.contains { $0.event == .learned },
+              "Immediate undo records a bounded rejection reason and never a learned event")
     }
 
     @MainActor static func voiceChordEvent(_ down: Bool, flags: NSEvent.ModifierFlags = [.control, .option],

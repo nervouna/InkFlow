@@ -4,6 +4,8 @@ import SwiftUI
 struct DictionarySettingsView: View {
     var coordinator: IFDictionaryCoordinator?
     @State private var detailsExpanded = false
+    @State private var confirmClearLearning = false
+    @State private var learningStatus: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -74,11 +76,34 @@ struct DictionarySettingsView: View {
                     .accessibilityIdentifier("dictionaries.check")
             }
 
+            Divider()
+            Text("个人英文学习")
+                .font(.headline)
+            Text("清除键盘英文学习和语音纠正别名，不影响内置词库、自定义短语或中文输入学习。")
+                .foregroundStyle(.secondary)
+            Button("清除个人英文学习", role: .destructive) { confirmClearLearning = true }
+                .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
+                .accessibilityIdentifier("dictionaries.clearEnglishLearning")
+            if let learningStatus {
+                Text(learningStatus).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("dictionaries.clearEnglishLearningStatus")
+            }
+
             Spacer(minLength: 0)
         }
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: coordinator?.failure?.technicalDetails) { _, _ in detailsExpanded = false }
+        .confirmationDialog("清除个人英文学习？", isPresented: $confirmClearLearning) {
+            Button("清除", role: .destructive) {
+                learningStatus = IFEngine.clearPersonalEnglishLearning()
+                    ? "个人英文学习已清除。"
+                    : "暂时无法清除，请结束当前输入后重试。"
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("此操作会清除已学习的英文候选和语音英文别名，无法撤销。")
+        }
     }
 
     private var status: String? {

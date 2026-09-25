@@ -84,22 +84,53 @@ struct VoiceAliasSnapshot: Equatable, Sendable {
 }
 
 enum VoiceAliasRewriter {
+    struct Result: Equatable, Sendable {
+        let text: String
+        let matchedDisplays: [String]
+        var hitCount: Int { matchedDisplays.count }
+
+        func retainedHitCount(in insertedFinal: String) -> Int {
+            var remaining: [String: Int] = [:]
+            for display in matchedDisplays { remaining[display, default: 0] += 1 }
+            let value = insertedFinal as NSString
+            var retained = 0
+            for range in voiceLatinTokenRanges(insertedFinal) {
+                let token = value.substring(with: range)
+                guard let count = remaining[token], count > 0 else { continue }
+                retained += 1
+                remaining[token] = count - 1
+            }
+            return retained
+        }
+    }
+
+    private static let evidenceLimit = 64
+
     static func apply(_ transcript: String, snapshot: VoiceAliasSnapshot) -> String {
-        guard snapshot.availability == .available, !snapshot.entries.isEmpty else { return transcript }
+        result(transcript, snapshot: snapshot).text
+    }
+
+    static func result(_ transcript: String, snapshot: VoiceAliasSnapshot) -> Result {
+        guard snapshot.availability == .available, !snapshot.entries.isEmpty else {
+            return Result(text: transcript, matchedDisplays: [])
+        }
         var grouped: [String: Set<String>] = [:]
         for entry in snapshot.entries { grouped[entry.code, default: []].insert(entry.text) }
         let mappings = grouped.compactMapValues { $0.count == 1 ? $0.first : nil }
-        guard !mappings.isEmpty else { return transcript }
+        guard !mappings.isEmpty else { return Result(text: transcript, matchedDisplays: []) }
         let value = transcript as NSString
-        var output = "", cursor = 0
+        var output = "", cursor = 0, matchedDisplays: [String] = []
         for range in voiceLatinTokenRanges(transcript) {
             output += value.substring(with: NSRange(location: cursor, length: range.location - cursor))
             let token = value.substring(with: range)
-            output += mappings[token.lowercased()] ?? token
+            if let replacement = mappings[token.lowercased()] {
+                output += replacement
+                if matchedDisplays.count < evidenceLimit { matchedDisplays.append(replacement) }
+            } else { output += token }
             cursor = NSMaxRange(range)
         }
         output += value.substring(from: cursor)
-        return output
+        return Result(text: output, matchedDisplays: matchedDisplays)
     }
 }
 

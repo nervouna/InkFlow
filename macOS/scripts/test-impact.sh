@@ -84,10 +84,10 @@ impact_classify() {
       impact_rule "$path" 'AI test domain' ai ;;
 
     macOS/Sources/VoiceLexicon.swift|macOS/Sources/VoiceLearning.swift)
-      impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport
+      impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/*Voice*.swift)
-      impact_rule "$path" 'voice feature domain' voice-session apple-voice voice-lexicon voice-controller settings ai-transport
+      impact_rule "$path" 'voice feature domain' voice-session apple-voice voice-lexicon voice-controller settings ai-transport quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Tests/*Voice*.swift|macOS/scripts/test-*voice*.sh)
       impact_rule "$path" 'voice test domain' voice-session apple-voice voice-lexicon voice-controller ;;
@@ -115,6 +115,10 @@ impact_classify() {
       impact_rule "$path" 'packaged resources and cache consumers' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation
       impact_bundle=true
       impact_manual_add manual-input ;;
+    macOS/Sources/DictionarySettings.swift)
+      impact_rule "$path" 'dictionary and personal-learning lifecycle settings' settings ai-learning engine-english voice-controller
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
     macOS/Sources/Dictionary*|macOS/DictionaryTool/*|macOS/DictionaryWorker/*|macOS/Data/*|macOS/config/*|schemas/*|config/*|Data/*|*.yaml|*.yml|macOS/scripts/prepare-*.sh)
       impact_rule "$path" 'dictionary and generated-data domain' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true

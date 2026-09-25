@@ -117,6 +117,7 @@ final class IFEngine {
     private var precedingText = ""
     private var orderedContent = EngineSnapshot()
     private var candidateOrder: [Int] = []
+    private var candidateRankingMetadata: [IFCandidateRankingMetadata]?
     let qualityRecorder: QualityRecorder?
     private(set) var qualityRevision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))
     private var qualityDepth = 0
@@ -299,7 +300,7 @@ final class IFEngine {
             Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
         }
         candidateCount = 5; appliedPhrases = []; inputPreferences = nil; configurationError = nil
-        candidateOrder = []; orderedContent = EngineSnapshot(); precedingText = ""
+        candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
         applyConfigurationIfIdle()
         if let configurationError { throw IFDictionaryUpdateError(.apply, "session-settings", detail: configurationError) }
         asciiMode = savedASCII
@@ -312,7 +313,7 @@ final class IFEngine {
             _ = Self.api.pointee.destroy_session(session)
         }
         session = 0; sessionGeneration = 0; sessionRestored = false
-        candidateOrder = []; orderedContent = EngineSnapshot(); precedingText = ""
+        candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
     }
 
     isolated deinit {
@@ -613,11 +614,15 @@ final class IFEngine {
         // Once a segment is selected, the immediate prefix is inside the mark.
         // Leave these remaining candidates to Rime instead of applying older document text.
         candidateOrder = Array(raw.candidates.indices)
-        if !raw.hasSelectedPrefix, !hasCustomCode, let ranker = Self.contextRanker {
+        candidateRankingMetadata = nil
+        if !raw.hasSelectedPrefix, !hasCustomCode {
             let metadata = inputRankingMetadata(page: raw.page, count: raw.candidates.count,
                                                 inputLength: input.utf8.count)
-            candidateOrder = ranker.order(raw.candidates, precedingText: precedingText,
-                                         metadata: metadata)
+            candidateRankingMetadata = metadata
+            if let ranker = Self.contextRanker {
+                candidateOrder = ranker.order(raw.candidates, precedingText: precedingText,
+                                              metadata: metadata)
+            }
         }
         if let first = candidateOrder.first {
             _ = Self.api.pointee.highlight_candidate_on_current_page(session, first)
@@ -724,9 +729,20 @@ final class IFEngine {
         var candidates: [QualityCandidate] = []
         if let buffer = context.menu.candidates {
             candidates = order.enumerated().map { display, native in
-                QualityCandidate(text: Self.string(buffer[native].text), comment: Self.string(buffer[native].comment),
+                let evidence = candidateRankingMetadata.flatMap { $0.indices.contains(native) ? $0[native] : nil }
+                let personalSource: String? = evidence.flatMap {
+                    guard $0.exact, $0.personalBucket > 0 else { return nil }
+                    switch $0.source {
+                    case .english: return "personal_exact_english"
+                    case .mixed: return "personal_exact_mixed"
+                    default: return nil
+                    }
+                }
+                return QualityCandidate(text: Self.string(buffer[native].text), comment: Self.string(buffer[native].comment),
                     displayIndex: display, displayRank: page * size + display + 1,
-                    nativeIndex: native, nativeRank: page * size + native + 1)
+                    nativeIndex: native, nativeRank: page * size + native + 1, source: personalSource,
+                    consumedInputStart: personalSource == nil ? nil : evidence?.coverage.lowerBound,
+                    consumedInputEnd: personalSource == nil ? nil : evidence?.coverage.upperBound)
             }
         }
         return QualityPageSnapshot(generation: 0, rawInput: Self.string(Self.api.pointee.get_input(session)),

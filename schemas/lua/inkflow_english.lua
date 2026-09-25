@@ -43,6 +43,68 @@ local function voice_aliases(memory)
   return "ok\n" .. table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
 end
 
+local clear_limit = 4096
+
+local function positive_records(memory)
+  if not memory.user_dict or not memory.user_dict.loaded then return nil end
+  local iterator = memory.user_dict:lookup_words("", true, clear_limit + 1)
+  local records = {}
+  for entry in iterator:iter() do
+    if entry.commit_count > 0 then
+      local code = entry.custom_code and entry.custom_code:gsub(" +$", "")
+      local text = entry.text
+      if #records == clear_limit or not code or not code:match("^[a-z]+$") or #code > 64
+          or not text or text == "" or #text > 256 or text:find("[%c]") then return nil end
+      records[#records + 1] = { code = code, text = text, commits = entry.commit_count }
+    end
+  end
+  return records
+end
+
+local function apply_records(memory, records, direction)
+  if not memory:start_session() then return false end
+  local applied = {}
+  local called, result = pcall(function()
+    for index, row in ipairs(records) do
+      local entry = DictEntry()
+      entry.text = row.text
+      entry.custom_code = row.code .. " "
+      applied[index] = { entry = entry, count = 0 }
+      -- librime's native undo contract is one commit per update. Replay that
+      -- proven primitive so an arbitrary accumulated count is removed exactly.
+      for _ = 1, row.commits do
+        if not memory:update_userdict(entry, direction, "") then return false end
+        applied[index].count = applied[index].count + 1
+      end
+    end
+    return true
+  end)
+  if not called or not result then
+    -- Keep a mid-session update failure from leaving one namespace half-cleared.
+    for index = #applied, 1, -1 do
+      local row = applied[index]
+      for _ = 1, row.count do memory:update_userdict(row.entry, -direction, "") end
+    end
+  end
+  local finished = memory:finish_session()
+  return called and result and finished
+end
+
+local function clear_learning(env)
+  local shared = positive_records(env.memory)
+  if not shared then return false end
+  local called, cleared = with_voice(env, function(voice)
+    local aliases = positive_records(voice)
+    if not aliases then return false end
+    if not apply_records(env.memory, shared, -1) then return false end
+    if apply_records(voice, aliases, -1) then return true end
+    -- The namespaces are independent. Restore the first if the second fails.
+    apply_records(env.memory, shared, 1)
+    return false
+  end)
+  return called and cleared
+end
+
 local function entry_code(memory, entry)
   local code = entry.custom_code
   if not code or code == "" then
@@ -71,6 +133,13 @@ function M.init(env)
     return false
   end)
   env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
+    if name == "inkflow_clear_english_learning" then
+      if context:get_property(name) == "" then return end
+      local cleared = clear_learning(env)
+      if cleared then env.input, env.entries, env.learnable = nil, nil, {} end
+      context:set_property("inkflow_clear_english_learning_result", cleared and "ok" or "failed")
+      return
+    end
     if name == "inkflow_voice_aliases" then
       if context:get_property(name) == "" then return end
       local ok, result = with_voice(env, voice_aliases)
