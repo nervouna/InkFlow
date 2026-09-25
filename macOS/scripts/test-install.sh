@@ -84,7 +84,12 @@ fi
 STUB
 cat > "$fixture/bin/mv" <<'STUB'
 #!/bin/bash
+if [[ "${MV_FAILURE:-}" == before-candidate && "$1" == */.inkflow-install.*/InkFlow.app && "$2" == */Library/Input\ Methods/InkFlow.app ]]; then
+  exit 1
+fi
 /bin/mv "$@"
+status=$?
+[[ $status -eq 0 ]] || exit "$status"
 if [[ "${MV_FAILURE:-}" == after-candidate && "$1" == */.inkflow-install.*/InkFlow.app && "$2" == */Library/Input\ Methods/InkFlow.app ]]; then
   exit 1
 fi
@@ -134,11 +139,21 @@ install --developer-id > "$fixture/output" 2>&1
 grep -Fq "register:$HOME/Library/Input Methods/InkFlow.app" "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow"
+stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
+[[ ${#stages[@]} -eq 0 ]]
 
 # Verify each integrity gate independently, before any existing failure leaves
 # a retained recovery directory. These fixtures never touch the real installation.
 printf old > "$target/old-marker"
 if DITTO_FAILURE=before-stage-copy install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
+[[ -f "$target/old-marker" ]]
+stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
+[[ ${#stages[@]} -eq 0 ]]
+! grep -Fq 'staged state retained' "$fixture/output"
+assert_no_persistent_backups
+
+printf old > "$target/old-marker"
+if MV_FAILURE=before-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 [[ -f "$target/old-marker" ]]
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]]
@@ -190,6 +205,9 @@ if LIFECYCLE_FAILURE=finish install --developer-id > "$fixture/output" 2>&1; the
 grep -Fq 'old-intact-before-stop' "$EVENTS"
 grep -Fq 'staged state retained' "$fixture/output"
 ! grep -Fq 'Installed and verified' "$fixture/output"
+stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
+[[ ${#stages[@]} -eq 1 && -s "${stages[0]}/state.json" ]]
+rm -rf "${stages[0]}"
 : > "$EVENTS"
 install --developer-id > "$fixture/output" 2>&1
 [[ -x "$target/Contents/MacOS/InkFlow" && ! -e "$target/old-marker" ]]
@@ -197,6 +215,8 @@ cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$target/Contents/MacOS/Ink
 grep -Fq ':--prepare-update' "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
 grep -Fxq refresh "$EVENTS"
+stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
+[[ ${#stages[@]} -eq 0 ]]
 assert_no_persistent_backups
 
 # Exercise the actual read-only wrapper with fake compiler and service diagnostics.
