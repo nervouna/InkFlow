@@ -489,6 +489,9 @@ final class IFInputControllerVoice {
             guard let self else { return }
             do { try await Task.sleep(for: self.learningObservationDelay) } catch { return }
             guard let client, let observation = self.learningObservation else { return }
+            guard self.currentLearningTarget(client, revision: revision) else {
+                self.discardLearningObservation(reason: .clientDrift); return
+            }
             let decision = observation.observe(client: client, sessionRevision: revision,
                                                secure: self.controller?.secureInput() ?? true)
             switch decision {
@@ -512,6 +515,7 @@ final class IFInputControllerVoice {
             do { try await Task.sleep(for: self.learningUndoGrace) } catch { return }
             guard let client, self.pendingLearning == correction,
                   let observation = self.learningObservation,
+                  self.currentLearningTarget(client, revision: revision),
                   observation.observe(client: client, sessionRevision: revision,
                                       secure: self.controller?.secureInput() ?? true) == .learn(correction) else {
                 self.discardLearningObservation(reason: .unavailable); return
@@ -533,6 +537,11 @@ final class IFInputControllerVoice {
             guard self?.learningObservation?.operationID == operationID else { return }
             self?.discardLearningObservation(reason: .timeout)
         }
+    }
+
+    private func currentLearningTarget(_ client: IMKTextInput, revision: UInt64) -> Bool {
+        guard let current = readTarget(epoch: revision) else { return false }
+        return current.proxy == ObjectIdentifier(client as AnyObject)
     }
 
     private func discardLearningObservation(reason: QualityEffectivenessReason? = nil) {

@@ -143,10 +143,12 @@ struct VoiceCorrectionObservation {
     }
 
     static let textLimit = 4_096
+    static let latinTokenLimit = 64
     static let lifetime: Duration = .seconds(8)
 
     let operationID: UUID
     private let clientIdentity: ObjectIdentifier
+    private let clientIdentifier: String
     let sessionRevision: UInt64
     let insertionRange: NSRange
     let rawFinal: String
@@ -154,6 +156,9 @@ struct VoiceCorrectionObservation {
     let expiry: ContinuousClock.Instant
     private let documentLength: Int
     private var attributedTokenIndex: Int?
+    private var attributedTokenLength = 0
+    private var allowsDocumentGrowth = false
+    private var allowsTrailingExtension = false
 
     static func capture(operationID: UUID, client: IMKTextInput, sessionRevision: UInt64,
                         insertionRange: NSRange, rawFinal: String, insertedFinal: String,
@@ -161,29 +166,44 @@ struct VoiceCorrectionObservation {
         guard valid(insertionRange), insertionRange.length == insertedFinal.utf16.count,
               !insertedFinal.isEmpty, insertedFinal.utf16.count <= textLimit,
               rawFinal.utf16.count <= textLimit else { return nil }
+        guard let identifier = client.uniqueClientIdentifierString(), !identifier.isEmpty else { return nil }
         let selection = client.selectedRange()
         guard valid(selection), selection.length == 0,
-              selection.location == NSMaxRange(insertionRange) else { return nil }
+              selection.location == NSMaxRange(insertionRange),
+              client.uniqueClientIdentifierString() == identifier else { return nil }
         let length = client.length()
-        guard length != NSNotFound, length >= NSMaxRange(insertionRange) else { return nil }
+        guard length != NSNotFound, length >= NSMaxRange(insertionRange),
+              client.uniqueClientIdentifierString() == identifier else { return nil }
         var actual = insertionRange
         guard let readback = client.string(from: insertionRange, actualRange: &actual),
-              actual == insertionRange, readback == insertedFinal else { return nil }
+              actual == insertionRange, readback == insertedFinal,
+              client.uniqueClientIdentifierString() == identifier else { return nil }
         return Self(operationID: operationID, clientIdentity: ObjectIdentifier(client as AnyObject),
+                    clientIdentifier: identifier,
                     sessionRevision: sessionRevision, insertionRange: insertionRange,
                     rawFinal: rawFinal, insertedFinal: insertedFinal,
                     expiry: now.advanced(by: lifetime), documentLength: length)
     }
 
     mutating func attributeLocalEdit(selection: NSRange) -> Bool {
-        guard Self.valid(selection), selection.location >= insertionRange.location,
-              NSMaxRange(selection) <= NSMaxRange(insertionRange) else { return false }
+        guard Self.valid(selection), selection.location >= insertionRange.location else { return false }
+        if selection.length == 0, allowsTrailingExtension,
+           selection.location >= NSMaxRange(insertionRange),
+           selection.location - NSMaxRange(insertionRange) <= Self.latinTokenLimit - attributedTokenLength {
+            return true
+        }
+        guard NSMaxRange(selection) <= NSMaxRange(insertionRange) else { return false }
         let local = NSRange(location: selection.location - insertionRange.location, length: selection.length)
         let token = voiceLatinTokenRanges(insertedFinal).enumerated().first { _, range in
             if local.length > 0 { return local == range }
-            return local.location > range.location && local.location < NSMaxRange(range)
+            return local.location > range.location && local.location <= NSMaxRange(range)
         }
         attributedTokenIndex = token?.offset
+        attributedTokenLength = token?.element.length ?? 0
+        allowsDocumentGrowth = token.map { local == $0.element ||
+            (local.length == 0 && local.location == NSMaxRange($0.element)) } ?? false
+        allowsTrailingExtension = token.map { local.length == 0 &&
+            local.location == insertedFinal.utf16.count && NSMaxRange($0.element) == insertedFinal.utf16.count } ?? false
         return attributedTokenIndex != nil
     }
 
@@ -191,7 +211,8 @@ struct VoiceCorrectionObservation {
                  now: ContinuousClock.Instant = .now) -> Decision {
         guard let attributedTokenIndex, !secure, now < expiry,
               self.sessionRevision == sessionRevision,
-              clientIdentity == ObjectIdentifier(client as AnyObject) else { return .discard }
+              clientIdentity == ObjectIdentifier(client as AnyObject),
+              client.uniqueClientIdentifierString() == clientIdentifier else { return .discard }
         let mark = client.markedRange()
         guard !Self.valid(mark) || mark.length == 0 else { return .discard }
         let selection = client.selectedRange()
@@ -200,7 +221,10 @@ struct VoiceCorrectionObservation {
         guard currentLength != NSNotFound else { return .discard }
         let delta = currentLength - documentLength
         guard delta >= -insertionRange.length,
-              delta <= Self.textLimit - insertionRange.length else { return .discard }
+              delta <= Self.textLimit - insertionRange.length,
+              delta <= 0 || (allowsDocumentGrowth && delta <= Self.latinTokenLimit - attributedTokenLength) else {
+            return .discard
+        }
         let currentRange = NSRange(location: insertionRange.location, length: insertionRange.length + delta)
         guard Self.valid(currentRange), NSMaxRange(currentRange) <= currentLength,
               selection.location >= currentRange.location, selection.location <= NSMaxRange(currentRange) else {
@@ -208,7 +232,8 @@ struct VoiceCorrectionObservation {
         }
         var actual = currentRange
         guard let current = client.string(from: currentRange, actualRange: &actual),
-              actual == currentRange, current.utf16.count == currentRange.length else { return .discard }
+              actual == currentRange, current.utf16.count == currentRange.length,
+              client.uniqueClientIdentifierString() == clientIdentifier else { return .discard }
         guard current != insertedFinal else { return .pending }
         // An automatic polish result is not learning evidence. This first slice
         // only attributes a user edit when raw ASR was inserted unchanged.

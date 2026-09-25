@@ -212,6 +212,54 @@ struct VoiceControllerTests {
         ambiguous.document = "Use Codex, now"; ambiguous.selection = NSRange(location: 9, length: 0)
         check(twoTokens.observe(client: ambiguous, sessionRevision: 16, secure: false) == .discard,
               "Two changed tokens are ambiguous and fail closed")
+
+        let appended = RecordingClient(document: "codux")
+        appended.selection = NSRange(location: 5, length: 0)
+        var appendedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: appended, sessionRevision: 17,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(appendedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)),
+              "A direct edit at the final Latin token boundary remains attributable")
+        appended.document = "coduxe"; appended.selection = NSRange(location: 6, length: 0)
+        check(appendedObservation.observe(client: appended, sessionRevision: 17, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "coduxe")),
+              "A bounded suffix appended at the original token end is learned")
+
+        let elongated = RecordingClient(document: "codux")
+        elongated.selection = NSRange(location: 5, length: 0)
+        var elongatedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: elongated, sessionRevision: 18,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)))
+        elongated.document = "coduxp"; elongated.selection = NSRange(location: 6, length: 0)
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 6, length: 0)),
+              "Successive direct keys may extend only the attributed final token")
+        elongated.document = "coduxpro"; elongated.selection = NSRange(location: 8, length: 0)
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 8, length: 0)))
+        check(elongatedObservation.observe(client: elongated, sessionRevision: 18, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "coduxpro")),
+              "A multi-key bounded final-token extension learns once")
+
+        let crossed = RecordingClient(document: "codux")
+        crossed.selection = NSRange(location: 5, length: 0)
+        var crossedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: crossed, sessionRevision: 19,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(crossedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)))
+        crossed.document = "codux pro"; crossed.selection = NSRange(location: 9, length: 0)
+        check(crossedObservation.observe(client: crossed, sessionRevision: 19, secure: false) == .discard,
+              "Extending across a token boundary is never learning evidence")
+
+        let targetChanged = RecordingClient(document: "codux")
+        targetChanged.selection = NSRange(location: 5, length: 0)
+        var targetObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: targetChanged, sessionRevision: 20,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(targetObservation.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+        targetChanged.testClientID = "another-editing-target"
+        targetChanged.document = "Codex"; targetChanged.selection = NSRange(location: 5, length: 0)
+        check(targetObservation.observe(client: targetChanged, sessionRevision: 20, secure: false) == .discard,
+              "A changed native client identifier fails closed even when the proxy object is reused")
     }
 
     @MainActor static func postInsertionControllerLearning() async {
@@ -311,7 +359,7 @@ struct VoiceControllerTests {
                   "AI polish that removes the alias cannot count as later reuse")
         }
 
-        for interruption in ["undo", "deactivate", "ordinary"] {
+        for interruption in ["undo", "deactivate", "focus", "ordinary"] {
             let h = VoiceHarness(); defer { h.close() }
             h.controller.voice.aliasLexicon = { .init(generation: 1, revision: 1, availability: .available, entries: []) }
             h.controller.voice.learningObservationDelay = .zero
@@ -325,6 +373,11 @@ struct VoiceControllerTests {
                 h.client.selection = NSRange(location: 3, length: 5)
                 _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
                 h.controller.deactivateServer(h.client)
+                h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+            case "focus":
+                h.client.selection = NSRange(location: 3, length: 5)
+                _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+                h.focused = RecordingClient(document: "another target")
                 h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
             default:
                 h.client.selection = NSRange(location: 8, length: 0)

@@ -32,6 +32,7 @@ traditional:
   excluded_types: [user_table, simplified]
 inkflow_short_conflict:
   inputs: [can, you, she, he, man, bug]
+  lookahead: 256
 custom_phrase:
   dictionary: ""
   user_dict: inkflow_custom_phrases_empty

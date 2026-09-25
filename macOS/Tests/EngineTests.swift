@@ -31,6 +31,7 @@ struct EngineTests {
             englishAdmission()
             conservativeChinesePrefixes()
             mixedEnglishCandidates()
+            shortConflictBounds()
             englishCandidates()
             englishFeatureCoexistence()
             spellingCorrection()
@@ -572,6 +573,28 @@ struct EngineTests {
         engine.key(32)
         check(engine.takeCommit() == "电子邮件")
         print("PASS English integration: Chinese context priority, English reachability/order, mixed commits and custom phrase coexistence")
+    }
+
+    @MainActor static func shortConflictBounds() {
+        let engine = IFEngine()!
+        let phrases = (0..<1_024).map {
+            CustomPhrase(id: UUID(), code: "can", text: "自定义候选\($0)")
+        }
+        engine.setConfiguration(candidateCount: 9, customPhrases: phrases)
+        check(engine.configurationError == nil)
+        let started = ContinuousClock.now
+        type(engine, "can")
+        let firstPage = engine.snapshot().candidates
+        let elapsed = started.duration(to: .now)
+        check(elapsed < .seconds(2), "High-cardinality first-page latency stays bounded: \(elapsed)")
+        check(!firstPage.contains("can"),
+              "An exact English candidate beyond the bounded lookahead keeps native pagination")
+        let all = allCandidates(engine)
+        check(all.contains("can"), "Bounded lookahead keeps a later exact candidate reachable")
+        check(phrases.allSatisfy { all.contains($0.text) },
+              "Bounded lookahead retains every high-cardinality candidate across pages")
+        engine.clear()
+        print("PASS short-conflict bounds: 256-candidate lookahead, 1024-candidate latency/memory envelope, pagination and exact reachability")
     }
 
     @MainActor static func allCandidates(_ engine: IFEngine) -> [String] {
