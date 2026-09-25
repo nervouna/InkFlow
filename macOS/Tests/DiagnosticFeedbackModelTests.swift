@@ -7,20 +7,14 @@ import InkFlowTestSupport
 @MainActor enum DiagnosticFeedbackModelTests {
     static func run() async {
         var clock = Date(timeIntervalSince1970: 1_800_000_000)
-        var exports = 0, saves = 0
+        var exports = 0
         var selected: DiagnosticExportSelection?
         var capturedClick: Date?
-        var capturedOccurrence: Date?
         var destination: URL?
         var partial = false, failure = false
-        let id = UUID()
         let dependencies = DiagnosticFeedbackDependencies(
-            save: { occurred, clicked, _ in
-                saves += 1; capturedOccurrence = occurred; capturedClick = clicked
-                if failure { throw NSError(domain: "secret-provider-error", code: 9) }
-                return .init(id: id, occurredAt: occurred, savedAt: clicked, eventCount: 2, isPartial: partial)
-            },
-            incidents: { .init(incidents: [], invalidIncidentCount: 1) },
+            save: { _, _, _ in preconditionFailure("The simplified model must not save incidents") },
+            incidents: { .init(incidents: [], invalidIncidentCount: 0) },
             export: { selection, clicked, url in
                 exports += 1; selected = selection; capturedClick = clicked
                 if failure { throw NSError(domain: "secret-provider-error", code: 9) }
@@ -28,38 +22,33 @@ import InkFlowTestSupport
             },
             chooseDestination: { clock.addTimeInterval(20); return destination }, now: { clock })
         let model = DiagnosticFeedbackModel(dependencies: dependencies)
-        clock.addTimeInterval(600)
-        let clicked = clock
-        await model.save()
-        check(saves == 1 && capturedOccurrence == clicked && capturedClick == clicked,
-              "Default incident time is the save click, not view construction")
-        check(model.status?.kind == .success && model.selectedIncident == id && model.scope == .incident)
         await model.export()
         check(exports == 0 && model.status?.kind == .cancelled, "Cancelling the panel must never call export")
         destination = URL(fileURLWithPath: "/tmp/diagnostic-model-only.zip")
-        model.scope = .incident; model.selectedIncident = id
+
+        model.scope = .lastThirtyMinutes
         let exportClicked = clock
+        await model.export()
+        check(exports == 1 && capturedClick == exportClicked && model.status?.kind == .success)
+        if case .lastThirtyMinutes = selected {} else { check(false) }
+
+        model.scope = .lastDay
         partial = true
         await model.export()
-        check(exports == 1 && capturedClick == exportClicked && model.status?.kind == .partial)
-        if case .incident(let actual) = selected { check(actual == id) } else { check(false) }
-        model.earlier = true; model.occurredAt = clock.addingTimeInterval(-60)
-        await model.save()
-        check(capturedOccurrence == model.occurredAt && model.status?.kind == .partial)
-        let beforeInvalid = saves
-        model.note = String(repeating: "x", count: 2_001)
-        await model.save()
-        check(saves == beforeInvalid && model.status?.kind == .failure)
-        model.note = ""; failure = true
-        await model.save()
-        check(model.status?.kind == .failure && !model.status!.message.contains("secret-provider-error"))
+        check(exports == 2 && model.status?.kind == .partial)
+        if case .lastDay = selected {} else { check(false) }
+
+        model.scope = .lastSevenDays
+        partial = false
+        await model.export()
+        check(exports == 3 && model.status?.kind == .success)
+        if case .retainedHistory = selected {} else { check(false) }
+
+        failure = true
         await model.export()
         check(model.status?.kind == .failure && !model.status!.message.contains("secret-provider-error"))
-        failure = false
-        await model.reload()
-        check(model.listNotice?.contains("1") == true && model.incidents.isEmpty)
         await duplicateActions()
-        print("PASS diagnostic feedback model: click times, panel cancellation, partial/success/failure, notes, selected incident and duplicate suppression")
+        print("PASS diagnostic feedback model: three log ranges, panel cancellation, partial/success/failure and duplicate suppression")
     }
 
     private static func duplicateActions() async {
@@ -72,7 +61,7 @@ import InkFlowTestSupport
         let model = DiagnosticFeedbackModel(dependencies: dependencies)
         let first = Task { await model.export() }
         while release == nil { await Task.yield() }
-        await model.export(); await model.save()
+        await model.export()
         check(chooserCalls == 1 && model.isBusy)
         release?.resume(returning: nil)
         await first.value

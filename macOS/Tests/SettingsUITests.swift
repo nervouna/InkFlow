@@ -51,7 +51,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["输入", "快捷键", "外观", "自定义短语", "词库", "语音", "AI 服务", "更新", "反馈", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["输入", "快捷键", "外观", "自定义短语", "词库", "语音", "AI 服务", "更新", "反馈与诊断", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)
@@ -349,6 +349,7 @@ struct SettingsUITests {
 
     @MainActor static func checkFeedbackAndAbout(_ window: NSWindow, settings: IFSettings) {
         let state = FeedbackUIState()
+        var exportedSelection: DiagnosticExportSelection?
         let reporter = FeedbackReporter(
             metadata: FeedbackMetadata(version: "0.4.1", build: "41", operatingSystem: "macOS 26.0 (25A1)"),
             collectLogs: {
@@ -360,8 +361,17 @@ struct SettingsUITests {
                 return true
             }
         )
+        let diagnostics = DiagnosticFeedbackDependencies(
+            save: { _, _, _ in preconditionFailure("The simplified log export UI must not save incidents") },
+            incidents: { .init(incidents: [], invalidIncidentCount: 0) },
+            export: { selection, _, destination in
+                exportedSelection = selection
+                return .init(url: destination, incidentID: nil, eventCount: 26, isPartial: false)
+            },
+            chooseDestination: { URL(fileURLWithPath: "/tmp/feedback-ui-diagnostics.zip") }
+        )
         window.contentViewController = SettingsHostingController(rootView: SettingsView(
-            settings: settings, initialSection: .feedback, feedbackReporter: reporter, diagnosticDependencies: .unavailable
+            settings: settings, initialSection: .feedback, feedbackReporter: reporter, diagnosticDependencies: diagnostics
         ))
         checkMinimumSize(window)
         drainEvents()
@@ -396,24 +406,39 @@ struct SettingsUITests {
 
         let includeLogs = control("settings.feedback.includeLogs")
         let submit = control("settings.feedback.submitFeedback")
+        let exportScope = control("settings.feedback.exportScope")
+        let exportLogs = control("settings.feedback.exportDiagnostics")
         check(includeLogs["role"] as? String == "AXCheckBox" && includeLogs["value"] as? Int == 0,
               "Feedback log attachment must be an accessible default-off checkbox")
-        check(includeLogs["label"] as? String == "附上最近 10 分钟运行日志")
-        check(submit["role"] as? String == "AXButton" && submit["label"] as? String == "在 GitHub 提交反馈",
+        check(includeLogs["label"] as? String == "附上最近10分钟日志")
+        check(submit["role"] as? String == "AXButton" && submit["label"] as? String == "反馈",
               "Feedback handoff must be an accessible named button")
+        check(exportScope["role"] as? String == "AXPopUpButton"
+              && exportScope["value"] as? String == "最近半小时",
+              "Log range must use an accessible menu with the default range")
+        check(exportLogs["role"] as? String == "AXButton" && exportLogs["label"] as? String == "导出",
+              "Log export must use an accessible named button")
         let includeFrame = (includeLogs["frame"] as! NSValue).rectValue
         let submitFrame = (submit["frame"] as! NSValue).rectValue
-        check(submitFrame.minY > includeFrame.maxY, "Feedback button must appear above the log checkbox")
+        check(submitFrame.maxY < includeFrame.minY, "Feedback button must follow its log checkbox")
         check(abs(submitFrame.minX - includeFrame.minX) < 1,
               "Feedback button and checkbox must share the page's leading alignment")
         let initialFeedbackElements = IFAccessibilityTree(window)
-        check(initialFeedbackElements.contains { $0["id"] as? String == "settings.feedback.privacy" },
-              "Feedback must explain that optional notes are included and sensitive text should be omitted")
-        check(initialFeedbackElements.contains { $0["id"] as? String == "settings.feedback.retention" },
-              "Feedback must explain the shared retention upper limits")
+        check(initialFeedbackElements.contains { $0["value"] as? String == "提交反馈" })
+        check(initialFeedbackElements.contains { $0["value"] as? String == "导出日志" })
+        for removed in ["settings.feedback.occurrence", "settings.feedback.occurredAt", "settings.feedback.note",
+                        "settings.feedback.saveIncident", "settings.feedback.exportSavedIncident", "settings.feedback.incident"] {
+            check(!initialFeedbackElements.contains { $0["id"] as? String == removed },
+                  "Simplified log export UI must omit \(removed)")
+        }
         check(initialFeedbackElements.contains { $0["role"] as? String == "AXScrollArea" },
               "Diagnosis controls must remain reachable at the minimum Settings height")
-        check(window.title == "反馈")
+        check(window.title == "反馈与诊断")
+
+        press("settings.feedback.exportDiagnostics")
+        let exportDeadline = Date.now.addingTimeInterval(5)
+        while exportedSelection == nil && Date.now < exportDeadline { drainEvents(seconds: 0.02) }
+        if case .lastThirtyMinutes = exportedSelection {} else { check(false) }
 
         press("settings.feedback.submitFeedback")
         waitForOpen(count: 1)
@@ -426,7 +451,7 @@ struct SettingsUITests {
         waitForOpen(count: 2)
         check(state.logCollections == 1)
         check(body(of: state.openedURLs[1]).contains("synthetic feedback log"))
-        check(window.title == "反馈")
+        check(window.title == "反馈与诊断")
 
         let failureState = FeedbackUIState()
         let failingReporter = FeedbackReporter(
@@ -466,13 +491,13 @@ struct SettingsUITests {
 
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings))
         drainEvents()
-        print("PASS Feedback/About UI: ordered GitHub controls, diagnostic privacy/retention guidance, injected action/failure, version-only About")
+        print("PASS Feedback/About UI: two-section hierarchy, ordered GitHub controls, menu-based log export, injected action/failure, version-only About")
     }
 
     @MainActor static func checkInputLayout(_ window: NSWindow, settings: IFSettings) {
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .input))
         checkMinimumSize(window)
-        window.setContentSize(NSSize(width: 700, height: 560))
+        window.setContentSize(NSSize(width: 700, height: 600))
         drainEvents()
         if CommandLine.arguments.contains("--dump-accessibility") {
             for element in IFAccessibilityTree(window) { print("AX input initial \(element)") }
@@ -650,7 +675,7 @@ struct SettingsUITests {
         checkMinimumSize(window)
         drainEvents()
         check(window.title == "自定义短语")
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
+        for size in [NSSize(width: 700, height: 600), NSSize(width: 700, height: 720)] {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
@@ -813,7 +838,7 @@ struct SettingsUITests {
         controller.doCommand(by: #selector(InkFlowInputController.toggleSmartPrediction(_:)), command: [kIMKCommandMenuItemName: item])
         check(!settings.smart.isEnabled, "Incomplete configuration must reject direct menu dispatch")
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .smart))
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
+        for size in [NSSize(width: 700, height: 600), NSSize(width: 700, height: 720)] {
             window.setContentSize(size); drainEvents()
             checkMinimumSize(window)
             let elements = IFAccessibilityTree(window)
@@ -974,10 +999,10 @@ struct SettingsUITests {
 
     @MainActor static func checkMinimumSize(_ window: NSWindow) {
         let original = window.frame
-        for requested in [NSSize(width: 500, height: 200), NSSize(width: 900, height: 560)] {
+        for requested in [NSSize(width: 500, height: 200), NSSize(width: 900, height: 720)] {
             window.setContentSize(requested)
             drainEvents()
-            let expected = NSSize(width: 700, height: max(380, requested.height))
+            let expected = NSSize(width: 700, height: max(600, requested.height))
             check(window.contentView!.frame.size == expected,
                   "Requested \(requested), expected \(expected), actual \(window.contentView!.frame.size)")
         }
@@ -987,7 +1012,7 @@ struct SettingsUITests {
 
     @MainActor static func checkLayout(_ window: NSWindow) {
         let initialFrame = window.frame
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 560)] {
+        for size in [NSSize(width: 700, height: 600), NSSize(width: 700, height: 720)] {
             window.setContentSize(size)
             drainEvents()
             window.contentView?.layoutSubtreeIfNeeded()

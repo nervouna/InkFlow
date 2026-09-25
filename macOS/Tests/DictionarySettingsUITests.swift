@@ -221,7 +221,7 @@ private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
     }
 
     static func fit(_ window: NSWindow, required: [String]) async {
-        for size in [NSSize(width: 700, height: 380), NSSize(width: 700, height: 700)] {
+        for size in [NSSize(width: 700, height: 600), NSSize(width: 700, height: 700)] {
             window.setContentSize(size)
             try? await Task.sleep(for: .milliseconds(50))
             drainEvents()

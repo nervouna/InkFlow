@@ -326,7 +326,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case voice = "语音"
     case smart = "AI 服务"
     case updates = "更新"
-    case feedback = "反馈"
+    case feedback = "反馈与诊断"
     case about = "关于"
     static let groups: [(title: String, sections: [Self])] = [
         ("输入体验", [.input, .shortcuts, .appearance]),
@@ -506,7 +506,7 @@ final class SettingsHostingController: NSHostingController<SettingsView> {
         sizingOptions = []
         NSLayoutConstraint.activate([
             view.widthAnchor.constraint(equalToConstant: 700),
-            view.heightAnchor.constraint(greaterThanOrEqualToConstant: 380),
+            view.heightAnchor.constraint(greaterThanOrEqualToConstant: 600),
         ])
     }
 
@@ -548,7 +548,7 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     required init?(coder: NSCoder) { fatalError("Settings windows are created programmatically") }
 
     override func loadWindow() {
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 450),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: false)
         window.title = "墨流拼音设置"
@@ -559,7 +559,7 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         window.contentViewController = SettingsHostingController(rootView: SettingsView(
             settings: settings, dictionaries: dictionaries, updaterAccess: updaterAccess
         ))
-        window.setContentSize(NSSize(width: 700, height: 450))
+        window.setContentSize(NSSize(width: 700, height: 600))
         self.window = window
         window.delegate = self
         window.center()
