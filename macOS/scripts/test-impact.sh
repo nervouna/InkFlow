@@ -58,6 +58,12 @@ impact_classify() {
     macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
       impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
   esac
+  # These schema components jointly implement personal mixed-English lookup,
+  # provenance, boundaries and reachability covered by test-ai-learning.sh.
+  case "$path" in
+    schemas/lua/inkflow_input_coverage.lua|schemas/lua/inkflow_mixed.lua|schemas/lua/inkflow_short_conflict.lua|schemas/inkflow_pinyin.schema.yaml|schemas/inkflow_pinyin.custom.yaml)
+      impact_rule "$path" 'personal mixed learning and provenance' ai-learning ;;
+  esac
   case "$path" in
     .agents/skills/inkflow-release/*)
       impact_rule "$path" 'release workflow' workflow

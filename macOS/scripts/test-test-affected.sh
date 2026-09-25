@@ -139,11 +139,19 @@ has 'Units: ai-learning'; not_has 'manual-input'; not_has 'manual-settings'; not
 
 new_case
 change schemas/lua/inkflow_mixed.lua; plan
-has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'manual-input'
+has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'ai-learning'; has 'manual-input'
+has 'schemas/lua/inkflow_mixed.lua: personal mixed learning and provenance'
 
 new_case
 change schemas/lua/inkflow_input_coverage.lua; plan
-has 'engine-context'; has 'controller'; has 'quality-capture-query'; has 'dictionary-worker'; has 'bundle-fast'; has 'manual-input'
+has 'engine-context'; has 'controller'; has 'quality-capture-query'; has 'dictionary-worker'; has 'ai-learning'; has 'bundle-fast'; has 'manual-input'
+has 'schemas/lua/inkflow_input_coverage.lua: personal mixed learning and provenance'
+
+for path in schemas/lua/inkflow_short_conflict.lua schemas/inkflow_pinyin.schema.yaml schemas/inkflow_pinyin.custom.yaml; do
+  new_case
+  change "$path"; plan
+  has 'ai-learning'; has "$path: personal mixed learning and provenance"
+done
 
 new_case
 change macOS/Sources/Future.swift; plan
