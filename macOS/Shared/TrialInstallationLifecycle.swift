@@ -11,7 +11,7 @@ struct IFTrialInstallationState: Codable {
 
 @MainActor protocol IFTrialProcessOperations {
     func installedPIDs(at target: URL) throws -> [Int32]
-    func stop(_ pids: [Int32]) async throws
+    func stop(_ pids: [Int32], at target: URL) async throws
     func launchAndVerify(at target: URL, excluding: [Int32]) async throws -> Int32
 }
 
@@ -47,7 +47,7 @@ struct IFTrialInstallationState: Codable {
                 try sources.select(fallback.id)
                 try await waitForState { $0.selectedID == fallback.id }
             }
-            try await processes.stop(pids)
+            try await processes.stop(pids, at: target)
             guard try processes.installedPIDs(at: target).isEmpty else {
                 throw IFInputError.unavailable("old process restarted before replacement")
             }
@@ -80,6 +80,15 @@ struct IFTrialInstallationState: Codable {
 }
 
 @MainActor final class IFTrialSystemProcesses: IFTrialProcessOperations {
+    static func hasExited(applicationTerminated: Bool, processID: pid_t,
+                          probe: (pid_t) -> Int32 = { pid in
+                              Darwin.kill(pid, 0) == 0 ? 0 : errno
+                          }) -> Bool {
+        if applicationTerminated { return true }
+        guard processID > 0 else { return false }
+        return probe(processID) == ESRCH
+    }
+
     static func executablePath(_ pid: Int32) -> String? {
         // SDK's PROC_PIDPATHINFO_MAXSIZE is (4 * MAXPATHLEN), unavailable as a Swift macro.
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
@@ -96,6 +105,12 @@ struct IFTrialInstallationState: Codable {
         let parts = normalized.dropFirst(parent.count).split(separator: "/").map(String.init)
         guard let stage = parts.first, stage.hasPrefix(".inkflow-install."), stage.count > ".inkflow-install.".count else { return false }
         return Array(parts.dropFirst()) == ["previous"] || Array(parts.dropFirst()) == ["previous", "Contents", "MacOS", "InkFlow"]
+    }
+
+    static func ownsRunningProcess(executablePath: String?, cachedPath: String?, target: URL) -> Bool? {
+        if let executablePath { return owns(path: executablePath, target: target) }
+        if let cachedPath { return owns(path: cachedPath, target: target) }
+        return nil
     }
 
     func installedPIDs(at target: URL) throws -> [Int32] {
@@ -115,13 +130,20 @@ struct IFTrialInstallationState: Codable {
         return pids
     }
 
-    func stop(_ pids: [Int32]) async throws {
-        let apps = pids.compactMap { NSRunningApplication(processIdentifier: $0) }
-        for app in apps where !app.isTerminated {
+    func stop(_ pids: [Int32], at target: URL) async throws {
+        let processes = pids.map { (pid: $0, app: NSRunningApplication(processIdentifier: $0)) }
+        for process in processes where process.app?.isTerminated == false {
+            guard let app = process.app else { continue }
+            let cachedPath = (app.executableURL ?? app.bundleURL)?.path
+            guard Self.ownsRunningProcess(executablePath: Self.executablePath(process.pid), cachedPath: cachedPath, target: target) == true else {
+                throw IFInputError.unavailable("process \(process.pid) identity changed before termination; installation unchanged")
+            }
             guard app.terminate() else { throw IFInputError.unavailable("process \(app.processIdentifier) declined normal termination; installation unchanged") }
         }
         let deadline = ContinuousClock.now + .seconds(10)
-        while apps.contains(where: { !$0.isTerminated }) {
+        while processes.contains(where: {
+            !Self.hasExited(applicationTerminated: $0.app?.isTerminated ?? false, processID: $0.pid)
+        }) {
             guard ContinuousClock.now < deadline else { throw IFInputError.unavailable("normal termination timed out; installation unchanged") }
             try await Task.sleep(for: .milliseconds(100))
         }
