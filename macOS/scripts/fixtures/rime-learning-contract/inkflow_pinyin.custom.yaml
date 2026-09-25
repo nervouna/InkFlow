@@ -1,0 +1,24 @@
+# Test-only patch for the bundled librime learning contract. Production schemas
+# do not load this translator or enable these user dictionaries in Task 1.
+patch:
+  schema/dependencies/+:
+    - inkflow_learning_contract
+  engine/translators/+:
+    - lua_translator@*inkflow_ai_learning
+    - lua_translator@*inkflow_learning_contract
+  inkflow_contract_shared:
+    dictionary: inkflow_learning_contract
+    user_dict: inkflow_shared_english
+    enable_completion: false
+    enable_sentence: false
+  inkflow_contract_voice:
+    dictionary: inkflow_learning_contract
+    user_dict: inkflow_voice_alias
+    enable_completion: false
+    enable_sentence: false
+  voice_learning:
+    dictionary: easy_en
+    user_dict: inkflow_voice_alias
+    enable_completion: false
+    enable_sentence: false
+  mixed_personal/max_input_length: 20

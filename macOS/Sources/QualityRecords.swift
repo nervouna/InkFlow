@@ -278,6 +278,55 @@ enum QualityKeyKind: String, Codable, Sendable {
     case shortcut, modeToggle = "mode_toggle", other
 }
 
+/// Content-free effectiveness evidence. These closed enums deliberately cannot carry
+/// transcript, candidate, document, or correction text.
+enum QualityEffectivenessSource: String, Codable, Sendable {
+    case voiceSession = "voice_session"
+    case voiceCorrection = "voice_correction"
+    case voiceAlias = "voice_alias"
+    case canonicalLexicon = "canonical_lexicon"
+}
+
+enum QualityEffectivenessKind: String, Codable, Sendable {
+    case finalized, detected, learned, rejected, hit
+    case laterReuse = "later_reuse"
+}
+
+enum QualityEffectivenessReason: String, Codable, Sendable {
+    case immediateUndo = "immediate_undo"
+    case deactivated, cancelled
+    case clientDrift = "client_drift"
+    case secure, unreadable
+    case invalidRange = "invalid_range"
+    case unrelatedEdit = "unrelated_edit"
+    case timeout
+    case storageFailure = "storage_failure"
+    case unavailable
+}
+
+struct QualityEffectivenessEvent: Equatable, Sendable {
+    var source: QualityEffectivenessSource
+    var event: QualityEffectivenessKind
+    var reason: QualityEffectivenessReason? = nil
+    var count = 1
+    var milliseconds: Int? = nil
+    var occurredAt = Date()
+
+    var isValid: Bool {
+        guard (1...QualityLimits.effectivenessMaxCount).contains(count),
+              milliseconds.map({ (0...QualityLimits.effectivenessMaxMilliseconds).contains($0) }) ?? true else {
+            return false
+        }
+        let pairing = switch source {
+        case .voiceSession: event == .finalized
+        case .voiceCorrection: [.detected, .learned, .rejected].contains(event)
+        case .voiceAlias, .canonicalLexicon: [.hit, .laterReuse].contains(event)
+        }
+        guard pairing else { return false }
+        return event == .rejected ? reason != nil : reason == nil
+    }
+}
+
 struct QualityKeySample: Codable, Equatable, Sendable {
     var sequence: Int
     /// Seconds at the controller keyDown callback entry (or direct engine call),
@@ -492,7 +541,7 @@ struct QualityEnvelope: Codable, Equatable, Sendable {
 }
 
 enum QualityLimits {
-    static let databaseSchemaVersion = 2
+    static let databaseSchemaVersion = 3
     static let envelopeBytes = 64 * 1024
     static let configurationBytes = 256 * 1024
     static let bufferedBytes = 8 * 1024 * 1024
@@ -503,6 +552,11 @@ enum QualityLimits {
     static let collectionRuleVersion = 1
     static let keySamples = 256
     static let visibilityObservationInterval: TimeInterval = 0.1
+    static let bufferedEffectivenessEvents = 256
+    static let effectivenessMaxCount = 64
+    static let effectivenessMaxMilliseconds = 60_000
+    static let effectivenessRetentionRows = 4_096
+    static let effectivenessRetentionDays = 90
 }
 
 /// Conservative logical retained-byte budget. The worker separately checks encoded bytes.

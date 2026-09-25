@@ -46,6 +46,20 @@ struct VoiceLexiconTests {
         let groups = Array(repeating: ["伟", "玮", "炜", "苇", "委", "尾", "纬", "伪"], count: 64)
         precondition(select(groups) == String(repeating: "伟", count: 64), "Bounded alternative explosion retains stable ties")
         precondition(select(Array(repeating: ["张伟", "张玮"], count: 65)) == String(repeating: "张伟", count: 65))
+        let aliases = VoiceAliasSnapshot(payload: "ok\ncodux\tCodex\t2\nswiftui\tSwiftUI\t1\n",
+                                         generation: 2, revision: 3)
+        precondition(VoiceAliasRewriter.apply("用 codux，配合 swiftui。", snapshot: aliases) == "用 Codex，配合 SwiftUI。")
+        precondition(VoiceAliasRewriter.apply("mycodux 和 coduxx 不替换", snapshot: aliases) == "mycodux 和 coduxx 不替换",
+                     "Voice aliases require exact ASCII token boundaries")
+        precondition(VoiceAliasRewriter.apply("codux", snapshot: .unknown()) == "codux",
+                     "Unknown alias evidence preserves finalized ASR")
+        let ambiguous = VoiceAliasSnapshot(payload: "ok\ncodux\tCodex\t1\ncodux\tCODEX\t1\n",
+                                           generation: 2, revision: 4)
+        precondition(VoiceAliasRewriter.apply("codux", snapshot: ambiguous) == "codux",
+                     "Ambiguous exact aliases fail closed")
+        let oversized = "ok\n" + Array(repeating: "aa\tWord\t1", count: 513).joined(separator: "\n") + "\n"
+        precondition(VoiceAliasSnapshot(payload: oversized, generation: 2, revision: 5).availability == .unknown,
+                     "Oversized alias evidence fails closed")
         print("PASS voice lexicon: learned alternatives, fixed prefix, explicit phrases, spelling controls, stable ties and bounds")
     }
 }

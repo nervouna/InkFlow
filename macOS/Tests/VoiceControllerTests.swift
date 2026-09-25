@@ -120,7 +120,502 @@ struct VoiceControllerTests {
         await selectedTextTargetLoss()
         await startRejectionDiagnostics()
         await correctingCancellation()
-        print("PASS voice controller: selected-text transactions, hold/toggle, UTF16 marks, exact-once fallback, target ownership, reentrancy and independent settings")
+        postInsertionCorrectionObservation()
+        await postInsertionControllerLearning()
+        await initialObservationCaptureReentrancy()
+        await editAttributionPrecheckReentrancy()
+        await editAttributionReentrancy()
+        await postInsertionPersistenceReentrancy()
+        await detectedCorrectionImmediateUndo()
+        print("PASS voice controller: selected-text transactions, post-insertion learning, hold/toggle, UTF16 marks, exact-once fallback, target ownership, reentrancy and independent settings")
+    }
+
+    @MainActor static func postInsertionCorrectionObservation() {
+        let client = RecordingClient(document: "前：codux，后")
+        let inserted = NSRange(location: 2, length: 5)
+        client.selection = NSRange(location: NSMaxRange(inserted), length: 0)
+        var observation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: client, sessionRevision: 7,
+            insertionRange: inserted, rawFinal: "codux", insertedFinal: "codux")
+        check(observation != nil, "A verified bounded insertion must create an observation")
+        check(observation!.attributeLocalEdit(selection: inserted),
+              "An exact selection inside the inserted range is attributable")
+        client.document = "前：Codex，后"
+        client.selection = NSRange(location: 7, length: 0)
+        check(observation!.observe(client: client, sessionRevision: 7, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "Codex")),
+              "A bounded exact Latin token substitution must be observable")
+        check(client.requests.last == NSRange(location: 2, length: 5),
+              "Observation reads only the bounded inserted region")
+
+        let outside = RecordingClient(document: "codux other")
+        outside.selection = NSRange(location: 5, length: 0)
+        var rejected = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: outside, sessionRevision: 9,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(!rejected.attributeLocalEdit(selection: NSRange(location: 6, length: 5)),
+              "An edit outside the inserted range is not attributable")
+
+        func decision(contextAvailable: Bool = true, adjusted: Bool = false,
+                      secure: Bool = false, revision: UInt64 = 11,
+                      clientOverride: RecordingClient? = nil) -> VoiceCorrectionObservation.Decision {
+            let original = RecordingClient(document: "codux")
+            original.selection = NSRange(location: 5, length: 0)
+            var value = VoiceCorrectionObservation.capture(
+                operationID: UUID(), client: original, sessionRevision: 11,
+                insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+            check(value.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+            let observed = clientOverride ?? original
+            observed.document = "Codex"; observed.selection = NSRange(location: 5, length: 0)
+            observed.contextAvailable = contextAvailable
+            if adjusted { observed.substringResponse = { _ in ("Codex", NSRange(location: 0, length: 4)) } }
+            return value.observe(client: observed, sessionRevision: revision, secure: secure)
+        }
+        check(decision(contextAvailable: false) == .discard, "Unreadable clients fail closed")
+        check(decision(adjusted: true) == .discard, "Adjusted ranges fail closed")
+        check(decision(secure: true) == .discard, "Secure input fails closed")
+        check(decision(revision: 12) == .discard, "Session revision drift fails closed")
+        check(decision(clientOverride: RecordingClient(document: "Codex")) == .discard,
+              "Client identity drift fails closed")
+
+        let polished = RecordingClient(document: "Codex")
+        polished.selection = NSRange(location: 5, length: 0)
+        var noAutomaticLearning = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: polished, sessionRevision: 13,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "Codex")!
+        check(noAutomaticLearning.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+        polished.document = "CODEX"; polished.selection = NSRange(location: 5, length: 0)
+        check(noAutomaticLearning.observe(client: polished, sessionRevision: 13, secure: false) == .discard,
+              "Automatic polish alone cannot become learning evidence")
+
+        let expired = RecordingClient(document: "codux")
+        expired.selection = NSRange(location: 5, length: 0)
+        let now = ContinuousClock.now
+        var timeout = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: expired, sessionRevision: 14,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux", now: now)!
+        check(timeout.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+        expired.document = "Codex"
+        check(timeout.observe(client: expired, sessionRevision: 14, secure: false,
+                              now: now.advanced(by: .seconds(9))) == .discard,
+              "Expired observations fail closed")
+
+        let sentence = RecordingClient(document: "use codux, now")
+        sentence.selection = NSRange(location: 14, length: 0)
+        var oneToken = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: sentence, sessionRevision: 15,
+            insertionRange: NSRange(location: 0, length: 14),
+            rawFinal: "use codux, now", insertedFinal: "use codux, now")!
+        check(oneToken.attributeLocalEdit(selection: NSRange(location: 4, length: 5)))
+        sentence.document = "use Codex, now"; sentence.selection = NSRange(location: 9, length: 0)
+        check(oneToken.observe(client: sentence, sessionRevision: 15, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "Codex")),
+              "One corrected Latin token preserves surrounding words and punctuation")
+        sentence.selection = NSRange(location: 13, length: 0)
+        check(oneToken.observe(client: sentence, sessionRevision: 15, secure: false) == .discard,
+              "Selection drift to a different token fails closed")
+
+        let ambiguous = RecordingClient(document: "use codux, now")
+        ambiguous.selection = NSRange(location: 14, length: 0)
+        var twoTokens = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: ambiguous, sessionRevision: 16,
+            insertionRange: NSRange(location: 0, length: 14),
+            rawFinal: "use codux, now", insertedFinal: "use codux, now")!
+        check(twoTokens.attributeLocalEdit(selection: NSRange(location: 4, length: 5)))
+        ambiguous.document = "Use Codex, now"; ambiguous.selection = NSRange(location: 9, length: 0)
+        check(twoTokens.observe(client: ambiguous, sessionRevision: 16, secure: false) == .discard,
+              "Two changed tokens are ambiguous and fail closed")
+
+        let appended = RecordingClient(document: "codux")
+        appended.selection = NSRange(location: 5, length: 0)
+        var appendedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: appended, sessionRevision: 17,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(appendedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)),
+              "A direct edit at the final Latin token boundary remains attributable")
+        appended.document = "coduxe"; appended.selection = NSRange(location: 6, length: 0)
+        check(appendedObservation.observe(client: appended, sessionRevision: 17, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "coduxe")),
+              "A bounded suffix appended at the original token end is learned")
+
+        let elongated = RecordingClient(document: "codux")
+        elongated.selection = NSRange(location: 5, length: 0)
+        var elongatedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: elongated, sessionRevision: 18,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)))
+        elongated.document = "coduxp"; elongated.selection = NSRange(location: 6, length: 0)
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 6, length: 0)),
+              "Successive direct keys may extend only the attributed final token")
+        elongated.document = "coduxpro"; elongated.selection = NSRange(location: 8, length: 0)
+        check(elongatedObservation.attributeLocalEdit(selection: NSRange(location: 8, length: 0)))
+        check(elongatedObservation.observe(client: elongated, sessionRevision: 18, secure: false) ==
+              .learn(.init(sourceCode: "codux", canonicalText: "coduxpro")),
+              "A multi-key bounded final-token extension learns once")
+
+        let crossed = RecordingClient(document: "codux")
+        crossed.selection = NSRange(location: 5, length: 0)
+        var crossedObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: crossed, sessionRevision: 19,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(crossedObservation.attributeLocalEdit(selection: NSRange(location: 5, length: 0)))
+        crossed.document = "codux pro"; crossed.selection = NSRange(location: 9, length: 0)
+        check(crossedObservation.observe(client: crossed, sessionRevision: 19, secure: false) == .discard,
+              "Extending across a token boundary is never learning evidence")
+
+        let targetChanged = RecordingClient(document: "codux")
+        targetChanged.selection = NSRange(location: 5, length: 0)
+        var targetObservation = VoiceCorrectionObservation.capture(
+            operationID: UUID(), client: targetChanged, sessionRevision: 20,
+            insertionRange: NSRange(location: 0, length: 5), rawFinal: "codux", insertedFinal: "codux")!
+        check(targetObservation.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+        targetChanged.testClientID = "another-editing-target"
+        targetChanged.document = "Codex"; targetChanged.selection = NSRange(location: 5, length: 0)
+        check(targetObservation.observe(client: targetChanged, sessionRevision: 20, secure: false) == .discard,
+              "A changed native client identifier fails closed even when the proxy object is reused")
+    }
+
+    @MainActor static func postInsertionControllerLearning() async {
+        func finish(_ h: VoiceHarness, raw: String) async {
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal(raw)
+            h.key()
+            callbacks.onFinalized(raw)
+            for _ in 0..<10 { await Task.yield() }
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = { .init(generation: 1, revision: 1, availability: .available, entries: []) }
+            h.controller.voice.learningObservationDelay = .zero
+            h.controller.voice.learningUndoGrace = .zero
+            var learned: [VoiceLearnedCorrection] = []
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await finish(h, raw: "codux")
+            check(h.client.document == "前🙂codux" && h.client.insertions.count == 1,
+                  "Raw finalized voice text inserts exactly once before observation")
+            let token = NSRange(location: 3, length: 5)
+            h.client.selection = token
+            check(!h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client),
+                  "The observed paste remains a host application edit")
+            h.client.document = "前🙂Codex"
+            h.client.selection = NSRange(location: 8, length: 0)
+            for _ in 0..<10 { await Task.yield() }
+            check(learned == [.init(sourceCode: "codux", canonicalText: "Codex")],
+                  "One attributable local Latin substitution learns once off the key event")
+            check(events.contains { $0.source == .voiceSession && $0.event == .finalized } &&
+                  events.contains { $0.source == .voiceCorrection && $0.event == .detected } &&
+                  events.contains { $0.source == .voiceCorrection && $0.event == .learned },
+                  "Finalization, detection and successful learning emit content-free evidence")
+            check(h.client.insertions.count == 1, "Learning never inserts a second copy")
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available,
+                      entries: [.init(code: "codux", text: "Codex", commits: 1)])
+            }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await finish(h, raw: "用 codux。")
+            check(h.client.document == "前🙂用 Codex。" && h.client.insertions.count == 1,
+                  "Exact token-boundary voice aliases apply before insertion without duplication")
+            check(events.contains { $0.source == .voiceAlias && $0.event == .hit && $0.count == 1 } &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .laterReuse && $0.count == 1 },
+                  "Alias application emits numeric hit and later-reuse evidence without token content")
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.settings.voicePolishEnabled = true
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available,
+                      entries: [.init(code: "codux", text: "Codex", commits: 1)])
+            }
+            h.controller.voice.correctionOverride = { text, _ in
+                try await Task.sleep(for: .seconds(1))
+                return text
+            }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("用 codux。")
+            h.key()
+            callbacks.onFinalized("用 codux。")
+            for _ in 0..<10 { await Task.yield() }
+            h.controller.voice.cancel(.cancellation)
+            check(h.client.insertions.isEmpty &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .hit } &&
+                  !events.contains { $0.source == .voiceAlias && $0.event == .laterReuse },
+                  "A matched alias cancelled before insertion is a hit but not later reuse")
+        }
+
+        do {
+            let h = VoiceHarness(); defer { h.close() }
+            h.settings.voicePolishEnabled = true
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available,
+                      entries: [.init(code: "codux", text: "Codex", commits: 1)])
+            }
+            h.controller.voice.correctionOverride = { _, _ in "用产品。" }
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+            await finish(h, raw: "用 codux。")
+            check(h.client.document == "前🙂用产品。" &&
+                  events.contains { $0.source == .voiceAlias && $0.event == .hit } &&
+                  !events.contains { $0.source == .voiceAlias && $0.event == .laterReuse },
+                  "AI polish that removes the alias cannot count as later reuse")
+        }
+
+        for interruption in ["undo", "deactivate", "focus", "ordinary"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = { .init(generation: 1, revision: 1, availability: .available, entries: []) }
+            h.controller.voice.learningObservationDelay = .zero
+            var learned: [VoiceLearnedCorrection] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            await finish(h, raw: "codux")
+            switch interruption {
+            case "undo":
+                check(!h.controller.handle(keyEvent(UInt16(kVK_ANSI_Z), "z", .command), client: h.client))
+            case "deactivate":
+                h.client.selection = NSRange(location: 3, length: 5)
+                _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+                h.controller.deactivateServer(h.client)
+                h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+            case "focus":
+                h.client.selection = NSRange(location: 3, length: 5)
+                _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+                h.focused = RecordingClient(document: "another target")
+                h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+            default:
+                h.client.selection = NSRange(location: 8, length: 0)
+                _ = h.controller.handle(keyEvent(0, "x"), client: h.client)
+                h.client.document = "前🙂coduxx"; h.client.selection = NSRange(location: 9, length: 0)
+            }
+            for _ in 0..<10 { await Task.yield() }
+            check(learned.isEmpty, "\(interruption) discards voice learning evidence")
+        }
+    }
+
+    @MainActor static func detectedCorrectionImmediateUndo() async {
+        let h = VoiceHarness(); defer { h.close() }
+        h.controller.voice.aliasLexicon = { .init(generation: 1, revision: 1, availability: .available, entries: []) }
+        h.controller.voice.learningObservationDelay = .milliseconds(350)
+        var learned: [VoiceLearnedCorrection] = []
+        var events: [QualityEffectivenessEvent] = []
+        h.controller.voice.learnCorrection = { learned.append($0); return true }
+        h.controller.voice.recordEffectiveness = { events.append($0) }
+        await h.start()
+        let callbacks = h.fake.callbacks!
+        callbacks.onFinal("codux")
+        h.key()
+        callbacks.onFinalized("codux")
+        for _ in 0..<10 { await Task.yield() }
+        h.client.selection = NSRange(location: 3, length: 5)
+        _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+        h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+        try? await Task.sleep(for: .milliseconds(420))
+        check(h.client.requests.count >= 2, "The production-like delayed bounded readback must occur")
+        check(h.controller.voice.hasPendingCorrection, "The exact correction must be detected before undo")
+        check(learned.isEmpty, "A detected correction must remain pending during the immediate undo window")
+        _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_Z), "z", .command), client: h.client)
+        check(!h.controller.voice.hasPendingCorrection, "Command-Z discards the detected correction immediately")
+        try? await Task.sleep(for: .milliseconds(1100))
+        check(learned.isEmpty, "Command-Z after detection must prevent both Rime namespace updates")
+        check(events.contains { $0.source == .voiceCorrection && $0.event == .detected } &&
+              events.contains { $0.source == .voiceCorrection && $0.event == .rejected && $0.reason == .immediateUndo } &&
+              !events.contains { $0.event == .learned },
+              "Immediate undo records a bounded rejection reason and never a learned event")
+    }
+
+    @MainActor static func postInsertionPersistenceReentrancy() async {
+        for transition in ["secure-mark", "focus-selection"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available, entries: [])
+            }
+            h.controller.voice.learningObservationDelay = .zero
+            h.controller.voice.learningUndoGrace = .milliseconds(50)
+            var learned: [VoiceLearnedCorrection] = []
+            var events: [QualityEffectivenessEvent] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            h.controller.voice.recordEffectiveness = { events.append($0) }
+
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("codux")
+            h.key()
+            callbacks.onFinalized("codux")
+            for _ in 0..<10 { await Task.yield() }
+            h.client.selection = NSRange(location: 3, length: 5)
+            _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+            h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+            for _ in 0..<20 where !h.controller.voice.hasPendingCorrection { await Task.yield() }
+            check(h.controller.voice.hasPendingCorrection,
+                  "The exact correction is pending before persistence revalidation")
+
+            var readsAtTransition: (selected: Int, length: Int, strings: Int)?
+            if transition == "secure-mark" {
+                h.client.onMarkedRange = {
+                    h.client.onMarkedRange = nil
+                    readsAtTransition = (h.client.selectedRangeReads, h.client.lengthReads, h.client.requests.count)
+                    h.secure = true
+                }
+            } else {
+                h.client.onSelectedRange = {
+                    h.client.onSelectedRange = nil
+                    readsAtTransition = (h.client.selectedRangeReads, h.client.lengthReads, h.client.requests.count)
+                    h.focused = RecordingClient(document: "another target")
+                }
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+
+            check(learned.isEmpty && !events.contains { $0.source == .voiceCorrection && $0.event == .learned },
+                  "A \(transition) transition during persistence readback must not learn")
+            check(readsAtTransition != nil && h.client.lengthReads == readsAtTransition?.length &&
+                  h.client.requests.count == readsAtTransition?.strings,
+                  "No document-content read follows a \(transition) transition")
+        }
+    }
+
+    @MainActor static func initialObservationCaptureReentrancy() async {
+        for transition in ["secure-identifier", "focus-selection", "secure-length"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available, entries: [])
+            }
+            var learned: [VoiceLearnedCorrection] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            var readsAtTransition: (selected: Int, length: Int, strings: Int)?
+            h.client.insertionCallback = {
+                if transition == "secure-identifier" {
+                    h.client.testIdentifierProvider = {
+                        h.client.testIdentifierProvider = nil
+                        readsAtTransition = (h.client.selectedRangeReads, h.client.lengthReads, h.client.requests.count)
+                        h.secure = true
+                        return h.client.testClientID
+                    }
+                } else if transition == "focus-selection" {
+                    h.client.onSelectedRange = {
+                        h.client.onSelectedRange = nil
+                        readsAtTransition = (h.client.selectedRangeReads, h.client.lengthReads, h.client.requests.count)
+                        h.focused = RecordingClient(document: "another target")
+                    }
+                } else {
+                    h.client.onLength = {
+                        h.client.onLength = nil
+                        readsAtTransition = (h.client.selectedRangeReads, h.client.lengthReads, h.client.requests.count)
+                        h.secure = true
+                    }
+                }
+            }
+
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("codux")
+            h.key()
+            callbacks.onFinalized("codux")
+            for _ in 0..<10 { await Task.yield() }
+
+            check(readsAtTransition != nil && !h.controller.voice.hasLearningObservation && learned.isEmpty,
+                  "A \(transition) transition during initial capture leaves no learning observation")
+            check(h.client.lengthReads == readsAtTransition?.length &&
+                  h.client.requests.count == readsAtTransition?.strings,
+                  "No document-content read follows a \(transition) transition during initial capture")
+        }
+    }
+
+    @MainActor static func editAttributionReentrancy() async {
+        for transition in ["secure-selection", "focus-selection"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available, entries: [])
+            }
+            var learned: [VoiceLearnedCorrection] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("codux")
+            h.key()
+            callbacks.onFinalized("codux")
+            for _ in 0..<10 { await Task.yield() }
+            check(h.controller.voice.hasLearningObservation,
+                  "Ordinary insertion creates an observation before edit attribution")
+
+            h.client.selection = NSRange(location: 3, length: 5)
+            let stringsBefore = h.client.requests.count
+            h.client.onSelectedRange = {
+                h.client.onSelectedRange = nil
+                if transition == "secure-selection" { h.secure = true }
+                else { h.focused = RecordingClient(document: "another target") }
+            }
+            _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+
+            check(!h.controller.voice.hasLearningObservation && learned.isEmpty,
+                  "A \(transition) transition during edit attribution discards learning immediately")
+            check(h.client.requests.count == stringsBefore,
+                  "Edit attribution performs no document-content read after a \(transition) transition")
+        }
+    }
+
+    @MainActor static func editAttributionPrecheckReentrancy() async {
+        for transition in ["secure-current", "focus-current", "secure-bundle", "focus-bundle"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.aliasLexicon = {
+                .init(generation: 1, revision: 1, availability: .available, entries: [])
+            }
+            var learned: [VoiceLearnedCorrection] = []
+            h.controller.voice.learnCorrection = { learned.append($0); return true }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("codux")
+            h.key()
+            callbacks.onFinalized("codux")
+            for _ in 0..<10 { await Task.yield() }
+            check(h.controller.voice.hasLearningObservation,
+                  "Ordinary insertion creates an observation before target precheck")
+
+            h.client.selection = NSRange(location: 3, length: 5)
+            var readsAtTransition: (bundle: Int, identifier: Int, marked: Int,
+                                    selected: Int, length: Int, strings: Int)?
+            func recordTransition() {
+                readsAtTransition = (h.client.bundleIdentifierReads, h.client.uniqueIdentifierReads,
+                                     h.client.markedRangeReads, h.client.selectedRangeReads,
+                                     h.client.lengthReads, h.client.requests.count)
+                if transition.hasPrefix("secure") { h.secure = true }
+                else { h.focused = RecordingClient(document: "another target") }
+            }
+            if transition.hasSuffix("current") {
+                var first = true
+                h.controller.voice.currentClient = {
+                    if first { first = false; recordTransition(); return h.client }
+                    return h.focused
+                }
+            } else {
+                h.client.testBundleIdentifierProvider = {
+                    h.client.testBundleIdentifierProvider = nil
+                    recordTransition()
+                    return h.client.testBundleID
+                }
+            }
+
+            let handled = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+            check(!handled, "A \(transition) transition still passes the host edit through")
+            check(readsAtTransition != nil && !h.controller.voice.hasLearningObservation && learned.isEmpty,
+                  "A \(transition) transition in target precheck discards learning")
+            check(h.client.bundleIdentifierReads == readsAtTransition?.bundle &&
+                  h.client.uniqueIdentifierReads == readsAtTransition?.identifier &&
+                  h.client.markedRangeReads == readsAtTransition?.marked &&
+                  h.client.selectedRangeReads == readsAtTransition?.selected &&
+                  h.client.lengthReads == readsAtTransition?.length &&
+                  h.client.requests.count == readsAtTransition?.strings,
+                  "No stale client call follows a \(transition) transition in target precheck")
+        }
     }
 
     @MainActor static func voiceChordEvent(_ down: Bool, flags: NSEvent.ModifierFlags = [.control, .option],
@@ -462,7 +957,8 @@ struct VoiceControllerTests {
         check(h.client.mark.location == NSNotFound && !h.controller.voice.isActive)
         callbacks.onFinalized("过期")
         check(h.client.insertions.count == 1 && h.status.values.contains(.voiceFallback))
-        check(h.client.lengthReads == 0 && h.client.requests.isEmpty, "Voice never reads document content or length")
+        check(h.client.lengthReads == 1 && h.client.requests == [NSRange(location: 3, length: 4)],
+              "Voice reads back only the bounded inserted range for correction observation")
     }
 
     @MainActor static func applicationPolishRouting() async throws {

@@ -80,6 +80,7 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
     package var requests: [NSRange] = []
     package var substringResponse: ((NSRange) -> (String?, NSRange))?
     package var lengthReads = 0
+    package var onLength: (() -> Void)?
     package var reportedLength: Int?
     package var caretRect = NSRect.zero
     package var attributeIndexes: [Int] = []
@@ -121,7 +122,9 @@ package final class RecordingClient: NSObject, @preconcurrency IMKTextInput {
         markedRangeReads += 1; onMarkedRange?(); return mark
     }
     package func attributedSubstring(from range: NSRange) -> NSAttributedString! { nil }
-    package func length() -> Int { lengthReads += 1; return reportedLength ?? document?.utf16.count ?? NSNotFound }
+    package func length() -> Int {
+        lengthReads += 1; onLength?(); return reportedLength ?? document?.utf16.count ?? NSNotFound
+    }
     package func characterIndex(for point: NSPoint, tracking mappingMode: IMKLocationToOffsetMappingMode,
                         inMarkedRange: UnsafeMutablePointer<ObjCBool>!) -> Int { NSNotFound }
     package func attributes(forCharacterIndex index: Int, lineHeightRectangle lineRect: UnsafeMutablePointer<NSRect>!) -> [AnyHashable: Any]! {

@@ -41,11 +41,25 @@ final class IFInputControllerVoice {
     private var deliveryDepth = 0
     private var deliveryEngine: IFEngine?
     private var nativeGeneration: UInt64 = 0
+    private var learningObservation: VoiceCorrectionObservation?
+    private var learningTarget: Target?
+    private var learningReadTask: Task<Void, Never>?
+    private var learningExpiryTask: Task<Void, Never>?
+    private var learningPersistenceTask: Task<Void, Never>?
+    private var pendingLearning: VoiceLearnedCorrection?
+    private var learningReadBarrier = false
     private var rejectionLimiter = VoiceDiagnostics.StartRejectionLimiter()
     var reportStartRejection: (VoiceDiagnostics.StartRejection) -> Void = VoiceDiagnostics.rejectStart
     var foreground: @MainActor () -> VoiceForeground? = VoiceForeground.current
     var currentClient: (() -> IMKTextInput?)?
     var lexicon: () -> VoiceLexiconSnapshot = { IFEngine.voiceLexicon.snapshot }
+    var aliasLexicon: (() -> VoiceAliasSnapshot)?
+    var learnCorrection: ((VoiceLearnedCorrection) -> Bool)?
+    var recordEffectiveness: ((QualityEffectivenessEvent) -> Void)?
+    var learningObservationDelay: Duration = .milliseconds(350)
+    var learningUndoGrace: Duration = .seconds(1)
+    var hasPendingCorrection: Bool { pendingLearning != nil }
+    var hasLearningObservation: Bool { learningObservation != nil }
     var correctionOverride: CorrectionOverride?
     var isActive: Bool { token != nil || starting }
     var isDelivering: Bool { deliveryDepth > 0 }
@@ -154,6 +168,8 @@ final class IFInputControllerVoice {
     }
 
     func handle(_ event: NSEvent, client: IMKTextInput?) -> Bool {
+        learningReadBarrier = false
+        considerLearningEvent(event, client: client)
         let flags = event.modifierFlags.intersection(ShortcutBinding.relevantFlags)
         let holdBinding = controller?.settings.shortcuts.binding(for: .voiceHold) ?? .rightShift
         let toggleBinding = controller?.settings.shortcuts.binding(for: .voiceToggle) ?? .rightShift
@@ -213,7 +229,13 @@ final class IFInputControllerVoice {
         return false
     }
 
+    func consumeLearningReadBarrier() -> Bool {
+        defer { learningReadBarrier = false }
+        return learningReadBarrier
+    }
+
     private func start(client: IMKTextInput?) {
+        discardLearningObservation(reason: .cancelled)
         func reject(_ reason: VoiceDiagnostics.StartRejection) {
             if rejectionLimiter.admit(reason) { reportStartRejection(reason) }
         }
@@ -234,6 +256,8 @@ final class IFInputControllerVoice {
         guard controller.settings.voice.service.isReady else { show(.voiceNotReady, client: client); return }
         let snapshot = lexicon()
         guard snapshot.availability == .available else { show(.voiceLexiconWaiting, client: client); return }
+        let aliasSnapshot = aliasLexicon?() ?? engine.readVoiceAliases(generation: snapshot.generation,
+                                                                       revision: snapshot.revision)
         guard Self.activeOwner?.isDelivering != true else { reject(.busy); return }
         if let owner = Self.activeOwner, owner !== self { owner.cancel(.deactivated) }
         epoch &+= 1; let expected = epoch
@@ -291,7 +315,15 @@ final class IFInputControllerVoice {
                 throw error
             }
         } }
-        let model = VoiceSession(correct: correct,
+        var aliasEvidence: VoiceAliasRewriter.Result?
+        let model = VoiceSession(applyAliases: { [weak self] transcript in
+            let result = VoiceAliasRewriter.result(transcript, snapshot: aliasSnapshot)
+            if result.hitCount > 0 {
+                self?.emitEffectiveness(.init(source: .voiceAlias, event: .hit, count: result.hitCount))
+                aliasEvidence = result
+            }
+            return result.text
+        }, correct: correct,
             onPreview: { [weak self] text in self?.preview(text, epoch: expected) },
             onRequestFinalize: { [weak self] id in
                 guard let self, self.epoch == expected else { return }
@@ -299,7 +331,9 @@ final class IFInputControllerVoice {
                 VoiceDiagnostics.emit(.tail, id: id)
                 self.controller?.statusPresentation?.hide()
                 self.controller?.settings.voice.service.stop(id: id)
-            }, onFinish: { [weak self] outcome in self?.finish(outcome, epoch: expected) })
+            }, onFinish: { [weak self] outcome in
+                self?.finish(outcome, epoch: expected, aliasEvidence: aliasEvidence)
+            })
         session = model
         let id = model.start(); token = id
         controller.ai.invalidate(.commit)
@@ -376,6 +410,7 @@ final class IFInputControllerVoice {
     }
 
     func cancel(_ reason: VoiceDiagnostics.Reason = .deactivated) {
+        discardLearningObservation(reason: effectivenessReason(reason))
         if reason == .deactivated { pressedModifiers.removeAll() }
         resetGesture()
         held = false
@@ -414,15 +449,21 @@ final class IFInputControllerVoice {
         }
     }
 
-    private func finish(_ outcome: VoiceSession.Outcome, epoch expected: UInt64) {
+    private func finish(_ outcome: VoiceSession.Outcome, epoch expected: UInt64,
+                        aliasEvidence: VoiceAliasRewriter.Result? = nil) {
         guard epoch == expected, let id = token else { return }
         switch outcome {
         case .cancelled: cancel(.deactivated)
         case .failed:
             cancel(.recognition); show(.voiceFailed)
-        case .completed(let text, let fallback):
+        case .completed(let rawFinal, let text, let fallback):
+            emitEffectiveness(.init(source: .voiceSession, event: .finalized))
             guard validate(), let owned = target else { return }
             if text.isEmpty { cancel(.none); return }
+            // Selected-text transactions deliberately avoid post-delivery document
+            // reads. Learning observations are only available for ordinary insertion.
+            let insertionStart = selectedTextTransaction ? nil :
+                ownedInsertionStart(owned.client, expected: owned, revision: expected)
             beginDelivery()
             defer { endDelivery() }
             cleanupPending = ownsVoiceMark ? owned : nil
@@ -446,7 +487,26 @@ final class IFInputControllerVoice {
             VoiceDiagnostics.emit(.submitted, id: id)
             owned.client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             VoiceDiagnostics.emit(.insertionReturned, id: id)
+            if let aliasEvidence {
+                let retained = aliasEvidence.retainedHitCount(in: text)
+                if retained > 0 {
+                    emitEffectiveness(.init(source: .voiceAlias, event: .laterReuse, count: retained))
+                }
+            }
             guard epoch == deliveryEpoch else { return }
+            if let insertionStart {
+                learningObservation = VoiceCorrectionObservation.capture(
+                    operationID: id, client: owned.client, sessionRevision: deliveryEpoch,
+                    insertionRange: NSRange(location: insertionStart, length: text.utf16.count),
+                    rawFinal: rawFinal, insertedFinal: text,
+                    validateTarget: {
+                        self.currentLearningTarget(owned.client, expected: owned, revision: deliveryEpoch)
+                    })
+                if learningObservation != nil {
+                    learningTarget = owned
+                    scheduleLearningExpiry(operationID: id)
+                }
+            }
             controller?.statusPresentation?.hide()
             if fallback { show(.voiceFallback, client: owned.client) }
         }
@@ -455,6 +515,161 @@ final class IFInputControllerVoice {
     private func beginDelivery() {
         if deliveryDepth == 0 { deliveryEngine = controller?.engine; deliveryEngine?.beginDelivery() }
         deliveryDepth += 1
+    }
+
+    private func ownedInsertionStart(_ client: IMKTextInput, expected: Target, revision: UInt64) -> Int? {
+        guard currentLearningTarget(client, expected: expected, revision: revision) else { return nil }
+        let mark = client.markedRange()
+        guard currentLearningTarget(client, expected: expected, revision: revision) else { return nil }
+        if AIClientAnchor.valid(mark), mark.length > 0 { return mark.location }
+        let selection = client.selectedRange()
+        guard currentLearningTarget(client, expected: expected, revision: revision),
+              AIClientAnchor.valid(selection), selection.length == 0 else { return nil }
+        return selection.location
+    }
+
+    private func considerLearningEvent(_ event: NSEvent, client: IMKTextInput?) {
+        guard event.type == .keyDown, learningObservation != nil else { return }
+        let flags = event.modifierFlags.intersection([.command, .control, .option])
+        if flags == .command && event.keyCode == UInt16(kVK_ANSI_Z) {
+            discardLearningObservation(reason: .immediateUndo); return
+        }
+        // Once an exact correction is detected, any further key event makes the
+        // pending evidence stale. Command-Z above is the explicit undo boundary.
+        if pendingLearning != nil { discardLearningObservation(reason: .unrelatedEdit); return }
+        let paste = flags == .command && event.keyCode == UInt16(kVK_ANSI_V)
+        let deletion = flags.isEmpty && (event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete))
+        let directText = flags.isEmpty && !(event.charactersIgnoringModifiers ?? "").isEmpty &&
+            event.keyCode != UInt16(kVK_Return) && event.keyCode != UInt16(kVK_Tab) && event.keyCode != UInt16(kVK_Escape)
+        guard paste || deletion || directText else { return }
+        guard let client, let observation = learningObservation,
+              currentLearningTarget(client, observation: observation,
+                                    revision: observation.sessionRevision) else {
+            learningReadBarrier = true
+            discardLearningObservation(reason: .unrelatedEdit); return
+        }
+        let selection = client.selectedRange()
+        guard currentLearningTarget(client, observation: observation,
+                                    revision: observation.sessionRevision) else {
+            learningReadBarrier = true
+            discardLearningObservation(reason: .unrelatedEdit); return
+        }
+        guard learningObservation?.operationID == observation.operationID,
+              learningObservation?.attributeLocalEdit(selection: selection) == true else {
+            discardLearningObservation(reason: .unrelatedEdit); return
+        }
+        learningReadTask?.cancel()
+        let revision = epoch
+        learningReadTask = Task { @MainActor [weak self, weak client] in
+            guard let self else { return }
+            do { try await Task.sleep(for: self.learningObservationDelay) } catch { return }
+            guard let client, let observation = self.learningObservation else { return }
+            guard self.currentLearningTarget(client, revision: revision) else {
+                self.discardLearningObservation(reason: .clientDrift); return
+            }
+            let decision = observation.observe(client: client, sessionRevision: revision,
+                                               secure: self.controller?.secureInput() ?? true,
+                                               validateTarget: {
+                                                   self.currentLearningTarget(client, observation: observation,
+                                                                              revision: revision)
+                                               })
+            switch decision {
+            case .pending: return
+            case .discard: self.discardLearningObservation()
+            case .learn(let correction):
+                let duration = self.learningObservationDelay.components
+                self.emitEffectiveness(.init(source: .voiceCorrection, event: .detected,
+                    milliseconds: Int(duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000)))
+                self.scheduleLearningPersistence(correction, client: client, revision: revision)
+            }
+        }
+    }
+
+    private func scheduleLearningPersistence(_ correction: VoiceLearnedCorrection,
+                                             client: IMKTextInput, revision: UInt64) {
+        pendingLearning = correction
+        learningPersistenceTask?.cancel()
+        learningPersistenceTask = Task { @MainActor [weak self, weak client] in
+            guard let self else { return }
+            do { try await Task.sleep(for: self.learningUndoGrace) } catch { return }
+            guard let client, self.pendingLearning == correction,
+                  let observation = self.learningObservation,
+                  self.currentLearningTarget(client, revision: revision),
+                  observation.observe(client: client, sessionRevision: revision,
+                                      secure: self.controller?.secureInput() ?? true,
+                                      validateTarget: {
+                                          self.currentLearningTarget(client, observation: observation,
+                                                                     revision: revision)
+                                      }) == .learn(correction),
+                  self.currentLearningTarget(client, observation: observation, revision: revision) else {
+                self.discardLearningObservation(reason: .unavailable); return
+            }
+            self.discardLearningObservation()
+            let learned: Bool
+            if let injected = self.learnCorrection { learned = injected(correction) }
+            else { learned = self.controller?.engine?.learnVoiceCorrection(correction) ?? false }
+            self.emitEffectiveness(.init(source: .voiceCorrection,
+                                         event: learned ? .learned : .rejected,
+                                         reason: learned ? nil : .storageFailure))
+        }
+    }
+
+    private func scheduleLearningExpiry(operationID: UUID) {
+        learningExpiryTask?.cancel()
+        learningExpiryTask = Task { @MainActor [weak self] in
+            do { try await Task.sleep(for: VoiceCorrectionObservation.lifetime) } catch { return }
+            guard self?.learningObservation?.operationID == operationID else { return }
+            self?.discardLearningObservation(reason: .timeout)
+        }
+    }
+
+    private func currentLearningTarget(_ client: IMKTextInput, revision: UInt64) -> Bool {
+        guard let learningTarget else { return false }
+        return currentLearningTarget(client, expected: learningTarget, revision: revision)
+    }
+
+    private func currentLearningTarget(_ client: IMKTextInput, expected: Target,
+                                       revision: UInt64) -> Bool {
+        guard let current = readTarget(epoch: revision) else { return false }
+        return expected.sameIdentity(current) && current.proxy == ObjectIdentifier(client as AnyObject)
+    }
+
+    private func currentLearningTarget(_ client: IMKTextInput,
+                                       observation: VoiceCorrectionObservation,
+                                       revision: UInt64) -> Bool {
+        guard currentLearningTarget(client, revision: revision),
+              observation.matchesTarget(client: client, sessionRevision: revision) else { return false }
+        // The native identifier lookup above can itself reenter InputMethodKit.
+        // Recheck focus, epoch, application, and secure state after it returns.
+        return currentLearningTarget(client, revision: revision)
+    }
+
+    private func discardLearningObservation(reason: QualityEffectivenessReason? = nil) {
+        if pendingLearning != nil, let reason {
+            emitEffectiveness(.init(source: .voiceCorrection, event: .rejected, reason: reason))
+        }
+        learningReadTask?.cancel(); learningReadTask = nil
+        learningExpiryTask?.cancel(); learningExpiryTask = nil
+        learningPersistenceTask?.cancel(); learningPersistenceTask = nil
+        pendingLearning = nil
+        learningObservation = nil
+        learningTarget = nil
+    }
+
+    private func emitEffectiveness(_ event: QualityEffectivenessEvent) {
+        if let recordEffectiveness { recordEffectiveness(event) }
+        else { controller?.engine?.qualityRecorder?.recordEffectiveness(event) }
+    }
+
+    private func effectivenessReason(_ reason: VoiceDiagnostics.Reason) -> QualityEffectivenessReason {
+        switch reason {
+        case .deactivated: .deactivated
+        case .secureInput: .secure
+        case .targetChanged: .clientDrift
+        case .invalidRange: .invalidRange
+        case .editing: .unrelatedEdit
+        default: .cancelled
+        }
     }
 
     private func endDelivery() {
@@ -483,28 +698,51 @@ final class IFInputControllerVoice {
 
     private func readTarget(epoch expected: UInt64,
                             onReject: ((VoiceDiagnostics.StartRejection) -> Void)? = nil) -> Target? {
-        func accept(_ valid: @autoclosure () -> Bool, _ reason: VoiceDiagnostics.StartRejection) -> Bool {
-            guard epoch == expected else { onReject?(.stale); return false }
-            let accepted = valid()
-            guard epoch == expected else { onReject?(.stale); return false }
-            guard accepted else { onReject?(reason); return false }
-            return true
+        func reject(_ reason: VoiceDiagnostics.StartRejection) -> Bool {
+            onReject?(reason)
+            return false
         }
         guard let controller else { onReject?(.engine); return nil }
-        guard accept(!controller.secureInput(), .secure) else { return nil }
-        let client = currentClient.map { $0() } ?? controller.client()
-        guard accept(client != nil, .client), let client else { return nil }
+
+        func secureCheckpoint() -> Bool {
+            guard epoch == expected else { return reject(.stale) }
+            let secure = controller.secureInput()
+            guard epoch == expected else { return reject(.stale) }
+            return !secure || reject(.secure)
+        }
+
+        func focusedClient() -> IMKTextInput? {
+            guard secureCheckpoint() else { return nil }
+            let value = currentClient.map { $0() } ?? controller.client()
+            guard epoch == expected else { onReject?(.stale); return nil }
+            guard secureCheckpoint() else { return nil }
+            guard let value else { onReject?(.client); return nil }
+            return value
+        }
+
+        func stable(_ client: IMKTextInput, app expectedApp: VoiceForeground? = nil) -> Bool {
+            guard secureCheckpoint(), let focused = focusedClient() else { return false }
+            guard ObjectIdentifier(focused as AnyObject) == ObjectIdentifier(client as AnyObject) else {
+                return reject(.proxy)
+            }
+            if let expectedApp {
+                let actualApp = foreground()
+                guard epoch == expected else { return reject(.stale) }
+                guard secureCheckpoint(), actualApp == expectedApp else { return reject(.foreground) }
+            }
+            return true
+        }
+
+        guard let client = focusedClient(), stable(client) else { return nil }
         let bundle = client.bundleIdentifier()
-        guard accept(bundle?.isEmpty == false, .bundle), let bundle else { return nil }
+        guard stable(client), let bundle, !bundle.isEmpty else { onReject?(.bundle); return nil }
         let app = foreground()
-        guard accept(app?.bundleID == bundle && (app?.pid ?? 0) > 0, .foreground), let app else { return nil }
+        guard epoch == expected, secureCheckpoint(), let app,
+              app.bundleID == bundle, app.pid > 0, stable(client, app: app) else {
+            onReject?(.foreground); return nil
+        }
         let finalBundle = client.bundleIdentifier()
-        guard accept(finalBundle == bundle, .bundle) else { return nil }
-        let finalClient = currentClient.map { $0() } ?? controller.client()
-        guard accept(finalClient != nil, .client), let finalClient,
-              accept(ObjectIdentifier(finalClient as AnyObject) == ObjectIdentifier(client as AnyObject), .proxy) else { return nil }
-        let finalApp = foreground()
-        guard accept(finalApp == app, .foreground), accept(!controller.secureInput(), .secure) else { return nil }
+        guard stable(client, app: app), finalBundle == bundle else { onReject?(.bundle); return nil }
         return Target(client: client, proxy: ObjectIdentifier(client as AnyObject), app: app)
     }
 

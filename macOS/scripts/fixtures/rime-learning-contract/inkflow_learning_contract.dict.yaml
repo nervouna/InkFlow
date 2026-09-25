@@ -1,0 +1,8 @@
+---
+name: inkflow_learning_contract
+version: '1'
+sort: by_weight
+use_preset_vocabulary: false
+...
+CoDeXProbe	qzxsharedprobe	100
+SwiftUIVoice	qzxvoiceprobe	100

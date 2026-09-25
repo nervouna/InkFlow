@@ -31,7 +31,7 @@ struct VoiceSessionTests {
         session.finalized(transcript: "ab", id: id)
         try await waitUntil { !results.isEmpty }
         precondition(requests == ["ab"], "A voice session must correct its complete finalized transcript exactly once")
-        precondition(results == [.completed("AB", usedRawFallback: false)])
+        precondition(results == [.completed(rawFinal: "ab", insertedFinal: "AB", usedRawFallback: false)])
         session.finalized(transcript: "ab", id: id)
         precondition(results.count == 1)
         // A whole-session correction failure preserves the complete finalized ASR transcript.
@@ -49,7 +49,7 @@ struct VoiceSessionTests {
         failed.receiveFinal("tail", id: failureID)
         failed.finalized(transcript: "abtail", id: failureID)
         try await waitUntil { !results.isEmpty }
-        precondition(results == [.completed("abtail", usedRawFallback: true)])
+        precondition(results == [.completed(rawFinal: "abtail", insertedFinal: "abtail", usedRawFallback: true)])
 
         // Cancellation wins even when the correction ignores task cancellation and returns later.
         results = []
@@ -76,7 +76,7 @@ struct VoiceSessionTests {
         releaseCancelledCorrection = nil
         try await waitUntil { cancelledCorrectionReturned }
         await Task.yield()
-        precondition(results == [.cancelled, .completed("", usedRawFallback: false)])
+        precondition(results == [.cancelled, .completed(rawFinal: "", insertedFinal: "", usedRawFallback: false)])
 
         // Tail timeout discards partial recognition; correction deadline can only use finalized ASR.
         results = []
@@ -101,7 +101,7 @@ struct VoiceSessionTests {
         precondition(results.isEmpty)
         deadline.receiveFinal("tail", id: deadlineID)
         deadline.finalized(transcript: "rawtail", id: deadlineID)
-        precondition(results == [.completed("rawtail", usedRawFallback: true)])
+        precondition(results == [.completed(rawFinal: "rawtail", insertedFinal: "rawtail", usedRawFallback: true)])
 
         // A deadline that wins after whole-transcript correction starts completes once with full raw ASR.
         results = []
@@ -123,12 +123,12 @@ struct VoiceSessionTests {
         lateDeadline.finalized(transcript: "raw tail", id: lateDeadlineID)
         try await waitUntil { deadlineRequests == ["raw tail"] }
         try await waitUntil { !results.isEmpty }
-        precondition(results == [.completed("raw tail", usedRawFallback: true)])
+        precondition(results == [.completed(rawFinal: "raw tail", insertedFinal: "raw tail", usedRawFallback: true)])
         releaseLateCorrection?.resume()
         releaseLateCorrection = nil
         try await waitUntil { lateCorrectionReturned }
         await Task.yield()
-        precondition(results == [.completed("raw tail", usedRawFallback: true)],
+        precondition(results == [.completed(rawFinal: "raw tail", insertedFinal: "raw tail", usedRawFallback: true)],
                      "A late correction that ignored cancellation must not complete the session again")
 
         results = []
@@ -148,7 +148,7 @@ struct VoiceSessionTests {
         fallback.stop(id: fallbackID)
         fallback.finalized(transcript: "raw tail", id: fallbackID)
         try await waitUntil { !results.isEmpty }
-        precondition(results == [.completed("raw tail", usedRawFallback: true)])
+        precondition(results == [.completed(rawFinal: "raw tail", insertedFinal: "raw tail", usedRawFallback: true)])
 
         // The finalized transcript is canonical even if adapter fragments differed.
         results = []
@@ -161,7 +161,19 @@ struct VoiceSessionTests {
         canonical.finalized(transcript: "raw tail", id: canonicalID)
         try await waitUntil { !results.isEmpty }
         precondition(canonicalRequests == ["raw tail"])
-        precondition(results == [.completed("correct", usedRawFallback: false)])
+        precondition(results == [.completed(rawFinal: "raw tail", insertedFinal: "correct", usedRawFallback: false)])
+
+        results = []
+        var aliasPolishRequests: [String] = []
+        let aliasFirst = VoiceSession(applyAliases: { $0.replacingOccurrences(of: "codux", with: "Codex") },
+            correct: { text in aliasPolishRequests.append(text); return text + "。" },
+            onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
+        let aliasID = aliasFirst.start()
+        aliasFirst.stop(id: aliasID)
+        aliasFirst.finalized(transcript: "用 codux", id: aliasID)
+        try await waitUntil { !results.isEmpty }
+        precondition(aliasPolishRequests == ["用 Codex"], "Exact voice aliases run before optional AI polish")
+        precondition(results == [.completed(rawFinal: "用 codux", insertedFinal: "用 Codex。", usedRawFallback: false)])
         let configuration = AISuggestionConfiguration(baseURL: "https://api.deepseek.com/v1", apiKey: "fixture", model: "deepseek-v4-flash")
         let request = try VoiceCorrectionClient.makeRequest(text: "测试", style: .defaultStyle,
                                                             configuration: configuration)
@@ -236,7 +248,9 @@ struct VoiceSessionTests {
         for _ in 0..<512 { smallRanges.receiveFinal("字", id: manyID) }
         smallRanges.stop(id: manyID)
         smallRanges.finalized(transcript: String(repeating: "字", count: 512), id: manyID)
-        precondition(results == [.completed(String(repeating: "字", count: 512), usedRawFallback: false)])
+        precondition(results == [.completed(rawFinal: String(repeating: "字", count: 512),
+                                            insertedFinal: String(repeating: "字", count: 512),
+                                            usedRawFallback: false)])
         results = []
         let tooManyID = smallRanges.start()
         for _ in 0..<513 { smallRanges.receiveFinal("字", id: tooManyID) }

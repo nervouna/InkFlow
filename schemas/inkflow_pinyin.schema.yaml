@@ -32,6 +32,7 @@ traditional:
   excluded_types: [user_table, simplified]
 inkflow_short_conflict:
   inputs: [can, you, she, he, man, bug]
+  lookahead: 256
 custom_phrase:
   dictionary: ""
   user_dict: inkflow_custom_phrases_empty
@@ -51,7 +52,9 @@ translator:
     - xform/([jqxy])v/$1u/
 english:
   dictionary: easy_en
-  enable_user_dict: false
+  user_dict: inkflow_shared_english
+  enable_completion: false
+  enable_sentence: false
 mixed:
   dictionary: inkflow_mixed
   enable_completion: false
@@ -59,6 +62,8 @@ mixed:
   preedit_format:
     - xform/([nl])v/$1ü/
     - xform/([jqxy])v/$1u/
+mixed_personal:
+  max_input_length: 64
 key_binder:
   bindings:
     - { when: has_menu, accept: minus, send: Page_Up }

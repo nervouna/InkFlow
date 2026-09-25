@@ -114,16 +114,44 @@ change macOS/Sources/VoiceLexicon.swift; plan
 has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
 
 new_case
+change macOS/Sources/VoiceLearning.swift; plan
+has 'voice-session'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'quality-store'; has 'manual-input'
+
+new_case
+change macOS/Sources/InputControllerVoice.swift; plan
+has 'voice-controller'; has 'quality-store'; has 'quality-capture-query'; has 'manual-input'
+
+new_case
+change macOS/Sources/DictionarySettings.swift; plan
+has 'settings'; has 'ai-learning'; has 'engine-english'; has 'voice-controller'; has 'manual-settings'
+
+new_case
 change schemas/lua/inkflow_ai_learning.lua; plan
 has 'voice-lexicon'; has 'ai-learning'; has 'ai-headless'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
 
 new_case
+change schemas/lua/inkflow_english.lua; plan
+has 'engine-english'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
+
+new_case
+change macOS/scripts/fixtures/rime-learning-contract/inkflow_learning_contract.lua; plan
+has 'Units: ai-learning'; not_has 'manual-input'; not_has 'manual-settings'; not_has 'bundle-fast'
+
+new_case
 change schemas/lua/inkflow_mixed.lua; plan
-has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'manual-input'
+has 'preparation'; has 'dictionary-generator'; has 'dictionary-worker'; has 'engine-english'; has 'ai-learning'; has 'manual-input'
+has 'schemas/lua/inkflow_mixed.lua: personal mixed learning and provenance'
 
 new_case
 change schemas/lua/inkflow_input_coverage.lua; plan
-has 'engine-context'; has 'controller'; has 'quality-capture-query'; has 'dictionary-worker'; has 'bundle-fast'; has 'manual-input'
+has 'engine-context'; has 'controller'; has 'quality-capture-query'; has 'dictionary-worker'; has 'ai-learning'; has 'bundle-fast'; has 'manual-input'
+has 'schemas/lua/inkflow_input_coverage.lua: personal mixed learning and provenance'
+
+for path in schemas/lua/inkflow_short_conflict.lua schemas/inkflow_pinyin.schema.yaml schemas/inkflow_pinyin.custom.yaml; do
+  new_case
+  change "$path"; plan
+  has 'ai-learning'; has "$path: personal mixed learning and provenance"
+done
 
 new_case
 change macOS/Sources/Future.swift; plan

@@ -60,6 +60,7 @@ final class QualityRecorder {
     private var generation = 0
     private var sinceDecision = QualityOperations()
     private var pendingPrefixes: [Int: String] = [:]
+    private var personalExactOpportunities: Set<String> = []
     private var inProgress: (action: QualityAction, before: QualityPageSnapshot, decision: Int?, entered: TimeInterval)?
     private var expectedCommit: String?
     private var commitKind: QualityCommitKind = .unknown
@@ -76,6 +77,10 @@ final class QualityRecorder {
     var timingSnapshot: QualityTiming? { snapshotTiming(at: offsetNow) }
     var lastEditMonotonicTime: TimeInterval? { timing?.lastEditOffset.map { monotonicStart + $0 } }
     private var offsetNow: TimeInterval { max(0, clock.monotonic() - monotonicStart) }
+
+    func recordEffectiveness(_ event: QualityEffectivenessEvent) {
+        _ = store.submit(event)
+    }
 
     func setTimingCaptureEnabled(_ enabled: Bool) {
         timingEnabled = enabled
@@ -159,6 +164,9 @@ final class QualityRecorder {
         default: break
         }
         let selection = selection(for: action, snapshot: before)
+        if let selection, !selection.ambiguous, let selected = selection.index {
+            recordPersonalExactOpportunities(before, candidateIndexes: [selected])
+        }
         var index: Int?
         if let selection {
             var decision = QualityDecision(sequence: envelope!.decisions.count, trigger: selection.trigger,
@@ -278,6 +286,7 @@ final class QualityRecorder {
         ensureComposition()
         var snapshot = snapshot
         snapshot.presentation = panelShowIssued ? .panelShowIssued : .candidatesRequested
+        recordPersonalExactOpportunities(snapshot)
         observe(snapshot)
         enforceBudget()
     }
@@ -312,6 +321,11 @@ final class QualityRecorder {
                     self.envelope?.decisions[index].outcome = .committed
                     self.envelope?.decisions[index].commitID = commit.id
                     self.envelope?.decisions[index].pathReason = nil
+                    if let display = envelope.decisions[index].selectedDisplayIndex,
+                       envelope.decisions[index].snapshot.candidates.indices.contains(display),
+                       envelope.decisions[index].snapshot.candidates[display].source?.hasPrefix("personal_exact_") == true {
+                        recordEffectiveness(.init(source: .canonicalLexicon, event: .laterReuse))
+                    }
                 } else { setOutcome(index, .unknown, "final_commit_path_unproven") }
             }
         }
@@ -319,6 +333,22 @@ final class QualityRecorder {
     }
 
     func interrupt(reason: String) { finish(.interrupted, reason: reason) }
+
+    private func recordPersonalExactOpportunities(_ snapshot: QualityPageSnapshot,
+                                                   candidateIndexes: [Int]? = nil) {
+        var count = 0
+        let candidates = candidateIndexes.map { indexes in
+            indexes.compactMap { snapshot.candidates.indices.contains($0) ? snapshot.candidates[$0] : nil }
+        } ?? snapshot.candidates
+        for candidate in candidates {
+            guard personalExactOpportunities.count < QualityLimits.effectivenessMaxCount,
+                  let source = candidate.source, source.hasPrefix("personal_exact_"),
+                  let start = candidate.consumedInputStart, let end = candidate.consumedInputEnd else { continue }
+            let key = "\(source)\u{1f}\(start)\u{1f}\(end)\u{1f}\(candidate.text)"
+            if personalExactOpportunities.insert(key).inserted { count += 1 }
+        }
+        if count > 0 { recordEffectiveness(.init(source: .canonicalLexicon, event: .hit, count: count)) }
+    }
 
     private typealias Selection = (index: Int?, text: String?, trigger: QualityTrigger, kind: QualityCommitKind, regular: Bool, ambiguous: Bool)
     private func selection(for action: QualityAction, snapshot: QualityPageSnapshot) -> Selection? {
@@ -529,6 +559,7 @@ final class QualityRecorder {
         cacheHistoryTruncated = false
         cacheDroppedPages = 0
         pendingPrefixes = [:]
+        personalExactOpportunities = []
         sinceDecision = QualityOperations()
         inProgress = nil
         expectedCommit = nil

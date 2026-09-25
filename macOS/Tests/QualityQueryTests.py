@@ -25,6 +25,9 @@ DDL = dict(re.findall(r'"(\w+)": """\s*(CREATE TABLE .*?)\s*"""', SOURCE.read_te
 DDL['config_revisions'] = re.search(
     r'schema\["config_revisions"\] = """\s*(CREATE TABLE .*?)\s*"""',
     SOURCE.read_text(), re.S).group(1)
+DDL['effectiveness_events'] = re.search(
+    r'private static let effectivenessTable = """\s*(CREATE TABLE .*?)\s*"""',
+    SOURCE.read_text(), re.S).group(1)
 STAMP = '2026-09-06T16:00:00.000Z'
 OPS = dict(keypresses=5, pageRequests=1, pageTurns=1, candidateMoves=2, preeditEdits=0)
 
@@ -37,7 +40,7 @@ def empty_db(path):
     db = sqlite3.connect(path)
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA application_id=1229345073')
-    db.execute('PRAGMA user_version=2')
+    db.execute('PRAGMA user_version=3')
     for sql in DDL.values():
         db.execute(sql)
     return db
@@ -49,6 +52,13 @@ def fixture(path):
            build_metadata_json='{}', metric_rule_version=1,
            stats_json=json.dumps(dict(written=21, submitted=30, droppedBusy=2, droppedQueue=3,
                                       droppedOversized=1, errors=1, truncatedEnvelopes=1)))
+    for source, event, count, reason in [
+            ('voice_session', 'finalized', 4, None), ('voice_correction', 'detected', 2, None),
+            ('voice_correction', 'learned', 1, None), ('voice_correction', 'rejected', 1, 'immediate_undo'),
+            ('voice_alias', 'hit', 2, None), ('voice_alias', 'later_reuse', 1, None),
+            ('canonical_lexicon', 'hit', 3, None), ('canonical_lexicon', 'later_reuse', 2, None)]:
+        insert(db, 'effectiveness_events', run_id='run', occurred_at=STAMP, source=source,
+               event=event, reason=reason, count=count)
     identities = {
         'rev1': ('fingerprint-A', 'ranking-A', 'settings-A', 'measurement-A', 'build-A'),
         'rev2': ('fingerprint-A', 'ranking-A', 'settings-B', 'measurement-A', 'build-B'),
@@ -180,6 +190,21 @@ class QueryTests(unittest.TestCase):
         self.assertIsNone(hidden['top3_rate'])
         self.assertEqual(result['recording_runs']['scope'], 'whole_db_lifetime_unfiltered')
         self.assertEqual(result['recording_runs']['totals']['droppedQueue'], 3)
+        effectiveness = result['learning_effectiveness']
+        self.assertEqual(effectiveness['scope'], 'content_free_events_separate_from_candidate_accuracy')
+        self.assertEqual(effectiveness['voice']['finalized'], 4)
+        self.assertEqual(effectiveness['voice']['corrections_detected'], 2)
+        self.assertEqual(effectiveness['voice']['corrections_learned'], 1)
+        self.assertEqual(effectiveness['voice']['corrections_rejected'], 1)
+        self.assertEqual(effectiveness['voice']['rejection_reasons'],
+                         [{'reason': 'immediate_undo', 'count': 1}])
+        self.assertEqual(effectiveness['voice']['correction_detection_rate'], 0.5)
+        self.assertEqual(effectiveness['voice']['correction_learning_rate'], 0.5)
+        self.assertEqual(effectiveness['voice']['alias_reuse_rate'], 0.5)
+        self.assertEqual(effectiveness['canonical_lexicon']['reuse_rate'], 2 / 3)
+        filtered = self.result('summary', '--kind', 'english')['learning_effectiveness']
+        self.assertEqual(filtered['status'], 'unavailable_for_candidate_filters')
+        self.assertIsNone(filtered['voice']['correction_detection_rate'])
 
     def test_top3_uses_the_known_rank_denominator_and_includes_ranks_two_and_three(self):
         with sqlite3.connect(self.db) as db:

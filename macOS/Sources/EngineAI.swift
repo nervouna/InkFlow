@@ -2,6 +2,66 @@ import Foundation
 
 @MainActor
 extension IFEngine {
+    /// Explicit lifecycle action. It touches only the two named English memories;
+    /// public dictionaries and the ordinary pinyin_simp user dictionary stay open.
+    @discardableResult
+    static func clearPersonalEnglishLearning() -> Bool {
+        guard ready, allSessionsIdle else { return false }
+        let temporary = liveSessions.isEmpty ? IFEngine() : nil
+        guard let engine = liveSessions.first(where: \.available), allSessionsIdle else { return false }
+        let api = Self.api.pointee
+        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
+        api.set_property(engine.session, "inkflow_clear_english_learning", "clear")
+        api.set_property(engine.session, "inkflow_clear_english_learning", "")
+        var result = [CChar](repeating: 0, count: 16)
+        let read = api.get_property(engine.session, "inkflow_clear_english_learning_result", &result, result.count)
+        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
+        let cleared = read != 0 && Self.string(result) == "ok"
+        if cleared { voiceLexicon.markDirty(); signalIdle() }
+        withExtendedLifetime(temporary) {}
+        return cleared
+    }
+
+    @discardableResult
+    func learnVoiceCorrection(_ correction: VoiceLearnedCorrection) -> Bool {
+        let canonical = correction.canonicalText.lowercased()
+        guard available, (2...64).contains(correction.sourceCode.utf8.count),
+              correction.sourceCode.utf8.allSatisfy({ (97...122).contains($0) }),
+              (2...64).contains(correction.canonicalText.utf8.count),
+              correction.canonicalText.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) }),
+              canonical.utf8.allSatisfy({ (97...122).contains($0) }) else { return false }
+        let api = Self.api.pointee
+        let payload = correction.sourceCode + "\t" + canonical + "\t" + correction.canonicalText
+        api.set_property(session, "inkflow_voice_learning_result", "")
+        payload.withCString { api.set_property(session, "inkflow_voice_learning", $0) }
+        api.set_property(session, "inkflow_voice_learning", "")
+        var result = [CChar](repeating: 0, count: 16)
+        let read = api.get_property(session, "inkflow_voice_learning_result", &result, result.count)
+        api.set_property(session, "inkflow_voice_learning_result", "")
+        let learned = read != 0 && Self.string(result) == "ok"
+        if learned { Self.voiceLexicon.markDirty(); Self.signalIdle() }
+        return learned
+    }
+
+    func readVoiceAliases(generation: UInt64 = 0, revision: UInt64 = 0) -> VoiceAliasSnapshot {
+        guard available, Self.allSessionsIdle else {
+            return .unknown(generation: generation, revision: revision)
+        }
+        let api = Self.api.pointee
+        api.set_property(session, "inkflow_voice_aliases_result", "")
+        api.set_property(session, "inkflow_voice_aliases", "read")
+        defer {
+            api.set_property(session, "inkflow_voice_aliases", "")
+            api.set_property(session, "inkflow_voice_aliases_result", "")
+        }
+        var buffer = [CChar](repeating: 0, count: VoiceAliasSnapshot.byteLimit + 1)
+        guard api.get_property(session, "inkflow_voice_aliases_result", &buffer, buffer.count) != 0 else {
+            return .unknown(generation: generation, revision: revision)
+        }
+        let payload = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return VoiceAliasSnapshot(payload: payload, generation: generation, revision: revision)
+    }
+
     /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
     func aiInputIdentity() -> AIInputIdentity? {
         guard available, !asciiMode else { return nil }

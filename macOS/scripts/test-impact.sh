@@ -58,6 +58,12 @@ impact_classify() {
     macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
       impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
   esac
+  # These schema components jointly implement personal mixed-English lookup,
+  # provenance, boundaries and reachability covered by test-ai-learning.sh.
+  case "$path" in
+    schemas/lua/inkflow_input_coverage.lua|schemas/lua/inkflow_mixed.lua|schemas/lua/inkflow_short_conflict.lua|schemas/inkflow_pinyin.schema.yaml|schemas/inkflow_pinyin.custom.yaml)
+      impact_rule "$path" 'personal mixed learning and provenance' ai-learning ;;
+  esac
   case "$path" in
     .agents/skills/inkflow-release/*)
       impact_rule "$path" 'release workflow' workflow
@@ -78,14 +84,16 @@ impact_classify() {
     macOS/Sources/AI*|macOS/Sources/InputControllerAI.swift)
       impact_rule "$path" 'AI feature domain' ai voice-session settings
       impact_manual_add manual-input manual-settings ;;
+    macOS/scripts/fixtures/rime-learning-contract/*)
+      impact_rule "$path" 'test-only bundled Rime learning contract' ai-learning ;;
     macOS/Tests/AI*|macOS/scripts/test-ai-*.sh)
       impact_rule "$path" 'AI test domain' ai ;;
 
-    macOS/Sources/VoiceLexicon.swift)
-      impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport
+    macOS/Sources/VoiceLexicon.swift|macOS/Sources/VoiceLearning.swift)
+      impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/*Voice*.swift)
-      impact_rule "$path" 'voice feature domain' voice-session apple-voice voice-lexicon voice-controller settings ai-transport
+      impact_rule "$path" 'voice feature domain' voice-session apple-voice voice-lexicon voice-controller settings ai-transport quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Tests/*Voice*.swift|macOS/scripts/test-*voice*.sh)
       impact_rule "$path" 'voice test domain' voice-session apple-voice voice-lexicon voice-controller ;;
@@ -105,10 +113,18 @@ impact_classify() {
       impact_rule "$path" 'native learning bridge and generated-data consumers' voice-lexicon ai-learning ai-headless preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
+    schemas/lua/inkflow_english.lua)
+      impact_rule "$path" 'English and voice learning bridge' engine-english voice-lexicon voice-controller ai-learning preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
     macOS/Sources/PackagedCache*|macOS/Tools/PackagedCacheTool.swift|macOS/Resources/*)
       impact_rule "$path" 'packaged resources and cache consumers' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation
       impact_bundle=true
       impact_manual_add manual-input ;;
+    macOS/Sources/DictionarySettings.swift)
+      impact_rule "$path" 'dictionary and personal-learning lifecycle settings' settings ai-learning engine-english voice-controller
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
     macOS/Sources/Dictionary*|macOS/DictionaryTool/*|macOS/DictionaryWorker/*|macOS/Data/*|macOS/config/*|schemas/*|config/*|Data/*|*.yaml|*.yml|macOS/scripts/prepare-*.sh)
       impact_rule "$path" 'dictionary and generated-data domain' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true

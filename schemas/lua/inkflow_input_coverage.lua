@@ -1,5 +1,28 @@
--- Read only already materialized native candidates. No text or learning state.
+-- Read only already materialized native candidates. Return bounded, content-free
+-- page metadata; no candidate or context text crosses this bridge.
 local M = {}
+
+local function candidate_metadata(candidate, input_length)
+  local candidate_type = candidate.type or ""
+  local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
+  if candidate_type == "user_table" then
+    source = "c"
+  elseif candidate_type == "english_exact" then
+    source, exact = "e", 1
+  elseif candidate_type == "english_completion" then
+    source, exact = "e", 0
+  elseif candidate_type:match("^english_personal_[123]$") then
+    source, exact, personal = "e", 1, tonumber(candidate_type:sub(-1))
+  elseif candidate_type == "mixed_exact" then
+    source, exact = "m", 1
+  elseif candidate_type:match("^mixed_personal_[123]$") then
+    source, exact, personal = "m", 1, tonumber(candidate_type:sub(-1))
+  end
+  local has_letter = candidate.text:find("[A-Za-z]") ~= nil
+  local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
+  local class = has_letter and (has_non_ascii and "m" or "a") or (has_non_ascii and "n" or "o")
+  return table.concat({candidate.start, candidate._end, class, exact, personal, source}, ",")
+end
 
 function M.init(env)
   env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
@@ -19,7 +42,7 @@ function M.init(env)
       for index = offset, offset + count - 1 do
         local candidate = menu:get_candidate_at(index)
         if not candidate then return "" end
-        rows[#rows + 1] = candidate.start .. "," .. candidate._end
+        rows[#rows + 1] = candidate_metadata(candidate, #context.input)
       end
       return table.concat(rows, ";")
     end)

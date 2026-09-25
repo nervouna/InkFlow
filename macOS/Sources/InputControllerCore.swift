@@ -185,15 +185,25 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             }
             if voice.isDelivering {
                 let handled = callbackEvent.map { voice.handle($0, client: callbackClient as? IMKTextInput) } ?? false
+                if voice.consumeLearningReadBarrier() {
+                    return finishFirstKey(false, .voiceDeliveringPassThrough)
+                }
                 return finishFirstKey(handled, handled ? .voiceDeliveringHandled : .voiceDeliveringPassThrough)
             }
             guard !ai.isAccepting else {
                 modeModifierArmed = nil
                 return finishFirstKey(false, .aiAccepting)
             }
-            if let callbackEvent, voice.handle(callbackEvent, client: callbackClient as? IMKTextInput) {
-                modeModifierArmed = nil
-                return finishFirstKey(true, .voiceHandled)
+            if let callbackEvent {
+                let handled = voice.handle(callbackEvent, client: callbackClient as? IMKTextInput)
+                if voice.consumeLearningReadBarrier() {
+                    modeModifierArmed = nil
+                    return finishFirstKey(false, .voiceDeliveringPassThrough)
+                }
+                if handled {
+                    modeModifierArmed = nil
+                    return finishFirstKey(true, .voiceHandled)
+                }
             }
             let entered = qualityClock.monotonic()
             let secureInput = secureInput()

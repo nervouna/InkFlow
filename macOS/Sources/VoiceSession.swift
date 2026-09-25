@@ -13,12 +13,13 @@ final class VoiceSession {
     }
     enum Failure: Equatable { case boundExceeded, recognitionFailed, finalizationTimedOut }
     enum Outcome: Equatable {
-        case completed(String, usedRawFallback: Bool)
+        case completed(rawFinal: String, insertedFinal: String, usedRawFallback: Bool)
         case cancelled
         case failed(Failure)
     }
     typealias Correction = @MainActor (String) async throws -> String
     private let limits: Limits
+    private let applyAliases: (String) -> String
     private let correct: Correction?
     private let onPreview: (String) -> Void
     private let onRequestFinalize: (UUID) -> Void
@@ -26,6 +27,7 @@ final class VoiceSession {
     private(set) var id: UUID?
     private var stopped = false
     private var finalTranscript: String?
+    private var aliasedTranscript: String?
     private var segments: [String] = []
     private var corrected: String?
     private var rawFallback = false
@@ -34,11 +36,12 @@ final class VoiceSession {
     private var tailTimer: Task<Void, Never>?
     private var correctionTimer: Task<Void, Never>?
 
-    init(limits: Limits = .init(), correct: Correction? = nil,
+    init(limits: Limits = .init(), applyAliases: @escaping (String) -> String = { $0 },
+         correct: Correction? = nil,
          onPreview: @escaping (String) -> Void,
          onRequestFinalize: @escaping (UUID) -> Void,
          onFinish: @escaping (Outcome) -> Void) {
-        self.limits = limits; self.correct = correct
+        self.limits = limits; self.applyAliases = applyAliases; self.correct = correct
         self.onPreview = onPreview; self.onRequestFinalize = onRequestFinalize; self.onFinish = onFinish
     }
 
@@ -47,7 +50,7 @@ final class VoiceSession {
         // A completion callback may synchronously start the replacement session.
         if let id { return id }
         let token = UUID()
-        id = token; stopped = false; finalTranscript = nil
+        id = token; stopped = false; finalTranscript = nil; aliasedTranscript = nil
         segments = []; corrected = nil; rawFallback = false
         recordingTimer = timer(after: limits.recording, id: token) { session in
             session.finish(.failed(.boundExceeded))
@@ -91,8 +94,11 @@ final class VoiceSession {
         guard id == token, stopped, finalTranscript == nil else { return }
         guard transcript.utf16.count <= limits.textUTF16 else { finish(.failed(.boundExceeded)); return }
         finalTranscript = transcript
+        let aliased = applyAliases(transcript)
+        guard aliased.utf16.count <= limits.textUTF16 else { finish(.failed(.boundExceeded)); return }
+        aliasedTranscript = aliased
         tailTimer?.cancel(); tailTimer = nil
-        launchWorker(transcript, id: token)
+        launchWorker(aliased, id: token)
         completeIfReady()
     }
 
@@ -140,11 +146,12 @@ final class VoiceSession {
     }
 
     private func completeIfReady() {
-        guard stopped, let transcript = finalTranscript else { return }
+        guard stopped, let transcript = finalTranscript, let aliased = aliasedTranscript else { return }
         if correct == nil || transcript.isEmpty || rawFallback {
-            finish(.completed(transcript, usedRawFallback: correct != nil && rawFallback))
+            finish(.completed(rawFinal: transcript, insertedFinal: aliased,
+                              usedRawFallback: correct != nil && rawFallback))
         } else if let corrected {
-            finish(.completed(corrected, usedRawFallback: false))
+            finish(.completed(rawFinal: transcript, insertedFinal: corrected, usedRawFallback: false))
         }
     }
 
@@ -155,7 +162,7 @@ final class VoiceSession {
         recordingTimer?.cancel(); recordingTimer = nil
         tailTimer?.cancel(); tailTimer = nil
         correctionTimer?.cancel(); correctionTimer = nil
-        segments = []; corrected = nil; finalTranscript = nil
+        segments = []; corrected = nil; finalTranscript = nil; aliasedTranscript = nil
         onFinish(outcome)
     }
 

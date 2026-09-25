@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only queries for InkFlow quality schema v2 (stdlib only)."""
+"""Read-only queries for InkFlow quality schema v3 (stdlib only)."""
 import argparse
 from contextlib import closing
 import csv
@@ -20,6 +20,7 @@ TABLE_COLUMNS = {
     'compositions': 'id run_id started_at ended_at app_bundle_id client_id outcome page_history_truncated dropped_page_count outcome_reason operations_json',
     'commits': 'id composition_id issued_at text kind insertion_issued client_id',
     'candidate_decisions': 'id composition_id config_revision_id commit_id occurred_at sequence trigger outcome selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json page_history_truncated dropped_page_count operations_json regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason',
+    'effectiveness_events': 'id run_id occurred_at source event reason count milliseconds',
 }
 GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'text_kind', 'presentation')
 ISSUE_GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
@@ -82,16 +83,16 @@ def connect(path):
     try:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
-        if (db.execute('PRAGMA user_version').fetchone()[0] != 2
+        if (db.execute('PRAGMA user_version').fetchone()[0] != 3
                 or db.execute('PRAGMA application_id').fetchone()[0] != 0x49465131):
-            raise QueryError('Database is incompatible: expected InkFlow quality schema v2 (IFQ1).')
+            raise QueryError('Database is incompatible: expected InkFlow quality schema v3 (IFQ1).')
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND substr(name,1,7)!='sqlite_'")}
         if tables != set(TABLE_COLUMNS):
-            raise QueryError('Database is incompatible: expected the five InkFlow quality tables.')
+            raise QueryError('Database is incompatible: expected the six InkFlow quality tables.')
         for table, columns in TABLE_COLUMNS.items():
             actual = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             if set(columns.split()) != actual:
-                raise QueryError(f'Database is incompatible: unexpected v2 columns in {table}.')
+                raise QueryError(f'Database is incompatible: unexpected v3 columns in {table}.')
         db.execute("SELECT json_extract('{\"v\":1}', '$.v')").fetchone()
         return db
     except Exception:
@@ -286,11 +287,55 @@ def summary(db, args):
                     'droppedBusy', 'droppedInvalid', 'errors', 'truncatedEnvelopes')
     run_sql = ','.join(f"COALESCE(SUM(json_extract(stats_json,'$.{key}')),0) AS {key}" for key in run_counters)
     return dict(coverage=coverage(db, sql, parameters),
+                learning_effectiveness=effectiveness(db, args),
                 identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'),
                 groups=[rates(g) for g in groups], rank_counts=ranks,
                 recording_runs=dict(scope='whole_db_lifetime_unfiltered',
                     totals=rows(db, 'SELECT COUNT(*) AS runs,' + run_sql + ' FROM recording_runs')[0],
                     statuses=rows(db, 'SELECT status,error_code,COUNT(*) AS runs FROM recording_runs GROUP BY status,error_code')))
+
+
+def effectiveness(db, args):
+    """Keep voice-learning denominators independent from ordinary candidate accuracy."""
+    unsupported = any(getattr(args, key) is not None for key in ('app', 'config', 'ranking_config', 'kind'))
+    conditions, parameters = [], {}
+    for option, operator in (('since', '>='), ('until', '<')):
+        if (value := getattr(args, option)) is not None:
+            conditions.append(f'occurred_at {operator} :{option}')
+            parameters[option] = value
+    where = ' AND '.join(conditions) or '1'
+    counts = {(row['source'], row['event']): row['count'] for row in rows(db, f'''SELECT source,event,
+        COALESCE(SUM(count),0) AS count FROM effectiveness_events WHERE {where}
+        GROUP BY source,event''', parameters)}
+    rejection_reasons = rows(db, f'''SELECT reason,COALESCE(SUM(count),0) AS count
+        FROM effectiveness_events WHERE {where} AND event = 'rejected'
+        GROUP BY reason ORDER BY reason''', parameters)
+    value = lambda source, event: counts.get((source, event), 0)
+    voice = dict(finalized=value('voice_session', 'finalized'),
+                 corrections_detected=value('voice_correction', 'detected'),
+                 corrections_learned=value('voice_correction', 'learned'),
+                 corrections_rejected=value('voice_correction', 'rejected'),
+                 rejection_reasons=rejection_reasons,
+                 alias_hits=value('voice_alias', 'hit'),
+                 alias_later_reuse=value('voice_alias', 'later_reuse'))
+    canonical = dict(exact_hits=value('canonical_lexicon', 'hit'),
+                     later_reuse=value('canonical_lexicon', 'later_reuse'))
+    if unsupported:
+        status = 'unavailable_for_candidate_filters'
+        voice.update(correction_detection_rate=None, correction_learning_rate=None, alias_reuse_rate=None)
+        canonical.update(reuse_rate=None)
+    else:
+        status = 'available' if voice['finalized'] else 'unavailable_without_finalized_voice_sessions'
+        voice['correction_detection_rate'] = (voice['corrections_detected'] / voice['finalized']
+                                               if voice['finalized'] else None)
+        voice['correction_learning_rate'] = (voice['corrections_learned'] / voice['corrections_detected']
+                                              if voice['corrections_detected'] else None)
+        voice['alias_reuse_rate'] = (voice['alias_later_reuse'] / voice['alias_hits']
+                                     if voice['alias_hits'] else None)
+        canonical['reuse_rate'] = (canonical['later_reuse'] / canonical['exact_hits']
+                                   if canonical['exact_hits'] else None)
+    return dict(scope='content_free_events_separate_from_candidate_accuracy', status=status,
+                voice=voice, canonical_lexicon=canonical)
 
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',

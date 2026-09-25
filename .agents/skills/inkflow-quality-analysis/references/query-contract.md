@@ -139,10 +139,11 @@ possibly including copies across decisions, not unique pages or unseen candidate
 
 ## Storage, identity and coverage limits
 
-Schema v2 has application ID `0x49465131` (IFQ1). The query requires v2, checks the
-identity, required columns and exact five table names, and accepts measurement
+Schema v3 has application ID `0x49465131` (IFQ1). The query requires v3, checks the
+identity, required columns and exact six table names, and accepts measurement
 cohorts distinguished by their persisted fingerprints. A v1 database must first be
-migrated by the writer; the query never creates or migrates it. Foreign, malformed
+migrated by the writer; v2 is migrated by the writer by adding only the effectiveness
+table. The query never creates or migrates a database. Foreign, malformed
 or unknown schemas are not repaired or reset. The canonical writer/models are
 `macOS/Sources/QualityStore.swift` and `QualityRecords.swift`; query fixture tests
 extract their current DDL and full acceptance verifies actual engine-written DDL.
@@ -154,10 +155,19 @@ extract their current DDL and full acceptance verifies actual engine-written DDL
 | commits | Separate ID, same-composition link, time, text, kind, insertion issuance and client |
 | config_revisions | Capture UUID, legacy stable fingerprint, ranking/settings/measurement/build identities, applied config, build/resource metadata, engine and metric-rule versions |
 | recording_runs | Writer lifetime, engine/build identity, status/error and best-effort cumulative counters |
+| effectiveness_events | Content-free time, closed source/event/rejection labels, bounded count and optional bounded milliseconds; no input, transcript, correction, candidate or document text |
+
+Summary reports these events under `learning_effectiveness`, separate from candidate
+accuracy. Voice finalized sessions are the correction-detection denominator, detected
+corrections are the learning denominator, exact alias matches are the alias-reuse
+denominator, and deduplicated personal-exact opportunities are the canonical-reuse
+denominator. Rejection counts are grouped only by the closed reason label.
+Unavailable denominators return `null`; candidate-specific filters make this section
+unavailable because effectiveness events deliberately carry no candidate identity.
 
 New page JSON stores `configurationRevisionID` and omits the repeated
 `configuration` payload. `configurations` in inspect resolves every retained page
-reference. Legacy full page JSON remains readable after its database is migrated to v2;
+reference. Legacy full page JSON remains readable after its database is migrated to v3;
 compact Swift decoding requires an explicit revision map and fails for missing or
 conflicting configuration evidence. No defaults or database migration are used.
 
@@ -231,7 +241,7 @@ decision, then the whole matching composition's timing is included. No timing
 field or unsupported version means unavailable evidence, not a zero duration.
 Coverage reports missing/unsupported timing, ended versus unfinished snapshots,
 truncated compositions, dropped keys and retained key counts. Existing commands
-retain their result-format contract, while database compatibility is strictly v2.
+retain their result-format contract, while database compatibility is strictly v3.
 
 All timing units are **seconds**. `key_intervals.all` and category/repeat groups
 use the stored interval of each retained key, including navigation and finishing

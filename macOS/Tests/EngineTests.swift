@@ -31,6 +31,7 @@ struct EngineTests {
             englishAdmission()
             conservativeChinesePrefixes()
             mixedEnglishCandidates()
+            shortConflictBounds()
             englishCandidates()
             englishFeatureCoexistence()
             spellingCorrection()
@@ -347,8 +348,10 @@ struct EngineTests {
                 check(false, "Missing representative technology source row: \(display)"); return
             }
             selectCandidate(display, input: code, engine: engine)
+            engine.key(0xff09)
         }
         selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
+        engine.key(0xff09)
         type(engine, "swiftui")
         for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
             let candidates = allCandidates(engine)
@@ -356,12 +359,17 @@ struct EngineTests {
             engine.key(0xff08)
         }
         engine.clear()
-        for input in ["woapi", "apihenhao", "wocpp", "wotypec", "claudecodehenhao"] {
+        for (input, expected) in [("woapi", "API"), ("apihenhao", "API"),
+                                  ("wocpp", "C++"), ("wotypec", "Type-C")] {
             type(engine, input)
-            check(!allCandidates(engine).contains { $0.contains("API") || $0.contains("C++") || $0.contains("Type-C") || $0.contains("Claude Code") },
-                  "Short/punctuated/spaced technical aliases do not bypass mixed structural restrictions")
+            check(allCandidates(engine).contains { $0.contains(expected) },
+                  "Selected personal ASCII run bypasses public mixed structural restrictions: \(input)")
             engine.clear()
         }
+        type(engine, "claudecodehenhao")
+        check(!allCandidates(engine).contains { $0.contains("Claude Code") },
+              "A spaced personal phrase is not a single mixed ASCII run")
+        engine.clear()
         engine.setConfiguration(candidateCount: 5, customPhrases: [CustomPhrase(id: UUID(), code: "api", text: "我的接口")])
         engine.setPrecedingText("调用")
         type(engine, "api")
@@ -565,6 +573,28 @@ struct EngineTests {
         engine.key(32)
         check(engine.takeCommit() == "电子邮件")
         print("PASS English integration: Chinese context priority, English reachability/order, mixed commits and custom phrase coexistence")
+    }
+
+    @MainActor static func shortConflictBounds() {
+        let engine = IFEngine()!
+        let phrases = (0..<1_024).map {
+            CustomPhrase(id: UUID(), code: "can", text: "自定义候选\($0)")
+        }
+        engine.setConfiguration(candidateCount: 9, customPhrases: phrases)
+        check(engine.configurationError == nil)
+        let started = ContinuousClock.now
+        type(engine, "can")
+        let firstPage = engine.snapshot().candidates
+        let elapsed = started.duration(to: .now)
+        check(elapsed < .seconds(2), "High-cardinality first-page latency stays bounded: \(elapsed)")
+        check(!firstPage.contains("can"),
+              "An exact English candidate beyond the bounded lookahead keeps native pagination")
+        let all = allCandidates(engine)
+        check(all.contains("can"), "Bounded lookahead keeps a later exact candidate reachable")
+        check(phrases.allSatisfy { all.contains($0.text) },
+              "Bounded lookahead retains every high-cardinality candidate across pages")
+        engine.clear()
+        print("PASS short-conflict bounds: 256-candidate lookahead, 1024-candidate latency/memory envelope, pagination and exact reachability")
     }
 
     @MainActor static func allCandidates(_ engine: IFEngine) -> [String] {
@@ -1085,24 +1115,61 @@ struct EngineTests {
         defer { try? FileManager.default.removeItem(at: url) }
         try "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n".write(to: url, atomically: true, encoding: .utf8)
         let ranker = try IFContextRanker(dictionary: url.path)
-        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午", coverage: [0..<3, 0..<3, 0..<3]) == [2, 1, 0], "Longer crossing phrases precede frequency")
-        check(ranker.order(["惨", "餐", "参"], precedingText: "午", coverage: [0..<3, 0..<3, 0..<3]) == [1, 2, 0], "Frequency then stable original order")
-        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午", coverage: [0..<3, 0..<3, 0..<3, 0..<3]) == [2, 1, 0, 3],
+        func row(_ coverage: Range<Int> = 0..<3,
+                 _ candidateClass: IFCandidateRankingMetadata.CandidateClass = .nonASCII,
+                 exact: Bool = true, personal: Int = 0,
+                 source: IFCandidateRankingMetadata.Source = .native) -> IFCandidateRankingMetadata {
+            .init(coverage: coverage, candidateClass: candidateClass, exact: exact,
+                  personalBucket: personal, source: source)
+        }
+        let han = [row(), row(), row()]
+        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午", metadata: han) == [2, 1, 0], "Longer crossing phrases precede frequency")
+        check(ranker.order(["惨", "餐", "参"], precedingText: "午", metadata: han) == [1, 2, 0], "Frequency then stable original order")
+        let conflict = [row(), row(0..<3, .ascii, source: .english), row(), row()]
+        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午", metadata: conflict) == [2, 1, 0, 3],
               "Context reorders eligible Han candidates only within their original slots")
-        check(ranker.order(["你好", "你"], precedingText: "迷", coverage: [0..<5, 0..<5]) == [0, 1], "Unequal-length choices remain in the native relative order")
-        for spans: [Range<Int>]? in [nil, [], [0..<3], [0..<3, 0..<1], [0..<3, 1..<4], [0..<3, 0..<0]] {
-            check(ranker.order(["惨", "餐"], precedingText: "午", coverage: spans) == [0, 1],
+        check(ranker.order(["你好", "你"], precedingText: "迷", metadata: [row(0..<5), row(0..<5)]) == [0, 1], "Unequal-length choices remain in the native relative order")
+        let invalidMetadata: [[IFCandidateRankingMetadata]?] = [nil, [], [row()],
+            [row(), row(0..<1)], [row(), row(1..<4)]]
+        for metadata in invalidMetadata {
+            check(ranker.order(["惨", "餐"], precedingText: "午", metadata: metadata) == [0, 1],
                   "Unknown or different native spans must not permit context promotion")
         }
-        check(ranker.order(["惨", "餐", "参"], precedingText: "午", coverage: [0..<3, 0..<1, 0..<3]) == [2, 1, 0],
+        check(ranker.order(["惨", "餐", "参"], precedingText: "午", metadata: [row(), row(0..<1), row()]) == [2, 1, 0],
               "An ineligible partial candidate retains its slot while equal-span alternatives rank")
-        check(IFContextRanker.parseCoverage("9,3;0,4;0,4;0,1", offset: 9, count: 3, inputLength: 4) == [0..<4, 0..<4, 0..<1])
-        for invalid in ["", "0,3;0,4;0,4;0,1", "9,3;0,4;0,4", "9,3;0,4;0,4;0,1;0,1",
-                        "9,3;0,4;0,4;0,5", "9,3;0,4;0,4;2,1", "9,3;0,4;0,4;0,0",
-                        "9,3;0,4;0,4;-1,1", "9,3;0,4;0,4;0,+1", "9,3;0,4;0,4;0,x"] {
-            check(IFContextRanker.parseCoverage(invalid, offset: 9, count: 3, inputLength: 4) == nil,
+        let parsed = IFContextRanker.parseMetadata("9,3;0,4,n,1,0,n;0,4,a,1,2,e;0,1,m,1,1,m",
+                                                   offset: 9, count: 3, inputLength: 4)
+        check(parsed == [row(0..<4), row(0..<4, .ascii, personal: 2, source: .english),
+                         row(0..<1, .mixed, personal: 1, source: .mixed)])
+        for invalid in ["", "0,3;0,4,n,1,0,n;0,4,a,1,2,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;0,4,a,1,2,e",
+                        "9,3;0,4,n,1,0,n;0,4,a,1,2,e;0,1,m,1,1,m;0,1,n,1,0,n",
+                        "9,3;0,5,n,1,0,n;0,4,a,1,2,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;2,1,a,1,2,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;0,4,x,1,2,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;0,4,a,2,2,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;0,4,a,1,4,e;0,1,m,1,1,m",
+                        "9,3;0,4,n,1,0,n;0,4,a,0,2,e;0,1,m,1,1,m"] {
+            check(IFContextRanker.parseMetadata(invalid, offset: 9, count: 3, inputLength: 4) == nil,
                   "Malformed, stale-page or truncated span metadata must fail closed")
         }
+        let evidence = [row(0..<5), row(0..<5, .ascii, personal: 1, source: .english),
+                        row(0..<5, .ascii, exact: false, source: .english), row(0..<5)]
+        check(ranker.order(["从哦的新", "Codex", "Codex CLI", "才"], precedingText: "日常", metadata: evidence) == [0, 1, 3, 2],
+              "Neutral ordering keeps one Chinese candidate first, then exact English before completion")
+        check(ranker.order(["从哦的新", "Codex", "Codex CLI", "才"], precedingText: "正在使用 Swift ", metadata: evidence) == [1, 0, 3, 2],
+              "Bounded technical context plus personal exact evidence may promote English")
+        let strengths = [row(0..<5), row(0..<5, .ascii, personal: 1, source: .english),
+                         row(0..<5, .ascii, personal: 3, source: .english)]
+        check(ranker.order(["从哦的新", "Codex", "SwiftUI"], precedingText: "正在使用 CLI ", metadata: strengths) == [2, 1, 0],
+              "Personal commit evidence is bounded and stronger buckets rank first")
+        let custom = [row(0..<5), row(0..<5, .nonASCII, source: .custom),
+                      row(0..<5, .ascii, personal: 3, source: .english)]
+        check(ranker.order(["从哦的新", "自定义", "Codex"], precedingText: "正在使用 CLI ", metadata: custom) == [1, 2, 0],
+              "Explicit custom source remains ahead of personal technical evidence")
+        check(ranker.order(["从哦的新", "Codex"], precedingText: "正在使用 CLI ",
+                           metadata: [row(0..<5), row(0..<5, .nonASCII, personal: 1, source: .english)]) == [0, 1],
+              "Inconsistent candidate class metadata fails closed to native order")
         print("PASS context ranking rules: equal native spans, unknown metadata fallback, strict page identity, longer match, frequency, stable ties, fixed ineligible slots")
     }
 
