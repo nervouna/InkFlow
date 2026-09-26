@@ -10,11 +10,12 @@ private final class FakeVoice: VoiceRecognitionServing {
     var isReady = true
     var prepares = 0, starts = 0, stops = 0, cancels = 0
     var id: UUID?
+    var snapshot: VoiceLexiconSnapshot?
     var callbacks: AppleVoiceRecognizer.Callbacks?
     var onCancel: (() -> Void)?
     func prepare(requestPermission: Bool) async throws { prepares += 1; isReady = true }
     func start(id: UUID, snapshot: VoiceLexiconSnapshot, callbacks: AppleVoiceRecognizer.Callbacks) {
-        self.id = id; self.callbacks = callbacks; starts += 1
+        self.id = id; self.snapshot = snapshot; self.callbacks = callbacks; starts += 1
     }
     func stop(id: UUID) { if self.id == id { stops += 1 } }
     func cancel() { if id != nil { cancels += 1 }; id = nil; callbacks = nil; onCancel?() }
@@ -110,6 +111,9 @@ struct VoiceControllerTests {
         await externalClientCommit()
         await synchronousDeactivation()
         await gatesAndSettings()
+        await unknownLexiconFallback()
+        await unknownLexiconInvalidation()
+        await unknownLexiconQueuedCancellation()
         await selectedTextDelivery()
         await selectedTextRollback()
         await reportedSelectionMismatch()
@@ -1179,13 +1183,101 @@ struct VoiceControllerTests {
         h.fake.isReady = false; h.key()
         check(!h.controller.voice.isActive && h.status.values.last == .voiceNotReady && h.fake.prepares == 0)
         h.fake.isReady = true
-        h.controller.voice.lexicon = { .unknown() }; h.key()
-        check(h.status.values.last == .voiceLexiconWaiting && !h.controller.voice.isActive)
+        h.controller.voice.lexicon = { .unknown(generation: 17, revision: 3) }; h.key()
+        check(h.controller.voice.isActive && h.status.values.last == .voiceRecordingToggle,
+              "Unknown learned lexicon readiness must not block a ready recognition service")
+        h.controller.voice.cancel(.escape)
         h.controller.voice.lexicon = { .init(generation: 1, revision: 0, availability: .available, entries: []) }
         check(h.controller.handle(keyEvent(0, "n"), client: h.client), "Ordinary offline key remains handled")
         h.key()
         check(!h.controller.voice.isActive && h.controller.engine?.snapshot().preedit.isEmpty == false)
         h.controller.engine?.clear()
+    }
+
+    @MainActor static func unknownLexiconFallback() async {
+        let h = VoiceHarness(); defer { h.close() }
+        let unknown = VoiceLexiconSnapshot.unknown(generation: 41, revision: 7)
+        var current = unknown
+        h.controller.voice.lexicon = { current }
+        h.controller.voice.aliasLexicon = { .unknown() }
+        let alternatives = [["张伟", "张玮"], ["使用 Swift。"]]
+        h.key()
+        check(h.controller.voice.isActive && h.fake.starts == 0)
+        // Preparation can finish after target capture but before queued service startup.
+        current = .init(generation: 41, revision: 8, availability: .available,
+                        entries: [.init(text: "张玮", code: "zhang wei ", commits: 3)])
+        for _ in 0..<20 { await Task.yield() }
+        check(h.fake.starts == 1 && h.fake.snapshot == unknown && h.fake.prepares == 0,
+              "Recognition receives the real unknown generation and revision without preparation")
+        let callbacks = h.fake.callbacks!
+        check(h.controller.voice.validate() && h.controller.voice.isActive && h.fake.snapshot == unknown,
+              "Same-generation readiness preserves the active session and its captured snapshot")
+        let raw = VoiceAlternativeReranker.select(alternatives, snapshot: h.fake.snapshot!)
+        check(raw == "张伟使用 Swift。", "An empty unknown snapshot preserves the primary ASR transcript")
+        callbacks.onFinal(raw)
+        h.controller.voice.stop()
+        callbacks.onFinalized(raw)
+        callbacks.onFinalized("重复")
+        check(h.client.document == "前🙂" + raw && h.client.insertions.count == 1 && !h.controller.voice.isActive,
+              "Unknown lexicon fallback inserts the production reranker's raw result exactly once")
+
+        h.key()
+        for _ in 0..<20 { await Task.yield() }
+        check(h.controller.voice.isActive && h.fake.starts == 2 && h.fake.snapshot == current,
+              "The next session captures the now-ready learned entries")
+        callbacks.onFinalized("旧会话")
+        check(h.controller.voice.isActive && h.client.insertions.count == 1,
+              "Late callbacks from the fallback session cannot finish the next session")
+        let personalized = VoiceAlternativeReranker.select(alternatives, snapshot: h.fake.snapshot!)
+        check(personalized == "张玮使用 Swift。", "Ready entries restore production ASR personalization")
+        h.controller.voice.stop()
+        h.fake.callbacks?.onFinalized(personalized)
+        check(h.client.document == "前🙂" + raw + personalized && h.client.insertions.count == 2,
+              "The ready session inserts its personalized result once")
+    }
+
+    @MainActor static func unknownLexiconInvalidation() async {
+        for mode in 0..<4 {
+            let h = VoiceHarness(); defer { h.close() }
+            var current = VoiceLexiconSnapshot.unknown(generation: 51, revision: 9)
+            h.controller.voice.lexicon = { current }
+            h.controller.voice.aliasLexicon = { .unknown() }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            switch mode {
+            case 0: current = .unknown(generation: 52)
+            case 1: current = .init(generation: 52, revision: 1, availability: .available, entries: [])
+            case 2: h.controller.voice.cancel(.escape)
+            default: h.controller.deactivateServer(h.client)
+            }
+            callbacks.onVolatile("迟到草稿")
+            callbacks.onFinal("迟到")
+            callbacks.onFinalized("迟到")
+            check(!h.controller.voice.isActive && h.fake.cancels == 1,
+                  "Generation reset, reload, cancellation and deactivation invalidate unknown sessions")
+            check(h.client.document == "前🙂" && h.client.mutations.isEmpty && h.client.insertions.isEmpty,
+                  "Invalidated unknown sessions reject all late recognition writes")
+        }
+    }
+
+    @MainActor static func unknownLexiconQueuedCancellation() async {
+        for mode in 0..<3 {
+            let h = VoiceHarness(); defer { h.close() }
+            var current = VoiceLexiconSnapshot.unknown(generation: 61, revision: 2)
+            h.controller.voice.lexicon = { current }
+            h.key()
+            check(h.controller.voice.isActive && h.fake.starts == 0,
+                  "Unknown fallback queues recognition startup after target capture")
+            switch mode {
+            case 0: h.controller.voice.cancel(.escape)
+            case 1: current = .unknown(generation: 62)
+            default: current = .init(generation: 62, revision: 1, availability: .available, entries: [])
+            }
+            for _ in 0..<20 { await Task.yield() }
+            check(!h.controller.voice.isActive && h.fake.starts == 0 && h.fake.prepares == 0,
+                  "Cancellation or generation change before queued startup prevents recognition and preparation")
+            check(h.client.document == "前🙂" && h.client.mutations.isEmpty)
+        }
     }
 
     @MainActor static func selectedTextDelivery() async {

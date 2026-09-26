@@ -254,8 +254,8 @@ final class IFInputControllerVoice {
             reject(.busy); return
         }
         guard controller.settings.voice.service.isReady else { show(.voiceNotReady, client: client); return }
+        // Unknown learned entries use the existing ASR fallback; retain their generation for invalidation.
         let snapshot = lexicon()
-        guard snapshot.availability == .available else { show(.voiceLexiconWaiting, client: client); return }
         let aliasSnapshot = aliasLexicon?() ?? engine.readVoiceAliases(generation: snapshot.generation,
                                                                        revision: snapshot.revision)
         guard Self.activeOwner?.isDelivering != true else { reject(.busy); return }
