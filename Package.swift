@@ -15,6 +15,14 @@ let buildRimeRuntime: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(dependencyRoot)/lib"]),
 ]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
+let nativeRoot = URL(fileURLWithPath: dependencyRoot).deletingLastPathComponent().appendingPathComponent("native").path
+let nativeCxxSettings: [CXXSetting] = [.unsafeFlags([
+    "-Wall", "-Wextra", "-Werror", "-DBOOST_DLL_USE_STD_FS",
+    "-DGLOG_EXPORT=", "-DGLOG_NO_EXPORT=", "-DGLOG_DEPRECATED=__attribute__((deprecated))",
+    "-isystem", "\(nativeRoot)/deps/include", "-isystem", "\(nativeRoot)/generated",
+    "-isystem", "\(nativeRoot)/boost", "-isystem", "\(nativeRoot)/librime/src",
+    "-isystem", "\(nativeRoot)/librime/include",
+])]
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
 let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
@@ -127,6 +135,8 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
+        .target(name: "InkFlowRimeNative", path: "Core/Sources/InkFlowRimeNative",
+                publicHeadersPath: "include", cxxSettings: nativeCxxSettings, linkerSettings: rimeLinkerSettings),
         .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeWorker"], path: "Core/Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Core/Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         .executableTarget(name: "VoiceLearningCoordinatorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/VoiceLearningCoordinatorTests", swiftSettings: strictSwiftSettings),
@@ -139,6 +149,7 @@ let package = Package(
         .target(name: "InkFlowDomain", path: "Core/Sources/InkFlowDomain", swiftSettings: strictSwiftSettings),
         .target(
             name: "CRime",
+            dependencies: ["InkFlowRimeNative"],
             path: "Core/Sources/CRime",
             publicHeadersPath: "include",
             cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])],
@@ -310,5 +321,6 @@ let package = Package(
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
     ],
-    swiftLanguageModes: [.v6]
+    swiftLanguageModes: [.v6],
+    cxxLanguageStandard: .cxx17
 )

@@ -57,6 +57,11 @@ package func verifyRankingRules(in directory: URL) throws {
                          row(0..<5, .ascii, personal: 3, source: .english)]
         check(ranker.order(["从哦的新", "Codex", "SwiftUI"], precedingText: "正在使用 CLI ", metadata: strengths) == [2, 1, 0],
               "Personal commit evidence is bounded and stronger buckets rank first")
+        for bucket in 1...3 {
+            check(ranker.order(["是一台", "是以他I"], precedingText: "API 已经",
+                               metadata: [row(0..<8), row(0..<8, .mixed, personal: bucket, source: .mixed)]) == [0, 1],
+                  "Learning an embedded English token does not certify whole-sentence intent in technical context")
+        }
         let custom = [row(0..<5), row(0..<5, .nonASCII, source: .custom),
                       row(0..<5, .ascii, personal: 3, source: .english)]
         check(ranker.order(["从哦的新", "自定义", "Codex"], precedingText: "正在使用 CLI ", metadata: custom) == [1, 2, 0],

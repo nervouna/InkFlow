@@ -18,6 +18,25 @@ local function candidate_metadata(candidate, input_length)
   elseif candidate_type:match("^mixed_personal_[123]$") then
     source, exact, personal = "m", 1, tonumber(candidate_type:sub(-1))
   end
+  if candidate_type == "uniquified" then
+    -- Native deduplication preserves genuine candidates. Read existing evidence
+    -- only when it describes this exact displayed text and input span. Do not
+    -- prepare translations or reinterpret a merged phrase as learnable input.
+    local items = candidate:get_genuines()
+    if #items <= 256 then
+      for _, item in ipairs(items) do
+        if item.start == candidate.start and item._end == candidate._end
+            and item.text == candidate.text then
+          local kind = item.type or ""
+          if kind == "user_table" then
+            source, personal = "c", 0
+          elseif source ~= "c" and kind:match("^mixed_personal_[123]$") then
+            source, exact, personal = "m", 1, math.max(personal, tonumber(kind:sub(-1)))
+          end
+        end
+      end
+    end
+  end
   local has_letter = candidate.text:find("[A-Za-z]") ~= nil
   local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
   local class = has_letter and (has_non_ascii and "m" or "a") or (has_non_ascii and "n" or "o")

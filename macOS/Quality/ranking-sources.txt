@@ -3,6 +3,7 @@ macOS/Sources/CandidatePresentation.swift
 macOS/Sources/Context.swift
 macOS/Sources/CustomPhrases.swift
 Core/Sources/InkFlowDomain/DictionaryGenerator.swift
+Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp
 Core/Sources/InkFlowRime/Engine.swift
 Core/Sources/InkFlowRime/EngineAI.swift
 Core/Sources/InkFlowDomain/InputPreferences.swift

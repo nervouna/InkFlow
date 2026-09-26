@@ -7,6 +7,14 @@ let dependencyRoot = repository.appendingPathComponent("build/deps/dist").path
 let rimeLinkerSettings: [LinkerSetting] = [.unsafeFlags(["-L\(dependencyRoot)/lib"]), .linkedLibrary("rime")]
 let buildRimeRuntime: [LinkerSetting] = [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(dependencyRoot)/lib"])]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
+let nativeRoot = URL(fileURLWithPath: dependencyRoot).deletingLastPathComponent().appendingPathComponent("native").path
+let nativeCxxSettings: [CXXSetting] = [.unsafeFlags([
+    "-Wall", "-Wextra", "-Werror", "-DBOOST_DLL_USE_STD_FS",
+    "-DGLOG_EXPORT=", "-DGLOG_NO_EXPORT=", "-DGLOG_DEPRECATED=__attribute__((deprecated))",
+    "-isystem", "\(nativeRoot)/deps/include", "-isystem", "\(nativeRoot)/generated",
+    "-isystem", "\(nativeRoot)/boost", "-isystem", "\(nativeRoot)/librime/src",
+    "-isystem", "\(nativeRoot)/librime/include",
+])]
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
 let package = Package(
     name: "InkFlowShared",
@@ -28,6 +36,8 @@ let package = Package(
         .executable(name: "ranking-tests", targets: ["RankingTests"])
     ],
     targets: [
+        .target(name: "InkFlowRimeNative", path: "Sources/InkFlowRimeNative",
+                publicHeadersPath: "include", cxxSettings: nativeCxxSettings, linkerSettings: rimeLinkerSettings),
         .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeWorker"], path: "Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         .executableTarget(name: "VoiceLearningCoordinatorTests", dependencies: ["InkFlowDomain"], path: "Tests/VoiceLearningCoordinatorTests", swiftSettings: strictSwiftSettings),
@@ -47,10 +57,11 @@ let package = Package(
         .executableTarget(name: "RankingTests", dependencies: ["InkFlowRankingTestSupport"], path: "Tests/RankingTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
 
         .target(name: "InkFlowDomain", swiftSettings: strictSwiftSettings),
-        .target(name: "CRime", publicHeadersPath: "include",
+        .target(name: "CRime", dependencies: ["InkFlowRimeNative"], publicHeadersPath: "include",
                 cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])],
                 linkerSettings: rimeLinkerSettings),
         .target(name: "InkFlowRime", dependencies: ["InkFlowDomain", "CRime"],
                 swiftSettings: strictSwiftSettings, linkerSettings: [.linkedLibrary("sqlite3")] + rimeLinkerSettings)
-    ]
+    ],
+    cxxLanguageStandard: .cxx17
 )

@@ -298,11 +298,17 @@ package enum EngineRegression {
             engine.key(0xff08)
         }
         engine.clear()
-        for (input, expected) in [("woapi", "API"), ("apihenhao", "API"),
+        for (input, expected) in [("woAPI", "API"), ("APIhenhao", "API"),
                                   ("wocpp", "C++"), ("wotypec", "Type-C")] {
             type(engine, input)
             check(allCandidates(engine).contains { $0.contains(expected) },
                   "Selected personal ASCII run bypasses public mixed structural restrictions: \(input)")
+            engine.clear()
+        }
+        for input in ["woapi", "apihenhao"] {
+            type(engine, input)
+            check(!allCandidates(engine).contains { $0.contains("API") },
+                  "An unmarked normal Pinyin sequence is not personal English intent: \(input)")
             engine.clear()
         }
         type(engine, "claudecodehenhao")

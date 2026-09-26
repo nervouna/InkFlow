@@ -178,6 +178,8 @@ struct AISuggestionTests {
         pending.cancel()
         do { _ = try await pending.value; fatalError("Cancelled request cannot return a suggestion") }
         catch { expect(error is CancellationError, "Preserve cancellation as cancellation") }
+        // URLSession may finish the async task before URLProtocol receives stopLoading.
+        for _ in 0..<100 where !AIStubURLProtocol.state.cancelled { try await Task.sleep(for: .milliseconds(5)) }
         expect(AIStubURLProtocol.state.cancelled, "Cancellation must reach URLSession")
         AIStubURLProtocol.state.configure(status: 200, body: "private body", networkError: .timedOut)
         do {

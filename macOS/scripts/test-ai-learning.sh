@@ -104,13 +104,33 @@ echo 'PASS canonical keyboard English learning: first/repeated/negative/restart,
 
 mixed_user="$user_dir/mixed-user"
 mkdir -p "$mixed_user"
+letters_user="$user_dir/mixed-letters-user"
+mkdir -p "$letters_user"
+build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-write
+build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-read
+build/ai-adoption-learning-tests "$contract_shared" "$letters_user" contract-mixed-letters-verify
+(cd "$letters_user" && "$manager" -e pinyin_simp letters-pinyin.txt)
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$letters_user/letters-pinyin.txt"
+echo 'PASS learned letters: actual standalone A/I selection, unchanged ordinary Pinyin on every page, source preedit, technical context, restart and undo isolation'
+
+immediate_user="$user_dir/mixed-immediate-user"
+mkdir -p "$immediate_user"
+build/ai-adoption-learning-tests "$contract_shared" "$immediate_user" contract-mixed-immediate
+conflicts_user="$user_dir/mixed-pinyin-conflicts-user"
+mkdir -p "$conflicts_user"
+build/ai-adoption-learning-tests "$contract_shared" "$conflicts_user" contract-mixed-pinyin-conflicts
+
 ranking_user="$user_dir/ranking-user"
 mkdir -p "$ranking_user"
 build/ai-adoption-learning-tests "$contract_shared" "$ranking_user" contract-ranking-seed
 build/ai-adoption-learning-tests "$shared" "$ranking_user" mixed-ranking-read
+build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-seed
+(cd "$mixed_user" && "$manager" -e pinyin_simp mixed-pinyin-before.txt)
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-seed
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" mixed-bounded
 build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-read
 build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-restart
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-verify
-echo 'PASS mixed personal English: shared exact lookup, initial/internal/final, restart, no completion, fidelity, editing, paging, dedup, selection, collisions, custom phrases'
+(cd "$mixed_user" && "$manager" -e pinyin_simp mixed-pinyin-after.txt)
+cmp "$mixed_user/mixed-pinyin-before.txt" "$mixed_user/mixed-pinyin-after.txt"
+echo 'PASS mixed personal English: immediate shared exact lookup, initial/internal/final, restart, no completion, source preedit, fidelity, editing, selected prefix, paging, dedup, read-only selection, collisions, custom phrases'

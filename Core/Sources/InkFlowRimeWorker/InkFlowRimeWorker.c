@@ -1,5 +1,5 @@
 #include "InkFlowRimeWorker.h"
-#include <rime_api.h>
+#include "CRime.h"
 #include <string.h>
 #include <stdatomic.h>
 
@@ -18,6 +18,7 @@ static RimeApi *initialize(const char *shared, const char *user, const char *cac
     traits.log_dir = "";
     api->setup(&traits);
     api->initialize(&traits);
+    IFRegisterRimeComponents();
     return api;
 }
 

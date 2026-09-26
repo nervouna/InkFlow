@@ -105,6 +105,13 @@ for path in macOS/Sources/FeedbackReport.swift macOS/Sources/FeedbackSettingsVie
   not_has 'manual-input'; not_has 'manual-install'; not_has 'ai-transport'
 done
 
+for path in Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp Core/Sources/CRime/CRime.c; do
+  new_case
+  change "$path"; plan
+  has 'native mixed decoder and registration'; has 'shared-core'; has 'engine'; has 'ai-learning'
+  has 'deployment'; has 'dictionary-activation'; has 'Preparation: build.sh'; has 'manual-input'
+done
+
 new_case
 change macOS/Tests/SettingsUITests.swift; plan
 has 'Units: settings'; not_has 'manual-input'; not_has 'manual-install'

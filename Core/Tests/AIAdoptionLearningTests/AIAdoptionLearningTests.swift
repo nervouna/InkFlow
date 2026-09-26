@@ -30,6 +30,11 @@ struct AIAdoptionLearningTests {
             print("PASS keyboard English learning \(scenario)")
             return
         }
+        if scenario == "mixed-letter-write" || scenario == "mixed-letter-read" {
+            try mixedLetterIsolation(engine: engine, shared: shared, user: user, learn: scenario == "mixed-letter-write")
+            print("PASS mixed letter isolation \(scenario)")
+            return
+        }
         if scenario.hasPrefix("mixed-") {
             try mixedPersonalEnglish(engine: engine, scenario: scenario)
             print("PASS mixed personal English \(scenario)")
@@ -324,6 +329,44 @@ struct AIAdoptionLearningTests {
             check(request("batch\tshared\tzzoverflow\tOverflow") == "ok",
                   "Seed an exact record after 512 earlier dictionary keys")
             expectEntry("shared", "zzoverflow", "Overflow", "Exact records after 512 keys remain queryable")
+        case "contract-mixed-immediate":
+            // Exercise the production mixed translator after a real shared-memory
+            // update in this engine, without recompilation or process restart.
+            for (code, text) in [("codex", "Codex"), ("cpp", "C++"), ("offline", "offline")] {
+                check(request("update\tshared\t\(code)\t\(text)\t1") == "ok", "Confirm an exact personal record")
+                for (input, expected) in [(code + "henhao", text + "很好"),
+                                          ("woyong" + code, "我用" + text),
+                                          ("woyong" + code + "kaifa", "我用" + text + "开发")] {
+                    checkMixedRecall(engine, input: input, expected: expected)
+                }
+            }
+        case "contract-mixed-letters-verify":
+            for (code, text) in [("a", "A"), ("i", "I")] {
+                check(query("shared", code) == "ok\t1\t\(text)\t\(code)\t1",
+                      "Display, mixed lookup and cancelled compositions do not relearn \(text)")
+                expectAbsent("voice", code, "Keyboard letters do not become voice aliases")
+            }
+            expectAbsent("shared", "email", "Immediate standalone English undo remains intact")
+            for code in ["shiyitai", "huichuxian", "duihua", "woyongcodexkaifa"] {
+                expectAbsent("shared", code, "Mixed queries never become whole-sentence English records")
+            }
+        case "contract-mixed-pinyin-conflicts":
+            for (code, text) in [("api", "PrivateAPI"), ("qian", "PrivateQian"), ("shijian", "PrivateShijian")] {
+                check(request("update\tshared\t\(code)\t\(text)\t1") == "ok", "Seed a normally spelled Pinyin sequence alias")
+                for context in ["", "API 已经"] {
+                    engine.clear(); engine.setPrecedingText(context); type(engine, "woyong" + code)
+                    var exhausted = false
+                    for _ in 0..<1000 {
+                        let page = engine.snapshot()
+                        check(!page.candidates.contains { $0.contains(text) },
+                              "Unmarked normally spelled Pinyin sequence does not acquire personal English intent: \(code), \(page.candidates)")
+                        engine.key(0xff56)
+                        if engine.snapshot().page == page.page { exhausted = true; break }
+                    }
+                    check(exhausted, "Enumerate all normally spelled conflict pages")
+                }
+                checkMixedRecall(engine, input: "woyong" + code.uppercased(), expected: "我用" + text)
+            }
         case "contract-mixed-verify":
             let codex = query("shared", "codex")
             check(codex.hasPrefix("ok\t2\t") && codex.contains("\tCodex\tcodex\t1")
@@ -401,15 +444,25 @@ struct AIAdoptionLearningTests {
 
         let exactCases = [
             ("codexhenhao", "Codex很好"),
+            ("sangcodexhenhao", "桑Codex很好"),
+            ("woyongcodexkaifa", "我用Codex开发"),
+            ("woyongcodex", "我用Codex"),
+            ("Codexhenhao", "Codex很好"),
+            ("woyongCODEXkaifa", "我用CODEX开发"),
             ("woyongswiftuihenhao", "我用SwiftUI很好"),
+            ("cpphenhao", "C++很好"),
+            ("woyongcppkaifa", "我用C++开发"),
             ("woyongcpp", "我用C++"),
             ("offlinehenhao", "offline很好"),
+            ("woyongofflinehenhao", "我用offline很好"),
+            ("woyongoffline", "我用offline"),
             ("zzoverflowhenhao", "Overflow很好")
         ]
         for (input, expected) in exactCases {
             let result = candidates(input)
             check(result.contains(expected), "Personal exact mixed candidate \(input) -> \(expected): \(result)")
-            check(result.filter { $0 == expected }.count == 1, "Personal/static mixed candidates deduplicate \(expected)")
+            check(result.filter { $0 == expected }.count == 1, "Personal/static mixed candidates deduplicate \(input) -> \(expected)")
+            checkMixedRecall(engine, input: input, expected: expected)
         }
         let codexVariants = candidates("codexhenhao")
         check(codexVariants.contains("Codex很好") && codexVariants.contains("CODEX很好"),
@@ -425,6 +478,7 @@ struct AIAdoptionLearningTests {
         engine.clear(); type(engine, "woyongcpx"); engine.key(0xff51); engine.key(0xff08); type(engine, "p")
         engine.key(0xffff); type(engine, "p")
         check(allCandidates().contains("我用C++"), "Cursor editing preserves personal symbol candidate")
+        checkOriginalInput(engine, expected: "woyongcpp", caret: 9)
         engine.clear()
 
         type(engine, "woyongcpp")
@@ -439,12 +493,32 @@ struct AIAdoptionLearningTests {
               "Selecting displayed personal mixed text commits native candidate exactly")
         engine.key(0xff09)
 
+        // Select a real Chinese prefix, then continue the same composition.
+        engine.clear(); type(engine, "woyongcpp")
+        // Ordinary Left uses Rime Rewind and may jump syllables. The keypad
+        // binding explicitly moves by source character to select the wo prefix.
+        for _ in 0..<7 { engine.key(0xff96) }
+        check(engine.qualitySnapshot().caret == 2, "Caret refers to raw ASCII input positions")
+        guard let prefix = engine.snapshot().candidates.firstIndex(of: "我") else {
+            check(false, "A native prefix remains selectable before personal mixed input")
+            return
+        }
+        engine.select(prefix)
+        check(engine.takeCommit().isEmpty && engine.qualitySnapshot().selectedPrefix == "我",
+              "Partial selection preserves the native selected-prefix transaction")
+        engine.key(0xff57)
+        check(engine.qualitySnapshot().rawInput == "woyongcpp", "Partial selection retains the complete raw input")
+        check(allCandidates().contains("用C++"), "A personal mixed suffix remains reachable after selecting Chinese")
+        engine.clear()
+
         engine.setConfiguration(candidateCount: 9,
-                                customPhrases: [CustomPhrase(id: UUID(), code: "codexhenhao", text: "自定义词")],
+                                customPhrases: [CustomPhrase(id: UUID(), code: "codexhenhao", text: "自定义词"),
+                                                CustomPhrase(id: UUID(), code: "codexhenhao", text: "Codex很好")],
                                 inputPreferences: .init())
         type(engine, "codexhenhao")
         check(engine.snapshot().candidates.first == "自定义词", "Custom phrase keeps explicit priority")
-        check(allCandidates().contains("Codex很好"), "Custom phrase coexists with personal mixed candidate")
+        check(allCandidates().filter { $0 == "Codex很好" }.count == 1,
+              "Custom phrase and personal mixed candidate deduplicate while preserving custom priority")
         engine.clear()
 
         type(engine, "can")
@@ -462,6 +536,120 @@ struct AIAdoptionLearningTests {
         type(engine, "UnknownCamelToken")
         check(engine.key(0xff0d) && engine.takeCommit() == "UnknownCamelToken",
               "Unknown camel-case Return commits raw input without mixed synthesis")
+    }
+
+    @MainActor private static func checkOriginalInput(_ engine: IFEngine, expected: String, caret: Int? = nil) {
+        let state = engine.qualitySnapshot()
+        check(state.rawInput == expected, "Highlight/edit must retain raw input \(expected): \(state.rawInput)")
+        check((0...expected.utf8.count).contains(state.caret), "Caret remains within original input")
+        if let caret { check(state.caret == caret, "Caret is an input offset, not a display-text offset") }
+        // Native Pinyin may insert syllable spaces or retain apostrophe delimiters.
+        // Neither permits replacing source letters with a fabricated carrier.
+        let letters: (String) -> String = { $0.filter { $0 != " " && $0 != "'" } }
+        if state.selectedPrefix.isEmpty {
+            check(letters(engine.snapshot().preedit) == letters(expected),
+                  "Highlighted preedit derives from original input \(expected): \(engine.snapshot().preedit)")
+        }
+    }
+
+    @MainActor private static func checkMixedRecall(_ engine: IFEngine, input: String, expected: String) {
+        engine.clear(); type(engine, input)
+        for _ in 0..<1000 {
+            let page = engine.snapshot()
+            if let index = page.candidates.firstIndex(of: expected) {
+                engine.highlight(index)
+                checkOriginalInput(engine, expected: input, caret: input.utf8.count)
+                let pronunciation = engine.aiPronunciation(input: engine.aiInputIdentity()!, text: expected)
+                check(pronunciation.resolve(input: input, text: expected) == nil, "A mixed phrase cannot become a Chinese pronunciation through Lua")
+                let row = engine.qualitySnapshot().candidates[index]
+                check(row.source == "personal_exact_mixed", "Native deduplication preserves exact personal token provenance")
+                check(row.consumedInputStart == 0 && row.consumedInputEnd == input.utf8.count,
+                      "Mixed candidate covers its actual complete input span")
+                if input == "woyongcpp" {
+                    engine.key(0xff51, modifiers: 4) // Native Control-Left syllable navigation.
+                    check(engine.qualitySnapshot().caret == 6,
+                          "Native navigation crosses the actual cpp input span, independent of C++ output")
+                    check(engine.qualitySnapshot().rawInput == input, "Syllable navigation preserves original input")
+                    engine.key(0xff57)
+                    check(engine.qualitySnapshot().caret == input.utf8.count, "End restores the real input caret")
+                }
+                engine.clear()
+                return
+            }
+            engine.key(0xff56)
+            if engine.snapshot().page == page.page { break }
+        }
+        check(false, "Missing exact personal mixed candidate \(input) -> \(expected)")
+    }
+
+    @MainActor private static func mixedLetterIsolation(engine: IFEngine, shared: String, user: String, learn: Bool) throws {
+        // These native dictionary records cover i/a within normally spelled
+        // syllables and alternate syllable boundaries, beyond the reported words.
+        let dictionary = try String(contentsOfFile: shared + "/pinyin_simp.dict.yaml", encoding: .utf8)
+        let families = [("时间", "shi jian"), ("知道", "zhi dao"), ("天气", "tian qi"),
+                        ("上海", "shang hai"), ("西安", "xi an")]
+        for (text, code) in families {
+            check(dictionary.contains("\n\(text)\t\(code)\t"), "Conflict family is backed by the actual Chinese dictionary")
+        }
+        let inputs = ["shiyitai", "huichuxian", "duihua", "chajian", "xiang", "qian", "liang", "xi'an"]
+            + families.map { $0.1.replacingOccurrences(of: " ", with: "") }
+        let baselineFile = user + "/letter-chinese-baseline.json"
+        var baseline: [String: String]
+        if learn {
+            baseline = [:]
+            for input in inputs {
+                engine.clear(); type(engine, input)
+                baseline[input] = engine.snapshot().candidates.first
+                checkOriginalInput(engine, expected: input)
+            }
+            try JSONEncoder().encode(baseline).write(to: URL(fileURLWithPath: baselineFile))
+            for (input, expected, undo) in [("A", "A", false), ("i", "I", false), ("email", "email", true)] {
+                engine.clear(); type(engine, input)
+                guard let index = engine.snapshot().candidates.firstIndex(of: expected) else {
+                    check(false, "Real standalone selection fixture missing \(input) -> \(expected)")
+                    return
+                }
+                engine.select(index)
+                check(engine.takeCommit() == expected, "Learn through actual standalone candidate selection")
+                engine.key(undo ? 0xff08 : 0xff09)
+            }
+        } else {
+            baseline = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: URL(fileURLWithPath: baselineFile)))
+        }
+        var violations: [String] = []
+        for context in ["", "API 已经"] {
+            for input in inputs {
+                engine.clear(); engine.setPrecedingText(context); type(engine, input)
+                if context.isEmpty && engine.snapshot().candidates.first != baseline[input] {
+                    violations.append("\(input): Chinese baseline changed after learning standalone letters")
+                }
+                var exhausted = false
+                for _ in 0..<1000 {
+                    let page = engine.snapshot()
+                    for (index, candidate) in page.candidates.enumerated() {
+                        engine.highlight(index)
+                        let state = engine.qualitySnapshot()
+                        let preedit = engine.snapshot().preedit
+                        let compact = preedit.filter { $0 != " " && $0 != "'" }
+                        let actual = input.filter { $0 != " " && $0 != "'" }
+                        let embeddedLetter = candidate.unicodeScalars.contains { $0.value > 127 }
+                            && candidate.contains { $0 == "A" || $0 == "I" }
+                        if embeddedLetter || compact != actual || state.rawInput != input {
+                            violations.append("input=\(input) context=\(context.isEmpty ? "neutral" : "technical") page=\(page.page) candidate=\(candidate) preedit=\(preedit) raw=\(state.rawInput)")
+                        }
+                        check((0...input.utf8.count).contains(state.caret), "Highlighted caret stays within real input")
+                    }
+                    engine.key(0xff56)
+                    if engine.snapshot().page == page.page { exhausted = true; break }
+                }
+                check(exhausted, "All negative candidate pages must be enumerated")
+            }
+        }
+        engine.clear()
+        check(violations.isEmpty, "Learned letters must not contaminate ordinary Pinyin or highlighted preedit:\n" + violations.joined(separator: "\n"))
+        for letter in ["A", "I"] {
+            checkMixedRecall(engine, input: "woyong" + letter, expected: "我用" + letter)
+        }
     }
 
     @MainActor private static func keyboardEnglishLearning(engine: IFEngine, user: String, scenario: String) throws {

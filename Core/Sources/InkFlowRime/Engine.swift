@@ -199,6 +199,7 @@ package final class IFEngine {
                     traits.prebuilt_data_dir = cachePath
                     api.pointee.setup(&traits)
                     api.pointee.initialize(&traits)
+                    IFRegisterRimeComponents()
                 }
                 if let cache = configuration.cache { cache.path.withCString { initialize($0) } }
                 else { initialize(nil) }

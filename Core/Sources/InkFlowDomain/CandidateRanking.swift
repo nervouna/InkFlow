@@ -78,7 +78,7 @@ package struct IFContextRanker: Sendable {
         func evidencePromotes(_ index: Int) -> Bool {
             let row = metadata[index]
             return technical && row.exact && row.personalBucket > 0 &&
-                (row.source == .english || row.source == .mixed)
+                row.source == .english
         }
         func tier(_ index: Int) -> Int {
             let row = metadata[index]

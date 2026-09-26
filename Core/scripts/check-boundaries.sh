@@ -24,7 +24,7 @@ outer, core = (json.loads(Path(path).read_text()) for path in sys.argv[2:])
 assert not core['dependencies'], 'Standalone core must not resolve platform packages'
 outer_targets = {item['name']: item for item in outer['targets']} if outer else {}
 core_targets = {item['name']: item for item in core['targets']}
-required = {'InkFlowDomain', 'InkFlowRime', 'CRime', 'InkFlowRimeWorker', 'DictionaryGeneratorTool', 'PackagedCacheTool'}
+required = {'InkFlowDomain', 'InkFlowRime', 'InkFlowRimeNative', 'CRime', 'InkFlowRimeWorker', 'DictionaryGeneratorTool', 'PackagedCacheTool'}
 assert required <= core_targets.keys()
 if outer:
     assert required <= outer_targets.keys()

@@ -162,6 +162,10 @@ impact_classify() {
     Core/Sources/InkFlowDomain/CustomPhrase.swift|macOS/Sources/CustomPhrases.swift)
       impact_rule "$path" 'custom phrases and activation integration' engine controller ai-headless voice-controller quality-capture-query settings dictionary-activation
       impact_manual_add manual-input manual-settings ;;
+    Core/Sources/InkFlowRimeNative/*|Core/Sources/CRime/*)
+      impact_rule "$path" 'native mixed decoder and registration' engine ai-learning deployment dictionary-activation controller
+      impact_bundle=true
+      impact_manual_add manual-input ;;
     Core/Sources/InkFlowRime/Engine.swift)
       impact_rule "$path" 'shared engine integration' engine controller ai-headless ai-learning voice-controller quality-capture-query deployment dictionary-activation
       impact_manual_add manual-input ;;
