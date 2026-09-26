@@ -20,17 +20,20 @@ cat > "$probe/Contents/Info.plist" <<'PLIST'
 <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
-for mode in success dictionary-failure store-failure disabled; do
+for mode in success dictionary-failure store-failure disabled quality-stall ai-stall; do
   mkdir "$termination_root/$mode"
   "$probe/Contents/MacOS/TerminationProbe" "$termination_root/$mode" "$mode" "$PWD/build/InkFlow.app/Contents/Resources/Rime"
   case "$mode" in
     dictionary-failure) printf 'drain-start\ndenied-retry\ndrain-start\ndrain-end\nengine-stop\nstore-close\nwill-terminate\n' ;;
-    store-failure) printf 'drain-start\ndrain-end\nengine-stop\nstore-failed\ndenied-retry\nstore-close\nwill-terminate\n' ;;
+    store-failure) printf 'drain-start\ndrain-end\nengine-stop\nstore-failed\nwill-terminate\n' ;;
     *) printf 'drain-start\ndrain-end\nengine-stop\nstore-close\nwill-terminate\n' ;;
   esac > "$termination_root/expected"
   diff -u "$termination_root/expected" "$termination_root/$mode/trace"
-  if [[ "$mode" != disabled ]]; then
+  if [[ "$mode" != disabled && "$mode" != store-failure && "$mode" != quality-stall ]]; then
     [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select status from recording_runs') == closed ]]
+  fi
+  if [[ "$mode" == success ]]; then
+    [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select count(*) from compositions') == 1 ]]
   fi
   echo "PASS native termination: $mode (15s subprocess timeout)"
 done

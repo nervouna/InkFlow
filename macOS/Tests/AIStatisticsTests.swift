@@ -39,6 +39,7 @@ struct AIStatisticsTests {
         require(bounded.usage.state == .valid && bounded.textTruncated && bounded.text!.utf8.count <= 16_384 && huge.hasPrefix(bounded.text!), "Long Unicode samples stay bounded without losing usage or inventing text")
         try await persistence(metadata: metadata, rule: rule)
         try await writerFailures()
+        try await boundedClose()
         print("PASS AI statistics usage and pricing")
     }
 
@@ -182,5 +183,31 @@ struct AIStatisticsTests {
         require(crashDB.scalar("SELECT recovery_state FROM attempts") == "interrupted", "Reopening detects released OS lock and marks pending accounting interrupted")
         require(crashDB.scalar("SELECT reason FROM attempt_events WHERE kind='uiEnded'") == "inputChanged", "Recovery never rewrites the original UI reason")
         print("PASS AI statistics bounded queue, oversized payload, busy writer and crash recovery")
+    }
+
+    static func boundedClose() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-ai-close-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let entered = DispatchSemaphore(value: 0), release = DispatchSemaphore(value: 0)
+        let store = AIStatisticsStore(url: root.appendingPathComponent("close.sqlite3"), hooks: .init(beforeWrite: {
+            entered.signal()
+            require(release.wait(timeout: .now() + 5) == .success, "Release stalled AI writer")
+        }))
+        _ = store.begin(configuration: config)
+        require(entered.wait(timeout: .now() + 5) == .success, "AI write reached its worker gate")
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { release.signal() }
+        let began = ContinuousClock.now
+        await store.close()
+        require(began.duration(to: .now) < .seconds(2), "Stalled AI worker must not hold close indefinitely")
+        _ = store.begin(configuration: config)
+        require(store.statistics().droppedDisabled == 1, "Close timeout still rejects new AI attempts")
+        release.signal()
+        await store.close()
+        let database = AIStatisticsTestDatabase(url: root.appendingPathComponent("close.sqlite3"))
+        require(database.scalar("SELECT count(*) FROM attempts") == "1", "Late AI close preserves accepted attempt exactly once")
+        require(database.scalar("SELECT count(*) FROM attempt_events WHERE kind='scheduled'") == "1", "Late AI close preserves its event")
+        require(database.scalar("SELECT status FROM recording_runs") == "closed", "Late worker completion closes run without a duplicate continuation")
+        print("PASS AI statistics bounded close and late worker completion")
     }
 }

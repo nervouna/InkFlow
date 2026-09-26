@@ -157,28 +157,52 @@ final class QualityStore: @unchecked Sendable {
         }
     }
 
-    /// Stops accepting immediately, drains accepted work, saves the run, then closes asynchronously.
+    private final class CloseReply: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Bool, Never>?
+        init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
+        func finish(_ success: Bool, timedOut: Bool = false) {
+            guard let reply = lock.withLock({ let reply = continuation; continuation = nil; return reply }) else { return }
+            if timedOut {
+                LocalDiagnostics.shared.submit(.init(module: .statistics, event: "qualityStoreClose", outcome: .timeout))
+                NSLog("InkFlow quality close timed out; pending statistics may be lost")
+            }
+            reply.resume(returning: success)
+        }
+    }
+
+    /// Stops accepting immediately. A timeout ends the wait, not the worker's ownership of SQLite.
+    /// False reports incomplete persistence; auxiliary data must never veto application termination.
     @discardableResult
-    func close() async -> Bool {
-        let target = lock.withLock { accepting = false; return acceptedSequence }
+    func close(timeout: TimeInterval = 1) async -> Bool {
+        let (target, expectedWritten) = lock.withLock {
+            accepting = false
+            return (acceptedSequence, stats.written + stats.buffered)
+        }
         return await withCheckedContinuation { continuation in
+            let reply = CloseReply(continuation)
             queue.async { [self] in
                 if !closed {
                     timer?.cancel()
-                    let writtenBefore = statistics().written
-                    let pendingCount = lock.withLock { pending.count }
                     drain(upTo: target)
                     do {
                         try database.finish(statistics: statistics(), status: statsDisabled ? "disabled" : "closed")
-                        closeSucceeded = statistics().written >= writtenBefore + pendingCount
+                        closeSucceeded = statistics().written >= expectedWritten
                     } catch {
                         handle(error, count: 0)
-                        // No pending data means metadata failure alone need not block quitting.
-                        closeSucceeded = pendingCount == 0
+                        closeSucceeded = false
                     }
                     closed = true
+                    if !closeSucceeded {
+                        LocalDiagnostics.shared.submit(.init(module: .statistics, event: "qualityStoreClose", outcome: .failed,
+                            errorDomain: .sqlite, errorCode: statistics().lastErrorCode.map(Int.init)))
+                        NSLog("InkFlow quality close could not save all statistics")
+                    }
                 }
-                continuation.resume(returning: closeSucceeded)
+                reply.finish(closeSucceeded)
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + max(0, timeout)) {
+                reply.finish(false, timedOut: true)
             }
         }
     }
@@ -237,8 +261,12 @@ final class QualityStore: @unchecked Sendable {
         }
         let batch = retainedBatch.map(\.envelope)
         guard !batch.isEmpty else { _ = startIfNeeded(); return }
+        var outcome = (written: 0, oversized: 0, truncated: 0)
         defer {
             lock.withLock {
+                stats.written += outcome.written
+                stats.droppedOversized += outcome.oversized
+                stats.truncatedEnvelopes += outcome.truncated
                 inFlight -= batch.count
                 stats.bufferedBytes -= retainedBatch.reduce(0) { $0 + $1.bytes }
                 stats.buffered = pending.count + inFlight + effectivenessInFlight
@@ -253,19 +281,16 @@ final class QualityStore: @unchecked Sendable {
         }
         hooks.beforeBatch?()
         do {
-            let outcome = try database.write(batch)
-            lock.withLock {
-                stats.written += outcome.written
-                stats.droppedOversized += outcome.oversized
-                stats.truncatedEnvelopes += outcome.truncated
-            }
+            outcome = try database.write(batch)
         } catch { handle(error, count: batch.count) }
     }
 
 
     private func write(_ event: QualityEffectivenessEvent) {
+        var written = 0
         defer {
             lock.withLock {
+                stats.written += written
                 effectivenessInFlight -= 1
                 stats.buffered = pending.count + inFlight + effectivenessInFlight
             }
@@ -276,7 +301,7 @@ final class QualityStore: @unchecked Sendable {
         }
         do {
             try database.write(event)
-            lock.withLock { stats.written += 1 }
+            written = 1
         } catch { handle(error, count: 1) }
     }
 

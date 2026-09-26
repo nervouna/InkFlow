@@ -33,7 +33,10 @@ import AppKit
                 }
                 // Interrupt recorders and destroy sessions before closing their destination store.
                 if !engineStopped { stopEngine(); engineStopped = true }
-                guard await closeStore() else { throw CocoaError(.fileWriteUnknown) }
+                if !(await closeStore()) {
+                    LocalDiagnostics.shared.submit(.init(module: .termination, event: "statisticsClose", outcome: .failed,
+                        correlation: operation))
+                }
                 complete = true
                 LocalDiagnostics.shared.submit(.init(module: .termination, event: "cleanup", outcome: .completed, correlation: operation))
                 await LocalDiagnostics.shared.store?.drain()

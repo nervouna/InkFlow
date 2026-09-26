@@ -112,16 +112,45 @@ final class AIStatisticsStore: @unchecked Sendable {
         }
     }
 
-    func close() async {
-        lock.withLock { accepting = false }
+    private final class CloseReply: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Void, Never>?
+        init(_ continuation: CheckedContinuation<Void, Never>) { self.continuation = continuation }
+        func finish(timedOut: Bool = false) {
+            guard let reply = lock.withLock({ let reply = continuation; continuation = nil; return reply }) else { return }
+            if timedOut {
+                LocalDiagnostics.shared.submit(.init(module: .statistics, event: "aiStoreClose", outcome: .timeout))
+                NSLog("InkFlow AI statistics close timed out; pending statistics may be lost")
+            }
+            reply.resume()
+        }
+    }
+
+    /// Best effort: stop producers now, but leave SQLite cleanup on its worker even after timeout.
+    func close(timeout: TimeInterval = 1) async {
+        let expectedWritten = lock.withLock {
+            accepting = false
+            return counters.written + counters.buffered
+        }
         await withCheckedContinuation { continuation in
+            let reply = CloseReply(continuation)
             worker.async { [self] in
                 if !closed {
                     timer?.cancel(); drain()
-                    do { try database.close(counters: statistics()) } catch { failure(error, count: 0) }
+                    var failed = statistics().written < expectedWritten
+                    do { try database.close(counters: statistics()) }
+                    catch { failure(error, count: 0); failed = true }
                     closed = true
+                    if failed {
+                        LocalDiagnostics.shared.submit(.init(module: .statistics, event: "aiStoreClose", outcome: .failed,
+                            errorDomain: .sqlite, errorCode: statistics().lastErrorCode.map(Int.init)))
+                        NSLog("InkFlow AI statistics close could not save all statistics")
+                    }
                 }
-                continuation.resume()
+                reply.finish()
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + max(0, timeout)) {
+                reply.finish(timedOut: true)
             }
         }
     }
@@ -143,6 +172,7 @@ final class AIStatisticsStore: @unchecked Sendable {
                 inFlight += batch.count; return batch
             }
             guard !batch.isEmpty else { return }
+            var outcome = (written: 0, missing: 0)
             if start() {
                 do {
                     hooks.beforeWrite?()
@@ -158,7 +188,7 @@ final class AIStatisticsStore: @unchecked Sendable {
                             }
                         }
                     }
-                    lock.withLock { counters.written += batch.count - missing; counters.droppedMissingAttempt += missing }
+                    outcome = (batch.count - missing, missing)
                 } catch { failure(error, count: batch.count) }
             } else {
                 lock.withLock {
@@ -166,7 +196,10 @@ final class AIStatisticsStore: @unchecked Sendable {
                     else { counters.droppedBusy += batch.count }
                 }
             }
-            lock.withLock { inFlight -= batch.count; counters.buffered = pending.count + inFlight }
+            lock.withLock {
+                counters.written += outcome.written; counters.droppedMissingAttempt += outcome.missing
+                inFlight -= batch.count; counters.buffered = pending.count + inFlight
+            }
         }
     }
 

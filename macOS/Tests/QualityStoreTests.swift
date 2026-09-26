@@ -193,6 +193,7 @@ struct QualityStoreTests {
         print("PASS quality store: reopen, Unicode snapshots, native/display ranks, foreign keys, run close")
         try await atomicityAndReaders()
         try await busyLocks()
+        try await boundedClose()
         try await pressureAndTimer()
         try await budgets()
         try await configurationBudgetsAndReferences()
@@ -576,6 +577,46 @@ private extension QualityStoreTests {
             from: Data(try locker.scalar("SELECT stats_json FROM recording_runs").utf8))
         expect(saved.droppedBusy == 2 && saved.written == 1 && saved.buffered == 0, "run persists drop counters")
         print("PASS quality store: writer lock and reader-held COMMIT busy, rollback, next-batch recovery")
+    }
+
+    static func boundedClose() async throws {
+        let url = try makeURL("close")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let gate = Gate()
+        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
+                                 hooks: .init(beforeOpen: { gate.blockOnce() }))
+        gate.wait()
+        expect(store.submit(fixture("close-pending")) == .accepted, "close fixture accepts pending composition")
+        expect(store.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
+               "close fixture accepts pending effectiveness event")
+        // Release even an unbounded implementation so the regression reports its wait, not a hang.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) { gate.release.signal() }
+        let began = ContinuousClock.now
+        let completed = await store.close()
+        expect(began.duration(to: .now) < .seconds(2), "stalled quality worker must not hold close indefinitely")
+        expect(!completed, "timeout cannot claim persistence completed")
+        expect(store.submit(fixture("after-close")) == .disabled, "timeout still stops submissions")
+        gate.release.signal()
+        let recovered = await store.close()
+        expect(recovered, "late worker completion remains safe after timeout and another close")
+        let reader = try Reader(url)
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "1", "late close preserves accepted composition exactly once")
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "late close preserves accepted event exactly once")
+        expect(try reader.scalar("SELECT status FROM recording_runs") == "closed", "late close finishes run metadata")
+
+        let lockedURL = try makeURL("close-locked")
+        defer { try? FileManager.default.removeItem(at: lockedURL.deletingLastPathComponent()) }
+        let locked = QualityStore(url: lockedURL, engineVersion: "test", buildMetadata: metadata)
+        await locked.flush()
+        let locker = try Reader(lockedURL, writable: true)
+        try locker.execute("BEGIN IMMEDIATE")
+        expect(locked.submit(fixture("close-locked")) == .accepted, "writer lock does not block acceptance")
+        let saved = await locked.close()
+        expect(!saved && locked.statistics().droppedBusy == 1, "actual close-time SQLite failure reports unsaved composition")
+        try locker.execute("ROLLBACK")
+        expect(try locker.scalar("SELECT count(*) FROM compositions") == "0", "failed close does not leave a partial composition")
+        expect(!(await locked.close()), "closed store preserves its real failure result on retry")
+        print("PASS quality store: bounded close, late completion, pending composition/event persistence and held SQLite lock")
     }
 
     static func pressureAndTimer() async throws {

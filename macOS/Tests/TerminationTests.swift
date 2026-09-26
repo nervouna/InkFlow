@@ -36,7 +36,13 @@ import InkFlowTestSupport
             bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
             rankingSourceSHA256: String(repeating: "d", count: 64), rankingResourcesSHA256: String(repeating: "e", count: 64),
             appVersion: "test", appBuild: "1")
-        let store = QualityStore(url: storeURL, engineVersion: "test", buildMetadata: metadata)
+        let stalledWorker = DispatchSemaphore(value: 0)
+        var qualityHooks = QualityStoreHooks()
+        if mode == "quality-stall" { qualityHooks.beforeOpen = { stalledWorker.wait() } }
+        let store = QualityStore(url: storeURL, engineVersion: "test", buildMetadata: metadata,
+            hooks: qualityHooks)
+        let statistics = mode == "ai-stall" ? AIStatisticsStore(url: root.appendingPathComponent("ai.sqlite3"),
+            hooks: .init(beforeOpen: { stalledWorker.wait() })) : nil
         var engine: IFEngine?
         if mode == "success" {
             try IFEngine.start(shared: CommandLine.arguments[3], user: root.appendingPathComponent("rime-user").path, qualityStore: store)
@@ -44,7 +50,7 @@ import InkFlowTestSupport
             check(engine != nil && IFEngine.ready)
             type(engine!, "nihao")
         }
-        var drainAttempts = 0, closeAttempts = 0
+        var drainAttempts = 0
         let delegate = IFApplicationLifecycle(stopDictionaries: {
             drainAttempts += 1
             record("drain-start")
@@ -59,10 +65,27 @@ import InkFlowTestSupport
             check(!IFEngine.ready && engine?.available != true)
             record("engine-stop")
         }, closeStore: {
-            closeAttempts += 1
-            if mode == "store-failure" && closeAttempts == 1 { record("store-failed"); return false }
+            if mode == "store-failure" {
+                await store.flush()
+                var writer: OpaquePointer?
+                check(sqlite3_open(storeURL.path, &writer) == SQLITE_OK)
+                defer { sqlite3_exec(writer, "ROLLBACK", nil, nil, nil); sqlite3_close(writer) }
+                check(sqlite3_exec(writer, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK)
+                check(store.submit(.init(composition: .init(outcome: .interrupted))) == .accepted)
+                let closed = await store.close()
+                check(!closed && store.statistics().droppedBusy == 1, "Real SQLite lock must fail pending close")
+                record("store-failed")
+                return closed
+            }
+            let began = ContinuousClock.now
             let closed = await store.close()
-            check(closed, "Termination must close the fixture store in mode \(mode): \(store.statistics())")
+            await statistics?.close()
+            if mode == "quality-stall" || mode == "ai-stall" {
+                check(began.duration(to: .now) < .seconds(2), "Stalled auxiliary IO must have a bounded close")
+                check(mode != "quality-stall" || !closed, "Timed-out quality close must report unsaved state")
+            } else {
+                check(closed, "Termination must close the fixture store in mode \(mode): \(store.statistics())")
+            }
             record("store-close")
             return closed
         }, didTerminate: { record("will-terminate") })
@@ -76,7 +99,7 @@ import InkFlowTestSupport
                 if mode == "success" { app.terminate(nil) }
             }
         }
-        if mode == "dictionary-failure" || mode == "store-failure" {
+        if mode == "dictionary-failure" {
             _ = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: false) { _ in
                 MainActor.assumeIsolated {
                     check(delegate.failure != nil, "Failed cleanup must deny the first native quit")

@@ -54,7 +54,11 @@ package enum InkFlowApplicationBootstrap {
                     await LocalDiagnostics.shared.store?.drain()
                     drained.signal()
                 }
-                drained.wait()
+                // Both optional stores and diagnostics already have individual budgets.
+                // Bound this synchronous startup-failure bridge as well if their task cannot run.
+                if drained.wait(timeout: .now() + 3) == .timedOut {
+                    NSLog("InkFlow startup statistics cleanup timed out")
+                }
                 IFEngine.configureQualityRecording(nil)
                 InkFlowInputController.statisticsStore = nil
                 return 1
