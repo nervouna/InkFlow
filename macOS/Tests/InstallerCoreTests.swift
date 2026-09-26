@@ -110,10 +110,25 @@ private actor Files: IFInstallerFileOperations {
         let process = try ControlledProcess()
         defer { process.finish() }
         let processes = IFTrialSystemProcesses(application: { _ in process }, terminationTimeout: .milliseconds(20))
-        try await processes.stop([process.processIdentifier])
+        try await processes.stop([process.processIdentifier], at: URL(fileURLWithPath: "/bin/cat"))
         try check(process.terminationRequests == 1 && !process.isTerminated,
                   "developer stop accepts actual child exit while AppKit observation stays stale")
-        print("PASS developer stop: real child exit with stale AppKit observation")
+        let unrelated = try ControlledProcess()
+        defer { unrelated.finish() }
+        let guarded = IFTrialSystemProcesses(application: { _ in unrelated })
+        do {
+            try await guarded.stop([unrelated.processIdentifier], at: URL(fileURLWithPath: "/tmp/unrelated/InkFlow.app"))
+            throw IFInstallerError.invalid("changed executable identity must refuse termination")
+        } catch is IFInputError {}
+        try check(unrelated.terminationRequests == 0,
+                  "ownership mismatch must not request termination of the live child")
+        let missing = IFTrialSystemProcesses(application: { _ in nil })
+        try await missing.stop([process.processIdentifier], at: URL(fileURLWithPath: "/bin/cat"))
+        do {
+            try await missing.stop([unrelated.processIdentifier], at: URL(fileURLWithPath: "/bin/cat"))
+            throw IFInstallerError.invalid("unidentified live PID must refuse replacement")
+        } catch is IFInputError {}
+        print("PASS developer stop: stale exit, ownership mismatch and missing application identity")
     }
 
     @MainActor static func trialPrepareExitObservationTest() async throws {
@@ -149,7 +164,7 @@ private actor Files: IFInstallerFileOperations {
             let system = IFTrialSystemProcesses(application: { pid in
                 processes.first { $0.processIdentifier == pid }
             }, terminationTimeout: timeout)
-            try await system.stop(processes.map(\.processIdentifier))
+            try await system.stop(processes.map(\.processIdentifier), at: URL(fileURLWithPath: "/bin/cat"))
         }
     }
 
@@ -227,7 +242,7 @@ private actor Files: IFInstallerFileOperations {
         var failure = ""
         var launches = 0
         func installedPIDs(at target: URL) -> [Int32] { pids }
-        func stop(_ pids: [Int32]) throws {
+        func stop(_ pids: [Int32], at target: URL) throws {
             if failure == "declined" || failure == "timeout" { throw IFInputError.unavailable(failure) }
             self.pids = failure == "restarted" ? [43] : []
         }
@@ -271,6 +286,24 @@ private actor Files: IFInstallerFileOperations {
     }
     @MainActor static func trialTests() async throws {
         let target = URL(fileURLWithPath: "/tmp/input methods/InkFlow.app")
+        let child = Process()
+        let input = Pipe()
+        child.executableURL = URL(fileURLWithPath: "/bin/cat")
+        child.standardInput = input
+        child.standardOutput = FileHandle.nullDevice
+        try child.run()
+        let childPID = child.processIdentifier
+        try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: childPID), "trial lifecycle must keep waiting for a live PID")
+        try input.fileHandleForWriting.close()
+        child.waitUntilExit()
+        try check(IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: childPID), "trial lifecycle must accept an exited PID when AppKit state is stale")
+        for status: Int32 in [0, EPERM, EINVAL] {
+            try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: childPID, probe: { _ in status }), "trial lifecycle must fail closed for live or unknown probe results")
+        }
+        for invalid: pid_t in [-1, 0] {
+            try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: invalid, probe: { _ in fatalError("invalid PID must not be probed") }), "trial lifecycle cannot prove exit for an invalid PID")
+        }
+        try check(IFInstallationProcessLifecycle.hasExited(applicationTerminated: true, processID: -1, probe: { _ in fatalError("confirmed exit needs no probe") }), "trial lifecycle accepts AppKit-confirmed exit")
         for failure in ["declined", "timeout", "restarted"] {
             let s = TrialSources(), p = TrialProcesses(); p.failure = failure
             let trial = IFTrialInstallation(sources: s, processes: p)
@@ -310,7 +343,11 @@ private actor Files: IFInstallerFileOperations {
         for path in ["/tmp/harness/InkFlow.app/Contents/MacOS/InkFlow", "/tmp/input methods/.inkflow-install.abc/other/Contents/MacOS/InkFlow", "/tmp/else/.inkflow-install.abc/previous/Contents/MacOS/InkFlow"] {
             try check(!IFTrialSystemProcesses.owns(path: path, target: target), "unrelated instance excluded")
         }
-        print("PASS trial lifecycle: declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; scoped ownership (fake backends, no desktop mutation)")
+        try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: "/tmp/input methods/InkFlow.app/Contents/MacOS/InkFlow", cachedPath: nil, target: target) == true, "current target executable accepted before termination")
+        try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: "/tmp/other.app/Contents/MacOS/other", cachedPath: target.path, target: target) == false, "current executable identity overrides stale cached target URL")
+        try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: nil, cachedPath: target.path, target: target) == true, "target-bound cached URL remains the missing-image fallback")
+        try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: nil, cachedPath: nil, target: target) == nil, "unknown process identity fails closed")
+        print("PASS trial lifecycle: stale AppKit exit observation; declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; scoped ownership (fake backends, no desktop mutation)")
     }
     static func fileTests() throws {
         let fm = FileManager.default

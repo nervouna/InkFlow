@@ -38,31 +38,26 @@ if [[ -e "$target" ]]; then updating=true; fi
 mkdir -p "$(dirname "$target")"
 [[ ! -L "$target" ]] || { echo 'Refusing to replace a symlinked installation.' >&2; exit 1; }
 stage=$(mktemp -d "$(dirname "$target")/.inkflow-install.XXXXXX")
-replaced=false
 verified=false
 cleanup() {
-  if [[ "$replaced" == true && "$verified" != true ]]; then
-    echo "Installation verification failed; staged previous app and state retained at $stage" >&2
+  if [[ "$verified" != true && -e "$target" && ! -e "$stage/InkFlow.app" && -s "$stage/state.json" ]]; then
+    echo "Installation verification failed; staged state retained at $stage" >&2
     return
   fi
-  if [[ -e "$stage/previous" && ! -e "$target" ]]; then mv "$stage/previous" "$target"; fi
+  if [[ "$verified" != true && -e "$stage/previous" ]]; then
+    if [[ ! -e "$target" ]]; then
+      mv "$stage/previous" "$target"
+    fi
+  fi
   rm -rf "$stage"
 }
 trap cleanup EXIT
 ditto "$app" "$stage/InkFlow.app"
 codesign --verify --deep --strict "$stage/InkFlow.app"
-if [[ -e "$target" ]]; then
-  mkdir -p build/backups
-  backup_dir=$(mktemp -d "$PWD/build/backups/installation.XXXXXX")
-  ditto -c -k --keepParent "$target" "$backup_dir/InkFlow.zip"
-  unzip -tq "$backup_dir/InkFlow.zip"
-  echo "Previous app archived at $backup_dir/InkFlow.zip"
-fi
 # The lifecycle helper waits for graceful shutdown before any installed file moves.
 bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$stage/InkFlow.app"
 if [[ -e "$target" ]]; then mv "$target" "$stage/previous"; fi
 mv "$stage/InkFlow.app" "$target"
-replaced=true
 codesign --verify --deep --strict "$target"
 bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json"
 verified=true

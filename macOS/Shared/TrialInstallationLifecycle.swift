@@ -58,7 +58,7 @@ struct IFTrialInstallationState: Codable {
 
 @MainActor protocol IFTrialProcessOperations {
     func installedPIDs(at target: URL) throws -> [Int32]
-    func stop(_ pids: [Int32]) async throws
+    func stop(_ pids: [Int32], at target: URL) async throws
     func launchAndVerify(at target: URL, excluding: [Int32]) async throws -> Int32
 }
 
@@ -94,7 +94,7 @@ struct IFTrialInstallationState: Codable {
                 try sources.select(fallback.id)
                 try await waitForState { $0.selectedID == fallback.id }
             }
-            try await processes.stop(pids)
+            try await processes.stop(pids, at: target)
             guard try processes.installedPIDs(at: target).isEmpty else {
                 throw IFInputError.unavailable("old process restarted before replacement")
             }
@@ -134,11 +134,11 @@ struct IFTrialInstallationState: Codable {
 extension NSRunningApplication: IFTrialInstalledProcess {}
 
 @MainActor final class IFTrialSystemProcesses: IFTrialProcessOperations {
-    private let application: (pid_t) -> (any IFInstallationProcess)?
+    private let application: (pid_t) -> (any IFTrialInstalledProcess)?
     private let installedApplications: () -> [any IFTrialInstalledProcess]
     private let terminationTimeout: Duration
 
-    init(application: @escaping (pid_t) -> (any IFInstallationProcess)? = {
+    init(application: @escaping (pid_t) -> (any IFTrialInstalledProcess)? = {
         NSRunningApplication(processIdentifier: $0)
     }, installedApplications: @escaping () -> [any IFTrialInstalledProcess] = {
         NSRunningApplication.runningApplications(withBundleIdentifier: IFInputIdentity.bundleID)
@@ -166,6 +166,12 @@ extension NSRunningApplication: IFTrialInstalledProcess {}
         return Array(parts.dropFirst()) == ["previous"] || Array(parts.dropFirst()) == ["previous", "Contents", "MacOS", "InkFlow"]
     }
 
+    static func ownsRunningProcess(executablePath: String?, cachedPath: String?, target: URL) -> Bool? {
+        if let executablePath { return owns(path: executablePath, target: target) }
+        if let cachedPath { return owns(path: cachedPath, target: target) }
+        return nil
+    }
+
     func installedPIDs(at target: URL) throws -> [Int32] {
         var pids: [Int32] = []
         for app in installedApplications() where !IFInstallationProcessLifecycle.hasExited(
@@ -185,8 +191,20 @@ extension NSRunningApplication: IFTrialInstalledProcess {}
         return pids
     }
 
-    func stop(_ pids: [Int32]) async throws {
-        let apps = pids.compactMap(application)
+    func stop(_ pids: [Int32], at target: URL) async throws {
+        var apps: [any IFTrialInstalledProcess] = []
+        for pid in pids {
+            guard let app = application(pid) else {
+                if IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: pid) { continue }
+                throw IFInputError.unavailable("cannot identify InkFlow process \(pid); installation unchanged")
+            }
+            if IFInstallationProcessLifecycle.hasExited(applicationTerminated: app.isTerminated, processID: pid) { continue }
+            let cachedPath = (app.executableURL ?? app.bundleURL)?.path
+            guard Self.ownsRunningProcess(executablePath: Self.executablePath(pid), cachedPath: cachedPath, target: target) == true else {
+                throw IFInputError.unavailable("process \(pid) identity changed before termination; installation unchanged")
+            }
+            apps.append(app)
+        }
         do {
             try await IFInstallationProcessLifecycle.terminate(apps, timeout: terminationTimeout)
         } catch IFInstallationTerminationError.declined(let pid) {
