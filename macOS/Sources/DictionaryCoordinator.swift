@@ -458,7 +458,7 @@ final class IFDictionaryCoordinator {
                                 try Task.checkCancellation()
                                 let prepared = try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader)
                                 try Task.checkCancellation()
-                                try backend.store.beginActivation(version)
+                                try backend.store.beginValidatedActivation(version)
                                 return prepared
                             }
                             pending = prepared

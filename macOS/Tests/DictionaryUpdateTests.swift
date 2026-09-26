@@ -30,6 +30,23 @@ private actor RequestGate {
     func open() { continuation?.resume(); continuation = nil }
 }
 
+private final class FileHashCounts: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts: [String: Int] = [:]
+    let root: URL
+    init(root: URL) { self.root = root }
+    func record(_ url: URL) {
+        let prefix = root.path + "/"
+        guard url.path.hasPrefix(prefix) else { return }
+        let parts = url.path.dropFirst(prefix.count).split(separator: "/")
+        guard parts.count > 2, parts[0] == "candidates" || parts[0] == "versions" else { return }
+        let relative = parts.dropFirst(2).joined(separator: "/")
+        lock.lock(); defer { lock.unlock() }
+        counts[relative, default: 0] += 1
+    }
+    var snapshot: [String: Int] { lock.lock(); defer { lock.unlock() }; return counts }
+}
+
 private func network(_ mutation: String = "", changed: Bool = false) -> IFDictionarySourceClient {
     IFDictionarySourceClient(transport: { request, _ in
         let url = request.url!
@@ -82,6 +99,8 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
             let runtime = IFDictionaryRuntime(resources: resources, helper: resources.appendingPathComponent("unused"), libraries: [])
             let fingerprint = String(repeating: "a", count: 64)
             try storeTests(root: root, runtime: runtime, fingerprint: fingerprint)
+            try validationHashCounts(root: root, runtime: runtime, fingerprint: fingerprint)
+            try validationFailures(root: root, runtime: runtime, fingerprint: fingerprint)
             try cleanupTests(root: root, fingerprint: fingerprint)
         }
         if mode == "all" || mode == "--worker" {
@@ -230,6 +249,116 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         check(replacement.directory != second.directory, "Fresh artifact cannot collide with corrupt same-content cache")
         _ = try store.resolve(replacement, fingerprint: fingerprint)
         print("PASS store: begin/confirm/failure/interruption/fallback, same-content observations, safe paths, cache/fingerprint integrity, diagnostic-free atomic state")
+    }
+    static func validationHashCounts(root: URL, runtime: IFDictionaryRuntime, fingerprint: String) throws {
+        var store = try IFDictionaryStore(root: root.appendingPathComponent("hash-counts"))
+        let counts = FileHashCounts(root: store.root)
+        store.didHashFile = { counts.record($0) }
+        let version = try fixture(store: store, runtime: runtime, fingerprint: fingerprint, versionCharacter: "3")
+        _ = try store.resolve(version, fingerprint: fingerprint)
+        try store.beginValidatedActivation(version)
+        let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self,
+            at: store.root.appendingPathComponent(version.directory).appendingPathComponent(IFDictionaryPreparedReceipt.filename))
+        let observed = counts.snapshot
+        let dictionaryPath = "shared/\(IFDictionaryCatalog.dictionaryFilename)"
+        let summary = "HASH COUNTS adopt/resolve/journal: files=\(receipt.files.count), total=\(observed.values.reduce(0, +)), dictionary=\(observed[dictionaryPath, default: 0]), other=\(Set(observed.filter { $0.key != dictionaryPath }.map(\.value)).sorted())\n"
+        try FileHandle.standardOutput.write(contentsOf: Data(summary.utf8))
+        check(Set(observed.keys) == Set(receipt.files.keys), "Observe every prepared file")
+        for path in receipt.files.keys {
+            check(observed[path] == (path == dictionaryPath ? 3 : 2), "Two complete validations plus first-receipt dictionary integrity: \(path), observed \(observed[path, default: 0])")
+        }
+        try store.confirmActivation(version)
+        check(counts.snapshot == observed, "Activation confirmation only writes the journal")
+        _ = try store.resolve(version, fingerprint: fingerprint)
+        for path in receipt.files.keys {
+            check(counts.snapshot[path] == observed[path]! + 1, "Later resolve rehashes every file: \(path)")
+        }
+        print("PASS store hashing: adopt/resolve/journal performs two whole-set reads plus initial dictionary integrity")
+    }
+    static func validationFailures(root: URL, runtime: IFDictionaryRuntime, fingerprint: String) throws {
+        let store = try IFDictionaryStore(root: root.appendingPathComponent("validation-failures"))
+        let manager = FileManager.default
+        let cachePath = "cache/pinyin_simp.table.bin"
+        let dictionaryPath = "shared/\(IFDictionaryCatalog.dictionaryFilename)"
+        let manifestPath = "shared/\(IFDictionaryManifest.filename)"
+        let scenarios = [
+            ("corrupt", "prepared-checksum"), ("missing", "prepared-extra-files"),
+            ("extra-shared", "prepared-extra-files"), ("extra-cache", "prepared-extra-files"), ("extra-raw", "prepared-extra-files"),
+            ("same-count-replacement", "prepared-extra-files"), ("missing-required-receipt", "prepared-file-missing"),
+            ("invalid-hash", "prepared-checksum"), ("outside-prefix", "prepared-path"),
+            ("parent-path", "unsafe-path"), ("empty-component", "unsafe-path"), ("dot-component", "unsafe-path"),
+            ("backslash", "unsafe-path"), ("receipt-symlink", "symlink-path"), ("extra-symlink", "symlink-resource"),
+            ("receipt-version", "prepared-version"), ("receipt-runtime", "prepared-version"),
+            ("manifest-version", "manifest-version"), ("manifest-metadata", "manifest-metadata"),
+            ("manifest-source", "manifest-source"), ("dictionary-and-receipt", "manifest-integrity")
+        ]
+        for (scenario, expected) in scenarios {
+            let version = try fixture(store: store, runtime: runtime, fingerprint: fingerprint, versionCharacter: "4")
+            let directory = store.root.appendingPathComponent(version.directory)
+            let receiptURL = directory.appendingPathComponent(IFDictionaryPreparedReceipt.filename)
+            let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self, at: receiptURL)
+            var files = receipt.files, contentVersion = receipt.contentVersion, runtimeFingerprint = receipt.runtimeFingerprint
+            switch scenario {
+            case "corrupt": try Data("corrupt".utf8).write(to: directory.appendingPathComponent(cachePath))
+            case "missing": try manager.removeItem(at: directory.appendingPathComponent(cachePath))
+            case "extra-shared", "extra-cache", "extra-raw":
+                let folder = directory.appendingPathComponent(String(scenario.dropFirst("extra-".count)))
+                try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+                try Data("extra".utf8).write(to: folder.appendingPathComponent("unexpected"))
+            case "same-count-replacement":
+                try manager.moveItem(at: directory.appendingPathComponent(cachePath), to: directory.appendingPathComponent("cache/substitute.bin"))
+            case "missing-required-receipt": files.removeValue(forKey: cachePath)
+            case "invalid-hash": files[cachePath] = "not-a-sha256"
+            case "outside-prefix": files["outside/file"] = files[cachePath]
+            case "parent-path": files["cache/../cache/pinyin_simp.table.bin"] = files[cachePath]
+            case "empty-component": files["cache//pinyin_simp.table.bin"] = files[cachePath]
+            case "dot-component": files["cache/./pinyin_simp.table.bin"] = files[cachePath]
+            case "backslash": files["cache/unsafe\\file"] = files[cachePath]
+            case "receipt-symlink":
+                let file = directory.appendingPathComponent(cachePath)
+                try manager.removeItem(at: file)
+                try manager.createSymbolicLink(at: file, withDestinationURL: runtime.resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
+            case "extra-symlink":
+                try manager.createSymbolicLink(at: directory.appendingPathComponent("cache/unexpected"), withDestinationURL: runtime.resources)
+            case "receipt-version": contentVersion = "r\(IFDictionaryCatalog.recipeVersion)-" + String(repeating: "5", count: 64)
+            case "receipt-runtime": runtimeFingerprint = String(repeating: "b", count: 64)
+            case "manifest-version", "manifest-metadata", "manifest-source":
+                let url = directory.appendingPathComponent(manifestPath)
+                var manifest = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+                if scenario == "manifest-version" {
+                    manifest["contentVersion"] = "r\(IFDictionaryCatalog.recipeVersion)-" + String(repeating: "5", count: 64)
+                } else if scenario == "manifest-metadata" {
+                    manifest["entryCount"] = 0
+                } else {
+                    var sources = manifest["sources"] as! [[String: Any]]
+                    sources[0]["path"] = "unexpected-source.yaml"; manifest["sources"] = sources
+                }
+                try JSONSerialization.data(withJSONObject: manifest).write(to: url)
+                files[manifestPath] = try IFDictionaryFiles.hash(url)
+            case "dictionary-and-receipt":
+                let url = directory.appendingPathComponent(dictionaryPath)
+                try Data("changed dictionary with self-consistent receipt".utf8).write(to: url)
+                files[dictionaryPath] = try IFDictionaryFiles.hash(url)
+            default: fatalError("Unknown validation fixture: \(scenario)")
+            }
+            try IFDictionaryFiles.encode(IFDictionaryPreparedReceipt(contentVersion: contentVersion,
+                runtimeFingerprint: runtimeFingerprint, files: files)).write(to: receiptURL)
+            fails(expected) { _ = try store.resolve(version, fingerprint: fingerprint) }
+            let reopened = try IFDictionaryStore(root: store.root)
+            fails(expected) { _ = try reopened.resolve(version, fingerprint: fingerprint) }
+            fails(expected) { try reopened.beginActivation(version) }
+            check(try reopened.state().pending == nil, "Invalid artifact never reaches the activation journal: \(scenario)")
+            let candidate = try store.candidate()
+            for file in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
+                try manager.copyItem(at: file, to: candidate.appendingPathComponent(file.lastPathComponent))
+            }
+            fails(scenario == "manifest-version" ? "prepared-version" : expected) {
+                _ = try store.adopt(candidate, fingerprint: fingerprint)
+            }
+            check(manager.fileExists(atPath: candidate.path), "Invalid first receipt remains unadopted: \(scenario)")
+            try store.removeCandidate(candidate)
+        }
+        print("PASS prepared validation: \(scenarios.count) corruption/path/symlink/metadata/version cases rejected on first receipt, existing and reopened stores before journaling")
     }
     static func runtimeFingerprintTests(root: URL, runtime: IFDictionaryRuntime) throws {
         let fingerprintRoot = root.appendingPathComponent("runtime")
