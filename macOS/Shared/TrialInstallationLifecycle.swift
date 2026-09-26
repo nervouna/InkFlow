@@ -1,6 +1,53 @@
 import AppKit
 import Darwin
 
+@MainActor package protocol IFInstallationProcess {
+    var processIdentifier: pid_t { get }
+    var isTerminated: Bool { get }
+    func terminate() -> Bool
+}
+
+extension NSRunningApplication: IFInstallationProcess {}
+
+package enum IFInstallationTerminationError: Error {
+    case declined(pid_t)
+    case timeout
+}
+
+@MainActor package enum IFInstallationProcessLifecycle {
+    package static let terminationTimeout: Duration = .seconds(10)
+
+    package static func hasExited(applicationTerminated: Bool, processID: pid_t,
+                                  probe: (pid_t) -> Int32 = { pid in
+                                      Darwin.kill(pid, 0) == 0 ? 0 : errno
+                                  }) -> Bool {
+        if applicationTerminated { return true }
+        // AppKit's observable state can lag behind process exit. Signal zero
+        // only queries existence; ESRCH is the sole fallback proof of exit.
+        guard processID > 0 else { return false }
+        return probe(processID) == ESRCH
+    }
+
+    private static func hasExited(_ process: any IFInstallationProcess) -> Bool {
+        hasExited(applicationTerminated: process.isTerminated, processID: process.processIdentifier)
+    }
+
+    package static func terminate(_ processes: [any IFInstallationProcess],
+                                  timeout: Duration = terminationTimeout) async throws {
+        for process in processes where !hasExited(process) {
+            // A process can exit between observation and the normal quit request.
+            guard process.terminate() || hasExited(process) else {
+                throw IFInstallationTerminationError.declined(process.processIdentifier)
+            }
+        }
+        let deadline = ContinuousClock.now + timeout
+        while processes.contains(where: { !hasExited($0) }) {
+            guard ContinuousClock.now < deadline else { throw IFInstallationTerminationError.timeout }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+    }
+}
+
 struct IFTrialInstallationState: Codable {
     let target: String
     let build: String
@@ -79,7 +126,28 @@ struct IFTrialInstallationState: Codable {
     }
 }
 
+@MainActor protocol IFTrialInstalledProcess: IFInstallationProcess {
+    var executableURL: URL? { get }
+    var bundleURL: URL? { get }
+}
+
+extension NSRunningApplication: IFTrialInstalledProcess {}
+
 @MainActor final class IFTrialSystemProcesses: IFTrialProcessOperations {
+    private let application: (pid_t) -> (any IFInstallationProcess)?
+    private let installedApplications: () -> [any IFTrialInstalledProcess]
+    private let terminationTimeout: Duration
+
+    init(application: @escaping (pid_t) -> (any IFInstallationProcess)? = {
+        NSRunningApplication(processIdentifier: $0)
+    }, installedApplications: @escaping () -> [any IFTrialInstalledProcess] = {
+        NSRunningApplication.runningApplications(withBundleIdentifier: IFInputIdentity.bundleID)
+    }, terminationTimeout: Duration = IFInstallationProcessLifecycle.terminationTimeout) {
+        self.application = application
+        self.installedApplications = installedApplications
+        self.terminationTimeout = terminationTimeout
+    }
+
     static func executablePath(_ pid: Int32) -> String? {
         // SDK's PROC_PIDPATHINFO_MAXSIZE is (4 * MAXPATHLEN), unavailable as a Swift macro.
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
@@ -100,7 +168,9 @@ struct IFTrialInstallationState: Codable {
 
     func installedPIDs(at target: URL) throws -> [Int32] {
         var pids: [Int32] = []
-        for app in NSRunningApplication.runningApplications(withBundleIdentifier: IFInputIdentity.bundleID) where !app.isTerminated {
+        for app in installedApplications() where !IFInstallationProcessLifecycle.hasExited(
+            applicationTerminated: app.isTerminated, processID: app.processIdentifier
+        ) {
                 if let path = Self.executablePath(app.processIdentifier) {
                     if Self.owns(path: path, target: target) { pids.append(app.processIdentifier) }
                     continue
@@ -116,14 +186,13 @@ struct IFTrialInstallationState: Codable {
     }
 
     func stop(_ pids: [Int32]) async throws {
-        let apps = pids.compactMap { NSRunningApplication(processIdentifier: $0) }
-        for app in apps where !app.isTerminated {
-            guard app.terminate() else { throw IFInputError.unavailable("process \(app.processIdentifier) declined normal termination; installation unchanged") }
-        }
-        let deadline = ContinuousClock.now + .seconds(10)
-        while apps.contains(where: { !$0.isTerminated }) {
-            guard ContinuousClock.now < deadline else { throw IFInputError.unavailable("normal termination timed out; installation unchanged") }
-            try await Task.sleep(for: .milliseconds(100))
+        let apps = pids.compactMap(application)
+        do {
+            try await IFInstallationProcessLifecycle.terminate(apps, timeout: terminationTimeout)
+        } catch IFInstallationTerminationError.declined(let pid) {
+            throw IFInputError.unavailable("process \(pid) declined normal termination; installation unchanged")
+        } catch IFInstallationTerminationError.timeout {
+            throw IFInputError.unavailable("normal termination timed out; installation unchanged")
         }
     }
 
