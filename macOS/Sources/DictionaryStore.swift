@@ -25,7 +25,7 @@ enum IFDictionaryFiles {
         }
         return url
     }
-    static func hashes(in root: URL, excluding: Set<String> = []) throws -> [String: String] {
+    static func hashes(in root: URL, excluding: Set<String> = [], didHashFile: @Sendable (URL) -> Void = { _ in }) throws -> [String: String] {
         let root = try canonical(root)
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else {
             throw IFDictionaryUpdateError(.prepare, "missing-resources")
@@ -36,18 +36,20 @@ enum IFDictionaryFiles {
             let values = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
             guard values.isSymbolicLink != true else { throw IFDictionaryUpdateError(.prepare, "symlink-resource", file: relative) }
             if values.isRegularFile == true, !excluding.contains(relative) {
-                result[relative] = try hash(file)
+                result[relative] = try hash(file, didHashFile: didHashFile)
             }
         }
         return result
     }
-    static func hash(_ url: URL) throws -> String {
+    static func hash(_ url: URL, didHashFile: @Sendable (URL) -> Void = { _ in }) throws -> String {
         guard try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]).isRegularFile == true,
               try url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else { throw IFDictionaryUpdateError(.verify, "nonregular-file") }
         let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
         var hash = SHA256()
         while let data = try file.read(upToCount: 1_048_576), !data.isEmpty { hash.update(data: data) }
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+        let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        didHashFile(url)
+        return digest
     }
     static func atomicWrite(_ data: Data, to url: URL) throws {
         let temporary = url.deletingLastPathComponent().appendingPathComponent(".state-\(UUID().uuidString)")
@@ -138,6 +140,8 @@ struct IFDictionaryDescriptor: Sendable {
 struct IFDictionaryStore: Sendable {
     let root: URL
     var beforeStateWrite: @Sendable (IFDictionaryState) throws -> Void = { _ in }
+    /// Observes completed file hashing without replacing filesystem reads or validation.
+    var didHashFile: @Sendable (URL) -> Void = { _ in }
     init(root: URL, beforeStateWrite: @escaping @Sendable (IFDictionaryState) throws -> Void = { _ in }) throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         self.root = try IFDictionaryFiles.canonical(root); self.beforeStateWrite = beforeStateWrite
@@ -195,7 +199,7 @@ struct IFDictionaryStore: Sendable {
               candidate.path == (try IFDictionaryFiles.canonical(candidate)).path else { throw IFDictionaryUpdateError(.prepare, "unsafe-candidate") }
         let manifest = try validatedManifest(at: candidate.appendingPathComponent("shared"))
         let version = IFDictionaryVersion(contentVersion: manifest.contentVersion, runtimeFingerprint: fingerprint, preparedAt: now)
-        try version.validate(); try validatePrepared(at: candidate, version: version)
+        try version.validate(); _ = try validatePrepared(at: candidate, version: version)
         let destination = try IFDictionaryFiles.child(version.directory, in: root)
         try FileManager.default.moveItem(at: candidate, to: destination)
         return version
@@ -204,8 +208,8 @@ struct IFDictionaryStore: Sendable {
         try version.validate()
         guard version.runtimeFingerprint == fingerprint else { throw IFDictionaryUpdateError(.prepare, "runtime-changed") }
         let directory = try IFDictionaryFiles.child(version.directory, in: root)
-        try validatePrepared(at: directory, version: version)
-        return .init(version: version, manifest: try validatedManifest(at: directory.appendingPathComponent("shared")),
+        let manifest = try validatePrepared(at: directory, version: version)
+        return .init(version: version, manifest: manifest,
                      sharedData: directory.appendingPathComponent("shared"), cache: directory.appendingPathComponent("cache"))
     }
     /// Inert source data for rebuilding with CURRENT app-owned schemas, Lua and correction policy.
@@ -326,14 +330,19 @@ struct IFDictionaryStore: Sendable {
         }
     }
     func validatedManifest(at shared: URL) throws -> IFDictionaryManifest {
+        try validatedManifest(at: shared, dictionarySHA256: nil)
+    }
+    private func validatedManifest(at shared: URL, dictionarySHA256: String?) throws -> IFDictionaryManifest {
         let manifest = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: IFDictionaryFiles.child(IFDictionaryManifest.filename, in: shared))
         try Self.validateMetadata(manifest)
-        guard try IFDictionaryFiles.hash(IFDictionaryFiles.child(IFDictionaryCatalog.dictionaryFilename, in: shared)) == manifest.dictionarySHA256 else {
+        let dictionarySHA256 = try dictionarySHA256 ?? IFDictionaryFiles.hash(
+            IFDictionaryFiles.child(IFDictionaryCatalog.dictionaryFilename, in: shared), didHashFile: didHashFile)
+        guard dictionarySHA256 == manifest.dictionarySHA256 else {
             throw IFDictionaryUpdateError(.verify, "manifest-integrity")
         }
         return manifest
     }
-    private func validatePrepared(at directory: URL, version: IFDictionaryVersion) throws {
+    private func validatePrepared(at directory: URL, version: IFDictionaryVersion) throws -> IFDictionaryManifest {
         let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self, at: IFDictionaryFiles.child(IFDictionaryPreparedReceipt.filename, in: directory))
         let required = ["shared/\(IFDictionaryManifest.filename)", "shared/\(IFDictionaryCatalog.dictionaryFilename)",
                         "cache/inkflow_pinyin.schema.yaml", "cache/pinyin_simp.table.bin", "cache/pinyin_simp.prism.bin",
@@ -349,18 +358,29 @@ struct IFDictionaryStore: Sendable {
             throw IFDictionaryUpdateError(.verify, "prepared-path")
         }
         for (path, hash) in receipt.files {
-            guard IFDictionaryHash.isHex(hash, length: 64), try IFDictionaryFiles.hash(IFDictionaryFiles.child(path, in: directory)) == hash else {
+            guard IFDictionaryHash.isHex(hash, length: 64) else {
                 throw IFDictionaryUpdateError(.verify, "prepared-checksum", file: path)
             }
+            _ = try IFDictionaryFiles.child(path, in: directory)
         }
-        var actualCount = 0
+        var actual = [String: String]()
         for name in ["shared", "cache", "raw"] {
             let folder = try IFDictionaryFiles.child(name, in: directory)
-            if FileManager.default.fileExists(atPath: folder.path) { actualCount += try IFDictionaryFiles.hashes(in: folder).count }
+            if FileManager.default.fileExists(atPath: folder.path) {
+                for (path, hash) in try IFDictionaryFiles.hashes(in: folder, didHashFile: didHashFile) {
+                    actual["\(name)/\(path)"] = hash
+                }
+            }
         }
-        guard actualCount == receipt.files.count else { throw IFDictionaryUpdateError(.verify, "prepared-extra-files") }
-        guard try validatedManifest(at: directory.appendingPathComponent("shared")).contentVersion == version.contentVersion else {
+        guard Set(actual.keys) == Set(receipt.files.keys) else { throw IFDictionaryUpdateError(.verify, "prepared-extra-files") }
+        for (path, hash) in receipt.files where actual[path] != hash {
+            throw IFDictionaryUpdateError(.verify, "prepared-checksum", file: path)
+        }
+        let manifest = try validatedManifest(at: directory.appendingPathComponent("shared"),
+            dictionarySHA256: actual["shared/\(IFDictionaryCatalog.dictionaryFilename)"])
+        guard manifest.contentVersion == version.contentVersion else {
             throw IFDictionaryUpdateError(.verify, "manifest-version")
         }
+        return manifest
     }
 }

@@ -406,7 +406,7 @@ final class IFDictionaryCoordinator {
                             let prepared = try await Task.detached {
                                 let version = try backend.store.adopt(candidate, fingerprint: fingerprint, now: date)
                                 let prepared = try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader)
-                                try backend.store.beginActivation(version)
+                                try backend.store.beginValidatedActivation(version)
                                 return prepared
                             }.value
                             pending = prepared

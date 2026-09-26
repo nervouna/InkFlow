@@ -292,6 +292,16 @@ private actor TestGate {
 
     @MainActor static func coordinatorLifecycle(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
         let base = try backend(root.appendingPathComponent("coordinator"), runtime: runtime)
+        let fileHashCounts = TestBox<[String: Int]>([:])
+        var observedStore = base.store
+        let storePrefix = observedStore.root.path + "/"
+        observedStore.didHashFile = { url in
+            guard url.path.hasPrefix(storePrefix) else { return }
+            let parts = url.path.dropFirst(storePrefix.count).split(separator: "/")
+            guard parts.count > 2, parts[0] == "candidates" || parts[0] == "versions" else { return }
+            let relative = parts.dropFirst(2).joined(separator: "/")
+            fileHashCounts.update { $0[relative, default: 0] += 1 }
+        }
         let calls = TestBox((check: 0, download: 0, prepare: 0))
         let failCheck = TestBox(false)
         let gate = TestGate()
@@ -312,7 +322,7 @@ private actor TestGate {
             await preparationGate.wait()
             return try await Task.detached { try copyTemplate(template, to: candidate) }.value
         }
-        let service = IFDictionaryCoordinator(backend: .init(store: base.store, runtime: runtime, user: base.user, services: services),
+        let service = IFDictionaryCoordinator(backend: .init(store: observedStore, runtime: runtime, user: base.user, services: services),
             now: { Date(timeIntervalSince1970: 500) }, logger: { value in log.update { $0.append(value) } })
         service.bootstrap()
         check(service.engineAvailable && service.active?.isBundled == true && service.active?.activatedAt == Date(timeIntervalSince1970: 500))
@@ -333,6 +343,15 @@ private actor TestGate {
         await until("Prepared update waiting for hidden session") { service.activity == .waitingForIdle }
         check(calls.value.download == 1 && calls.value.prepare == 1, "Single-flight double clicks")
         check(try! base.store.state().pending != nil, "Intent journal persisted before publishing waiting")
+        let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self,
+            at: template.sharedData.deletingLastPathComponent().appendingPathComponent(IFDictionaryPreparedReceipt.filename))
+        let waitingHashCounts = fileHashCounts.value
+        let dictionaryPath = "shared/\(IFDictionaryCatalog.dictionaryFilename)"
+        check(Set(waitingHashCounts.keys) == Set(receipt.files.keys), "Coordinator observes only the complete candidate/version file set")
+        for path in receipt.files.keys {
+            check(waitingHashCounts[path] == (path == dictionaryPath ? 3 : 2), "Coordinator validates adopt and resolve once each before waiting: \(path)")
+        }
+        print("HASH COUNTS coordinator waiting: files=\(receipt.files.count), total=\(waitingHashCounts.values.reduce(0, +)), dictionary=\(waitingHashCounts[dictionaryPath, default: 0])")
         check(service.active?.manifest.contentVersion == bundledVersion && !hidden.snapshot().preedit.isEmpty, "Old engine serves during preparation and waiting")
         lateProgress.value?(.init(stage: .prepare, completed: 0, total: 1))
         await Task.yield(); check(service.activity == .waitingForIdle, "Late progress cannot replace waiting state")
@@ -343,6 +362,7 @@ private actor TestGate {
         check(service.activity == .updated && service.active?.manifest.contentVersion == template.manifest.contentVersion)
         check(service.active?.activatedAt == Date(timeIntervalSince1970: 500) && hidden.available)
         check(try! base.store.state().current?.contentVersion == service.active?.manifest.contentVersion)
+        check(fileHashCounts.value == waitingHashCounts, "Idle activation and confirmation add no prepared-file hashing")
         lateProgress.value?(.init(stage: .verify, completed: 0, total: 1))
         await Task.yield(); check(service.activity == .updated, "Late progress cannot replace successful terminal outcome")
         failCheck.value = true
