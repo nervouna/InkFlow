@@ -63,20 +63,21 @@ action=$1; shift; history="$NOTARY_STATE/history.tsv"; mkdir -p "$NOTARY_STATE";
 case "$action" in
 history)
   out=$(mktemp); plutil -create xml1 "$out"; plutil -insert history -array "$out"; i=0
+  case "${NOTARY_MODE:-ok}" in history-error) exit 72 ;; history-schema) plutil -remove history "$out" ;; history-record) plutil -insert history.0 -dictionary "$out" ;; esac
   while IFS="	" read -r id name created; do [[ -n "$id" ]] || continue; plutil -insert "history.$i" -dictionary "$out"; plutil -insert "history.$i.id" -string "$id" "$out"; plutil -insert "history.$i.name" -string "$name" "$out"; plutil -insert "history.$i.createdDate" -string "$created" "$out"; i=$((i+1)); done < "$history"
   cat "$out"; rm "$out" ;;
 submit)
   artifact=$1; name=$(basename "$artifact"); echo "submit-args:$*" >> "$EVENTS"; count=0; [[ ! -f "$NOTARY_STATE/count" ]] || count=$(cat "$NOTARY_STATE/count"); count=$((count+1)); echo "$count" > "$NOTARY_STATE/count"; printf -v id '00000000-0000-4000-8000-%012d' "$count"
   created=$(date -u '+%Y-%m-%dT%H:%M:%SZ'); mode=${NOTARY_MODE:-ok}; [[ "$mode" != late-* || "$name" != *"${mode#late-}"* ]] || created=2199-01-01T00:00:00Z; [[ "$mode" != bad-id ]] || id=damaged-id
   if [[ "$mode" == hang-* && "$name" == *"${mode#hang-}"* ]]; then echo "submit:$name" >> "$EVENTS"; /bin/sleep 5; exit 70; fi
-  if [[ "$mode" == missing-* && "$name" == *"${mode#missing-}"* ]]; then echo "submit:$name" >> "$EVENTS"; exit 70; fi
+  if [[ "$mode" == missing-* && "$name" == *"${mode#missing-}"* ]]; then echo "submit:$name" >> "$EVENTS"; echo fixture-partial-output; echo fixture-upload-error >&2; exit 70; fi
   printf '%s\t%s\t%s\n' "$id" "$name" "$created" >> "$history"; echo "submit:$name" >> "$EVENTS"
   if [[ "$mode" == ambiguous-* && "$name" == *"${mode#ambiguous-}"* ]]; then printf -v extra '00000000-0000-4000-8000-%012d' "$((count + 100))"; printf '%s\t%s\t%s\n' "$extra" "$name" "$created" >> "$history"; exit 70; fi
   [[ "$mode" != late-* || "$name" != *"${mode#late-}"* ]] || exit 70
   [[ "$mode" != loss-* || "$name" != *"${mode#loss-}"* ]] || exit 70
   out=$(mktemp); plutil -create xml1 "$out"; plutil -insert id -string "$id" "$out"; cat "$out"; rm "$out" ;;
 info)
-  id=$1; out=$(mktemp); plutil -create xml1 "$out"; plutil -insert id -string "$id" "$out"; status=Accepted; [[ ${NOTARY_MODE:-ok} != invalid ]] || status=Invalid; [[ ${NOTARY_MODE:-ok} != unknown ]] || status=Mystery; plutil -insert status -string "$status" "$out"; cat "$out"; rm "$out" ;;
+  id=$1; out=$(mktemp); plutil -create xml1 "$out"; plutil -insert id -string "$id" "$out"; status=Accepted; case ${NOTARY_MODE:-ok} in invalid) status=Invalid;; rejected) status=Rejected;; unknown) status=Mystery;; progress) status='In Progress';; esac; plutil -insert status -string "$status" "$out"; cat "$out"; rm "$out" ;;
 log) echo fixture-invalid-log ;;
 *) exit 99 ;;
 esac
@@ -156,9 +157,123 @@ STUB
   : > "$EVENTS"; : > "$SIDE_EFFECTS"
 }
 
-run_ok() { (cd "$repo" && bash .agents/skills/inkflow-release/scripts/release-runner.sh continue) > "$base/out" 2> "$base/err"; }
+run_command() { (cd "$repo" && bash .agents/skills/inkflow-release/scripts/release-runner.sh "$@") > "$base/out" 2> "$base/err"; }
+run_ok() { run_command continue; }
 run_fail() { if run_ok; then echo "Unexpected success: $base" >&2; exit 1; fi; }
+retry_ok() { run_command retry-notary "$retry_kind" "$retry_token" 'Upload response missing after inspection' --acknowledge-unknown; }
+retry_fail() { if retry_ok; then echo "Unexpected retry success: $base" >&2; exit 1; fi; }
+pin_retry() {
+  retry_kind=$1; retry_intent="$release/payload-submission.intent.plist"
+  [[ "$retry_kind" != dmg ]] || retry_intent="$release/submission.intent.plist"
+  retry_token=$(shasum -a 256 "$retry_intent" | awk '{print $1}')
+  while [[ -f "$release/notary-attempts/$retry_kind/$retry_token/intent.plist" ]]; do
+    retry_intent="$release/notary-attempts/$retry_kind/$retry_token/intent.plist"
+    retry_token=$(shasum -a 256 "$retry_intent" | awk '{print $1}')
+  done
+}
+add_history() {
+  printf '%s\t%s\t%s\n' "${1:-00000000-0000-4000-8000-000000009999}" "${2:-inputmethod-submission.zip}" "${3:-$(date -u '+%Y-%m-%dT%H:%M:%SZ')}" >> "$NOTARY_STATE/history.tsv"
+}
 accept_install() { printf 'Release-Installation-Acceptance: version=1.2.3 build=7 releaseCommit=%s dmgSHA256=%s scope=installation-upgrade result=pass\n' "$(git -C "$repo" rev-parse HEAD)" "$(shasum -a 256 "$release/InkFlow-1.2.3-7-arm64.dmg" | awk '{print $1}')" >> "$repo/build/release-notes.md"; }
+
+for retry_kind in payload dmg; do
+  setup_fixture "explicit-retry-$retry_kind" false
+  extension=zip; [[ "$retry_kind" != dmg ]] || extension=dmg
+  export NOTARY_MODE="missing-$extension"; run_fail; unset NOTARY_MODE
+  pin_retry "$retry_kind"; original_token=$retry_token
+  original_evidence=$(shasum -a 256 "$release/$retry_kind-submit"*)
+  retry_ok
+  [[ -f "$release/notary-attempts/$retry_kind/$original_token/intent.plist" && ! -s "$SIDE_EFFECTS" ]]
+  retry_record="$release/notary-attempts/$retry_kind/$original_token/intent.plist"
+  [[ $(plutil -extract priorRemoteState raw "$retry_record") == unknown && $(plutil -extract acknowledgedUnknown raw "$retry_record") == true ]]
+  [[ $(plutil -extract retryReason raw "$retry_record") == 'Upload response missing after inspection' ]]
+  plutil -extract reconciliationHistoryPLIST raw "$retry_record" > "$base/retry-history.plist"
+  [[ $(plutil -type history "$base/retry-history.plist") == array ]]
+  [[ $(grep -c "^submit:.*$extension$" "$EVENTS") == 2 ]]
+  require_original=$(shasum -a 256 "$retry_intent" | awk '{print $1}'); [[ "$require_original" == "$original_token" ]]
+  [[ $(shasum -a 256 "$release/$retry_kind-submit"*) == "$original_evidence" ]]
+  grep -Fq fixture-partial-output "$release/$retry_kind-submit-output.plist"
+  grep -Fq fixture-upload-error "$release/$retry_kind-submit.log"
+  [[ $(plutil -extract exitStatus raw "$release/$retry_kind-submit-result.plist") == 70 ]]
+  retry_fail
+  [[ $(grep -c "^submit:.*$extension$" "$EVENTS") == 2 && ! -s "$SIDE_EFFECTS" ]]
+  run_ok
+done
+echo 'PASS: explicit payload and DMG retries preserve intent, reject replay, and stop before publication'
+
+for observed in ok progress invalid rejected unknown; do
+  setup_fixture "retry-delayed-$observed" false; export NOTARY_MODE=missing-zip; run_fail; pin_retry payload
+  add_history; export NOTARY_MODE=$observed
+  case "$observed" in ok|progress) retry_ok;; *) retry_fail;; esac
+  [[ $(grep -c '^submit:' "$EVENTS") == 1 && -f "$release/payload-submission.plist" && ! -s "$SIDE_EFFECTS" && ! -d "$release/notary-attempts" ]]
+  retry_fail
+  [[ $(grep -c '^submit:' "$EVENTS") == 1 && ! -s "$SIDE_EFFECTS" ]]
+  unset NOTARY_MODE
+done
+echo 'PASS: delayed unique history is adopted and known statuses never permit another upload'
+
+setup_fixture retry-interrupted false; export NOTARY_MODE=missing-zip; run_fail; pin_retry payload
+original_date=$(plutil -extract submittedAt raw "$retry_intent"); original_token=$retry_token
+/bin/sleep 1
+export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_RETRY_INTENT=1; retry_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_RETRY_INTENT
+[[ -f "$release/notary-attempts/payload/$original_token/intent.plist" && $(grep -c '^submit:' "$EVENTS") == 1 ]]
+retry_fail; run_fail
+[[ $(grep -c '^submit:' "$EVENTS") == 1 ]]
+add_history 00000000-0000-4000-8000-000000009999 inputmethod-submission.zip "$original_date"
+unset NOTARY_MODE; pin_retry payload; retry_ok
+[[ $(grep -c '^submit:' "$EVENTS") == 1 && ! -s "$SIDE_EFFECTS" ]]
+echo 'PASS: interrupted retry cannot dispatch automatically and adopts late original history'
+
+setup_fixture retry-output-interrupted false; export NOTARY_MODE=missing-zip; run_fail; pin_retry payload; unset NOTARY_MODE
+export INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_SUBMIT_OUTPUT=1; retry_fail; unset INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_SUBMIT_OUTPUT
+[[ $(grep -c '^submit:' "$EVENTS") == 2 && ! -e "$release/payload-submission.plist" ]]
+: > "$NOTARY_STATE/history.tsv"
+pin_retry payload; retry_fail
+[[ $(grep -c '^submit:' "$EVENTS") == 2 && -f "$release/payload-submission.plist" && ! -s "$SIDE_EFFECTS" ]]
+run_ok
+[[ $(grep -c '^submit:inputmethod-submission.zip$' "$EVENTS") == 2 ]]
+echo 'PASS: interrupted submit response is recovered from retained output even when history is empty'
+
+setup_fixture retry-repeated false; export NOTARY_MODE=missing-zip; run_fail; pin_retry payload
+original_date=$(plutil -extract submittedAt raw "$retry_intent"); original_token=$retry_token
+/bin/sleep 1
+retry_fail; [[ $(grep -c '^submit:' "$EVENTS") == 2 ]]; retry_fail; run_fail
+[[ $(grep -c '^submit:' "$EVENTS") == 2 ]]
+pin_retry payload; [[ "$retry_token" != "$original_token" ]]; retry_fail
+[[ $(grep -c '^submit:' "$EVENTS") == 3 ]]
+add_history 00000000-0000-4000-8000-000000009998 inputmethod-submission.zip "$original_date"
+add_history 00000000-0000-4000-8000-000000009999
+pin_retry payload; retry_fail; grep -Fq 'refusing to choose one' "$base/err"
+run_fail; grep -Fq 'refusing to choose one' "$base/err"
+[[ $(grep -c '^submit:' "$EVENTS") == 3 && ! -s "$SIDE_EFFECTS" ]]
+unset NOTARY_MODE
+echo 'PASS: every retry needs a fresh token and older late history remains in the ambiguity window'
+
+for malformed in history-error history-schema history-record; do
+  setup_fixture "retry-$malformed" false; export NOTARY_MODE=missing-zip; run_fail; pin_retry payload
+  export NOTARY_MODE=$malformed; retry_fail; unset NOTARY_MODE
+  [[ $(grep -c '^submit:' "$EVENTS") == 1 && ! -d "$release/notary-attempts" && ! -s "$SIDE_EFFECTS" ]]
+done
+echo 'PASS: unsuccessful or malformed history cannot authorize a retry'
+
+for drift in payload dmg state; do
+  setup_fixture "retry-drift-$drift" false; export NOTARY_MODE=missing-dmg; run_fail; unset NOTARY_MODE; pin_retry dmg
+  case "$drift" in
+    payload) printf changed >> "$release/inputmethod-submission.zip" ;;
+    dmg) printf changed >> "$release/InkFlow-1.2.3-7-arm64.dmg" ;;
+    state) plutil -replace manualInstallNeeded -string true "$release/release-state.plist" ;;
+  esac
+  retry_fail
+  [[ $(grep -c '^submit:' "$EVENTS") == 2 && ! -d "$release/notary-attempts" && ! -s "$SIDE_EFFECTS" ]]
+done
+echo 'PASS: payload, DMG and release-state drift block retry before dispatch'
+
+setup_fixture retry-input false; export NOTARY_MODE=missing-zip; run_fail; unset NOTARY_MODE; pin_retry payload
+if run_command retry-notary payload "$retry_token" reason; then exit 1; fi
+if run_command retry-notary payload "$retry_token" ' ' --acknowledge-unknown; then exit 1; fi
+if run_command retry-notary payload 0123 reason --acknowledge-unknown; then exit 1; fi
+[[ $(grep -c '^submit:' "$EVENTS") == 1 && ! -d "$release/notary-attempts" ]]
+echo 'PASS: retry requires exact token, nonempty reason and explicit unknown-state acknowledgment'
 
 setup_fixture happy false; run_ok
 [[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 && $(grep -c '^publish$' "$SIDE_EFFECTS") == 1 ]]
@@ -172,6 +287,9 @@ effects=$(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}'); run_ok
 [[ $(grep -c '^submit:' "$EVENTS") == 2 && $(grep -c '^staple:' "$EVENTS") == 2 && $(grep -c '^upload:' "$SIDE_EFFECTS") == 4 ]]
 grep -Fq 'gh:release view v1.2.3 --repo fixture/inkflow --json body --template {{.body}}' "$EVENTS"
 echo 'PASS: happy path and completed continue are exactly-once'
+for retry_kind in payload dmg; do pin_retry "$retry_kind"; retry_fail; done
+[[ $(shasum -a 256 "$SIDE_EFFECTS" | awk '{print $1}') == "$effects" && $(grep -c '^submit:' "$EVENTS") == 2 ]]
+echo 'PASS: already-successful release cannot be retried or republished by recovery'
 
 for loss in zip dmg; do setup_fixture "loss-$loss" false; export NOTARY_MODE="loss-$loss"; run_ok; [[ $(grep -c '^submit:' "$EVENTS") == 2 ]]; unset NOTARY_MODE; done
 echo 'PASS: unique payload and DMG response-loss recovery does not resubmit'

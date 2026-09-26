@@ -1,7 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
-[[ $# -eq 1 && "$1" == continue ]] || { echo 'Usage: bash release-runner.sh continue' >&2; exit 2; }
+usage() {
+  echo 'Usage: bash release-runner.sh continue | retry-notary payload|dmg INTENT_SHA256 REASON --acknowledge-unknown' >&2
+  exit 2
+}
+operation=${1:-}
+case "$operation" in
+  continue) [[ $# -eq 1 ]] || usage ;;
+  retry-notary)
+    [[ $# -eq 5 && ( "$2" == payload || "$2" == dmg ) && "$3" =~ ^[[:xdigit:]]{64}$ && "$4" =~ [^[:space:]] && "$5" == --acknowledge-unknown ]] || usage
+    retry_kind=$2; retry_token=$3; retry_reason=$4 ;;
+  *) usage ;;
+esac
 root=$(cd "$(dirname "$0")/../../../.." && pwd -P)
 cd "$root"
 
@@ -14,20 +25,32 @@ dmg_cdhash() {
   [[ "$value" =~ ^[[:xdigit:]]{40,64}$ ]] || fail 'Could not read a valid DMG code-signing CDHash.'
   printf '%s\n' "$value"
 }
-atomic_plist_command() {
-  local target=$1; shift
-  local temporary response_id
-  temporary=$(mktemp "$(dirname "$target")/.response.XXXXXX")
-  if run_with_timeout "${submit_timeout_seconds:-600}" "$@" > "$temporary"; then
-    plutil -lint "$temporary" >/dev/null 2>&1 || { rm -f "$temporary"; return 1; }
-    response_id=$(plist_get "$temporary" id || true)
-    valid_uuid "$response_id" || { rm -f "$temporary"; return 1; }
-    [[ ! -e "$target" && ! -L "$target" ]] || { rm -f "$temporary"; fail "Refusing to replace $(basename "$target")."; }
-    mv "$temporary" "$target"
-    return 0
+submit_once() {
+  local artifact=$1 response=$2 prefix=$3 status=0 output diagnostic
+  [[ ! -e "$response" && ! -L "$response" ]] || fail 'A retained submission response is available; refusing another upload.'
+  require_equal "$(sha256 "$artifact")" "$(plist_get "$attempt_intent" artifactSHA256)" 'Artifact changed before notarization upload.'
+  require_equal "$(sha256 "$state")" "$state_sha" 'Release state changed before notarization upload.'
+  output="$prefix-output.plist"; diagnostic="$prefix.log"
+  [[ ! -e "$output" && ! -L "$output" && ! -e "$diagnostic" && ! -L "$diagnostic" ]] || fail 'Submit evidence already exists; refusing to replay upload.'
+  # Files exist before dispatch and survive interruption, including partial output.
+  (umask 077; set -C; : > "$output"; : > "$diagnostic")
+  run_with_timeout "$submit_timeout_seconds" bash .agents/skills/inkflow-release/scripts/notary.sh submit "$artifact" --no-wait --force --no-s3-acceleration --output-format plist > "$output" 2> "$diagnostic" || status=$?
+  write_plist "$prefix-result.plist" exitStatus "$status" completedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  [[ ! -s "$diagnostic" ]] || cat "$diagnostic" >&2
+  if [[ ${INKFLOW_RELEASE_TESTING:-0} == 1 && ${INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_SUBMIT_OUTPUT:-0} == 1 ]]; then fail 'Fixture interruption after submit output.'; fi
+  restore_submit_response "$response" "$output"
+}
+restore_submit_response() {
+  local response=$1 output=$2 id
+  [[ -f "$output" && ! -L "$output" ]] || return 0
+  plutil -lint "$output" >/dev/null 2>&1 || return 0
+  id=$(plist_get "$output" id || true)
+  valid_uuid "$id" || return 0
+  if [[ -f "$response" ]]; then
+    require_equal "$(plist_get "$response" id)" "$id" 'Retained submit output conflicts with the recovered submission ID.'
+  else
+    write_plist "$response" id "$id" recoveredFromOutput true
   fi
-  rm -f "$temporary"
-  return 1
 }
 run_with_timeout() {
   local timeout_seconds=$1; shift
@@ -127,6 +150,7 @@ if [[ -f "$state" && ! -L "$state" ]]; then
   require_equal "$(plist_get "$state" notesSHA256)" "$notes_sha" 'Release notes drifted from state.'
   require_equal "$(plist_get "$state" repo)" "$repo" 'Observed repository conflicts with state.'
 else
+  [[ "$operation" != retry-notary ]] || fail 'Explicit retry requires retained release state.'
   [[ ! -e "$state" && ! -L "$state" ]] || fail 'Untrusted release state path.'
   previous_tag=''
   while IFS= read -r candidate; do
@@ -165,26 +189,58 @@ history_snapshot() {
   rm -f "$temporary"
 }
 recover_submission() {
-  local artifact=$1 intent=$2 response=$3 temporary i id name created created_base submitted_base observed_base candidates=0 candidate=''
+  local artifact=$1 intent=$2 response=$3 temporary i total id name created created_base submitted_base observed_base candidates=0 candidate=''
   temporary=$(mktemp "$release_dir/.history.XXXXXX")
-  bash .agents/skills/inkflow-release/scripts/notary.sh history --output-format plist > "$temporary"
+  bash .agents/skills/inkflow-release/scripts/notary.sh history --output-format plist > "$temporary" || { rm -f "$temporary"; fail 'Notarization recovery history request failed.'; }
   plutil -lint "$temporary" >/dev/null 2>&1 || { rm -f "$temporary"; fail 'Invalid notarization recovery history.'; }
+  [[ $(plutil -type history "$temporary" 2>/dev/null) == array ]] || { rm -f "$temporary"; fail 'Notarization recovery history is missing its history array.'; }
   i=0
   submitted_base=$(plist_get "$intent" submittedAt); submitted_base=${submitted_base:0:19}
   observed_base=$(date -u '+%Y-%m-%dT%H:%M:%S')
-  while id=$(plutil -extract "history.$i.id" raw "$temporary" 2>/dev/null); do
+  total=$(plutil -extract history raw "$temporary")
+  while [[ $i -lt $total ]]; do
+    id=$(plutil -extract "history.$i.id" raw "$temporary" 2>/dev/null || true)
     valid_uuid "$id" || { rm -f "$temporary"; fail 'Notarization recovery history contains an invalid submission ID.'; }
     name=$(plutil -extract "history.$i.name" raw "$temporary" 2>/dev/null || true)
     created=$(plutil -extract "history.$i.createdDate" raw "$temporary" 2>/dev/null || true); created_base=${created:0:19}
+    [[ -n "$name" && "$created" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} ]] || { rm -f "$temporary"; fail 'Notarization recovery history has an incomplete record.'; }
     if [[ "$name" == "$(basename "$artifact")" && "$created" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2} && ( "$created_base" == "$submitted_base" || "$created_base" > "$submitted_base" ) && ( "$created_base" == "$observed_base" || "$created_base" < "$observed_base" ) ]] && ! printf '%s\n' "$(plist_get "$intent" preHistoryIDs)" | grep -Fxq "$id"; then
       candidates=$((candidates + 1)); candidate=$id
     fi
     i=$((i + 1))
   done
+  if [[ "$operation" == retry-notary && $candidates == 0 ]]; then
+    recovery_history=$(cat "$temporary")
+  fi
   rm -f "$temporary"
   [[ $candidates -le 1 ]] || fail "Lost submission response has $candidates matching history entries; refusing to choose one."
   [[ $candidates -eq 1 ]] || return 2
   write_plist "$response" id "$candidate" recoveredFromHistory true
+}
+resolve_attempt() {
+  local kind=$1 artifact=$2 original=$3 response=$4 next previous_sha original_sha
+  attempt_intent=$original; attempt_prefix="$release_dir/$kind-submit"
+  original_sha=$(sha256 "$original")
+  for next in "$release_dir/notary-attempts" "$release_dir/notary-attempts/$kind"; do
+    [[ ! -e "$next" && ! -L "$next" ]] || [[ -d "$next" && ! -L "$next" ]] || fail 'Untrusted notarization attempt directory.'
+  done
+  while :; do
+    [[ -f "$attempt_intent" && ! -L "$attempt_intent" ]] || fail "Untrusted $kind submission intent."
+    require_equal "$(plist_get "$attempt_intent" artifactSHA256)" "$(sha256 "$artifact")" "$kind artifact drifted after submission intent."
+    require_equal "$(plist_get "$attempt_intent" stateSHA256)" "$state_sha" "$kind intent is not bound to release state."
+    restore_submit_response "$response" "$attempt_prefix-output.plist"
+    attempt_sha=$(sha256 "$attempt_intent")
+    next="$release_dir/notary-attempts/$kind/$attempt_sha"
+    [[ ! -e "$next" && ! -L "$next" ]] || [[ -d "$next" && ! -L "$next" ]] || fail 'Untrusted notarization attempt directory.'
+    [[ -e "$next/intent.plist" || -L "$next/intent.plist" ]] || break
+    previous_sha=$attempt_sha
+    attempt_intent="$next/intent.plist"; attempt_prefix="$next/submit"
+    require_equal "$(plist_get "$attempt_intent" previousIntentSHA256)" "$previous_sha" 'Retry intent predecessor mismatch.'
+    require_equal "$(plist_get "$attempt_intent" originalIntentSHA256)" "$original_sha" 'Retry intent origin mismatch.'
+  done
+}
+unknown_submission() {
+  fail "Lost $1 submission response has no matching history entry; refusing to resubmit unknown remote state. Current intent: $attempt_intent (SHA-256 $attempt_sha)."
 }
 ensure_submission() {
   local kind=$1 artifact=$2 response=$3 intent=$4 pre_history id status info log recovery_status submitted_at
@@ -192,11 +248,11 @@ ensure_submission() {
   if [[ -e "$intent" && ( ! -f "$intent" || -L "$intent" ) ]]; then fail "Untrusted $kind submission intent path."; fi
   if [[ -e "$response" && ( ! -f "$response" || -L "$response" ) ]]; then fail "Untrusted $kind submission response path."; fi
   if [[ -e "$response" && ! -f "$intent" ]]; then fail "$kind submission response lacks its immutable intent."; fi
-  require_equal "$(sha256 "$artifact")" "$(plist_get "$intent" artifactSHA256 2>/dev/null || sha256 "$artifact")" "$kind artifact drifted after submission intent."
+  if [[ -f "$intent" ]]; then resolve_attempt "$kind" "$artifact" "$intent" "$response"; fi
   if [[ ! -f "$response" ]]; then
     if [[ -f "$intent" && ! -L "$intent" ]]; then
       recover_submission "$artifact" "$intent" "$response" || recovery_status=$?
-      [[ ${recovery_status:-0} -ne 2 ]] || fail "Lost $kind submission response has no matching history entry; refusing to resubmit unknown remote state."
+      [[ ${recovery_status:-0} -ne 2 ]] || unknown_submission "$kind"
       [[ ${recovery_status:-0} -eq 0 ]] || fail "$kind submission recovery failed."
     else
       [[ ! -e "$intent" && ! -L "$intent" ]] || fail "Untrusted $kind submission intent."
@@ -204,11 +260,12 @@ ensure_submission() {
       history_snapshot "$pre_history"
       submitted_at=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
       write_plist "$intent" artifactSHA256 "$(sha256 "$artifact")" submittedAt "$submitted_at" preHistoryIDs "$(cat "$pre_history")" stateSHA256 "$state_sha" transport s3-standard
-      atomic_plist_command "$response" bash .agents/skills/inkflow-release/scripts/notary.sh submit "$artifact" --no-wait --force --no-s3-acceleration --output-format plist || true
+      resolve_attempt "$kind" "$artifact" "$intent" "$response"
+      submit_once "$artifact" "$response" "$attempt_prefix"
       if [[ ! -f "$response" ]]; then
         recovery_status=0
         recover_submission "$artifact" "$intent" "$response" || recovery_status=$?
-        [[ $recovery_status -ne 2 ]] || fail "Lost $kind submission response has no matching history entry; refusing to resubmit unknown remote state."
+        [[ $recovery_status -ne 2 ]] || unknown_submission "$kind"
         [[ $recovery_status -eq 0 ]] || fail "$kind submission recovery failed."
       fi
     fi
@@ -227,8 +284,10 @@ ensure_submission() {
     mv "$temporary" "$info"
     case "$status" in
       Accepted) break ;;
-      'In Progress') sleep "$poll_interval" ;;
-      Invalid) bash .agents/skills/inkflow-release/scripts/notary.sh log "$id" > "$log" 2>&1 || true; fail "$kind notarization is Invalid; log retained at $log." ;;
+      'In Progress')
+        [[ "$operation" != retry-notary ]] || { echo "$kind submission $id is In Progress; use continue to resume polling."; return; }
+        sleep "$poll_interval" ;;
+      Invalid|Rejected) bash .agents/skills/inkflow-release/scripts/notary.sh log "$id" > "$log" 2>&1 || true; fail "$kind notarization is $status; log retained at $log." ;;
       *) cp "$info" "$log"; fail "Unknown $kind notarization status '$status'; response retained at $log." ;;
     esac
   done
@@ -250,6 +309,7 @@ assembly_snapshot() {
 if [[ -e "$dmg_build_intent" && ( ! -f "$dmg_build_intent" || -L "$dmg_build_intent" ) ]]; then fail 'Untrusted DMG build intent path.'; fi
 if [[ -e "$dmg_build_response" && ( ! -f "$dmg_build_response" || -L "$dmg_build_response" ) ]]; then fail 'Untrusted DMG build binding path.'; fi
 if [[ ! -f "$dmg_build_intent" ]]; then
+  [[ "$operation" != retry-notary ]] || fail 'Explicit retry requires the retained DMG build intent.'
   [[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Existing DMG has no immutable pre-finish intent.'
   [[ ! -e "$sparkle_update_zip" && ! -L "$sparkle_update_zip" ]] || fail 'Existing Sparkle update ZIP has no immutable pre-finish intent.'
   write_plist "$dmg_build_intent" stateSHA256 "$state_sha" releaseCommit "$release_commit" expectedDMGPath "$dmg" expectedDMGName "$(basename "$dmg")" expectedSparkleUpdateZIPName "$(basename "$sparkle_update_zip")" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" installerReceiptSHA256 "$(sha256 "$receipt")" preexistingAssemblies "$(assembly_snapshot)"
@@ -334,6 +394,49 @@ verify_final_dmg_container() {
   spctl --assess --type open --context context:primary-signature --verbose=2 "$dmg"
   hdiutil verify "$dmg"
 }
+
+retry_notary() {
+  local kind=$1 artifact=$2 response=$3 intent=$4 recovery_status=0 next temporary id status original_sha
+  [[ -f "$intent" && ! -L "$intent" ]] || fail "No retained $kind submission intent to retry."
+  [[ ! -e "$response" && ! -L "$response" ]] || [[ -f "$response" && ! -L "$response" ]] || fail "Untrusted $kind submission response."
+  resolve_attempt "$kind" "$artifact" "$intent" "$response"
+  require_equal "$retry_token" "$attempt_sha" "Retry token is stale; current intent is $attempt_intent (SHA-256 $attempt_sha)."
+  if [[ -f "$response" ]]; then
+    id=$(plist_get "$response" id)
+    valid_uuid "$id" || fail 'Retained submission ID is invalid.'
+    temporary=$(mktemp "$release_dir/.retry-info.XXXXXX")
+    bash .agents/skills/inkflow-release/scripts/notary.sh info "$id" --output-format plist > "$temporary" || fail 'Could not observe the known submission; retry refused.'
+    status=$(plist_get "$temporary" status || true)
+    fail "$kind already has submission $id (status: $status); this recovery command cannot retry a known submission."
+  fi
+  # Always reconcile against the original window. An older unknown upload can
+  # appear after a later retry starts, so retry history must not exclude it.
+  recover_submission "$artifact" "$intent" "$response" || recovery_status=$?
+  [[ $recovery_status == 0 || $recovery_status == 2 ]] || fail "$kind submission recovery failed."
+  if [[ $recovery_status == 2 ]]; then
+    original_sha=$(sha256 "$intent")
+    next="$release_dir/notary-attempts/$kind/$attempt_sha"
+    mkdir -p "$next"
+    write_plist "$next/intent.plist" artifactSHA256 "$(plist_get "$intent" artifactSHA256)" stateSHA256 "$state_sha" submittedAt "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" previousIntentSHA256 "$attempt_sha" originalIntentSHA256 "$original_sha" retryReason "$retry_reason" priorRemoteState unknown acknowledgedUnknown true reconciliationHistoryPLIST "$recovery_history" transport s3-standard
+    resolve_attempt "$kind" "$artifact" "$intent" "$response"
+    if [[ ${INKFLOW_RELEASE_TESTING:-0} == 1 && ${INKFLOW_RELEASE_TEST_INTERRUPT_AFTER_RETRY_INTENT:-0} == 1 ]]; then fail 'Fixture interruption after retry intent.'; fi
+    submit_once "$artifact" "$response" "$attempt_prefix"
+  fi
+  ensure_submission "$kind" "$artifact" "$response" "$intent"
+  echo "$kind notarization recovery recorded. No other release stage was run; use continue to resume the release."
+}
+
+if [[ "$operation" == retry-notary ]]; then
+  if [[ "$retry_kind" == payload ]]; then
+    retry_notary payload "$payload_zip" "$release_dir/payload-submission.plist" "$release_dir/payload-submission.intent.plist"
+  else
+    [[ ! -e "$dmg_receipt" && ! -L "$dmg_receipt" ]] || fail 'DMG already has a final notarization receipt; retry refused.'
+    [[ -f "$dmg_build_response" && ! -L "$dmg_build_response" ]] || fail 'Missing trusted DMG build binding.'
+    bind_dmg_build
+    retry_notary dmg "$dmg" "$dmg_response" "$dmg_intent"
+  fi
+  exit 0
+fi
 
 if [[ -e "$dmg_receipt" || -L "$dmg_receipt" ]]; then
   verify_final_dmg_receipt
