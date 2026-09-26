@@ -70,15 +70,18 @@ struct IFDictionaryWorkerRunner: Sendable {
                  progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) async throws -> IFDictionaryWorkerResult {
         let cancellation = IFDictionaryCancellation()
         return try await withTaskCancellationHandler {
-            try await Task.detached {
+            let result = try await Task.detached {
                 try prepareBlocking(candidate: candidate, inputs: inputs, existing: existing, cancellation: cancellation, progress: progress)
             }.value
+            try checkCancellation(cancellation)
+            return result
         } onCancel: { cancellation.cancel() }
     }
     func prepareBlocking(candidate: URL, inputs: [IFDictionaryInput], existing: IFDictionaryContentIdentity? = nil,
                          cancellation: IFDictionaryCancellation = .init(),
                          progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
         do {
+            try checkCancellation(cancellation)
             try validateCandidate(candidate)
             guard inputs.map(\.receipt.id) == IFDictionaryCatalog.sources.filter(\.isUpdatable).map(\.id) else {
                 throw IFDictionaryUpdateError(.prepare, "source-set")
@@ -86,9 +89,11 @@ struct IFDictionaryWorkerRunner: Sendable {
             let raw = try IFDictionaryFiles.child("raw", in: candidate)
             try FileManager.default.createDirectory(at: raw, withIntermediateDirectories: false)
             for input in inputs {
+                try checkCancellation(cancellation)
                 try IFDictionaryGenerator.validate(input)
                 try input.data.write(to: IFDictionaryFiles.child(input.receipt.id + ".dict.yaml", in: raw), options: .withoutOverwriting)
             }
+            try checkCancellation(cancellation)
             let request = IFDictionaryWorkerRequest(candidate: candidate, runtimeFingerprint: try runtime.fingerprint(),
                 receipts: inputs.map(\.receipt), reuseDictionary: false, existing: existing)
             return try runBlocking(request, cancellation: cancellation, progress: progress)
@@ -99,24 +104,31 @@ struct IFDictionaryWorkerRunner: Sendable {
                          cancellation: IFDictionaryCancellation = .init(),
                          progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
         do {
+            try checkCancellation(cancellation)
             try validateCandidate(candidate)
             let manifest = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: IFDictionaryFiles.child(IFDictionaryManifest.filename, in: dictionaryShared))
             let retainedRaw = dictionaryShared.deletingLastPathComponent().appendingPathComponent("raw")
             if FileManager.default.fileExists(atPath: retainedRaw.path) {
                 let inputs = try manifest.sources.filter { $0.id != "legacy" }.map { receipt in
-                    IFDictionaryInput(receipt: receipt, data: try Data(contentsOf: IFDictionaryFiles.child(receipt.id + ".dict.yaml", in: retainedRaw)))
+                    try checkCancellation(cancellation)
+                    return IFDictionaryInput(receipt: receipt, data: try Data(contentsOf: IFDictionaryFiles.child(receipt.id + ".dict.yaml", in: retainedRaw)))
                 }
                 return try prepareBlocking(candidate: candidate, inputs: inputs, cancellation: cancellation, progress: progress)
             }
             let reuse = try IFDictionaryFiles.child("rebuild", in: candidate)
             try FileManager.default.createDirectory(at: reuse, withIntermediateDirectories: false)
             for name in [IFDictionaryCatalog.dictionaryFilename, IFDictionaryManifest.filename] {
+                try checkCancellation(cancellation)
                 try FileManager.default.copyItem(at: IFDictionaryFiles.child(name, in: dictionaryShared), to: reuse.appendingPathComponent(name))
             }
+            try checkCancellation(cancellation)
             let request = IFDictionaryWorkerRequest(candidate: candidate, runtimeFingerprint: try runtime.fingerprint(), receipts: [],
                 reuseDictionary: true, existing: nil)
             return try runBlocking(request, cancellation: cancellation, progress: progress)
         } catch { let value = IFDictionaryUpdateError.wrapping(error, stage: .prepare); logger(value); throw value }
+    }
+    private func checkCancellation(_ cancellation: IFDictionaryCancellation) throws {
+        if cancellation.isCancelled || Task.isCancelled { throw IFDictionaryUpdateError(.prepare, "cancelled") }
     }
     private func validateCandidate(_ candidate: URL) throws {
         let protected = try IFDictionaryFiles.canonical(protectedUserRoot)
@@ -135,7 +147,7 @@ struct IFDictionaryWorkerRunner: Sendable {
         var outcome: IFStartupDiagnostics.Status = .failed
         defer { startup.end(span, outcome) }
         try validateCandidate(request.candidate)
-        if cancellation.isCancelled { outcome = .cancelled; throw IFDictionaryUpdateError(.prepare, "cancelled") }
+        if cancellation.isCancelled || Task.isCancelled { outcome = .cancelled; throw IFDictionaryUpdateError(.prepare, "cancelled") }
         let requestURL = try IFDictionaryFiles.child("request.json", in: request.candidate)
         try IFDictionaryFiles.atomicWrite(IFDictionaryFiles.encode(request), to: requestURL)
         let process = Process()
@@ -153,6 +165,7 @@ struct IFDictionaryWorkerRunner: Sendable {
         process.standardOutput = stdout; process.standardError = stderr; process.standardInput = FileHandle.nullDevice
         let output = IFDictionaryPipeCapture(limit: 262_144), diagnostics = IFDictionaryPipeCapture(limit: 16_000)
         let readers = DispatchGroup()
+        try checkCancellation(cancellation)
         do { try process.run() } catch {
             throw IFDictionaryUpdateError(.prepare, "worker-launch", detail: "\((error as NSError).domain) (\((error as NSError).code))")
         }
@@ -164,7 +177,7 @@ struct IFDictionaryWorkerRunner: Sendable {
         let start = ProcessInfo.processInfo.systemUptime
         var interrupted: String?
         while process.isRunning {
-            if cancellation.isCancelled { interrupted = "cancelled"; break }
+            if cancellation.isCancelled || Task.isCancelled { interrupted = "cancelled"; break }
             if ProcessInfo.processInfo.systemUptime - start >= timeout { interrupted = "worker-timeout"; break }
             Thread.sleep(forTimeInterval: 0.02)
         }
@@ -175,6 +188,7 @@ struct IFDictionaryWorkerRunner: Sendable {
             if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
         }
         process.waitUntilExit(); readers.wait()
+        if cancellation.isCancelled || Task.isCancelled { interrupted = "cancelled" }
         let (_, stage, result, failure) = output.snapshot()
         let diagnosticText = diagnostics.snapshot().0
         if let interrupted {

@@ -59,6 +59,7 @@ private actor TestGate {
         try partialRestoreModes(root: root, template: template)
         try await missingFingerprintRetry(root: root, runtime: runtime)
         try await coordinatorLifecycle(root: root, runtime: runtime, template: template)
+        try await shutdownStages(root: root, runtime: runtime, template: template)
         try await transactionFailures(root: root, runtime: runtime, template: template)
         try await recovery(root: root, runtime: runtime, template: template)
         try await domainCatalogUpgrade(root: root, runtime: runtime, repository: repository)
@@ -418,6 +419,100 @@ private actor TestGate {
         engine.clear()
         IFEngine.stop()
         print("PASS transaction: no-update, confirmation write rollback/date, compact housekeeping failure and safe composing retry")
+    }
+
+    @MainActor static func shutdownStages(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
+        let preparedRanker = try IFContextRanker(dictionary: template.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+        for stage in ["check", "download", "prepare", "pre-activation", "waiting-for-idle"] {
+            let base = try backend(root.appendingPathComponent("shutdown-" + stage), runtime: runtime)
+            let entered = TestBox(false), cancelled = TestBox(false), producerStopped = TestBox(false)
+            let candidateIntact = TestBox(true)
+            let calls = TestBox((download: 0, prepare: 0, pending: 0, activate: 0))
+            let store = try IFDictionaryStore(root: base.store.root, beforeStateWrite: { state in
+                if state.pending != nil { calls.update { $0.pending += 1 } }
+            })
+            @Sendable func waitForCancellation() async {
+                entered.value = true
+                do { try await Task.sleep(for: .seconds(8)) }
+                catch is CancellationError { cancelled.value = true }
+                catch { fatalError("Unexpected gate error: \(error)") }
+            }
+            var services = base.services
+            services.check = { _ in
+                if stage == "check" { await waitForCancellation(); producerStopped.value = true }
+                return .init(sources: [], hasUpdate: true)
+            }
+            services.download = { _, progress in
+                calls.update { $0.download += 1 }
+                if stage == "download" { await waitForCancellation(); producerStopped.value = true }
+                progress(.init(stage: .download, completed: 1, total: 1))
+                return []
+            }
+            services.prepare = { candidate, _, _, _ in
+                calls.update { $0.prepare += 1 }
+                if stage == "prepare" {
+                    defer { producerStopped.value = true }
+                    try Data("producer-owned".utf8).write(to: candidate.appendingPathComponent("producer"))
+                    await waitForCancellation()
+                    candidateIntact.value = FileManager.default.fileExists(atPath: candidate.appendingPathComponent("producer").path)
+                    guard candidateIntact.value else {
+                        throw IFDictionaryUpdateError(.prepare, "test-producer-cleaned-before-stop")
+                    }
+                    // A late successful producer result must still be rejected before adoption.
+                    return try copyTemplate(template, to: candidate)
+                }
+                return try copyTemplate(template, to: candidate)
+            }
+            let service = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: base.user, services: services),
+                rankerLoader: { path in
+                    if stage == "pre-activation", path != runtime.resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path {
+                        entered.value = true
+                        let deadline = Date(timeIntervalSinceNow: 8)
+                        while !Task.isCancelled, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+                        cancelled.value = Task.isCancelled; producerStopped.value = true
+                    }
+                    return preparedRanker
+                })
+            service.activationFault = { _, _ in calls.update { $0.activate += 1 } }
+            service.bootstrap(); service.presentationOpened()
+            let original = service.active!.manifest.contentVersion
+            let engine = IFEngine()!
+            type(engine, "nihao")
+            let composition = engine.snapshot()
+            service.checkForUpdates()
+            if stage != "check" {
+                await until("Shutdown fixture check completes") { !service.isBusy }
+                service.downloadAndUpdate()
+            }
+            if stage == "waiting-for-idle" {
+                await until("Shutdown fixture has pending activation") { service.activity == .waitingForIdle }
+            } else { await until("Shutdown fixture entered \(stage)") { entered.value } }
+            let completed = TestBox(false)
+            let start = ContinuousClock.now
+            let shutdown = Task { try await service.shutdown(); completed.value = true }
+            let deadline = start.advanced(by: .seconds(4))
+            while !completed.value, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            check(completed.value, "Shutdown cancels and drains \(stage) within the fixture bound")
+            try await shutdown.value
+            if stage != "waiting-for-idle" { check(cancelled.value && producerStopped.value, "Owned \(stage) producer observes cancellation and stops") }
+            check(candidateIntact.value, "Shutdown preserves candidate files until their producer has stopped")
+            check(calls.value.activate == 0 && calls.value.pending == (stage == "waiting-for-idle" ? 1 : 0),
+                  "Shutdown admits no new activation journal or native switch")
+            check(stage != "check" || calls.value.download == 0, "Cancelled check never starts download")
+            check(stage != "download" || calls.value.prepare == 0, "Cancelled download never starts worker")
+            check(service.active?.manifest.contentVersion == original && engine.snapshot() == composition && service.engineAvailable,
+                  "Shutdown keeps the serving offline engine and composition intact")
+            check(service.failure == nil && !service.canCheck && !service.canUpdate && !service.canRetry && !service.isBusy,
+                  "Shutdown cancellation is not a visible retryable failure")
+            let finalState = try store.state()
+            let candidates = try FileManager.default.contentsOfDirectory(atPath: store.root.appendingPathComponent("candidates").path)
+            check(finalState.pending == nil && candidates.isEmpty,
+                  "Shutdown drains producers before removing candidates and pending journal")
+            engine.clear(); await Task.yield()
+            check(calls.value.activate == 0, "Late idle signal cannot activate after shutdown")
+            IFEngine.stop()
+            print("PASS shutdown \(stage): cancellation/drain/no late activation/offline preservation, elapsed=\(start.duration(to: .now))")
+        }
     }
 
     @MainActor static func installTemplate(_ template: IFDictionaryDescriptor, store: IFDictionaryStore, date: TimeInterval) throws -> IFDictionaryVersion {

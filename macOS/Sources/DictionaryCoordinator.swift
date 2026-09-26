@@ -249,6 +249,8 @@ final class IFDictionaryCoordinator {
             return try Self.prepareIndex(descriptor, user: backend.user, loader: rankerLoader)
         }
         catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
             record(.wrapping(error, stage: .recovery), retry: .recovery)
             return try Self.rebuild(version, backend: backend, fingerprint: fingerprint, loader: rankerLoader)
         }
@@ -257,11 +259,16 @@ final class IFDictionaryCoordinator {
     private nonisolated static func rebuild(_ version: IFDictionaryVersion, backend: IFDictionaryBackend, fingerprint: String,
                                             loader: @Sendable (String) throws -> IFContextRanker) throws -> IFPreparedActivation {
         return try IFStartupDiagnostics.shared.measure(.rebuild, source: .downloaded) {
+            try Task.checkCancellation()
             let inert = try backend.store.storedDictionary(version)
+            try Task.checkCancellation()
             let candidate = try backend.store.candidate()
             defer { if FileManager.default.fileExists(atPath: candidate.path) { try? backend.store.removeCandidate(candidate) } }
+            try Task.checkCancellation()
             _ = try backend.services.rebuild(candidate, inert)
+            try Task.checkCancellation()
             let rebuilt = try backend.store.adopt(candidate, fingerprint: fingerprint)
+            try Task.checkCancellation()
             return try Self.prepareIndex(backend.store.resolve(rebuilt, fingerprint: fingerprint), user: backend.user, loader: loader)
         }
     }
@@ -269,31 +276,47 @@ final class IFDictionaryCoordinator {
     /// Manual and serving recovery share disk validation, helper work and indexes on a background executor.
     /// The serving path supplies its already-running packaged fallback to avoid rebuilding its index.
     private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend, bundledFallback: IFPreparedActivation? = nil,
-                                                    loader: @Sendable (String) throws -> IFContextRanker) -> IFRecoveryPreparation {
+                                                    loader: @Sendable (String) throws -> IFContextRanker) throws -> IFRecoveryPreparation {
+        try Task.checkCancellation()
         var errors: [IFDictionaryUpdateError] = []
         var state = IFDictionaryState(), malformed = false
         do { state = try IFStartupDiagnostics.shared.measure(.journal) { try backend.store.recoverInterrupted() } }
         catch { malformed = true; errors.append(.wrapping(error, stage: .recovery)) }
+        try Task.checkCancellation()
         var fingerprint: String?
         do { fingerprint = try IFStartupDiagnostics.shared.measure(.fingerprint) { try backend.runtime.fingerprint() } }
         catch { errors.append(.wrapping(error, stage: .recovery)) }
+        try Task.checkCancellation()
         var versions: [String: IFPreparedActivation] = [:]
         if let fingerprint, !malformed, state.bundled == nil {
             for version in [state.current, state.previous].compactMap({ $0 }) {
+                try Task.checkCancellation()
                 do {
                     do { versions[version.artifactID] = try prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader) }
                     catch {
+                        if error is CancellationError { throw error }
+                        try Task.checkCancellation()
                         errors.append(.wrapping(error, stage: .recovery))
                         versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint, loader: loader)
                     }
-                } catch { errors.append(.wrapping(error, stage: .recovery)) }
+                } catch {
+                    if error is CancellationError { throw error }
+                    try Task.checkCancellation()
+                    errors.append(.wrapping(error, stage: .recovery))
+                }
             }
         }
         var bundled = bundledFallback
+        try Task.checkCancellation()
         if bundled == nil {
             do { bundled = try prepareIndex(backend.store.bundled(backend.runtime.resources), user: backend.user, loader: loader) }
-            catch { errors.append(.wrapping(error, stage: .recovery)) }
+            catch {
+                if error is CancellationError { throw error }
+                try Task.checkCancellation()
+                errors.append(.wrapping(error, stage: .recovery))
+            }
         }
+        try Task.checkCancellation()
         return .init(state: state, malformed: malformed, fingerprint: fingerprint, versions: versions, bundled: bundled, errors: errors)
     }
 
@@ -304,12 +327,15 @@ final class IFDictionaryCoordinator {
         IFEngine.idleHandler = nil
     }
 
-    /// Drain owned tasks, including detached file/worker work. Never cancel a filesystem transaction midway.
-    /// Pending activation is abandoned only after every producer has stopped; normal replacement is unchanged.
+    /// Cancel optional preparation, then drain every producer before abandoning or cleaning its artifacts.
+    /// Already-entered synchronous journal writes and native activation finish before shutdown can proceed.
     func shutdown() async throws {
         isShuttingDown = true
+        operationID = nil
         if let servingFallback { IFEngine.cancelPendingContextRanker(for: servingFallback.configuration) }
         IFEngine.idleHandler = nil
+        task?.cancel()
+        rankerTask?.cancel()
         while let current = task { await current.value }
         if let rankerTask { await rankerTask.value }
         IFEngine.idleHandler = nil
@@ -320,6 +346,23 @@ final class IFDictionaryCoordinator {
             _ = try await Task.detached { try backend.store.cleanup() }.value
         }
         isBusy = false; operationID = nil; progress = nil
+    }
+
+    /// Detached preparation is owned: cancellation reaches it, and its producer always finishes before return.
+    /// Cleanup and compact journal completion deliberately use separate, uncancelled tasks.
+    private nonisolated static func prepareOffMain<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try Task.checkCancellation()
+        let worker = Task.detached {
+            try Task.checkCancellation()
+            return try operation()
+        }
+        return try await withTaskCancellationHandler {
+            let result = try await worker.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: { worker.cancel() }
     }
 
     func checkForUpdates() {
@@ -356,16 +399,18 @@ final class IFDictionaryCoordinator {
             activity = .preparing
             task = Task { [self] in
                 do {
-                    if backend == nil, let factory = backendFactory { backend = try await Task.detached { try factory() }.value }
+                    if backend == nil, let factory = backendFactory { backend = try await Self.prepareOffMain { try factory() } }
                     if let backend {
                         let loader = rankerLoader
-                        let prepared = await Task.detached { Self.prepareRecovery(backend, loader: loader) }.value
+                        let prepared = try await Self.prepareOffMain { try Self.prepareRecovery(backend, loader: loader) }
                         isBusy = false
                         bootstrap(prepared: prepared)
                         isBusy = true
                         await cleanupAfterOperation(backend.store)
                     }
-                } catch { recordUnavailable(error) }
+                } catch {
+                    if !isShuttingDown, !(error is CancellationError) { recordUnavailable(error) }
+                }
                 isBusy = false; task = nil; operationID = nil; activity = .idle
             }
             return
@@ -374,11 +419,14 @@ final class IFDictionaryCoordinator {
         activity = operation == .check ? .checking : operation == .update ? .downloading : .idle
         task = Task { [self] in
             do {
+                try Task.checkCancellation()
                 switch operation {
                 case .check:
                     guard let descriptor else { throw IFDictionaryUpdateError(.check, "engine-unavailable") }
-                    let observed = try await Task.detached { try backend.store.observed(active: descriptor.manifest) }.value
-                    checked = try await backend.services.check(observed)
+                    let observed = try await Self.prepareOffMain { try backend.store.observed(active: descriptor.manifest) }
+                    let result = try await backend.services.check(observed)
+                    try Task.checkCancellation()
+                    checked = result
                     operationID = nil
                     activity = checked!.hasUpdate ? .updateAvailable : .upToDate
                 case .update:
@@ -387,28 +435,32 @@ final class IFDictionaryCoordinator {
                         Task { @MainActor in self?.acceptProgress(update, operation: id) }
                     }
                     let inputs = try await backend.services.download(checked, report)
+                    try Task.checkCancellation()
                     activity = .preparing
-                    let candidate = try await Task.detached { try backend.store.candidate() }.value
+                    let candidate = try await Self.prepareOffMain { try backend.store.candidate() }
                     do {
                         let identity = IFDictionaryContentIdentity(contentVersion: descriptor.manifest.contentVersion, runtimeFingerprint: fingerprint)
                         let result = try await backend.services.prepare(candidate, inputs, identity, report)
+                        try Task.checkCancellation()
                         operationID = nil; progress = nil
                         if result.outcome == .contentUnchanged {
-                            try await Task.detached {
+                            try await Self.prepareOffMain {
                                 try backend.store.recordContentUnchanged(result.manifest, activeContentVersion: descriptor.manifest.contentVersion)
                                 try backend.store.removeCandidate(candidate)
-                            }.value
+                            }
                             self.checked = nil; activity = .upToDate
                         } else {
                             let date = now()
                             // Hash-heavy adopt/resolve and immutable context-index construction all stay off the input actor.
                             let loader = rankerLoader
-                            let prepared = try await Task.detached {
+                            let prepared = try await Self.prepareOffMain {
                                 let version = try backend.store.adopt(candidate, fingerprint: fingerprint, now: date)
+                                try Task.checkCancellation()
                                 let prepared = try Self.prepareIndex(backend.store.resolve(version, fingerprint: fingerprint), user: backend.user, loader: loader)
+                                try Task.checkCancellation()
                                 try backend.store.beginActivation(version)
                                 return prepared
-                            }.value
+                            }
                             pending = prepared
                             activity = .waitingForIdle; progress = nil
                             IFEngine.idleHandler = { [weak self] in self?.activateIfIdle() }
@@ -422,7 +474,7 @@ final class IFDictionaryCoordinator {
                     }
                 case .cleanup:
                     if fingerprint == nil {
-                        fingerprint = try await Task.detached { try backend.runtime.fingerprint() }.value
+                        fingerprint = try await Self.prepareOffMain { try backend.runtime.fingerprint() }
                     }
                     try await Task.detached { try backend.store.abandonActivation() }.value
                 case .recovery, .servingRecovery: break
@@ -430,7 +482,9 @@ final class IFDictionaryCoordinator {
                 retryOperation = nil
             } catch {
                 operationID = nil
-                record(.wrapping(error, stage: operation == .check ? .check : operation == .cleanup ? .recovery : .prepare), retry: operation)
+                if !isShuttingDown, !(error is CancellationError) {
+                    record(.wrapping(error, stage: operation == .check ? .check : operation == .cleanup ? .recovery : .prepare), retry: operation)
+                }
                 activity = checked?.hasUpdate == true ? .updateAvailable : .idle
             }
             await cleanupAfterOperation(backend.store)
@@ -445,15 +499,15 @@ final class IFDictionaryCoordinator {
         activity = .preparing
         task = Task { [self] in
             do {
-                if backend == nil, let factory = backendFactory { backend = try await Task.detached { try factory() }.value }
+                if backend == nil, let factory = backendFactory { backend = try await Self.prepareOffMain { try factory() } }
                 guard !isShuttingDown else { finishServingRecovery(); return }
                 guard let backend, let fallback = servingFallback else {
                     throw IFDictionaryUpdateError(.recovery, "backend-unavailable")
                 }
                 let loader = rankerLoader
-                let prepared = await Task.detached {
-                    Self.prepareRecovery(backend, bundledFallback: fallback, loader: loader)
-                }.value
+                let prepared = try await Self.prepareOffMain {
+                    try Self.prepareRecovery(backend, bundledFallback: fallback, loader: loader)
+                }
                 guard !isShuttingDown else { finishServingRecovery(); return }
                 fingerprint = prepared.fingerprint
                 for error in prepared.errors { record(error, retry: .servingRecovery) }
@@ -488,7 +542,7 @@ final class IFDictionaryCoordinator {
                 retryOperation = servingRankerFailed ? .servingRecovery : nil
                 await cleanupAfterOperation(backend.store)
             } catch {
-                record(.wrapping(error, stage: .recovery), retry: .servingRecovery)
+                if !isShuttingDown, !(error is CancellationError) { record(.wrapping(error, stage: .recovery), retry: .servingRecovery) }
             }
             finishServingRecovery()
         }
@@ -515,18 +569,18 @@ final class IFDictionaryCoordinator {
     /// The large bundled phrase index is optional for baseline input. Build it off the input actor,
     /// then retain the ranked configuration for rollback and publish it only at a native idle boundary.
     private func beginServingRankerPreparation() {
-        guard rankerTask == nil, let fallback = servingFallback, fallback.configuration.ranker == nil else { return }
+        guard !isShuttingDown, rankerTask == nil, let fallback = servingFallback, fallback.configuration.ranker == nil else { return }
         servingRankerFailed = false
         let original = fallback.configuration
         let descriptor = fallback.descriptor
         let loader = rankerLoader
         rankerTask = Task { [self] in
             do {
-                let ranker = try await Task.detached {
+                let ranker = try await Self.prepareOffMain {
                     try IFStartupDiagnostics.shared.measure(.indexes, source: .bundled) {
                         try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
                     }
-                }.value
+                }
                 guard !isShuttingDown else { rankerTask = nil; return }
                 let ranked = IFEngineConfiguration(shared: original.shared, cache: original.cache,
                     user: original.user, ranker: ranker)
@@ -539,8 +593,9 @@ final class IFDictionaryCoordinator {
                 rankerTask = nil
                 if isBusy, pending == nil, !recoveryAlternatives.isEmpty { queueServingRecovery() }
             } catch {
-                servingRankerFailed = true
                 rankerTask = nil
+                guard !isShuttingDown, !(error is CancellationError) else { return }
+                servingRankerFailed = true
                 record(.wrapping(error, stage: .recovery), retry: .servingRecovery)
                 if isBusy, pending == nil, !recoveryAlternatives.isEmpty {
                     recoveryAlternatives = []
@@ -555,7 +610,7 @@ final class IFDictionaryCoordinator {
     }
 
     private func acceptProgress(_ update: IFDictionaryProgress, operation: UUID) {
-        guard operationID == operation, isBusy, pending == nil else { return }
+        guard !isShuttingDown, operationID == operation, isBusy, pending == nil else { return }
         progress = update
         switch update.stage {
         case .download: activity = .downloading
@@ -616,6 +671,7 @@ final class IFDictionaryCoordinator {
     }
 
     private func cleanupAfterOperation(_ store: IFDictionaryStore) async {
+        guard !isShuttingDown else { return }
         do { _ = try await Task.detached { try store.cleanup() }.value }
         catch { record(.wrapping(error, stage: .recovery), retry: .recovery) }
     }
@@ -639,9 +695,11 @@ final class IFDictionaryCoordinator {
 
     private nonisolated static func prepareIndex(_ descriptor: IFDictionaryDescriptor, user: URL,
                                                  loader: @Sendable (String) throws -> IFContextRanker) throws -> IFPreparedActivation {
+        try Task.checkCancellation()
         let ranker = try IFStartupDiagnostics.shared.measure(.indexes, source: descriptor.version == nil ? .bundled : .downloaded) {
             try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
         }
+        try Task.checkCancellation()
         return prepareConfiguration(descriptor, user: user, ranker: ranker)
     }
 

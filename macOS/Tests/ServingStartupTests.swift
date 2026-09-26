@@ -12,17 +12,21 @@ private final class StartupGate: @unchecked Sendable {
     private var entered = false
     private var opened = false
     private var expired = false
+    private var cancelled = false
     init(timeout: TimeInterval = 8) { self.timeout = timeout }
     func wait() throws {
         lock.lock(); defer { lock.unlock() }
         entered = true
         let deadline = Date(timeIntervalSinceNow: timeout)
         while !opened {
-            if !lock.wait(until: deadline) { expired = true; throw IFDictionaryUpdateError(.prepare, "test-gate-timeout") }
+            if Task.isCancelled { cancelled = true; throw CancellationError() }
+            if Date() >= deadline { expired = true; throw IFDictionaryUpdateError(.prepare, "test-gate-timeout") }
+            _ = lock.wait(until: min(deadline, Date(timeIntervalSinceNow: 0.01)))
         }
     }
     func open() { lock.lock(); opened = true; lock.broadcast(); lock.unlock() }
     var held: Bool { lock.lock(); defer { lock.unlock() }; return entered && !opened && !expired }
+    var wasCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
 }
 
 private final class StartupFactory: @unchecked Sendable {
@@ -42,8 +46,8 @@ private final class StartupRankerTracker: @unchecked Sendable {
 }
 
 @main struct ServingStartupTests {
-    @MainActor static func until(_ label: String, _ predicate: () -> Bool) async throws {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(40))
+    @MainActor static func until(_ label: String, timeout: Duration = .seconds(40), _ predicate: () -> Bool) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
         while !predicate() && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         check(predicate(), label)
     }
@@ -99,10 +103,10 @@ private final class StartupRankerTracker: @unchecked Sendable {
         var retainedServer: IMKServer?
         var candidateLifetime: NativeCandidateLifetime?
         defer { withExtendedLifetime(candidateLifetime) {} }
-        for mode in native ? ["success"] : ["success", "previous", "failure", "activation-failure", "shutdown"] {
+        for mode in native ? ["success"] : ["success", "previous", "failure", "activation-failure", "shutdown", "shutdown-ranker"] {
             let user = root.appendingPathComponent(mode)
             let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
-            if mode == "previous" {
+            if mode == "previous" || mode.hasPrefix("shutdown") {
                 let previous = try adoptTemplate(store)
                 try store.beginValidatedActivation(previous)
                 try store.confirmActivation(previous, now: Date(timeIntervalSince1970: 1000))
@@ -130,7 +134,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
                 rankerLoader: { path in
                     rankerTracker.start()
                     defer { rankerTracker.finish() }
-                    if (mode == "success" || mode == "shutdown"), path == bundledDictionary { try rankerGate.wait() }
+                    if (mode == "success" || mode.hasPrefix("shutdown")), path == bundledDictionary { try rankerGate.wait() }
                     return try IFContextRanker(dictionary: path)
                 })
             var switches = 0
@@ -142,7 +146,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
             }
             coordinator.bootstrapForServing(runtime: runtime, user: user)
             check(coordinator.engineAvailable && coordinator.active?.isBundled == true, "Shipped fallback serves before downloaded recovery")
-            if mode == "success" || mode == "shutdown" {
+            if mode == "success" || mode.hasPrefix("shutdown") {
                 try await until("Bundled context index starts in background") { rankerGate.held }
                 check(!IFEngine.contextRankingReady, "Blocked background index is not published")
             }
@@ -187,18 +191,33 @@ private final class StartupRankerTracker: @unchecked Sendable {
                 check(!IFEngine.contextRankingReady && switches == 0,
                       "Context index publishes only at an all-session idle boundary")
             }
-            if mode == "shutdown" {
-                rankerGate.open()
-                try await until("Ranker finishes but remains pending behind live sessions") { rankerTracker.completedCount >= 1 }
+            if mode.hasPrefix("shutdown") {
+                if mode == "shutdown" {
+                    rankerGate.open()
+                    try await until("Ranker finishes but remains pending behind live sessions") { rankerTracker.completedCount >= 1 }
+                }
                 check(!IFEngine.contextRankingReady, "Busy sessions keep the completed ranker pending before shutdown")
-                let shutdown = Task { try await coordinator.shutdown() }
+                var stopped = false
+                let start = ContinuousClock.now
+                let shutdown = Task { try await coordinator.shutdown(); stopped = true }
                 try await until("Shutdown begins while rebuild is held") { coordinator.isShuttingDown }
                 controller.engine?.clear(); other.engine?.clear()
                 await Task.yield()
                 check(!IFEngine.contextRankingReady,
                       "Shutdown cancels a completed pending ranker before idle signals during task draining")
-                gate.open(); try await shutdown.value
+                try await until("Shutdown cancels and drains detached recovery/ranker", timeout: .seconds(4)) { stopped }
+                try await shutdown.value
+                check(gate.wasCancelled && (mode != "shutdown-ranker" || rankerGate.wasCancelled),
+                      "Cancellation reaches synchronous detached recovery and ranker work")
+                check(rankerTracker.completedCount == 1, "Shutdown starts no further recovery or fallback index work")
+                let finalState = try store.state()
+                let candidates = try FileManager.default.contentsOfDirectory(atPath: store.root.appendingPathComponent("candidates").path)
+                check(finalState.current == saved.current && finalState.previous == saved.previous && finalState.bundled == nil,
+                      "Cancelled recovery preserves the confirmed downloaded journal")
+                check(candidates.isEmpty,
+                      "Recovery candidate is cleaned after its producer stops")
                 check(switches == 0 && coordinator.engineAvailable && !coordinator.isBusy)
+                print("PASS \(mode) cancellation bound: \(start.duration(to: .now))")
             } else {
                 if mode != "success" { gate.open() }
                 try await until("Recovery preparation resolves") { coordinator.activity == .waitingForIdle || !coordinator.isBusy }
