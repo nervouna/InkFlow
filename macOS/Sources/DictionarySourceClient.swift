@@ -80,8 +80,10 @@ private final class IFDictionaryHTTPTask: NSObject, URLSessionDataDelegate, @unc
         buffer.append(data)
     }
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        lock.lock(); let continuation = continuation; self.continuation = nil; self.task = nil; self.session = nil; lock.unlock()
+        lock.lock(); let continuation = continuation; let cancelled = cancelled
+        self.continuation = nil; self.task = nil; self.session = nil; lock.unlock()
         defer { session.invalidateAndCancel() }
+        if cancelled { continuation?.resume(throwing: CancellationError()); return }
         if let failure = failure ?? error { continuation?.resume(throwing: failure); return }
         guard let response, let url = response.url else {
             continuation?.resume(throwing: IFDictionaryUpdateError(.download, "non-http-response")); return
@@ -113,6 +115,7 @@ struct IFDictionarySourceClient: Sendable {
             request.setValue("2026-03-10", forHTTPHeaderField: "X-GitHub-Api-Version")
             request.setValue("InkFlow-Dictionary", forHTTPHeaderField: "User-Agent")
             let response = try await transport(request, limit)
+            try Task.checkCancellation()
             guard Self.isAllowed(response.url) else { throw IFDictionaryUpdateError(stage, "redirect-host", source: source) }
             guard response.status == 200 else {
                 throw IFDictionaryUpdateError(stage, "http-status", source: source, httpStatus: response.status)
@@ -123,6 +126,8 @@ struct IFDictionarySourceClient: Sendable {
             }
             return response.data
         } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
             let value: IFDictionaryUpdateError
             if let known = error as? IFDictionaryUpdateError {
                 value = .init(stage, known.code, source: source, httpStatus: known.httpStatus, detail: known.detail)
@@ -171,8 +176,11 @@ struct IFDictionarySourceClient: Sendable {
             let changed = result.contains { item in
                 !observed.contains { $0.id == item.id && $0.blobSHA == item.blobSHA && $0.byteCount == item.byteCount }
             }
+            try Task.checkCancellation()
             return .init(sources: result, hasUpdate: changed)
         } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
             let value = IFDictionaryUpdateError.wrapping(error, stage: .check); logger(value); throw value
         }
     }
@@ -183,6 +191,7 @@ struct IFDictionarySourceClient: Sendable {
             guard check.sources.map(\.id) == specs.map(\.id) else { throw IFDictionaryUpdateError(.download, "source-set") }
             var result = [IFDictionaryInput]()
             for (spec, checked) in zip(specs, check.sources) {
+                try Task.checkCancellation()
                 guard IFDictionaryHash.isHex(checked.commit, length: 40), IFDictionaryHash.isHex(checked.blobSHA, length: 40),
                       checked.byteCount > 0, checked.byteCount <= IFDictionaryCatalog.maximumSourceBytes else {
                     throw IFDictionaryUpdateError(.download, "checked-source", source: spec.id)
@@ -195,9 +204,12 @@ struct IFDictionarySourceClient: Sendable {
                 try IFDictionaryGenerator.validate(input)
                 result.append(input)
             }
+            try Task.checkCancellation()
             progress(.init(stage: .download, completed: specs.count, total: specs.count))
             return result
         } catch {
+            if error is CancellationError { throw error }
+            try Task.checkCancellation()
             let value = IFDictionaryUpdateError.wrapping(error, stage: .download); logger(value); throw value
         }
     }

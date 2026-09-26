@@ -12,7 +12,11 @@ import Darwin
         switch request.existing?.contentVersion {
         case "timeout":
             signal(SIGTERM, SIG_IGN)
-            while true { Thread.sleep(forTimeInterval: 0.1) }
+            try IFDictionaryFiles.atomicWrite(Data(String(getpid()).utf8), to: request.candidate.appendingPathComponent("worker.pid"))
+            while true {
+                try Data(String(ProcessInfo.processInfo.systemUptime).utf8).write(to: request.candidate.appendingPathComponent("writer"))
+                Thread.sleep(forTimeInterval: 0.01)
+            }
         case "sandbox":
             let blocked = request.candidate.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("blocked.txt")
             if (try? Data(contentsOf: blocked)) != nil { exit(99) }

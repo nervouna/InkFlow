@@ -19,6 +19,17 @@ private func asyncFails(_ code: String? = nil, _ body: () async throws -> Void) 
 private let fakeCommit = String(repeating: "a", count: 40)
 private let fakeTree = String(repeating: "b", count: 40)
 
+private actor RequestGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var calls = 0
+    func wait() async {
+        calls += 1
+        if calls > 1 { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func open() { continuation?.resume(); continuation = nil }
+}
+
 private func network(_ mutation: String = "", changed: Bool = false) -> IFDictionarySourceClient {
     IFDictionarySourceClient(transport: { request, _ in
         let url = request.url!
@@ -125,6 +136,32 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         check(!IFDictionarySourceClient.isAllowed(URL(string: "https://user@api.github.com/")!), "No credential URL")
         let cancelled = Task { try await good.download(checked) }; cancelled.cancel()
         await asyncFails { _ = try await cancelled.value }
+        for download in [false, true] {
+            let cancelledClient = IFDictionarySourceClient(transport: { _, _ in throw CancellationError() })
+            do {
+                if download { _ = try await cancelledClient.download(checked) }
+                else { _ = try await cancelledClient.check(observed: baseline) }
+                check(false, "Cancelled transport cannot succeed")
+            } catch is CancellationError {} catch { check(false, "Source client preserves cancellation: \(error)") }
+
+            let gate = RequestGate()
+            let transport = download ? good.transport : network().transport
+            let lateClient = IFDictionarySourceClient(transport: { request, limit in
+                await gate.wait()
+                return try await transport(request, limit)
+            })
+            let late = Task {
+                if download { _ = try await lateClient.download(checked) }
+                else { _ = try await lateClient.check(observed: baseline) }
+            }
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while await gate.calls == 0, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            check(await gate.calls == 1, "Request entered before cancellation")
+            late.cancel(); await gate.open()
+            do { try await late.value; check(false, "A late response cannot resume cancelled source work") }
+            catch is CancellationError {} catch { check(false, "Late response preserves cancellation: \(error)") }
+            check(await gate.calls == 1, "Cancellation prevents the next network request")
+        }
         print("PASS client: immutable no/change/unrelated checks; missing/tree/mode/status/redirect/offline/timeout/length/hash/cancellation")
     }
     static func fixture(store: IFDictionaryStore, runtime: IFDictionaryRuntime, fingerprint: String, versionCharacter: String) throws -> IFDictionaryVersion {
@@ -304,7 +341,8 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
             catch let error as IFDictionaryUpdateError {
                 if mode == "stderr" { check(error.exitStatus == 17 && error.stderr!.contains("truncated") && error.stderr!.count < 16500, "Bounded draining stderr: \(error.technicalDetails.prefix(300)) count=\(error.stderr?.count ?? 0)") }
                 if mode == "typed" { check(error.code == "fixture-compile" && error.stage == .prepare, "Typed prepare detail") }
-                if mode == "timeout" { check(error.code == "worker-timeout" && error.stage == .verify && Date().timeIntervalSince(start) < 5, "Timeout kills resistant helper") }
+                if mode == "timeout" { check(error.code == "worker-timeout" && error.stage == .verify && Date().timeIntervalSince(start) < 5,
+                    "Timeout kills resistant helper: \(error.technicalDetails), elapsed=\(Date().timeIntervalSince(start))") }
                 if mode == "sandbox" {
                     check(error.exitStatus == 23, "Sandbox denied protected read")
                     check(FileManager.default.fileExists(atPath: candidate.appendingPathComponent("allowed.txt").path), "Sandbox allows candidate writes")
@@ -327,6 +365,34 @@ private func network(_ mutation: String = "", changed: Bool = false) -> IFDictio
         let task = Task.detached { try cancellableRunner.runBlocking(request, cancellation: runningCancellation) }
         try await Task.sleep(for: .milliseconds(150)); runningCancellation.cancel()
         await asyncFails("cancelled") { _ = try await task.value }
+        let inputs = try IFDictionaryCatalog.sources.filter(\.isUpdatable).map { spec in
+            IFDictionaryInput(receipt: spec.pinnedReceipt, data: try Data(contentsOf: repository.appendingPathComponent("build/dictionary-sources/\(spec.id).yaml")))
+        }
+        for asynchronousPreparation in [false, true] {
+            let ownedCandidate = try store.candidate()
+            let ownedRequest = IFDictionaryWorkerRequest(candidate: ownedCandidate, runtimeFingerprint: fingerprint, receipts: [], reuseDictionary: false,
+                existing: .init(contentVersion: "timeout", runtimeFingerprint: fingerprint))
+            var boundedRunner = runner; boundedRunner.timeout = 5
+            let ownedRunner = boundedRunner
+            let owned = Task.detached {
+                if asynchronousPreparation { return try await ownedRunner.prepare(candidate: ownedCandidate, inputs: inputs, existing: ownedRequest.existing) }
+                return try ownedRunner.runBlocking(ownedRequest)
+            }
+            let pidURL = ownedCandidate.appendingPathComponent("worker.pid")
+            let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+            while !FileManager.default.fileExists(atPath: pidURL.path), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+            check(FileManager.default.fileExists(atPath: pidURL.path), "Resistant worker entered its writer loop before cancellation")
+            let pid = pid_t(try String(contentsOf: pidURL, encoding: .utf8))!
+            let start = ContinuousClock.now
+            owned.cancel()
+            await asyncFails("cancelled") { _ = try await owned.value }
+            check(start.duration(to: .now) < .seconds(3), "Task cancellation bounds resistant worker drain")
+            check(kill(pid, 0) == -1 && errno == ESRCH, "Worker exits before returning to candidate cleanup")
+            try store.removeCandidate(ownedCandidate)
+            try await Task.sleep(for: .milliseconds(100))
+            check(!FileManager.default.fileExists(atPath: ownedCandidate.path), "No producer recreates a cleaned candidate")
+            print("PASS worker Task.cancel: async prepare=\(asynchronousPreparation), terminated and reaped resistant writer in \(start.duration(to: .now))")
+        }
         print("PASS runner: sandbox protected read/candidate write, concurrent bounded stderr, prepare detail, verify timeout, cancellation cleanup")
     }
     static func workerSuccess(root: URL, runtime: IFDictionaryRuntime, repository: URL, fingerprint: String) throws {
