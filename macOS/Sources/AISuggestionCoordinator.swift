@@ -1,3 +1,4 @@
+import InkFlowDomain
 import AppKit
 
 struct AISuggestionState: Equatable {

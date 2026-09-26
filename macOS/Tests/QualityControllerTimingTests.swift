@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import InputMethodKit
 #if SWIFT_PACKAGE
 @testable import InkFlowCore

@@ -142,4 +142,4 @@ delete the shared dependency checkout, Apple assets or OS crash reports.
 
 Sources: [Apple alternatives](https://developer.apple.com/documentation/speech/speechtranscriber/result/alternatives),
 [contextual strings](https://developer.apple.com/documentation/speech/analysiscontext/contextualstrings),
-repository `schemas/lua/inkflow_ai_learning.lua` and `macOS/Sources/AIPronunciation.swift`.
+repository `schemas/lua/inkflow_ai_learning.lua` and `Core/Sources/InkFlowDomain/AIPronunciation.swift`.

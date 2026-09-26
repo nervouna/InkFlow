@@ -1,3 +1,4 @@
+import InkFlowRime
 import SwiftUI
 
 struct AboutSettingsView: View {

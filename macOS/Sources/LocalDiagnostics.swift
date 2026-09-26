@@ -1,84 +1,6 @@
+import InkFlowRime
 import Foundation
 import Darwin
-
-/// Only finite, source-defined diagnostic enums conform. Never conform a wrapper around user text.
-protocol DiagnosticLabel: RawRepresentable, Sendable where RawValue == String {}
-
-struct DiagnosticContext: Codable, Sendable {
-    var startupRun: UUID?
-    var session: UUID?
-    var attempt: UUID?
-    var controller: UUID?
-    var activation: UUID?
-    var key: UUID?
-    var composition: UUID?
-    var inputStage: InputDiagnosticStage?
-    var sequence: Int?
-    var source: IFStartupDiagnostics.Source?
-    var enabled: Bool?
-    var baseURLPresent: Bool?
-    var keyPresent: Bool?
-    var modelPresent: Bool?
-    var precedingAvailable: Bool?
-    var followingAvailable: Bool?
-    var engineAvailable: Bool?
-    var clientPresent: Bool?
-    var commitInsertion: Bool?
-    var markedTextUpdate: Bool?
-    var markedTextClear: Bool?
-}
-
-/// Automatic records accept compile-time labels, UUIDs and numbers only. Never pass error descriptions,
-/// URLs, application identifiers, document text or configuration values into this channel.
-struct LocalDiagnosticEvent: Sendable {
-    enum Module: String, Codable, Sendable { case startup, input, ai, voice, dictionary, update, termination, statistics, diagnostics }
-    enum Outcome: String, Codable, Sendable { case begin, ready, completed, failed, skipped, cancelled, timeout, unavailable, handled, passThrough }
-    enum ErrorDomain: String, Codable, Sendable { case cocoa, posix, url, speech, audio, sqlite, unknown }
-    let module: Module
-    let event: String
-    let outcome: Outcome
-    let reason: String?
-    let correlation: UUID?
-    let elapsedMilliseconds: Double?
-    let errorDomain: ErrorDomain?
-    let errorCode: Int?
-    let httpStatus: Int?
-    var context: DiagnosticContext?
-
-    init(module: Module, event: StaticString, outcome: Outcome, reason: StaticString? = nil,
-         correlation: UUID? = nil, elapsedMilliseconds: Double? = nil,
-         errorDomain: ErrorDomain? = nil, errorCode: Int? = nil, httpStatus: Int? = nil) {
-        self.module = module; self.event = event.description; self.outcome = outcome
-        self.reason = reason?.description; self.correlation = correlation
-        self.elapsedMilliseconds = elapsedMilliseconds.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-        self.errorDomain = errorDomain; self.errorCode = errorCode
-        self.httpStatus = httpStatus.flatMap { (100...599).contains($0) ? $0 : nil }
-    }
-
-    init<E: DiagnosticLabel, R: DiagnosticLabel>(module: Module, event: E, outcome: Outcome,
-         reason: R, correlation: UUID? = nil, elapsedMilliseconds: Double? = nil,
-         errorDomain: ErrorDomain? = nil, errorCode: Int? = nil, httpStatus: Int? = nil,
-         context: DiagnosticContext? = nil) {
-        self.module = module; self.event = event.rawValue; self.outcome = outcome; self.reason = reason.rawValue
-        self.correlation = correlation
-        self.elapsedMilliseconds = elapsedMilliseconds.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-        self.errorDomain = errorDomain; self.errorCode = errorCode
-        self.httpStatus = httpStatus.flatMap { (100...599).contains($0) ? $0 : nil }; self.context = context
-    }
-
-    static func safeError(_ error: any Error) -> (ErrorDomain, Int) {
-        let value = error as NSError
-        let domain: ErrorDomain = switch value.domain {
-        case NSCocoaErrorDomain: .cocoa
-        case NSPOSIXErrorDomain: .posix
-        case NSURLErrorDomain: .url
-        case "kAFAssistantErrorDomain", "SFSpeechErrorDomain": .speech
-        case "com.apple.coreaudio.avfaudio", NSOSStatusErrorDomain: .audio
-        default: .unknown
-        }
-        return (domain, value.code)
-    }
-}
 
 struct DiagnosticProcess: Codable, Sendable {
     let run: UUID
@@ -553,16 +475,20 @@ final class LocalDiagnosticStore: @unchecked Sendable {
     }
 }
 
-/// Production activation is explicit: importing the core in tests, tools or harnesses has no disk effects.
-final class LocalDiagnostics: @unchecked Sendable {
-    static let shared = LocalDiagnostics()
-    private let lock = NSLock()
-    private var storage: LocalDiagnosticStore?
-    @TaskLocal static var observe: (@Sendable (LocalDiagnosticEvent) -> Void)?
+private final class PlatformDiagnosticStorage: @unchecked Sendable {
+    static let shared = PlatformDiagnosticStorage()
+    let lock = NSLock()
+    var storage: LocalDiagnosticStore?
+}
+
+extension LocalDiagnostics {
     func activate(directory: URL, buildMetadataURL: URL? = nil) {
-        let activated = lock.withLock {
-            guard storage == nil else { return false }
-            storage = LocalDiagnosticStore(directory: directory, buildMetadataURL: buildMetadataURL)
+        let owner = PlatformDiagnosticStorage.shared
+        let activated = owner.lock.withLock {
+            guard owner.storage == nil else { return false }
+            let store = LocalDiagnosticStore(directory: directory, buildMetadataURL: buildMetadataURL)
+            owner.storage = store
+            configure { store.submit($0) }
             return true
         }
         if activated {
@@ -571,8 +497,10 @@ final class LocalDiagnostics: @unchecked Sendable {
             }
         }
     }
-    var store: LocalDiagnosticStore? { lock.withLock { storage } }
-    func submit(_ event: LocalDiagnosticEvent) { Self.observe?(event); store?.submit(event) }
+    var store: LocalDiagnosticStore? {
+        let owner = PlatformDiagnosticStorage.shared
+        return owner.lock.withLock { owner.storage }
+    }
 }
 
 extension LocalDiagnosticStore {

@@ -154,6 +154,19 @@ git clone --quiet --shared --no-hardlinks "$root" "$fixture/gui-repo"
 gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
 (
   cd "$fixture/gui-repo"
+  prepare_gui_source() {
+    mkdir -p Core/Sources/InkFlowRime
+    cp "$root/Core/Sources/InkFlowRime/Engine.swift" Core/Sources/InkFlowRime/Engine.swift
+    git add Core/Sources/InkFlowRime/Engine.swift
+    if ! git diff --cached --quiet; then
+      git -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm "test: include shared engine input"
+    fi
+  }
+  prepare_gui_source
+  # Repeating the overlay exercises an already-committed identical source tree.
+  fixture_revision=$(git rev-parse HEAD)
+  prepare_gui_source
+  [[ "$(git rev-parse HEAD)" == "$fixture_revision" ]]
   evidence=build/gui-verification
   expect_rejected() {
     if bash "$gui" check > "$fixture/gui-error.log" 2>&1; then
@@ -181,9 +194,10 @@ gui="$root/.agents/skills/inkflow-release/scripts/gui-verification.sh"
   other=$(printf 'Synthetic commit identity\n' | git -c user.name=Fixture -c user.email=fixture@example.invalid commit-tree 'HEAD^{tree}' -p HEAD)
   git rev-parse "$other^{tree}" > "$evidence/passed.tree"
   bash "$gui" check
-  printf '\n// Changed test input\n' >> macOS/Sources/Engine.swift
+  cp Core/Sources/InkFlowRime/Engine.swift "$fixture/gui-original-engine.swift"
+  printf '\n// Changed test input\n' >> Core/Sources/InkFlowRime/Engine.swift
   expect_rejected
-  git show HEAD:macOS/Sources/Engine.swift > macOS/Sources/Engine.swift
+  cp "$fixture/gui-original-engine.swift" Core/Sources/InkFlowRime/Engine.swift
   echo input > unexpected-input
   expect_rejected
   rm unexpected-input

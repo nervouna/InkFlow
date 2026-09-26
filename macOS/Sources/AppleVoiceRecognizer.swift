@@ -1,3 +1,4 @@
+import InkFlowRime
 import AVFoundation
 import CoreMedia
 import Foundation

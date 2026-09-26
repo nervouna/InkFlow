@@ -1,3 +1,4 @@
+import InkFlowRime
 import SwiftUI
 
 /// Presentation only: the process-owned coordinator retains all work across window closure.

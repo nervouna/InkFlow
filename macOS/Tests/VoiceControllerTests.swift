@@ -1,3 +1,5 @@
+@testable import InkFlowRime
+@testable import InkFlowDomain
 import InputMethodKit
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
@@ -125,7 +127,9 @@ struct VoiceControllerTests {
         await startRejectionDiagnostics()
         await correctingCancellation()
         postInsertionCorrectionObservation()
+        evidencePrecheckAfterSecureCallback()
         await postInsertionControllerLearning()
+        await learningCallbackReentrancy()
         await initialObservationCaptureReentrancy()
         await editAttributionPrecheckReentrancy()
         await editAttributionReentrancy()
@@ -403,6 +407,67 @@ struct VoiceControllerTests {
             }
             for _ in 0..<10 { await Task.yield() }
             check(learned.isEmpty, "\(interruption) discards voice learning evidence")
+        }
+    }
+
+    @MainActor static func evidencePrecheckAfterSecureCallback() {
+        let client = RecordingClient(document: "codux")
+        client.selection = NSRange(location: 5, length: 0)
+        var observation = VoiceCorrectionObservation.capture(operationID: UUID(), client: client,
+            sessionRevision: 1, insertionRange: NSRange(location: 0, length: 5),
+            rawFinal: "codux", insertedFinal: "codux")!
+        check(observation.attributeLocalEdit(selection: NSRange(location: 0, length: 5)))
+        var current = true
+        func secureFact() -> Bool { current = false; return false }
+        let reads = client.uniqueIdentifierReads
+        let evidence = observation.readEvidence(client: client, sessionRevision: 1, secure: secureFact(),
+                                                 validateTarget: { current })
+        check(evidence == nil && client.uniqueIdentifierReads == reads,
+              "A reentrant security callback revokes evidence before the first native getter")
+    }
+
+    @MainActor static func learningCallbackReentrancy() async {
+        for callback in ["detected", "writer", "rejected"] {
+            let h = VoiceHarness(); defer { h.close() }
+            h.controller.voice.learningObservationDelay = .zero
+            h.controller.voice.learningUndoGrace = callback == "rejected" ? .seconds(1) : .zero
+            var writes = 0
+            var restarted = false
+            h.controller.voice.learnCorrection = { _ in
+                writes += 1
+                check(!h.controller.voice.hasLearningObservation && !h.controller.voice.hasPendingCorrection,
+                      "Shared state is consumed before a reentrant writer")
+                h.controller.voice.cancel()
+                return false
+            }
+            h.controller.voice.recordEffectiveness = { event in
+                if callback == "detected", event.source == .voiceCorrection, event.event == .detected {
+                    h.controller.voice.cancel()
+                }
+                if callback == "rejected", !restarted, event.source == .voiceCorrection, event.event == .rejected {
+                    restarted = true
+                    h.toggle()
+                }
+            }
+            await h.start()
+            let callbacks = h.fake.callbacks!
+            callbacks.onFinal("codux"); h.key(); callbacks.onFinalized("codux")
+            for _ in 0..<10 { await Task.yield() }
+            h.client.selection = NSRange(location: 3, length: 5)
+            _ = h.controller.handle(keyEvent(UInt16(kVK_ANSI_V), "v", .command), client: h.client)
+            h.client.document = "前🙂Codex"; h.client.selection = NSRange(location: 8, length: 0)
+            for _ in 0..<30 { await Task.yield() }
+            if callback == "rejected" {
+                check(h.controller.voice.hasPendingCorrection)
+                h.controller.voice.cancel()
+                for _ in 0..<30 { await Task.yield() }
+                check(restarted && h.controller.voice.isActive && h.fake.starts == 2,
+                      "Rejection telemetry may start a new session without stale cancellation after it")
+            }
+            check(writes == (callback == "writer" ? 1 : 0),
+                  "\(callback) reentrancy cannot schedule a stale write or retry failure")
+            check(!h.controller.voice.hasLearningObservation && !h.controller.voice.hasPendingCorrection)
+            check(h.client.insertions.count == 1, "Learning callbacks never insert text")
         }
     }
 

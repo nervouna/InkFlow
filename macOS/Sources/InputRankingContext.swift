@@ -1,3 +1,4 @@
+import InkFlowRime
 @preconcurrency import InputMethodKit
 
 /// Offline context-ranking glue kept separate from AI controller behavior for build identity auditing.

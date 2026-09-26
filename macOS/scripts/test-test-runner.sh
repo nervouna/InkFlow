@@ -22,6 +22,16 @@ if [[ "$name" == "${INKFLOW_RUNNER_FAIL:-}" ]]; then exit 17; fi
 STUB
   chmod +x "$fixture/macOS/scripts/$script.sh"
 done
+mkdir -p "$fixture/Core/scripts"
+for script in check-boundaries test; do
+  cat > "$fixture/Core/scripts/$script.sh" <<'STUB'
+#!/bin/bash
+name="core-$(basename "$0" .sh)"
+args=${*//${PWD}/REPO}
+echo "$name $args" >> "$INKFLOW_RUNNER_LOG"
+[[ "$name" != "${INKFLOW_RUNNER_FAIL:-}" ]] || exit 17
+STUB
+done
 cat > "$fixture/macOS/scripts/swift-test.sh" <<'STUB'
 build_swift_test() {
   echo "build $1" >> "$INKFLOW_RUNNER_LOG"
@@ -56,6 +66,14 @@ run() {
   bash "$fixture/macOS/scripts/test.sh" "$@" > "$fixture/output.log" 2>&1
 }
 expect() { printf '%s\n' "$@" > "$fixture/expected.log"; diff -u "$fixture/expected.log" "$INKFLOW_RUNNER_LOG"; }
+run shared-core shared-core
+expect 'dependencies ' 'prepare-rime build/test-shared' 'core-check-boundaries ' 'core-test REPO/build/test-shared'
+export INKFLOW_RUNNER_FAIL=core-check-boundaries
+if run shared-core settings; then exit 1; else status=$?; fi
+[[ $status == 17 ]]
+expect 'dependencies ' 'prepare-rime build/test-shared' 'core-check-boundaries '
+grep -q 'Not executed: settings' "$fixture/output.log"
+unset INKFLOW_RUNNER_FAIL
 run ai-runtime ai-runtime
 expect 'dependencies ' 'test-ai-runtime '
 run settings
@@ -109,7 +127,7 @@ run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
-for required in test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
+for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
   test-dictionary-activation test-serving-startup test-startup-diagnostics test-local-diagnostics test-diagnostic-archive test-termination \

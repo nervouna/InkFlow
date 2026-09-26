@@ -145,7 +145,7 @@ cohorts distinguished by their persisted fingerprints. A v1 database must first 
 migrated by the writer; v2 is migrated by the writer by adding only the effectiveness
 table. The query never creates or migrates a database. Foreign, malformed
 or unknown schemas are not repaired or reset. The canonical writer/models are
-`macOS/Sources/QualityStore.swift` and `QualityRecords.swift`; query fixture tests
+`Core/Sources/InkFlowRime/QualityStore.swift` and `QualityRecords.swift`; query fixture tests
 extract their current DDL and full acceptance verifies actual engine-written DDL.
 
 | Table | Role |

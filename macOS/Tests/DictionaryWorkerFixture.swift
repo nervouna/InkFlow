@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import Foundation
 import Darwin
 #if SWIFT_PACKAGE

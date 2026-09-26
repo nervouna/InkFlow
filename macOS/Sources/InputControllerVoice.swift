@@ -1,3 +1,5 @@
+import InkFlowRime
+import InkFlowDomain
 @preconcurrency import InputMethodKit
 import Carbon
 import Combine
@@ -41,12 +43,11 @@ final class IFInputControllerVoice {
     private var deliveryDepth = 0
     private var deliveryEngine: IFEngine?
     private var nativeGeneration: UInt64 = 0
-    private var learningObservation: VoiceCorrectionObservation?
+    private let learning = VoiceLearningCoordinator()
     private var learningTarget: Target?
     private var learningReadTask: Task<Void, Never>?
     private var learningExpiryTask: Task<Void, Never>?
     private var learningPersistenceTask: Task<Void, Never>?
-    private var pendingLearning: VoiceLearnedCorrection?
     private var learningReadBarrier = false
     private var rejectionLimiter = VoiceDiagnostics.StartRejectionLimiter()
     var reportStartRejection: (VoiceDiagnostics.StartRejection) -> Void = VoiceDiagnostics.rejectStart
@@ -56,10 +57,16 @@ final class IFInputControllerVoice {
     var aliasLexicon: (() -> VoiceAliasSnapshot)?
     var learnCorrection: ((VoiceLearnedCorrection) -> Bool)?
     var recordEffectiveness: ((QualityEffectivenessEvent) -> Void)?
-    var learningObservationDelay: Duration = .milliseconds(350)
-    var learningUndoGrace: Duration = .seconds(1)
-    var hasPendingCorrection: Bool { pendingLearning != nil }
-    var hasLearningObservation: Bool { learningObservation != nil }
+    var learningObservationDelay: Duration {
+        get { learning.observationDelay }
+        set { learning.observationDelay = newValue }
+    }
+    var learningUndoGrace: Duration {
+        get { learning.undoGrace }
+        set { learning.undoGrace = newValue }
+    }
+    var hasPendingCorrection: Bool { learning.hasPendingCorrection }
+    var hasLearningObservation: Bool { learning.hasObservation }
     var correctionOverride: CorrectionOverride?
     var isActive: Bool { token != nil || starting }
     var isDelivering: Bool { deliveryDepth > 0 }
@@ -235,7 +242,9 @@ final class IFInputControllerVoice {
     }
 
     private func start(client: IMKTextInput?) {
+        let entryEpoch = epoch
         discardLearningObservation(reason: .cancelled)
+        guard epoch == entryEpoch else { return }
         func reject(_ reason: VoiceDiagnostics.StartRejection) {
             if rejectionLimiter.admit(reason) { reportStartRejection(reason) }
         }
@@ -401,7 +410,9 @@ final class IFInputControllerVoice {
     }
 
     func cancel(_ reason: VoiceDiagnostics.Reason = .deactivated) {
+        let entryEpoch = epoch
         discardLearningObservation(reason: effectivenessReason(reason))
+        guard epoch == entryEpoch else { return }
         if reason == .deactivated { pressedModifiers.removeAll() }
         resetGesture()
         held = false
@@ -486,16 +497,16 @@ final class IFInputControllerVoice {
             }
             guard epoch == deliveryEpoch else { return }
             if let insertionStart {
-                learningObservation = VoiceCorrectionObservation.capture(
+                let observation = VoiceCorrectionObservation.capture(
                     operationID: id, client: owned.client, sessionRevision: deliveryEpoch,
                     insertionRange: NSRange(location: insertionStart, length: text.utf16.count),
                     rawFinal: rawFinal, insertedFinal: text,
                     validateTarget: {
                         self.currentLearningTarget(owned.client, expected: owned, revision: deliveryEpoch)
                     })
-                if learningObservation != nil {
+                if let observation {
                     learningTarget = owned
-                    scheduleLearningExpiry(operationID: id)
+                    scheduleLearningExpiry(learning.begin(observation))
                 }
             }
             controller?.statusPresentation?.hide()
@@ -520,97 +531,95 @@ final class IFInputControllerVoice {
     }
 
     private func considerLearningEvent(_ event: NSEvent, client: IMKTextInput?) {
-        guard event.type == .keyDown, learningObservation != nil else { return }
+        guard event.type == .keyDown else { return }
         let flags = event.modifierFlags.intersection([.command, .control, .option])
-        if flags == .command && event.keyCode == UInt16(kVK_ANSI_Z) {
-            discardLearningObservation(reason: .immediateUndo); return
-        }
-        // Once an exact correction is detected, any further key event makes the
-        // pending evidence stale. Command-Z above is the explicit undo boundary.
-        if pendingLearning != nil { discardLearningObservation(reason: .unrelatedEdit); return }
+        let undo = flags == .command && event.keyCode == UInt16(kVK_ANSI_Z)
         let paste = flags == .command && event.keyCode == UInt16(kVK_ANSI_V)
         let deletion = flags.isEmpty && (event.keyCode == UInt16(kVK_Delete) || event.keyCode == UInt16(kVK_ForwardDelete))
         let directText = flags.isEmpty && !(event.charactersIgnoringModifiers ?? "").isEmpty &&
             event.keyCode != UInt16(kVK_Return) && event.keyCode != UInt16(kVK_Tab) && event.keyCode != UInt16(kVK_Escape)
-        guard paste || deletion || directText else { return }
-        guard let client, let observation = learningObservation,
-              currentLearningTarget(client, observation: observation,
-                                    revision: observation.sessionRevision) else {
+        let transition = learning.receiveKey(undo ? .undo : (paste || deletion || directText ? .edit : .otherKey))
+        guard case .selection(let ticket) = transition else {
+            applyLearningTransition(transition, client: client); return
+        }
+        guard let client, let observation = learning.observation(for: ticket),
+              currentLearningTarget(client, observation: observation, revision: observation.sessionRevision) else {
             learningReadBarrier = true
-            discardLearningObservation(reason: .unrelatedEdit); return
+            if learning.isCurrent(ticket) { discardLearningObservation(reason: .unrelatedEdit) }
+            return
         }
-        let selection = client.selectedRange()
-        guard currentLearningTarget(client, observation: observation,
-                                    revision: observation.sessionRevision) else {
+        guard let evidence = observation.editEvidence(client: client, sessionRevision: observation.sessionRevision,
+            secure: controller?.secureInput() ?? true, validateTarget: {
+                self.learning.isCurrent(ticket) && self.currentLearningTarget(client, observation: observation,
+                                                                             revision: observation.sessionRevision)
+            }) else {
             learningReadBarrier = true
-            discardLearningObservation(reason: .unrelatedEdit); return
+            if learning.isCurrent(ticket) { discardLearningObservation(reason: .unrelatedEdit) }
+            return
         }
-        guard learningObservation?.operationID == observation.operationID,
-              learningObservation?.attributeLocalEdit(selection: selection) == true else {
-            discardLearningObservation(reason: .unrelatedEdit); return
-        }
-        learningReadTask?.cancel()
-        let revision = epoch
-        learningReadTask = Task { @MainActor [weak self, weak client] in
-            guard let self else { return }
-            do { try await Task.sleep(for: self.learningObservationDelay) } catch { return }
-            guard let client, let observation = self.learningObservation else { return }
-            guard self.currentLearningTarget(client, revision: revision) else {
-                self.discardLearningObservation(reason: .clientDrift); return
-            }
-            let decision = observation.observe(client: client, sessionRevision: revision,
-                                               secure: self.controller?.secureInput() ?? true,
-                                               validateTarget: {
-                                                   self.currentLearningTarget(client, observation: observation,
-                                                                              revision: revision)
-                                               })
-            switch decision {
-            case .pending: return
-            case .discard: self.discardLearningObservation()
-            case .learn(let correction):
-                let duration = self.learningObservationDelay.components
-                self.emitEffectiveness(.init(source: .voiceCorrection, event: .detected,
-                    milliseconds: Int(duration.seconds * 1_000 + duration.attoseconds / 1_000_000_000_000_000)))
-                self.scheduleLearningPersistence(correction, client: client, revision: revision)
-            }
-        }
+        applyLearningTransition(learning.attribute(selection: evidence.selection, target: evidence.target,
+                                                   ticket: ticket), client: client)
     }
 
-    private func scheduleLearningPersistence(_ correction: VoiceLearnedCorrection,
-                                             client: IMKTextInput, revision: UInt64) {
-        pendingLearning = correction
-        learningPersistenceTask?.cancel()
-        learningPersistenceTask = Task { @MainActor [weak self, weak client] in
-            guard let self else { return }
-            do { try await Task.sleep(for: self.learningUndoGrace) } catch { return }
-            guard let client, self.pendingLearning == correction,
-                  let observation = self.learningObservation,
-                  self.currentLearningTarget(client, revision: revision),
-                  observation.observe(client: client, sessionRevision: revision,
-                                      secure: self.controller?.secureInput() ?? true,
-                                      validateTarget: {
-                                          self.currentLearningTarget(client, observation: observation,
-                                                                     revision: revision)
-                                      }) == .learn(correction),
-                  self.currentLearningTarget(client, observation: observation, revision: revision) else {
-                self.discardLearningObservation(reason: .unavailable); return
+    private func scheduleLearningRead(_ ticket: VoiceLearningCoordinator.Ticket, client: IMKTextInput?, persistence: Bool) {
+        guard learning.isCurrent(ticket) else { return }
+        let task = Task { @MainActor [weak self, weak client] in
+            do { try await Self.waitForLearningWake(ticket) } catch { return }
+            guard let self, self.learning.isCurrent(ticket) else { return }
+            guard let client, let observation = self.learning.observation(for: ticket),
+                  self.currentLearningTarget(client, revision: observation.sessionRevision) else {
+                self.applyLearningTransition(self.learning.completeRead(ticket, evidence: nil), client: client); return
             }
-            self.discardLearningObservation()
-            let learned: Bool
-            if let injected = self.learnCorrection { learned = injected(correction) }
-            else { learned = self.controller?.engine?.learnVoiceCorrection(correction) ?? false }
-            self.emitEffectiveness(.init(source: .voiceCorrection,
-                                         event: learned ? .learned : .rejected,
-                                         reason: learned ? nil : .storageFailure))
+            let evidence = observation.readEvidence(client: client, sessionRevision: observation.sessionRevision,
+                secure: self.controller?.secureInput() ?? true, validateTarget: {
+                    self.learning.isCurrent(ticket) && self.currentLearningTarget(client, observation: observation,
+                                                                                 revision: observation.sessionRevision)
+                })
+            guard self.learning.isCurrent(ticket) else { return }
+            let finalEvidence = evidence != nil && self.currentLearningTarget(client, observation: observation,
+                revision: observation.sessionRevision) ? evidence : nil
+            self.applyLearningTransition(self.learning.completeRead(ticket, evidence: finalEvidence), client: client)
         }
+        if persistence { learningPersistenceTask?.cancel(); learningPersistenceTask = task }
+        else { learningReadTask?.cancel(); learningReadTask = task }
     }
 
-    private func scheduleLearningExpiry(operationID: UUID) {
+    private func scheduleLearningExpiry(_ ticket: VoiceLearningCoordinator.Ticket) {
         learningExpiryTask?.cancel()
         learningExpiryTask = Task { @MainActor [weak self] in
-            do { try await Task.sleep(for: VoiceCorrectionObservation.lifetime) } catch { return }
-            guard self?.learningObservation?.operationID == operationID else { return }
-            self?.discardLearningObservation(reason: .timeout)
+            do { try await Self.waitForLearningWake(ticket) } catch { return }
+            guard let self else { return }
+            self.applyLearningTransition(self.learning.expire(ticket))
+        }
+    }
+
+    private static func waitForLearningWake(_ ticket: VoiceLearningCoordinator.Ticket) async throws {
+        // Scheduling is platform work; the core owns the deadline. Tolerate early wakes.
+        while ContinuousClock.now < ticket.deadline {
+            try await Task.sleep(for: ContinuousClock.now.duration(to: ticket.deadline))
+        }
+        try Task.checkCancellation()
+    }
+
+    private func applyLearningTransition(_ transition: VoiceLearningCoordinator.Transition, client: IMKTextInput? = nil) {
+        switch transition {
+        case .ignored, .selection: break
+        case .read(let ticket): scheduleLearningRead(ticket, client: client, persistence: false)
+        case .detected(let ticket, let milliseconds):
+            emitEffectiveness(.init(source: .voiceCorrection, event: .detected, milliseconds: milliseconds))
+            // The injected observational sink can reenter and revoke this ticket.
+            scheduleLearningRead(ticket, client: client, persistence: true)
+        case .ended(let reason):
+            clearLearningTasks()
+            if let reason {
+                emitEffectiveness(.init(source: .voiceCorrection, event: .rejected, reason: qualityReason(reason)))
+            }
+        case .ready(let action):
+            clearLearningTasks()
+            guard let correction = learning.takeLearningAction(action) else { return }
+            let learned = learnCorrection?(correction) ?? controller?.engine?.learnVoiceCorrection(correction) ?? false
+            emitEffectiveness(.init(source: .voiceCorrection, event: learned ? .learned : .rejected,
+                                    reason: learned ? nil : .storageFailure))
         }
     }
 
@@ -635,15 +644,14 @@ final class IFInputControllerVoice {
         return currentLearningTarget(client, revision: revision)
     }
 
-    private func discardLearningObservation(reason: QualityEffectivenessReason? = nil) {
-        if pendingLearning != nil, let reason {
-            emitEffectiveness(.init(source: .voiceCorrection, event: .rejected, reason: reason))
-        }
+    private func discardLearningObservation(reason: VoiceLearningCoordinator.Reason? = nil) {
+        applyLearningTransition(learning.cancel(reason: reason))
+    }
+
+    private func clearLearningTasks() {
         learningReadTask?.cancel(); learningReadTask = nil
         learningExpiryTask?.cancel(); learningExpiryTask = nil
         learningPersistenceTask?.cancel(); learningPersistenceTask = nil
-        pendingLearning = nil
-        learningObservation = nil
         learningTarget = nil
     }
 
@@ -652,7 +660,7 @@ final class IFInputControllerVoice {
         else { controller?.engine?.qualityRecorder?.recordEffectiveness(event) }
     }
 
-    private func effectivenessReason(_ reason: VoiceDiagnostics.Reason) -> QualityEffectivenessReason {
+    private func effectivenessReason(_ reason: VoiceDiagnostics.Reason) -> VoiceLearningCoordinator.Reason {
         switch reason {
         case .deactivated: .deactivated
         case .secureInput: .secure
@@ -660,6 +668,20 @@ final class IFInputControllerVoice {
         case .invalidRange: .invalidRange
         case .editing: .unrelatedEdit
         default: .cancelled
+        }
+    }
+
+    private func qualityReason(_ reason: VoiceLearningCoordinator.Reason) -> QualityEffectivenessReason {
+        switch reason {
+        case .immediateUndo: .immediateUndo
+        case .unrelatedEdit: .unrelatedEdit
+        case .timeout: .timeout
+        case .unavailable: .unavailable
+        case .clientDrift: .clientDrift
+        case .cancelled: .cancelled
+        case .deactivated: .deactivated
+        case .secure: .secure
+        case .invalidRange: .invalidRange
         }
     }
 

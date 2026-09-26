@@ -4,7 +4,7 @@ cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-build-workflow.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"
-mkdir -p "$repo/macOS/scripts" "$repo/macOS/Resources" "$repo/macOS/Licenses" "$repo/macOS/Sources" "$repo/macOS/DictionaryTool" \
+mkdir -p "$repo/macOS/scripts" "$repo/macOS/Resources" "$repo/macOS/Licenses" "$repo/macOS/Sources" "$repo/Core/Tools/DictionaryGeneratorTool" \
   "$repo/build/deps/dist/lib/rime-plugins" "$repo/build/InkFlow.app/Contents"
 cp macOS/scripts/{build,build-number,build-summary}.sh "$repo/macOS/scripts/"
 mkdir -p "$repo/.git" "$fixture/bin"
@@ -19,7 +19,7 @@ cp macOS/Info.plist "$repo/macOS/Info.plist"
 printf resource > "$repo/macOS/Resources/resource"
 printf license > "$repo/macOS/Licenses/license"
 printf input > "$repo/macOS/Sources/input"
-printf entry > "$repo/macOS/DictionaryTool/main.swift"
+printf entry > "$repo/Core/Tools/DictionaryGeneratorTool/main.swift"
 printf old > "$repo/build/InkFlow.app/Contents/sentinel"
 touch "$repo/build/deps/dist/lib/librime.1.17.0.dylib" "$repo/build/deps/dist/lib/rime-plugins/librime-lua.dylib"
 sparkle_framework="$repo/build/swiftpm/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
@@ -69,7 +69,7 @@ build_swift_product() {
 [[ "$2" == --build-snapshot ]] || exit 0
 printf 'fixture clean '
 {
-  shasum -a 256 macOS/Sources/input macOS/DictionaryTool/main.swift \
+  shasum -a 256 macOS/Sources/input Core/Tools/DictionaryGeneratorTool/main.swift \
     macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh
   find build/dictionary-sources -type f -print 2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done
 } | shasum -a 256 | awk '{print $1}'

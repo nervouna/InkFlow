@@ -1,3 +1,5 @@
+import InkFlowRime
+import InkFlowDomain
 @preconcurrency import InputMethodKit
 import Carbon
 #if SWIFT_PACKAGE

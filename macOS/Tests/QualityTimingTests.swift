@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import Foundation
 import SQLite3
 #if SWIFT_PACKAGE

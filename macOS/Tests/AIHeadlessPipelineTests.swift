@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import AppKit
 @preconcurrency import InputMethodKit
 #if SWIFT_PACKAGE
@@ -231,6 +232,20 @@ struct AIHeadlessPipelineTests {
         check(engine.snapshot().candidates.first == word, "Genuine Tab improves local candidates with AI disabled")
         engine.clear(); controller.refresh(client)
         settings.smart.isEnabled = true
+
+        let ambiguousService = AIHeadlessService(response: "行")
+        let (ambiguous, ambiguousClient, ambiguousEndpoint) = fixture(settings: settings, service: ambiguousService)
+        defer { ambiguous.engine?.clear(); ambiguous.refresh(ambiguousClient) }
+        _ = await AIHeadlessKeyboard.type("h", into: ambiguous, client: ambiguousClient)
+        await until { ambiguousEndpoint.suggestionVisible }
+        let ambiguousEngine = ambiguous.engine!
+        let ambiguousInput = ambiguousEngine.aiInputIdentity()!
+        check(ambiguousEngine.aiPronunciation(input: ambiguousInput, text: "行").resolve(input: "h", text: "行") == nil,
+              "This consumed suggestion has no unambiguous learning code")
+        ambiguousClient.mutations.removeAll()
+        check(ambiguous.handle(AIHeadlessKeyboard.event(48, "\t"), client: ambiguousClient))
+        check(ambiguousClient.mutations == ["insert:行"], "Unavailable AI learning never suppresses the user's adoption")
+        ambiguousEngine.clear(); ambiguous.refresh(ambiguousClient)
 
         let expansion = AIHeadlessService(response: "你好，很高兴认识你")
         let (other, otherClient, otherEndpoint) = fixture(settings: settings, service: expansion)

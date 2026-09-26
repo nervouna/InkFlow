@@ -1,3 +1,4 @@
+@testable import InkFlowDomain
 import Foundation
 import AppKit
 #if SWIFT_PACKAGE

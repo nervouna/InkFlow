@@ -1,3 +1,5 @@
+@testable import InkFlowRime
+@testable import InkFlowDomain
 import InputMethodKit
 import SwiftUI
 import ApplicationServices

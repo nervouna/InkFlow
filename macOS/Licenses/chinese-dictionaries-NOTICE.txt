@@ -23,8 +23,8 @@ local corrections. No pronunciation generation or simplified/traditional convers
 The bundled dictionary-manifest.json records exact commits, files (by catalog
 identifier), source checksums, generation recipe and applied calibration. The
 pinned legacy compatibility input is included as legacy-pinyin-simp.dict.yaml.
-Source generation code is in macOS/Sources/DictionaryGenerator.swift and the
-pinned source catalog is in macOS/Sources/DictionaryModels.swift.
+Source generation code is in Core/Sources/InkFlowDomain/DictionaryGenerator.swift and the
+pinned source catalog is in Core/Sources/InkFlowDomain/DictionaryModels.swift.
 
 Default-enabled domain additions:
 - Rime Frost cn_dicts_cell/computer.dict.yaml and exthot.dict.yaml at the same

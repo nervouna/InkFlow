@@ -1,3 +1,4 @@
+import InkFlowRime
 import AppKit
 
 /// AppKit exits directly after its termination notifications; main's defer is not a cleanup hook.

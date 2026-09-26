@@ -1,3 +1,5 @@
+import InkFlowRime
+import InkFlowDomain
 import Foundation
 import Darwin
 
@@ -83,19 +85,8 @@ struct IFDictionaryWorkerRunner: Sendable {
         do {
             try checkCancellation(cancellation)
             try validateCandidate(candidate)
-            guard inputs.map(\.receipt.id) == IFDictionaryCatalog.sources.filter(\.isUpdatable).map(\.id) else {
-                throw IFDictionaryUpdateError(.prepare, "source-set")
-            }
-            let raw = try IFDictionaryFiles.child("raw", in: candidate)
-            try FileManager.default.createDirectory(at: raw, withIntermediateDirectories: false)
-            for input in inputs {
-                try checkCancellation(cancellation)
-                try IFDictionaryGenerator.validate(input)
-                try input.data.write(to: IFDictionaryFiles.child(input.receipt.id + ".dict.yaml", in: raw), options: .withoutOverwriting)
-            }
-            try checkCancellation(cancellation)
-            let request = IFDictionaryWorkerRequest(candidate: candidate, runtimeFingerprint: try runtime.fingerprint(),
-                receipts: inputs.map(\.receipt), reuseDictionary: false, existing: existing)
+            let request = try IFDictionaryPreparation.stage(candidate: candidate, inputs: inputs, runtime: runtime,
+                existing: existing, checkCancellation: { try checkCancellation(cancellation) })
             return try runBlocking(request, cancellation: cancellation, progress: progress)
         } catch { let value = IFDictionaryUpdateError.wrapping(error, stage: .prepare); logger(value); throw value }
     }
@@ -106,24 +97,8 @@ struct IFDictionaryWorkerRunner: Sendable {
         do {
             try checkCancellation(cancellation)
             try validateCandidate(candidate)
-            let manifest = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: IFDictionaryFiles.child(IFDictionaryManifest.filename, in: dictionaryShared))
-            let retainedRaw = dictionaryShared.deletingLastPathComponent().appendingPathComponent("raw")
-            if FileManager.default.fileExists(atPath: retainedRaw.path) {
-                let inputs = try manifest.sources.filter { $0.id != "legacy" }.map { receipt in
-                    try checkCancellation(cancellation)
-                    return IFDictionaryInput(receipt: receipt, data: try Data(contentsOf: IFDictionaryFiles.child(receipt.id + ".dict.yaml", in: retainedRaw)))
-                }
-                return try prepareBlocking(candidate: candidate, inputs: inputs, cancellation: cancellation, progress: progress)
-            }
-            let reuse = try IFDictionaryFiles.child("rebuild", in: candidate)
-            try FileManager.default.createDirectory(at: reuse, withIntermediateDirectories: false)
-            for name in [IFDictionaryCatalog.dictionaryFilename, IFDictionaryManifest.filename] {
-                try checkCancellation(cancellation)
-                try FileManager.default.copyItem(at: IFDictionaryFiles.child(name, in: dictionaryShared), to: reuse.appendingPathComponent(name))
-            }
-            try checkCancellation(cancellation)
-            let request = IFDictionaryWorkerRequest(candidate: candidate, runtimeFingerprint: try runtime.fingerprint(), receipts: [],
-                reuseDictionary: true, existing: nil)
+            let request = try IFDictionaryPreparation.stageRebuild(candidate: candidate, dictionaryShared: dictionaryShared,
+                runtime: runtime, checkCancellation: { try checkCancellation(cancellation) })
             return try runBlocking(request, cancellation: cancellation, progress: progress)
         } catch { let value = IFDictionaryUpdateError.wrapping(error, stage: .prepare); logger(value); throw value }
     }

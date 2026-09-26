@@ -20,7 +20,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / '.agents/skills/inkflow-quality-analysis/scripts/quality.py'
 ENGINE_DB = ROOT / 'build/quality-evidence/engine-controller.sqlite3'
-SOURCE = ROOT / 'macOS/Sources/QualityStore.swift'
+SOURCE = ROOT / 'Core/Sources/InkFlowRime/QualityStore.swift'
 DDL = dict(re.findall(r'"(\w+)": """\s*(CREATE TABLE .*?)\s*"""', SOURCE.read_text(), re.S))
 DDL['config_revisions'] = re.search(
     r'schema\["config_revisions"\] = """\s*(CREATE TABLE .*?)\s*"""',

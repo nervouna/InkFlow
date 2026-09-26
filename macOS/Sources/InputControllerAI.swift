@@ -135,10 +135,7 @@ final class IFInputControllerAI {
         defer { controller.qualityInsertionDepth -= 1; engine.endDelivery(); isAccepting = false }
         engine.qualityRecorder?.recordExternalKey(.aiTab, isRepeat: false, at: entered)
         engine.qualityRecorder?.finishExternalSelection(reason: "ai_adopted", at: entered)
-        let preferences = engine.inputPreferences
-        let pronunciation = engine.aiPronunciation(input: input, text: adoption.text)
-        engine.clear(recordQuality: false)
-        engine.learnAIAdoption(input: input, text: adoption.text, preferences: preferences, pronunciation: pronunciation)
+        engine.prepareConsumedAIAdoption(input: input, text: adoption.text)
         controller.ownsMarkedText = false
         adoption.statistics?.record(.insertionIssued,
             at: .init(utc: controller.qualityClock.utc(), monotonic: controller.qualityClock.monotonic()))

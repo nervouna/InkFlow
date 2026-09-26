@@ -5,10 +5,12 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-quality-metadata.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repository"
 app="$fixture/Fixture.app"
-mkdir -p "$repo/macOS/Quality" "$repo/macOS/Sources" "$app/Contents/Resources/Rime" \
+mkdir -p "$repo/Core/Sources/InkFlowRime" "$repo/Core/Sources/InkFlowDomain" "$repo/macOS/Quality" "$repo/macOS/Sources" "$app/Contents/Resources/Rime" \
   "$app/Contents/MacOS" "$app/Contents/Frameworks/rime-plugins"
 cp macOS/Info.plist "$app/Contents/Info.plist"
-printf 'offline candidate behavior\n' > "$repo/macOS/Sources/Engine.swift"
+printf 'offline candidate behavior\n' > "$repo/Core/Sources/InkFlowRime/Engine.swift"
+grep -Fxq 'Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift' macOS/Quality/ranking-sources.txt
+printf 'voice correction learning lifecycle\n' > "$repo/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift"
 printf 'offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
 core_source='controller calls offline context glue; selection keys 1-9; presents candidate strings with engine highlight'
 printf '%s\n' "$core_source" > "$repo/macOS/Sources/InputControllerCore.swift"
@@ -16,7 +18,7 @@ printf 'font size 14, horizontal presentation\n' > "$repo/macOS/Sources/InputCon
 printf 'AI-only controller behavior\n' > "$repo/macOS/Sources/InputControllerAI.swift"
 cp macOS/Sources/CandidatePresentation.swift "$repo/macOS/Sources/CandidatePresentation.swift"
 cp macOS/Sources/AIInputPresentation.swift "$repo/macOS/Sources/AIInputPresentation.swift"
-printf 'macOS/Sources/Engine.swift\nmacOS/Sources/InputRankingContext.swift\nmacOS/Sources/InputControllerCore.swift\nmacOS/Sources/CandidatePresentation.swift\n' > "$repo/macOS/Quality/ranking-sources.txt"
+printf 'Core/Sources/InkFlowRime/Engine.swift\nCore/Sources/InkFlowDomain/VoiceLearningCoordinator.swift\nmacOS/Sources/InputRankingContext.swift\nmacOS/Sources/InputControllerCore.swift\nmacOS/Sources/CandidatePresentation.swift\n' > "$repo/macOS/Quality/ranking-sources.txt"
 printf 'Rime/ranking.yaml\n' > "$repo/macOS/Quality/ranking-resources.txt"
 printf 'actual bundled ranking content\n' > "$app/Contents/Resources/Rime/ranking.yaml"
 cp /usr/bin/true "$app/Contents/MacOS/InkFlow"
@@ -29,7 +31,7 @@ chmod +x "$app/Contents/MacOS/InkFlow"
 git -C "$repo" init -q
 git -C "$repo" config user.name 'InkFlow Tests'
 git -C "$repo" config user.email 'tests@invalid'
-git -C "$repo" add macOS
+git -C "$repo" add macOS Core
 git -C "$repo" commit -qm fixture
 
 source macOS/scripts/swift-package.sh
@@ -177,13 +179,18 @@ build/quality-build-metadata "$repo" "$app"
 [[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 printf 'offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
 
+printf 'modified voice correction learning lifecycle\n' > "$repo/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift"
+build/quality-build-metadata "$repo" "$app"
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+printf 'voice correction learning lifecycle\n' > "$repo/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift"
+
 printf 'modified executable bytes\n' > "$app/Contents/MacOS/InkFlow"
 build/quality-build-metadata "$repo" "$app"
 [[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 [[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 [[ "$ranking_resources" == "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 
-printf 'modified offline candidate behavior\n' > "$repo/macOS/Sources/Engine.swift"
+printf 'modified offline candidate behavior\n' > "$repo/Core/Sources/InkFlowRime/Engine.swift"
 build/quality-build-metadata "$repo" "$app"
 [[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
 
@@ -196,7 +203,7 @@ cp "$repo/macOS/Quality/ranking-sources.txt" "$fixture/sources.manifest"
 for invalid in missing duplicate nonexistent; do
   case "$invalid" in
     missing) rm "$repo/macOS/Quality/ranking-sources.txt" ;;
-    duplicate) printf 'macOS/Sources/Engine.swift\nmacOS/Sources/Engine.swift\n' > "$repo/macOS/Quality/ranking-sources.txt" ;;
+    duplicate) printf 'Core/Sources/InkFlowRime/Engine.swift\nCore/Sources/InkFlowRime/Engine.swift\n' > "$repo/macOS/Quality/ranking-sources.txt" ;;
     nonexistent) printf 'macOS/Sources/DoesNotExist.swift\n' > "$repo/macOS/Quality/ranking-sources.txt" ;;
   esac
   if build/quality-build-metadata "$repo" "$app" > "$fixture/$invalid.log" 2>&1; then
@@ -256,10 +263,11 @@ echo 'PASS quality build metadata: deterministic layered hashes, AI boundary, an
 
 identity_repo="$fixture/identity-repo"
 git clone --quiet --shared --no-hardlinks "$PWD" "$identity_repo"
+ditto Core "$identity_repo/Core"
 cp Package.resolved "$identity_repo/Package.resolved"
 git -C "$identity_repo" config user.name 'InkFlow Tests'
 git -C "$identity_repo" config user.email 'tests@invalid'
-git -C "$identity_repo" add Package.resolved
+git -C "$identity_repo" add Package.resolved Core
 if ! git -C "$identity_repo" diff --cached --quiet; then
   git -C "$identity_repo" commit -qm 'fixture resolved dependency lock'
 fi
@@ -283,17 +291,17 @@ PY
 cp "$fixture/Package.resolved" "$identity_repo/Package.resolved"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
 mkdir "$fixture/originals"
-cp "$identity_repo/macOS/Sources/Engine.swift" "$fixture/originals/Engine.swift"
+cp "$identity_repo/Core/Sources/InkFlowRime/Engine.swift" "$fixture/originals/Engine.swift"
 cp "$identity_repo/macOS/scripts/quality-metadata.sh" "$fixture/originals/quality-metadata.sh"
 cp "$identity_repo/macOS/scripts/build-dictionary-generator.sh" "$fixture/originals/build-dictionary-generator.sh"
-cp "$identity_repo/macOS/DictionaryTool/main.swift" "$fixture/originals/main.swift"
-printf 'build input\n' >> "$identity_repo/macOS/Sources/Engine.swift"
+cp "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift" "$fixture/originals/main.swift"
+printf 'build input\n' >> "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
-for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh macOS/DictionaryTool/main.swift; do
-  cp "$fixture/originals/Engine.swift" "$identity_repo/macOS/Sources/Engine.swift"
+for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh Core/Tools/DictionaryGeneratorTool/main.swift; do
+  cp "$fixture/originals/Engine.swift" "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
   cp "$fixture/originals/quality-metadata.sh" "$identity_repo/macOS/scripts/quality-metadata.sh"
   cp "$fixture/originals/build-dictionary-generator.sh" "$identity_repo/macOS/scripts/build-dictionary-generator.sh"
-  cp "$fixture/originals/main.swift" "$identity_repo/macOS/DictionaryTool/main.swift"
+  cp "$fixture/originals/main.swift" "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift"
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
   [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
 done
@@ -304,4 +312,7 @@ for helper in build-number build-summary; do
   printf 'fixture build helper\n' > "$identity_repo/macOS/scripts/$helper.sh"
   [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]]
 done
+snapshot=$("$tool" "$identity_repo" --build-snapshot)
+printf 'fixture shared helper\n' > "$identity_repo/Core/Sources/InkFlowDomain/UntrackedFixture.swift"
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]]
 echo 'PASS quality build metadata: deterministic build-input/resources hashes, clean/dirty revision, docs excluded'

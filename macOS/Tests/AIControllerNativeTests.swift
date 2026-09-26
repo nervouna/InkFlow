@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import AppKit
 @preconcurrency import InputMethodKit
 #if SWIFT_PACKAGE

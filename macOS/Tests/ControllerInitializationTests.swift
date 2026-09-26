@@ -1,3 +1,4 @@
+@testable import InkFlowRime
 import InputMethodKit
 import Carbon
 import ObjectiveC

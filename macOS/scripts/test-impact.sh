@@ -53,9 +53,12 @@ impact_classify_git() {
 
 impact_classify() {
   local path=$1
+  case "$path" in
+    Core/*) impact_rule "$path" 'independent shared-core regression gate' shared-core ;;
+  esac
   # Producers share the content-free record contract in addition to their own feature behavior.
   case "$path" in
-    macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|macOS/Sources/DictionaryUpdateModels.swift|macOS/Sources/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|macOS/Sources/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
+    macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|Core/Sources/InkFlowRime/DictionaryCoordinator.swift|Core/Sources/InkFlowRime/DictionaryUpdateModels.swift|Core/Sources/InkFlowRime/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|Core/Sources/InkFlowRime/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
       impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
   esac
   # These schema components jointly implement personal mixed-English lookup,
@@ -74,14 +77,14 @@ impact_classify() {
       impact_rule "$path" 'documentation: diff check only' ;;
     macOS/scripts/probe-imk-candidate-lifetime.sh|macOS/scripts/diagnostics/IMKCandidateLifetimeProbe.m)
       impact_rule "$path" 'standalone native diagnostic: run explicitly outside daily checks' ;;
-    Package.swift|macOS/Info.plist)
+    Package.swift|Core/Package.swift|Core/scripts/*|macOS/Info.plist)
       impact_rule "$path" 'product and target graph: complete non-GUI coverage'
       impact_all=true; impact_bundle=true; impact_release_tools=true
       impact_manual_add manual-input manual-settings manual-install ;;
 
     macOS/Sources/AIStatistics*|macOS/Tests/AIStatistics*|macOS/Tools/ai-statistics.py|macOS/scripts/test-ai-statistics*.sh)
       impact_rule "$path" 'AI statistics domain' ai-transport ai-runtime ai-statistics ;;
-    macOS/Sources/AI*|macOS/Sources/InputControllerAI.swift)
+    Core/Sources/InkFlowDomain/AI*|macOS/Sources/AI*|macOS/Sources/InputControllerAI.swift)
       impact_rule "$path" 'AI feature domain' ai voice-session settings
       impact_manual_add manual-input manual-settings ;;
     macOS/scripts/fixtures/rime-learning-contract/*)
@@ -89,7 +92,7 @@ impact_classify() {
     macOS/Tests/AI*|macOS/scripts/test-ai-*.sh)
       impact_rule "$path" 'AI test domain' ai ;;
 
-    macOS/Sources/VoiceLexicon.swift|macOS/Sources/VoiceLearning.swift)
+    Core/Sources/InkFlowRime/VoiceLexicon.swift|Core/Sources/InkFlowDomain/VoiceLearning*.swift|macOS/Sources/VoiceLearning.swift)
       impact_rule "$path" 'voice lexicon and native learning bridge' voice-session apple-voice voice-lexicon voice-controller ai-learning settings ai-transport quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/*Voice*.swift)
@@ -98,7 +101,7 @@ impact_classify() {
     macOS/Tests/*Voice*.swift|macOS/scripts/test-*voice*.sh)
       impact_rule "$path" 'voice test domain' voice-session apple-voice voice-lexicon voice-controller ;;
 
-    macOS/Sources/Quality*|macOS/Tests/Quality*|macOS/scripts/*quality*.sh|macOS/Tools/QualityBuildMetadata.swift|tools/quality*.py)
+    Core/Sources/InkFlowRime/Quality*|macOS/Sources/Quality*|macOS/Tests/Quality*|macOS/scripts/*quality*.sh|macOS/Tools/QualityBuildMetadata.swift|tools/quality*.py)
       impact_rule "$path" 'input quality domain' quality
       case "$path" in macOS/Tools/QualityBuildMetadata.swift|macOS/scripts/*quality-metadata.sh) impact_release_tools=true ;; esac ;;
     macOS/Quality/*)
@@ -117,7 +120,7 @@ impact_classify() {
       impact_rule "$path" 'English and voice learning bridge' engine-english voice-lexicon voice-controller ai-learning preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
-    macOS/Sources/PackagedCache*|macOS/Tools/PackagedCacheTool.swift|macOS/Resources/*)
+    Core/Sources/InkFlowRime/PackagedCache*|macOS/Sources/PackagedCache*|Core/Tools/PackagedCacheTool/PackagedCacheTool.swift|macOS/Resources/*)
       impact_rule "$path" 'packaged resources and cache consumers' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation
       impact_bundle=true
       impact_manual_add manual-input ;;
@@ -125,7 +128,7 @@ impact_classify() {
       impact_rule "$path" 'dictionary and personal-learning lifecycle settings' settings ai-learning engine-english voice-controller
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
-    macOS/Sources/Dictionary*|macOS/DictionaryTool/*|macOS/DictionaryWorker/*|macOS/Data/*|macOS/config/*|schemas/*|config/*|Data/*|*.yaml|*.yml|macOS/scripts/prepare-*.sh)
+    Core/Sources/InkFlowDomain/Dictionary*|Core/Sources/InkFlowRime/Dictionary*|Core/Tools/DictionaryGeneratorTool/*|Core/Sources/InkFlowRimeWorker/*|macOS/Sources/Dictionary*|macOS/DictionaryTool/*|macOS/DictionaryWorker/*|macOS/Data/*|macOS/config/*|schemas/*|config/*|Data/*|*.yaml|*.yml|macOS/scripts/prepare-*.sh)
       impact_rule "$path" 'dictionary and generated-data domain' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation settings startup-diagnostics
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
@@ -147,33 +150,33 @@ impact_classify() {
     macOS/Sources/AvailableUpdate.swift|macOS/Sources/GitHubRelease*.swift|macOS/Sources/SemanticVersion.swift|macOS/Sources/Update*.swift)
       impact_rule "$path" 'Sparkle updater settings and legacy preference migration' settings
       impact_manual_add manual-settings manual-install ;;
-    macOS/Sources/*SettingsView.swift|macOS/Sources/InputPreferences.swift)
+    macOS/Sources/*SettingsView.swift|Core/Sources/InkFlowDomain/InputPreferences.swift)
       impact_rule "$path" 'settings domain' settings engine-options controller ai-runtime voice-controller
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/InputController.swift)
       impact_rule "$path" 'input-source update menu and Settings integration' controller settings
       impact_manual_add manual-input manual-settings ;;
-    macOS/Sources/EngineAI.swift)
+    Core/Sources/InkFlowRime/EngineAI.swift)
       impact_rule "$path" 'engine and AI learning integration' engine controller ai-headless ai-learning voice-controller quality-capture-query
       impact_manual_add manual-input ;;
-    macOS/Sources/CustomPhrases.swift)
+    Core/Sources/InkFlowDomain/CustomPhrase.swift|macOS/Sources/CustomPhrases.swift)
       impact_rule "$path" 'custom phrases and activation integration' engine controller ai-headless voice-controller quality-capture-query settings dictionary-activation
       impact_manual_add manual-input manual-settings ;;
-    macOS/Sources/Engine.swift)
+    Core/Sources/InkFlowRime/Engine.swift)
       impact_rule "$path" 'shared engine integration' engine controller ai-headless ai-learning voice-controller quality-capture-query deployment dictionary-activation
       impact_manual_add manual-input ;;
-    macOS/Sources/Engine*|macOS/Sources/InputController*|macOS/Sources/Context.swift|macOS/Sources/InputRankingContext.swift|macOS/Sources/CustomPhrases.swift|macOS/Sources/*Presentation.swift|macOS/Sources/*Panel.swift|macOS/Sources/NativeCandidates.*)
+    macOS/Sources/Engine*|macOS/Sources/InputController*|Core/Sources/InkFlowDomain/CandidateRanking.swift|macOS/Sources/Context.swift|macOS/Sources/InputRankingContext.swift|Core/Sources/InkFlowDomain/CustomPhrase.swift|macOS/Sources/CustomPhrases.swift|macOS/Sources/*Presentation.swift|macOS/Sources/*Panel.swift|macOS/Sources/NativeCandidates.*)
       impact_rule "$path" 'input engine and controller domain' engine controller ai-headless voice-controller quality-capture-query
       impact_manual_add manual-input ;;
     macOS/Tests/EngineTests.swift) impact_rule "$path" 'engine tests' engine ;;
     macOS/Tests/Controller*|macOS/scripts/test-controller*.sh) impact_rule "$path" 'controller tests' controller ai-headless ;;
     macOS/Tests/SettingsTests.swift|macOS/Tests/SettingsUITests.swift|macOS/Tests/UpdateTests.swift)
       impact_rule "$path" 'settings and application update tests' settings ;;
-    macOS/Sources/LocalDiagnostics.swift|macOS/Tests/LocalDiagnosticsTests.swift|macOS/scripts/test-local-diagnostics.sh)
+    Core/Sources/InkFlowRime/DiagnosticEvents.swift|macOS/Sources/LocalDiagnostics.swift|macOS/Tests/LocalDiagnosticsTests.swift|macOS/scripts/test-local-diagnostics.sh)
       impact_rule "$path" 'bounded local diagnostics' local-diagnostics diagnostic-archive ;;
     macOS/Sources/DiagnosticIncident.swift|macOS/Sources/DiagnosticArchive.swift|macOS/Sources/DiagnosticCrashReader.swift|macOS/Tests/DiagnosticArchiveTests.swift|macOS/scripts/test-diagnostic-archive.sh)
       impact_rule "$path" 'local incident and archive contract' diagnostic-archive local-diagnostics settings ;;
-    macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
+    Core/Sources/InkFlowRime/EngineDiagnostics.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Tests/StartupDiagnosticsTests.swift|macOS/scripts/test-startup-diagnostics.sh)
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 
     macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/main.swift)
@@ -189,7 +192,7 @@ impact_classify() {
     macOS/Tests/Installer*|macOS/scripts/test-installer-*.sh|macOS/scripts/check-installer-core.sh)
       impact_rule "$path" 'installer tests' installer-core workflow ;;
 
-    macOS/Tests/TestSupport.swift|macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
+    Core/Tests/*|macOS/Tests/TestSupport.swift|macOS/Tests/NativeTestSupport.m|macOS/Tests/include/*)
       impact_rule "$path" 'shared test support: complete non-GUI coverage'
       impact_all=true ;;
     macOS/scripts/test-groups.sh|macOS/scripts/test.sh|macOS/scripts/test-affected.sh|macOS/scripts/test-impact.sh|macOS/scripts/test-test-*.sh)
@@ -203,7 +206,7 @@ impact_classify() {
     macOS/Tests/*|macOS/scripts/test-*.sh)
       impact_rule "$path" 'unclassified test: complete non-GUI coverage'
       impact_all=true ;;
-    macOS/Sources/*|macOS/Shared/*|macOS/Installer/*|macOS/SwiftPM/*)
+    Core/Sources/*|Core/Tools/*|macOS/Sources/*|macOS/Shared/*|macOS/Installer/*|macOS/SwiftPM/*)
       impact_rule "$path" 'unclassified production path: complete non-GUI coverage'
       impact_all=true; impact_manual_add manual-input manual-settings manual-install ;;
     *)

@@ -1,3 +1,4 @@
+import InkFlowRime
 import Foundation
 import OSLog
 

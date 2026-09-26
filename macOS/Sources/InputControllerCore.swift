@@ -1,3 +1,4 @@
+import InkFlowRime
 @preconcurrency import InputMethodKit
 import Carbon
 

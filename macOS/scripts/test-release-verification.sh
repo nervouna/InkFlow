@@ -18,7 +18,7 @@ reject() {
 output=$(plan README.md AGENTS.md macOS/DEVELOPMENT.md)
 expect "$output" core bundle-deep
 reject "$output" manual-input manual-settings manual-install release-tools
-output=$(plan macOS/Sources/SmartSettingsView.swift macOS/Sources/InputPreferences.swift)
+output=$(plan macOS/Sources/SmartSettingsView.swift Core/Sources/InkFlowDomain/InputPreferences.swift)
 expect "$output" core bundle-deep
 reject "$output" manual-input manual-settings manual-install
 for path in InputControllerCore InputControllerAI EngineAI AISuggestionPanel; do
@@ -41,13 +41,13 @@ for path in AIStatistics AIStatisticsStore StartupDiagnostics; do
   reject "$output" manual-input manual-settings manual-install
 done
 for path in macOS/Sources/AIContext.swift macOS/Sources/AISuggestionCoordinator.swift \
-  macOS/Sources/DictionaryGenerator.swift macOS/Sources/DictionaryToolBootstrap.swift macOS/DictionaryTool/main.swift; do
+  Core/Sources/InkFlowDomain/DictionaryGenerator.swift Core/Sources/InkFlowDomain/DictionaryToolBootstrap.swift Core/Tools/DictionaryGeneratorTool/main.swift; do
   output=$(plan "$path")
   expect "$output" core bundle-deep
   reject "$output" manual-input manual-settings manual-install
 done
 for path in macOS/Tests/AIRuntimeTests.swift macOS/scripts/test-ai-runtime.sh \
-  macOS/Tests/DictionaryGeneratorTests.swift macOS/scripts/build-dictionary-generator.sh macOS/scripts/test-dictionary-generator.sh; do
+  Core/Tests/DictionaryGeneratorTests/DictionaryGeneratorTests.swift macOS/scripts/build-dictionary-generator.sh macOS/scripts/test-dictionary-generator.sh; do
   output=$(plan "$path")
   expect "$output" core bundle-deep
   reject "$output" manual-input manual-settings manual-install
@@ -58,8 +58,10 @@ reject "$output" manual-input manual-settings manual-install
 # Run the actual dispatcher in a clean linked fixture, stubbing expensive commands.
 git clone --quiet --shared "$PWD" "$fixture/repo"
 cp macOS/scripts/release-verification.sh macOS/scripts/test-impact.sh macOS/scripts/test-groups.sh "$fixture/repo/macOS/scripts/"
+mkdir -p "$fixture/repo/Core/Sources/InkFlowDomain"
+cp Core/Sources/InkFlowDomain/InputPreferences.swift "$fixture/repo/Core/Sources/InkFlowDomain/"
 # Exercise the non-plan output with a change that remains a daily input/Settings handoff.
-printf '\n' >> "$fixture/repo/macOS/Sources/InputPreferences.swift"
+printf '\n' >> "$fixture/repo/Core/Sources/InkFlowDomain/InputPreferences.swift"
 export INKFLOW_RELEASE_LOG="$fixture/commands"
 for name in build test check-bundle release-receipt; do
   cat > "$fixture/repo/macOS/scripts/$name.sh" <<'STUB'
@@ -73,7 +75,7 @@ cat > "$fixture/repo/macOS/scripts/swift-package.sh" <<'STUB'
 build_swift_product() { printf installer > "$2"; echo "product $1" >> "$INKFLOW_RELEASE_LOG"; }
 STUB
 cp "$fixture/repo/macOS/scripts/test.sh" "$fixture/repo/.agents/skills/inkflow-release/scripts/test.sh"
-git -C "$fixture/repo" add macOS/scripts macOS/Sources/InputPreferences.swift .agents/skills/inkflow-release/scripts/test.sh
+git -C "$fixture/repo" add macOS/scripts Core/Sources/InkFlowDomain/InputPreferences.swift .agents/skills/inkflow-release/scripts/test.sh
 git -C "$fixture/repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'test: release dispatcher fixture'
 git -C "$fixture/repo" worktree add --quiet --detach "$fixture/release" HEAD
 bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/output"

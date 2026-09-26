@@ -1,13 +1,6 @@
 @preconcurrency import InputMethodKit
 import Carbon
 
-/// Request identity deliberately excludes candidate paging, highlighting and display preedit.
-struct AIInputIdentity: Equatable, Sendable {
-    let rawInput: String
-    let caret: Int
-    let selectedPrefix: String
-}
-
 struct AIClientAnchor: Equatable {
     let client: ObjectIdentifier
     let mark: NSRange

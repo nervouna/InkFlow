@@ -67,7 +67,7 @@ change macOS/scripts/diagnostics/UnclassifiedProbe.m; plan
 has 'quality-store'; has 'workflow'
 
 new_case
-change macOS/Sources/InputPreferences.swift; plan
+change Core/Sources/InkFlowDomain/InputPreferences.swift; plan
 has 'engine-options'; has 'controller'; has 'manual-input'; has 'manual-settings'; not_has 'manual-install'
 
 new_case
@@ -86,13 +86,13 @@ new_case
 change macOS/Sources/DiagnosticFeedbackModel.swift; plan
 has 'settings'; has 'local-diagnostics'; has 'diagnostic-archive'; has 'manual-settings'
 
-for path in macOS/Sources/Engine.swift macOS/Sources/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift macOS/Sources/KeyboardShortcuts.swift; do
+for path in Core/Sources/InkFlowRime/Engine.swift Core/Sources/InkFlowRime/EngineAI.swift macOS/Sources/CustomPhrases.swift macOS/Sources/Settings.swift macOS/Sources/KeyboardShortcuts.swift; do
   new_case
   change "$path"; plan
   has 'controller'; has 'manual-input'
   case "$path" in
-    macOS/Sources/Engine.swift) has 'ai-learning'; has 'deployment'; has 'dictionary-activation' ;;
-    macOS/Sources/EngineAI.swift) has 'ai-learning'; has 'ai-headless' ;;
+    Core/Sources/InkFlowRime/Engine.swift) has 'ai-learning'; has 'deployment'; has 'dictionary-activation' ;;
+    Core/Sources/InkFlowRime/EngineAI.swift) has 'ai-learning'; has 'ai-headless' ;;
     macOS/Sources/CustomPhrases.swift) has 'settings'; has 'dictionary-activation' ;;
     macOS/Sources/Settings.swift|macOS/Sources/KeyboardShortcuts.swift) has 'settings'; has 'ai-transport'; has 'ai-runtime'; has 'ai-headless' ;;
   esac
@@ -110,12 +110,16 @@ change macOS/Tests/SettingsUITests.swift; plan
 has 'Units: settings'; not_has 'manual-input'; not_has 'manual-install'
 
 new_case
-change macOS/Sources/VoiceLexicon.swift; plan
+change Core/Sources/InkFlowRime/VoiceLexicon.swift; plan
 has 'voice-session'; has 'apple-voice'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'manual-input'
 
 new_case
 change macOS/Sources/VoiceLearning.swift; plan
 has 'voice-session'; has 'voice-lexicon'; has 'voice-controller'; has 'ai-learning'; has 'quality-store'; has 'manual-input'
+
+new_case
+change Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift; plan
+has 'shared-core'; has 'voice-controller'; has 'ai-learning'; has 'quality-store'; has 'manual-input'
 
 new_case
 change macOS/Sources/InputControllerVoice.swift; plan
@@ -166,7 +170,7 @@ new_case
 change macOS/Sources/AIStatistics.swift
 git -C "$case_root" add macOS/Sources/AIStatistics.swift
 git -C "$case_root" -c user.name=Fixture -c user.email=fixture@example.invalid commit --quiet -m 'test: statistics change'
-change macOS/Sources/InputPreferences.swift
+change Core/Sources/InkFlowDomain/InputPreferences.swift
 plan --from HEAD~1
 has 'macOS/Sources/AIStatistics.swift'; has 'ai-statistics'; has 'engine-options'
 
@@ -184,15 +188,27 @@ plan
 has 'quality-store'; has 'manual-input'; has 'manual-settings'; has 'manual-install'
 
 new_case
-change macOS/Sources/DictionaryStore.swift; plan --run
+change Core/Sources/InkFlowRime/DictionaryStore.swift; plan --run
 [[ $(head -n 1 "$INKFLOW_AFFECTED_LOG") == 'build ' ]]
 grep -Fq 'test ' "$INKFLOW_AFFECTED_LOG"
 grep -Fxq 'check-bundle --fast' "$INKFLOW_AFFECTED_LOG"
 
-for path in macOS/Resources/MenuIconTemplate.tiff macOS/Sources/PackagedCache.swift macOS/Tools/PackagedCacheTool.swift; do
+for path in macOS/Resources/MenuIconTemplate.tiff Core/Sources/InkFlowRime/PackagedCache.swift Core/Tools/PackagedCacheTool/PackagedCacheTool.swift; do
   new_case
   change "$path"; plan
   has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
+done
+
+for path in Core/Sources/InkFlowRime/DictionaryCoordinator.swift Core/Sources/InkFlowRime/DictionarySourceClient.swift Core/Sources/InkFlowRime/DictionaryPreparation.swift Core/Tests/DictionaryPreparationFixture/DictionaryPreparationFixture.swift; do
+  new_case
+  change "$path"; plan
+  has 'shared-core'; has 'dictionary-source'; has 'dictionary-store'; has 'dictionary-worker'; has 'dictionary-activation'
+  case "$path" in
+    Core/Sources/*) has 'bundle-fast' ;;
+  esac
+  case "$path" in
+    */DictionaryCoordinator.swift) has 'local-diagnostics' ;;
+  esac
 done
 
 new_case
@@ -210,4 +226,10 @@ has 'Not executed: bundle-fast'; ! grep -q '^check-bundle' "$INKFLOW_AFFECTED_LO
 unset INKFLOW_AFFECTED_FAIL
 
 for log in "$fixture"/commands-*; do ! grep -Eq 'gui|native|keychain|--live|install.sh' "$log"; done
-echo 'PASS affected selection: coarse domains, version metadata, preparation and failure propagation'
+
+for path in Core/Package.swift Core/scripts/test.sh Core/Sources/InkFlowDomain/Future.swift; do
+  new_case
+  change "$path"; plan
+  has 'shared-core'; has 'manual-input'; has 'manual-settings'
+done
+echo 'PASS affected selection: shared/platform domains, version metadata, preparation and failure propagation'

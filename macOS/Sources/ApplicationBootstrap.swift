@@ -1,3 +1,4 @@
+import InkFlowRime
 import InputMethodKit
 
 package enum InkFlowApplicationBootstrap {

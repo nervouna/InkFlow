@@ -25,7 +25,7 @@ fi
 needs_shared=false
 needs_dependencies=false
 for unit in "${test_units[@]}"; do
-  case "$unit" in quality-capture-query|ai-headless|deployment|engine-*|controller|voice-controller) needs_shared=true ;; esac
+  case "$unit" in shared-core|quality-capture-query|ai-headless|deployment|engine-*|controller|voice-controller) needs_shared=true ;; esac
   case "$unit" in preparation|runner|workflow|installer-core) ;; *) needs_dependencies=true ;; esac
 done
 if $needs_shared || $needs_dependencies; then macOS/scripts/dependencies.sh; fi
@@ -46,6 +46,7 @@ engine_built=false
 for unit in "${test_units[@]}"; do
   remaining=("${remaining[@]:1}")
   case "$unit" in
+    shared-core) bash Core/scripts/check-boundaries.sh; bash Core/scripts/test.sh "$PWD/build/test-shared" ;;
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
