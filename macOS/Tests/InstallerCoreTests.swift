@@ -63,6 +63,165 @@ private actor Files: IFInstallerFileOperations {
 }
 
 @main struct InstallerCoreTests {
+    @MainActor private final class ControlledProcess: IFTrialInstalledProcess {
+        enum QuitBehavior { case exit, delayedExit, decline, keepRunning, exitAndDecline }
+        private let child = Process()
+        private let input = Pipe()
+        private var exitTask: Task<Void, Never>?
+        var processIdentifier: pid_t { child.processIdentifier }
+        var isTerminated = false
+        var executableURL: URL?
+        var bundleURL: URL?
+        var quitBehavior = QuitBehavior.exit
+        var terminationRequests = 0
+
+        init() throws {
+            child.executableURL = URL(fileURLWithPath: "/bin/cat")
+            child.standardInput = input
+            child.standardOutput = FileHandle.nullDevice
+            try child.run()
+        }
+
+        func finish() {
+            exitTask?.cancel()
+            exitTask = nil
+            try? input.fileHandleForWriting.close()
+            child.waitUntilExit()
+        }
+
+        func terminate() -> Bool {
+            terminationRequests += 1
+            switch quitBehavior {
+            case .exit: finish(); return true
+            case .delayedExit:
+                exitTask = Task {
+                    try? await Task.sleep(for: .milliseconds(5))
+                    if !Task.isCancelled { finish() }
+                }
+                return true
+            case .decline: return false
+            case .keepRunning: return true
+            case .exitAndDecline: finish(); return false
+            }
+        }
+    }
+
+    @MainActor static func trialExitObservationTest() async throws {
+        let process = try ControlledProcess()
+        defer { process.finish() }
+        let processes = IFTrialSystemProcesses(application: { _ in process }, terminationTimeout: .milliseconds(20))
+        try await processes.stop([process.processIdentifier])
+        try check(process.terminationRequests == 1 && !process.isTerminated,
+                  "developer stop accepts actual child exit while AppKit observation stays stale")
+        print("PASS developer stop: real child exit with stale AppKit observation")
+    }
+
+    @MainActor static func trialPrepareExitObservationTest() async throws {
+        let process = try ControlledProcess()
+        defer { process.finish() }
+        let unrelated = URL(fileURLWithPath: "/tmp/installer-unrelated/InkFlow.app")
+        process.executableURL = unrelated
+        let processes = IFTrialSystemProcesses(application: { pid in
+            pid == process.processIdentifier ? process : nil
+        }, installedApplications: { [process] }, terminationTimeout: .milliseconds(20))
+        try check(try processes.installedPIDs(at: unrelated).isEmpty,
+                  "live executable path takes precedence over cached unrelated path")
+        guard let path = IFTrialSystemProcesses.executablePath(process.processIdentifier) else {
+            throw IFInstallerError.invalid("controlled child executable must be observable")
+        }
+        let target = URL(fileURLWithPath: path)
+        process.executableURL = target
+        let sources = TrialSources()
+        let trial = IFTrialInstallation(sources: sources, processes: processes)
+        let state = try await trial.prepare(target: target, build: "12")
+        try check(state.oldPIDs == [process.processIdentifier] && process.terminationRequests == 1,
+                  "prepare stops the live owned child through the system adapter")
+        try check(!process.isTerminated && sources.selected == "ascii",
+                  "stale cached target after child exit must not be reported as a restarted process")
+        print("PASS developer prepare: live path ownership, stale cached target after real child exit (fake input sources)")
+    }
+
+    @MainActor private static func stopControlledProcesses(_ processes: [ControlledProcess], native: Bool,
+                                                          timeout: Duration = .milliseconds(20)) async throws {
+        if native {
+            try await IFSystemLifecycle(applications: { processes }, terminationTimeout: timeout).terminateOld()
+        } else {
+            let system = IFTrialSystemProcesses(application: { pid in
+                processes.first { $0.processIdentifier == pid }
+            }, terminationTimeout: timeout)
+            try await system.stop(processes.map(\.processIdentifier))
+        }
+    }
+
+    @MainActor static func systemTerminationTests() async throws {
+        try check(IFInstallationProcessLifecycle.terminationTimeout == .seconds(10),
+                  "production graceful-termination deadline remains ten seconds")
+        for native in [true, false] {
+            try await stopControlledProcesses([], native: native)
+            for behavior: ControlledProcess.QuitBehavior in [.exit, .delayedExit, .exitAndDecline] {
+                let process = try ControlledProcess()
+                defer { process.finish() }
+                process.quitBehavior = behavior
+                try await stopControlledProcesses([process], native: native, timeout: .seconds(2))
+                try check(process.terminationRequests == 1 && !process.isTerminated &&
+                          IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
+                          "both system adapters accept real exit despite stale AppKit state or an exit racing the request")
+            }
+            do {
+                let process = try ControlledProcess()
+                defer { process.finish() }
+                process.finish()
+                process.quitBehavior = .decline
+                try await stopControlledProcesses([process], native: native)
+                try check(process.terminationRequests == 0, "already-exited process needs no normal quit request")
+            }
+            for declined in [true, false] {
+                let process = try ControlledProcess()
+                defer { process.finish() }
+                process.quitBehavior = declined ? .decline : .keepRunning
+                let start = ContinuousClock.now
+                do {
+                    try await stopControlledProcesses([process], native: native)
+                    throw IFInstallerError.invalid("live child must refuse replacement")
+                } catch {
+                    if native {
+                        try check(error as? IFInstallerError == (declined ? .terminationDeclined : .terminationTimeout),
+                                  "native installer preserves declined/timeout errors")
+                    } else {
+                        let message = declined ? "process \(process.processIdentifier) declined normal termination; installation unchanged"
+                            : "normal termination timed out; installation unchanged"
+                        try check(error as? IFInputError == .unavailable(message),
+                                  "developer installer preserves declined/timeout errors")
+                    }
+                }
+                let elapsed = start.duration(to: .now)
+                try check(elapsed < .seconds(2) && (declined || elapsed >= .milliseconds(20)),
+                          "injected short deadline is bounded and is not reported before expiry")
+                try check(process.terminationRequests == 1 &&
+                          !IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
+                          "declined/timed-out child remains alive without force termination")
+            }
+        }
+        print("PASS both system adapters: stale and delayed exit, pre-exited child, request race, live refusal, bounded timeout, exact errors, no force termination")
+    }
+
+    @MainActor static func exitPredicateTests() throws {
+        let process = try ControlledProcess()
+        defer { process.finish() }
+        let pid = process.processIdentifier
+        try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: pid), "live process must block replacement")
+        process.finish()
+        try check(IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: pid), "exited process must not time out when AppKit state is stale")
+        for status: Int32 in [0, EPERM, EINVAL] {
+            try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: pid, probe: { _ in status }), "unknown or live process status must block replacement")
+        }
+        for invalid: pid_t in [-1, 0] {
+            try check(!IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: invalid, probe: { _ in fatalError("invalid PID must not be probed") }), "invalid PID cannot prove exit")
+        }
+        try check(IFInstallationProcessLifecycle.hasExited(applicationTerminated: true, processID: -1, probe: { _ in fatalError("confirmed exit needs no probe") }), "AppKit-confirmed exit remains sufficient")
+        print("PASS shared exit observation: live child, exited child with stale AppKit state, permission/unknown errors, invalid PIDs")
+    }
+
     @MainActor private final class TrialProcesses: IFTrialProcessOperations {
         var pids: [Int32] = [42]
         var failure = ""
@@ -187,25 +346,10 @@ private actor Files: IFInstallerFileOperations {
         print("PASS real filesystem: first install, replacement, failed partial copy preserves old, cleanup, no backup, no path/version gates")
     }
     @MainActor static func main() async throws {
-        let child = Process()
-        let input = Pipe()
-        child.executableURL = URL(fileURLWithPath: "/bin/cat")
-        child.standardInput = input
-        child.standardOutput = FileHandle.nullDevice
-        try child.run()
-        let pid = child.processIdentifier
-        try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid), "live process must block replacement")
-        try input.fileHandleForWriting.close()
-        child.waitUntilExit()
-        try check(IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid), "exited process must not time out when AppKit state is stale")
-        for status: Int32 in [0, EPERM, EINVAL] {
-            try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: pid, probe: { _ in status }), "unknown or live process status must block replacement")
-        }
-        for invalid: pid_t in [-1, 0] {
-            try check(!IFSystemLifecycle.hasExited(applicationTerminated: false, processID: invalid, probe: { _ in fatalError("invalid PID must not be probed") }), "invalid PID cannot prove exit")
-        }
-        try check(IFSystemLifecycle.hasExited(applicationTerminated: true, processID: -1, probe: { _ in fatalError("confirmed exit needs no probe") }), "AppKit-confirmed exit remains sufficient")
-        print("PASS installer exit observation: live child, exited child with stale AppKit state, permission/unknown errors, invalid PIDs")
+        try await trialExitObservationTest()
+        try await trialPrepareExitObservationTest()
+        try await systemTerminationTests()
+        try exitPredicateTests()
         try await trialTests()
         try fileTests()
         let files = Files(), sources = Sources(), lifecycle = Lifecycle()
