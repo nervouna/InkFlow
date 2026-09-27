@@ -21,6 +21,8 @@ echo "$name $args" >> "$INKFLOW_RUNNER_LOG"
 if [[ -n "${INKFLOW_RUNNER_PARALLEL_DIR:-}" ]]; then
   parallel_key=''
   case "$name $*" in
+    'test-quality-metadata --prebuilt') parallel_key=quality-metadata ;;
+    'test-ai-headless --prebuilt') parallel_key=ai-headless ;;
     'test-ai-learning '*) parallel_key=ai-learning ;;
     'test-dictionary-updates --worker') parallel_key=dictionary-worker ;;
     'test-dictionary-activation '*) parallel_key=dictionary-activation ;;
@@ -30,10 +32,10 @@ if [[ -n "${INKFLOW_RUNNER_PARALLEL_DIR:-}" ]]; then
     [[ "$parallel_key" != dictionary-worker || "${INKFLOW_TEST_DEPENDENCIES_PREPARED:-}" == 1 ]] || exit 42
     touch "$INKFLOW_RUNNER_PARALLEL_DIR/$parallel_key"
     for _ in {1..200}; do
-      [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]] && break
+      [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 5 ]] && break
       sleep 0.01
     done
-    [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]] || exit 43
+    [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 5 ]] || exit 43
     if [[ -n "${INKFLOW_RUNNER_HOLD_DIR:-}" ]]; then
       printf '%s\n' "$$" > "$INKFLOW_RUNNER_HOLD_DIR/$parallel_key.pid"
       trap 'touch "$INKFLOW_RUNNER_HOLD_DIR/'"$parallel_key"'.terminated"; exit 130' INT
@@ -59,7 +61,10 @@ case "$name" in
     }
     echo "fixture output: $name" ;;
 esac
-if [[ "$name" == "${INKFLOW_RUNNER_FAIL:-}" ]]; then exit 17; fi
+if [[ "$name" == "${INKFLOW_RUNNER_FAIL:-}" ]]; then
+  echo "fixture failure diagnostic: $name" >&2
+  exit 17
+fi
 STUB
   chmod +x "$fixture/macOS/scripts/$script.sh"
 done
@@ -107,6 +112,15 @@ case "$name" in engine-tests|controller-tests)
 esac
 PROGRAM
   chmod +x "$2"
+}
+build_swift_product() {
+  echo "build-product $1 $3" >> "$INKFLOW_RUNNER_LOG"
+  if [[ "$1" == "${INKFLOW_SWIFT_BUILD_FAIL:-}" ]]; then
+    echo "product prebuild diagnostic: $1" >&2
+    return 38
+  fi
+  mkdir -p "$(dirname "$2")"
+  cp /usr/bin/true "$2"
 }
 STUB
 run() {
@@ -176,7 +190,7 @@ export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/parallel"
 mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
 run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
-[[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]]
+[[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 5 ]]
 rm -f "$INKFLOW_RUNNER_PARALLEL_DIR"/*
 run all
 LC_ALL=C sort "$fixture/default.log" > "$fixture/default.sorted"
@@ -186,6 +200,10 @@ grep -Fxq 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNN
 [[ $(grep -Fxc 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG") == 1 ]]
 grep -Fxq 'core-test-dictionaries REPO/build/test-shared --preparation-only' "$INKFLOW_RUNNER_LOG"
 [[ $(grep -Fxc 'core-test-dictionaries REPO/build/test-shared --preparation-only' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -Fxc 'build-product quality-build-metadata release' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -Fxc 'test-quality-metadata --prebuilt' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -Fxc 'build ai-headless-tests' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -Fxc 'test-ai-headless --prebuilt' "$INKFLOW_RUNNER_LOG") == 1 ]]
 for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
@@ -305,6 +323,15 @@ grep -Eq $'^ai-learning\tFAIL\t[0-9]+\t.*/ai-learning.log\t[1-9][0-9]*$' "$INKFL
 grep -q 'prebuild diagnostic: ai-pronunciation-tests' "$INKFLOW_TEST_EVIDENCE_DIR/ai-learning.log"
 ! grep -q ' (parallel)' "$fixture/output.log"
 unset INKFLOW_SWIFT_BUILD_FAIL INKFLOW_TEST_EVIDENCE_DIR
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/quality-metadata-prebuild-failure-evidence"
+export INKFLOW_SWIFT_BUILD_FAIL=quality-build-metadata
+if run all; then exit 1; else status=$?; fi
+[[ $status == 38 ]]
+grep -q 'product prebuild diagnostic: quality-build-metadata' "$fixture/output.log"
+grep -Eq $'^quality-metadata\tFAIL\t[0-9]+\t.*/quality-metadata.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -q 'product prebuild diagnostic: quality-build-metadata' "$INKFLOW_TEST_EVIDENCE_DIR/quality-metadata.log"
+! grep -q ' (parallel)' "$fixture/output.log"
+unset INKFLOW_SWIFT_BUILD_FAIL INKFLOW_TEST_EVIDENCE_DIR
 export INKFLOW_RUNNER_FAIL=test-ai-runtime
 if run ai-runtime settings; then exit 1; else status=$?; fi
 [[ $status == 17 ]]
@@ -318,10 +345,31 @@ export INKFLOW_RUNNER_FAIL=test-ai-learning
 if run all; then exit 1; else status=$?; fi
 [[ $status == 17 ]]
 grep -Eq $'^ai-learning\tFAIL\t[0-9]+\t.*/ai-learning.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^ai-headless\tPASS\t[0-9]+\t.*/ai-headless.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
 grep -Eq $'^dictionary-worker\tPASS\t[0-9]+\t.*/dictionary-worker.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
 grep -Eq $'^dictionary-activation\tPASS\t[0-9]+\t.*/dictionary-activation.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
-grep -q '^Not executed: ai-headless preparation' "$fixture/output.log"
-! grep -q 'Not executed: .*dictionary-worker\|Not executed: .*dictionary-activation' "$fixture/output.log"
+grep -q '^Not executed: preparation' "$fixture/output.log"
+! grep -q 'Not executed: .*ai-headless\|Not executed: .*dictionary-worker\|Not executed: .*dictionary-activation' "$fixture/output.log"
+unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_TEST_EVIDENCE_DIR
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/quality-metadata-failure-evidence"
+export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/quality-metadata-failure-parallel"
+mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
+export INKFLOW_RUNNER_FAIL=test-quality-metadata
+if run all; then exit 1; else status=$?; fi
+[[ $status == 17 ]]
+grep -Eq $'^quality-metadata\tFAIL\t[0-9]+\t.*/quality-metadata.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Fxq 'fixture failure diagnostic: test-quality-metadata' "$INKFLOW_TEST_EVIDENCE_DIR/quality-metadata.log"
+[[ $(grep -Fxc 'test-quality-metadata --prebuilt' "$INKFLOW_RUNNER_LOG") == 1 ]]
+unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_TEST_EVIDENCE_DIR
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/ai-headless-failure-evidence"
+export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/ai-headless-failure-parallel"
+mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
+export INKFLOW_RUNNER_FAIL=test-ai-headless
+if run all; then exit 1; else status=$?; fi
+[[ $status == 17 ]]
+grep -Eq $'^ai-headless\tFAIL\t[0-9]+\t.*/ai-headless.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Fxq 'fixture failure diagnostic: test-ai-headless' "$INKFLOW_TEST_EVIDENCE_DIR/ai-headless.log"
+[[ $(grep -Fxc 'test-ai-headless --prebuilt' "$INKFLOW_RUNNER_LOG") == 1 ]]
 unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_TEST_EVIDENCE_DIR
 signal_tmp="$fixture/signal-tmp"
 signal_parallel="$fixture/signal-parallel"
@@ -333,10 +381,10 @@ export INKFLOW_RUNNER_SERIAL_HOLD_DIR="$signal_hold"
 TMPDIR="$signal_tmp" bash "$fixture/macOS/scripts/test.sh" all > "$fixture/signal-output.log" 2>&1 &
 runner_pid=$!
 for _ in {1..500}; do
-  [[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 4 ]] && break
+  [[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 6 ]] && break
   sleep 0.01
 done
-[[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 4 ]]
+[[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 6 ]]
 signal_began=$(bash -c 'source macOS/scripts/test-timing.sh; inkflow_test_timing_now')
 kill -TERM "$runner_pid"
 set +e
@@ -350,7 +398,7 @@ for pid_file in "$signal_hold"/*.pid; do
   held_pid=$(cat "$pid_file")
   ! kill -0 "$held_pid" 2>/dev/null
 done
-[[ $(find "$signal_hold" -name '*.terminated' -type f | wc -l | tr -d ' ') == 4 ]]
+[[ $(find "$signal_hold" -name '*.terminated' -type f | wc -l | tr -d ' ') == 6 ]]
 [[ -z $(find "$signal_tmp" -name 'inkflow-test-units.*' -type d -print -quit) ]]
 ! grep -Eq 'No such file|status.*(missing|not found)|unbound variable' "$fixture/signal-output.log"
 echo "PASS runner TERM cleanup: serial plus parallel process groups reaped in ${signal_duration} ms"
@@ -358,6 +406,10 @@ unset INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_RUNNER_HOLD_DIR INKFLOW_RUNNER_SERIAL_
 export INKFLOW_TEST_DISABLE_PARALLEL=1
 run all
 ! grep -q 'parallel-prebuild\| (parallel)' "$fixture/output.log"
+[[ $(grep -Fxc 'test-quality-metadata ' "$INKFLOW_RUNNER_LOG") == 1 ]]
+! grep -q '^test-quality-metadata --prebuilt$' "$INKFLOW_RUNNER_LOG"
+[[ $(grep -Fxc 'test-ai-headless ' "$INKFLOW_RUNNER_LOG") == 1 ]]
+! grep -q '^test-ai-headless --prebuilt$' "$INKFLOW_RUNNER_LOG"
 [[ $(grep -c '^test-ai-learning ' "$INKFLOW_RUNNER_LOG") == 1 ]]
 [[ $(grep -c '^test-dictionary-updates --worker$' "$INKFLOW_RUNNER_LOG") == 1 ]]
 [[ $(grep -c '^test-dictionary-activation ' "$INKFLOW_RUNNER_LOG") == 1 ]]

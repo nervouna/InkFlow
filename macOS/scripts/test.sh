@@ -90,6 +90,18 @@ run_test_unit() {
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
+    quality-metadata)
+      if [[ "${INKFLOW_SWIFT_TEST_PREBUILT:-}" == 1 ]]; then
+        bash macOS/scripts/test-quality-metadata.sh --prebuilt
+      else
+        bash macOS/scripts/test-quality-metadata.sh
+      fi ;;
+    ai-headless)
+      if [[ "${INKFLOW_SWIFT_TEST_PREBUILT:-}" == 1 ]]; then
+        bash macOS/scripts/test-ai-headless.sh --prebuilt
+      else
+        bash macOS/scripts/test-ai-headless.sh
+      fi ;;
     apple-voice) bash macOS/scripts/test-apple-voice.sh ;;
     voice-session) bash macOS/scripts/test-voice-session.sh ;;
     ai-credentials) bash macOS/scripts/test-ai-credentials.sh ;;
@@ -158,7 +170,7 @@ run_serial_unit_tracked() {
 # Only these full-suite units are allowed to overlap. Their SwiftPM products are
 # built serially first; execution owns separate temp/user roots and treats the
 # app and shared Rime resources as read-only inputs.
-parallel_units=(ai-learning dictionary-worker dictionary-activation)
+parallel_units=(quality-metadata ai-learning ai-headless dictionary-worker dictionary-activation)
 parallel_began_ms=()
 parallel_prepare_ms=()
 parallel_prepare_logs=()
@@ -183,6 +195,9 @@ prepare_parallel_units() {
     unit_began=$(inkflow_test_timing_now)
     set +e
     case "$unit" in
+      quality-metadata)
+        build_swift_product quality-build-metadata build/quality-build-metadata release >> "$prepare_log" 2>&1
+        prepare_status=$? ;;
       ai-learning)
         build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests >> "$prepare_log" 2>&1
         prepare_status=$?
@@ -190,6 +205,9 @@ prepare_parallel_units() {
           build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests >> "$prepare_log" 2>&1
           prepare_status=$?
         fi ;;
+      ai-headless)
+        build_swift_test ai-headless-tests build/ai-headless-tests >> "$prepare_log" 2>&1
+        prepare_status=$? ;;
       dictionary-worker)
         build_swift_test dictionary-worker-fixture build/dictionary-worker-fixture >> "$prepare_log" 2>&1
         prepare_status=$?
