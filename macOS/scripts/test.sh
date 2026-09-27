@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source macOS/scripts/test-groups.sh
+source macOS/scripts/test-timing.sh
 report_successful_engine_stderr() {
   awk '
     $0 == "WARNING: Logging before InitGoogleLogging() is written to STDERR" { next }
@@ -90,9 +91,9 @@ run_test_unit() {
       bash macOS/scripts/test-dictionary-activation.sh
       bash macOS/scripts/test-serving-startup.sh ;;
     runner)
-      bash macOS/scripts/test-test-runner.sh
-      bash macOS/scripts/test-test-affected.sh ;;
-    workflow) bash macOS/scripts/test-workflow.sh ;;
+      env -u INKFLOW_TEST_EVIDENCE_DIR bash macOS/scripts/test-test-runner.sh
+      env -u INKFLOW_TEST_EVIDENCE_DIR bash macOS/scripts/test-test-affected.sh ;;
+    workflow) env -u INKFLOW_TEST_EVIDENCE_DIR bash macOS/scripts/test-workflow.sh ;;
     *) bash "macOS/scripts/test-$unit.sh" ;;
   esac
 }
@@ -102,11 +103,11 @@ run_test_unit_isolated() (
 )
 if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
   mkdir -p "$INKFLOW_TEST_EVIDENCE_DIR"
-  printf 'unit\tstatus\tduration_seconds\tlog\n' > "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+  printf 'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds\n' > "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
 fi
 for unit in "${test_units[@]}"; do
   remaining=("${remaining[@]:1}")
-  began=$(date +%s)
+  began_ms=$(inkflow_test_timing_now)
   echo "BEGIN test unit: $unit"
   unit_log="${INKFLOW_TEST_EVIDENCE_DIR:-}/$unit.log"
   set +e
@@ -118,11 +119,12 @@ for unit in "${test_units[@]}"; do
     status=$?
   fi
   set -e
-  duration=$(($(date +%s) - began))
+  duration_ms=$(($(inkflow_test_timing_now) - began_ms))
+  duration=$((duration_ms / 1000))
   if [[ $status == 0 ]]; then result=PASS; else result=FAIL; fi
   echo "END test unit: $unit ($result, ${duration}s)"
   if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
-    printf '%s\t%s\t%s\t%s\n' "$unit" "$result" "$duration" "$unit_log" >> "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$unit" "$result" "$duration" "$unit_log" "$duration_ms" >> "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
   fi
   [[ $status == 0 ]] || report_failure "$status"
 done

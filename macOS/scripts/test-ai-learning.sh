@@ -2,9 +2,13 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source macOS/scripts/swift-test.sh
+source macOS/scripts/test-timing.sh
+stage_started=$(inkflow_test_timing_now)
 build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests
 build/ai-pronunciation-tests
 build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests
+inkflow_test_timing_report ai-learning build "$stage_started"
+stage_started=$(inkflow_test_timing_now)
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-learning.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 if [[ $# -eq 0 ]]; then
@@ -14,8 +18,10 @@ else
   shared="$1"
 fi
 [[ -s "$shared/inkflow_pinyin.custom.yaml" ]] || { echo 'Missing active-schema AI patch' >&2; exit 1; }
+inkflow_test_timing_report ai-learning resources "$stage_started"
 manager="$PWD/build/deps/dist/bin/rime_dict_manager"
 export DYLD_LIBRARY_PATH="$PWD/build/deps/dist/lib"
+stage_started=$(inkflow_test_timing_now)
 for mode in no-voice-read voice-read; do
 fixture_user="$user_dir/$mode"
 mkdir -p "$fixture_user"
@@ -38,7 +44,9 @@ echo 'PASS voice native reads: identical export with/without attempted reads dur
 echo 'PASS canonical userdb export: correct full codes only; exact adoption counts; no raw typo/abbreviation'
 echo 'PASS ordinary learning: immediate Backspace undoes commits before/after AI callbacks; retained commit learns once'
 echo 'PASS fresh AI learning deployment: active schema patch, new shared data, userdb write/restart/read'
+inkflow_test_timing_report ai-learning native-adoption "$stage_started"
 
+stage_started=$(inkflow_test_timing_now)
 contract_shared="$user_dir/contract-shared"
 ditto "$shared" "$contract_shared"
 cp macOS/scripts/fixtures/rime-learning-contract/*.yaml "$contract_shared/"
@@ -54,7 +62,9 @@ build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-re
 (cd "$contract_user" && "$manager" -e inkflow_shared_english shared.txt)
 (cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
 echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
+inkflow_test_timing_report ai-learning rime-contract "$stage_started"
 
+stage_started=$(inkflow_test_timing_now)
 voice_user="$user_dir/voice-correction-user"
 mkdir -p "$voice_user"
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-write
@@ -78,7 +88,9 @@ build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-cleare
 ! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-alias.txt"
 awk -F '\t' '$1 == "测试" && $2 == "ce shi" && $3 == 1 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/retained-pinyin.txt"
 echo 'PASS English learning reset: both named namespaces clear across restart; pinyin userdb remains'
+inkflow_test_timing_report ai-learning voice-correction "$stage_started"
 
+stage_started=$(inkflow_test_timing_now)
 english_negative_user="$user_dir/english-negative-user"
 mkdir -p "$english_negative_user"
 build/ai-adoption-learning-tests "$shared" "$english_negative_user" english-negative
@@ -101,7 +113,9 @@ awk -F '\t' -v paged="$paged" '
   END { if (hello != 1 || computer != 1 || private != 1 || caseful != 1 || paged_count != 1) exit 1 }
 ' "$english_user/keyboard-english.txt"
 echo 'PASS canonical keyboard English learning: first/repeated/negative/restart, paging/editing, dedup, exact/completion, fidelity, private exact admission, short conflicts, Chinese baseline'
+inkflow_test_timing_report ai-learning keyboard-english "$stage_started"
 
+stage_started=$(inkflow_test_timing_now)
 mixed_user="$user_dir/mixed-user"
 mkdir -p "$mixed_user"
 letters_user="$user_dir/mixed-letters-user"
@@ -134,3 +148,4 @@ build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed
 (cd "$mixed_user" && "$manager" -e pinyin_simp mixed-pinyin-after.txt)
 cmp "$mixed_user/mixed-pinyin-before.txt" "$mixed_user/mixed-pinyin-after.txt"
 echo 'PASS mixed personal English: immediate shared exact lookup, initial/internal/final, restart, no completion, source preedit, fidelity, editing, selected prefix, paging, dedup, read-only selection, collisions, custom phrases'
+inkflow_test_timing_report ai-learning mixed-input "$stage_started"

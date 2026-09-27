@@ -6,7 +6,10 @@ mkdir -p build
 run_dir=$(mktemp -d "$PWD/build/serving-startup-run.XXXXXX")
 echo "Startup evidence: $run_dir/run.log"
 source macOS/scripts/swift-test.sh
+source macOS/scripts/test-timing.sh
+stage_started=$(inkflow_test_timing_now)
 build_swift_test serving-startup-tests build/serving-startup-tests 2>&1 | tee "$run_dir/compile.log"
+inkflow_test_timing_report serving-startup build "$stage_started"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-serving-startup.XXXXXX")
 trap 'chmod -R u+w "$scratch"; rm -rf "$scratch"' EXIT
 echo "Temporary user root: $scratch"
@@ -18,7 +21,9 @@ if [[ "${1:-}" == --native ]]; then
   cp "$binary" "$harness/Contents/MacOS/ServingStartupHarness"
   binary="$harness/Contents/MacOS/ServingStartupHarness"
 fi
+stage_started=$(inkflow_test_timing_now)
 "$binary" "$scratch" "$PWD/build/InkFlow.app" "$@" 2>&1 | tee "$run_dir/run.log"
+inkflow_test_timing_report serving-startup execute "$stage_started"
 rg -q '^PASS serving startup:' "$run_dir/run.log" || { echo 'Startup harness exited without final acceptance.' >&2; exit 1; }
 if [[ "${1:-}" == --native ]]; then
   rg -q '^PASS native serving startup:' "$run_dir/run.log" || { echo 'Native startup acceptance marker missing.' >&2; exit 1; }

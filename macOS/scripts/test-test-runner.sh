@@ -5,7 +5,7 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-runner.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/macOS/scripts" "$fixture/build/test-shared"
 touch "$fixture/build/test-shared/inkflow_pinyin.schema.yaml"
-cp macOS/scripts/test.sh macOS/scripts/test-groups.sh "$fixture/macOS/scripts/"
+cp macOS/scripts/test.sh macOS/scripts/test-groups.sh macOS/scripts/test-timing.sh "$fixture/macOS/scripts/"
 export INKFLOW_RUNNER_LOG="$fixture/commands.log"
 for script in dependencies prepare-rime test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-prepare-rime test-dictionary-generator test-quality-capture test-quality-query \
@@ -18,6 +18,14 @@ set -euo pipefail
 name=$(basename "$0" .sh)
 args=${*//${PWD}/REPO}
 echo "$name $args" >> "$INKFLOW_RUNNER_LOG"
+case "$name" in
+  test-test-runner|test-test-affected|test-workflow)
+    [[ -z "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]] || {
+      echo "nested fixture inherited parent evidence: $name" >&2
+      exit 31
+    }
+    echo "fixture output: $name" ;;
+esac
 if [[ "$name" == "${INKFLOW_RUNNER_FAIL:-}" ]]; then exit 17; fi
 STUB
   chmod +x "$fixture/macOS/scripts/$script.sh"
@@ -152,9 +160,24 @@ runtime_line=$(grep -n '^test-ai-runtime ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
 unset INKFLOW_TEST_PRIORITY
 export INKFLOW_TEST_EVIDENCE_DIR="$fixture/evidence"
 run ai-runtime
-grep -Fxq $'unit\tstatus\tduration_seconds\tlog' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
-grep -Eq $'^ai-runtime\tPASS\t[0-9]+\t.*/ai-runtime.log$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Fxq $'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^ai-runtime\tPASS\t[0-9]+\t.*/ai-runtime.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+awk -F '\t' 'NR == 2 { exit !($4 ~ /\/ai-runtime\.log$/ && $5 ~ /^[0-9]+$/ && $5 > 0) }' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
 [[ -f "$INKFLOW_TEST_EVIDENCE_DIR/ai-runtime.log" ]]
+run runner workflow
+grep -Fxq $'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+[[ $(wc -l < "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv" | tr -d ' ') == 3 ]]
+grep -Eq $'^runner\tPASS\t[0-9]+\t.*/runner.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^workflow\tPASS\t[0-9]+\t.*/workflow.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+awk -F '\t' '
+  NR > 1 {
+    expected = "/" $1 ".log$"
+    if ($4 !~ expected || $5 !~ /^[0-9]+$/ || $5 <= 0) exit 1
+  }
+' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Fxq 'fixture output: test-test-runner' "$INKFLOW_TEST_EVIDENCE_DIR/runner.log"
+grep -Fxq 'fixture output: test-test-affected' "$INKFLOW_TEST_EVIDENCE_DIR/runner.log"
+grep -Fxq 'fixture output: test-workflow' "$INKFLOW_TEST_EVIDENCE_DIR/workflow.log"
 unset INKFLOW_TEST_EVIDENCE_DIR
 export INKFLOW_RUNNER_FAIL=test-ai-runtime
 if run ai-runtime settings; then exit 1; else status=$?; fi
@@ -165,6 +188,7 @@ unset INKFLOW_RUNNER_FAIL
 # Standalone source/store preparation must not inspect the installed app or worker.
 rm -rf "$fixture/build/InkFlow.app"
 cp macOS/scripts/test-dictionary-updates.sh "$fixture/macOS/scripts/"
+cp macOS/scripts/test-timing.sh "$fixture/macOS/scripts/"
 cp "$fixture/macOS/scripts/dependencies.sh" "$fixture/macOS/scripts/prepare-chinese.sh"
 : > "$INKFLOW_RUNNER_LOG"
 bash "$fixture/macOS/scripts/test-dictionary-updates.sh" --source
@@ -176,4 +200,6 @@ bash "$fixture/macOS/scripts/test-dictionary-updates.sh" --store
 : > "$INKFLOW_RUNNER_LOG"
 if bash "$fixture/macOS/scripts/test-dictionary-updates.sh" --unknown >/dev/null 2>&1; then exit 1; else status=$?; fi
 [[ $status == 2 && ! -s "$INKFLOW_RUNNER_LOG" ]]
+timing_output=$(bash -c 'source macOS/scripts/test-timing.sh; began=$(inkflow_test_timing_now); inkflow_test_timing_report contract fixture "$began"')
+grep -Eq $'^TIMING\tscope=contract\tstage=fixture\tduration_milliseconds=[0-9]+$' <<< "$timing_output"
 echo 'PASS test runner: groups, isolated roots, preparation, default coverage and failure propagation'

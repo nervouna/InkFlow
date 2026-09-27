@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+source macOS/scripts/test-timing.sh
+stage_started=$(inkflow_test_timing_now)
 mode=deep
 metadata_option=--verify
 while [[ "${1:-}" == --fast || "${1:-}" == --deep || "${1:-}" == --signed ]]; do
@@ -72,8 +74,10 @@ for binary in "$app_binary" "$app/Contents/MacOS/InkFlowDictionaryWorker" "$app/
 done
 if [[ -f "$app/Contents/_CodeSignature/CodeResources" ]]; then codesign --verify --deep --strict "$app"; fi
 echo 'PASS bundle fast: plist, arm64, dylib closure, resource summary and signed structure when present'
+inkflow_test_timing_report bundle fast "$stage_started"
 [[ "$mode" == deep ]] || exit 0
 
+stage_started=$(inkflow_test_timing_now)
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
 bash macOS/scripts/prepare-rime.sh build/expected-rime
@@ -82,12 +86,19 @@ bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
 for license in boost.txt easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt rime-selected.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
+inkflow_test_timing_report bundle deep-resources "$stage_started"
 source macOS/scripts/swift-test.sh
+stage_started=$(inkflow_test_timing_now)
 build_swift_test engine-tests build/bundle-engine-tests
+inkflow_test_timing_report bundle engine-build "$stage_started"
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
+stage_started=$(inkflow_test_timing_now)
 DYLD_LIBRARY_PATH="$app/Contents/Frameworks" build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
+inkflow_test_timing_report bundle engine-execute "$stage_started"
 echo 'PASS bundle deep: rebuilt resources, packaged cache and real bundled-engine transcript'
 
+stage_started=$(inkflow_test_timing_now)
 build_swift_test metadata-tests build/metadata-tests
 build/metadata-tests "$app"
+inkflow_test_timing_report bundle metadata "$stage_started"
