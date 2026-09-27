@@ -127,7 +127,7 @@ run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
-grep -Fxq 'core-test REPO/build/test-shared --skip-ai-learning' "$INKFLOW_RUNNER_LOG"
+grep -Fxq 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG"
 for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \

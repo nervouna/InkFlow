@@ -49,7 +49,7 @@ run_test_unit() {
   case "$unit" in
     shared-core)
       bash Core/scripts/check-boundaries.sh
-      if $test_full_suite; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-ai-learning
+      if $test_full_suite; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-covered-units
       else bash Core/scripts/test.sh "$PWD/build/test-shared"
       fi ;;
     quality-capture-query)

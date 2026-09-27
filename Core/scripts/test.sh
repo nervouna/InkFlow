@@ -5,17 +5,22 @@ bash macOS/scripts/dependencies.sh
 bash Core/scripts/check-boundaries.sh --standalone
 source Core/scripts/swift-package.sh
 shared=""
-skip_ai_learning=false
+skip_covered_units=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-ai-learning) skip_ai_learning=true ;;
+    --skip-covered-units) skip_covered_units=true ;;
     --*) echo "Unknown option: $1" >&2; exit 2 ;;
-    *) [[ -z "$shared" ]] || { echo 'Usage: test.sh [SHARED] [--skip-ai-learning]' >&2; exit 2; }; shared=$1 ;;
+    *) [[ -z "$shared" ]] || { echo 'Usage: test.sh [SHARED] [--skip-covered-units]' >&2; exit 2; }; shared=$1 ;;
   esac
   shift
 done
-bash macOS/scripts/test-dictionary-generator.sh
-for product in ranking-tests ai-pronunciation-tests voice-learning-coordinator-tests voice-lexicon-tests dictionary-store-tests; do
+if ! $skip_covered_units; then bash macOS/scripts/test-dictionary-generator.sh; fi
+products=(ranking-tests)
+if ! $skip_covered_units; then products+=(ai-pronunciation-tests); fi
+products+=(voice-learning-coordinator-tests)
+if ! $skip_covered_units; then products+=(voice-lexicon-tests); fi
+products+=(dictionary-store-tests)
+for product in "${products[@]}"; do
   build_core_product "$product" "build/core-tests/$product"
   "build/core-tests/$product"
 done
@@ -31,5 +36,5 @@ for group in basic options english context custom-phrases; do
   build/core-tests/core-engine-tests "$shared" "$scratch/$group" "--$group"
 done
 bash Core/scripts/test-dictionaries.sh "$shared"
-if ! $skip_ai_learning; then bash macOS/scripts/test-ai-learning.sh "$shared"; fi
+if ! $skip_covered_units; then bash macOS/scripts/test-ai-learning.sh "$shared"; fi
 echo 'PASS shared core: standalone rules, generated data and real Rime compile/probe'
