@@ -89,14 +89,14 @@ done
 inkflow_test_timing_report bundle deep-resources "$stage_started"
 source macOS/scripts/swift-test.sh
 stage_started=$(inkflow_test_timing_now)
-build_swift_test engine-tests build/bundle-engine-tests
-inkflow_test_timing_report bundle engine-build "$stage_started"
+build_swift_test bundle-artifact-smoke-tests build/bundle-artifact-smoke-tests
+inkflow_test_timing_report bundle artifact-smoke-build "$stage_started"
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-bundle-tests.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 stage_started=$(inkflow_test_timing_now)
-DYLD_LIBRARY_PATH="$app/Contents/Frameworks" build/bundle-engine-tests "$app/Contents/Resources/Rime" "$user_dir"
-inkflow_test_timing_report bundle engine-execute "$stage_started"
-echo 'PASS bundle deep: rebuilt resources, packaged cache and real bundled-engine transcript'
+DYLD_LIBRARY_PATH="$app/Contents/Frameworks" build/bundle-artifact-smoke-tests "$app" "$user_dir"
+inkflow_test_timing_report bundle artifact-smoke-execute "$stage_started"
+echo 'PASS bundle deep: rebuilt resources, packaged cache and bundled-runtime smoke'
 
 stage_started=$(inkflow_test_timing_now)
 build_swift_test metadata-tests build/metadata-tests

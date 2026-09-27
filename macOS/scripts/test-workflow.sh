@@ -8,4 +8,6 @@ bash macOS/scripts/test-install.sh
 bash macOS/scripts/test-dependencies-cache.sh
 bash macOS/scripts/test-build-workflow.sh
 bash macOS/scripts/test-cleanup.sh
-echo 'PASS workflow fixtures: release matrix, receipt/install signing, dependency cache, staged build and cleanup boundaries'
+bash macOS/scripts/test-core-coverage.sh
+bash macOS/scripts/test-bundle-artifact-smoke.sh
+echo 'PASS workflow fixtures: release matrix, receipt/install signing, dependency cache, staged build, coverage ownership, bundle smoke and cleanup boundaries'

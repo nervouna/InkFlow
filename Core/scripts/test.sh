@@ -22,7 +22,7 @@ products=(ranking-tests)
 if ! $skip_covered_units; then products+=(ai-pronunciation-tests); fi
 products+=(voice-learning-coordinator-tests)
 if ! $skip_covered_units; then products+=(voice-lexicon-tests); fi
-products+=(dictionary-store-tests)
+if ! $skip_covered_units; then products+=(dictionary-store-tests); fi
 stage_started=$(inkflow_test_timing_now)
 for product in "${products[@]}"; do
   build_core_product "$product" "build/core-tests/$product"
@@ -37,21 +37,27 @@ if [[ -z "$shared" ]]; then
   bash macOS/scripts/prepare-rime.sh "$shared"
 fi
 inkflow_test_timing_report shared-core resources "$stage_started"
-stage_started=$(inkflow_test_timing_now)
-build_core_product core-engine-tests build/core-tests/core-engine-tests
-inkflow_test_timing_report shared-core engine-build "$stage_started"
-stage_started=$(inkflow_test_timing_now)
-for group in basic options english context custom-phrases; do
-  mkdir -p "$scratch/$group"
-  build/core-tests/core-engine-tests "$shared" "$scratch/$group" "--$group"
-done
-inkflow_test_timing_report shared-core engine-regression "$stage_started"
-stage_started=$(inkflow_test_timing_now)
-bash Core/scripts/test-dictionaries.sh "$shared"
-inkflow_test_timing_report shared-core dictionary-contract "$stage_started"
+if ! $skip_covered_units; then
+  stage_started=$(inkflow_test_timing_now)
+  build_core_product core-engine-tests build/core-tests/core-engine-tests
+  inkflow_test_timing_report shared-core engine-build "$stage_started"
+  stage_started=$(inkflow_test_timing_now)
+  for group in basic options english context custom-phrases; do
+    mkdir -p "$scratch/$group"
+    build/core-tests/core-engine-tests "$shared" "$scratch/$group" "--$group"
+  done
+  inkflow_test_timing_report shared-core engine-regression "$stage_started"
+  stage_started=$(inkflow_test_timing_now)
+  bash Core/scripts/test-dictionaries.sh "$shared"
+  inkflow_test_timing_report shared-core dictionary-contract "$stage_started"
+fi
 if ! $skip_covered_units; then
   stage_started=$(inkflow_test_timing_now)
   bash macOS/scripts/test-ai-learning.sh "$shared"
   inkflow_test_timing_report shared-core ai-learning "$stage_started"
 fi
-echo 'PASS shared core: standalone rules, generated data and real Rime compile/probe'
+if $skip_covered_units; then
+  echo 'PASS shared core: Core-only ranking and voice-learning regressions; platform-owned coverage delegated'
+else
+  echo 'PASS shared core: standalone rules, generated data and real Rime compile/probe'
+fi
