@@ -209,6 +209,45 @@ core_line=$(grep -n '^core-check-boundaries ' "$INKFLOW_RUNNER_LOG" | cut -d: -f
 runtime_line=$(grep -n '^test-ai-runtime ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
 [[ $quality_line -lt $core_line && $runtime_line -lt $core_line ]]
 unset INKFLOW_TEST_PRIORITY
+run_priority_dependency_case() {
+  local mode=$1 dependency_pid status core_end activation_end
+  : > "$INKFLOW_RUNNER_LOG"
+  : > "$INKFLOW_RUNNER_LOG.paths"
+  rm -rf "$fixture/priority-dependency-parallel"
+  export INKFLOW_TEST_PRIORITY=dictionary-activation
+  if [[ $mode == parallel ]]; then
+    export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/priority-dependency-parallel"
+    mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
+    unset INKFLOW_TEST_DISABLE_PARALLEL
+  else
+    unset INKFLOW_RUNNER_PARALLEL_DIR
+    export INKFLOW_TEST_DISABLE_PARALLEL=1
+  fi
+  bash "$fixture/macOS/scripts/test.sh" all > "$fixture/output.log" 2>&1 &
+  dependency_pid=$!
+  for _ in {1..500}; do
+    kill -0 "$dependency_pid" 2>/dev/null || break
+    sleep 0.01
+  done
+  if kill -0 "$dependency_pid" 2>/dev/null; then
+    kill -TERM "$dependency_pid" 2>/dev/null || true
+    wait "$dependency_pid" 2>/dev/null || true
+    echo "FAIL: priority dependency deadlocked in $mode mode" >&2
+    exit 1
+  fi
+  set +e
+  wait "$dependency_pid"
+  status=$?
+  set -e
+  [[ $status == 0 ]]
+  [[ $(grep -Fxc 'core-test-dictionaries REPO/build/test-shared --preparation-only' "$INKFLOW_RUNNER_LOG") == 1 ]]
+  core_end=$(grep -n '^END test unit: shared-core ' "$fixture/output.log" | cut -d: -f1)
+  activation_end=$(grep -n '^END test unit: dictionary-activation ' "$fixture/output.log" | cut -d: -f1)
+  [[ $core_end -lt $activation_end ]]
+  unset INKFLOW_TEST_PRIORITY INKFLOW_TEST_DISABLE_PARALLEL INKFLOW_RUNNER_PARALLEL_DIR
+}
+run_priority_dependency_case parallel
+run_priority_dependency_case serial
 # A failed embedded Core unit must release the parallel dictionary unit instead
 # of leaving it waiting forever for Core SwiftPM ownership.
 : > "$INKFLOW_RUNNER_LOG"
@@ -216,6 +255,7 @@ unset INKFLOW_TEST_PRIORITY
 export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/core-failure-parallel"
 mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
 export INKFLOW_RUNNER_FAIL=core-test
+export INKFLOW_TEST_PRIORITY=dictionary-activation
 bash "$fixture/macOS/scripts/test.sh" all > "$fixture/output.log" 2>&1 &
 core_failure_pid=$!
 for _ in {1..500}; do
@@ -234,7 +274,7 @@ status=$?
 set -e
 [[ $status == 17 ]]
 ! grep -q '^core-test-dictionaries ' "$INKFLOW_RUNNER_LOG"
-unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR
+unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_TEST_PRIORITY
 export INKFLOW_TEST_EVIDENCE_DIR="$fixture/evidence"
 run ai-runtime
 grep -Fxq $'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"

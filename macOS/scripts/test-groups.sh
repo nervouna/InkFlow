@@ -39,6 +39,21 @@ prioritize_test_units() {
   test_units=("${reordered[@]}")
   test_full_suite=true
 }
+ensure_test_unit_dependency_order() {
+  local prerequisite=$1 dependent=$2 prerequisite_index=-1 dependent_index=-1 index unit
+  local reordered=()
+  for ((index = 0; index < ${#test_units[@]}; index++)); do
+    [[ ${test_units[$index]} != "$prerequisite" ]] || prerequisite_index=$index
+    [[ ${test_units[$index]} != "$dependent" ]] || dependent_index=$index
+  done
+  [[ $prerequisite_index -ge 0 && $dependent_index -ge 0 && $prerequisite_index -gt $dependent_index ]] || return 0
+  for unit in "${test_units[@]}"; do
+    [[ $unit != "$prerequisite" ]] || continue
+    [[ $unit != "$dependent" ]] || reordered+=("$prerequisite")
+    reordered+=("$unit")
+  done
+  test_units=("${reordered[@]}")
+}
 test_units_need_app() {
   local unit
   [[ ${#test_units[@]} -gt 0 ]] || return 1

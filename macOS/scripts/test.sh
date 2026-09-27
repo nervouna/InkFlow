@@ -24,6 +24,9 @@ if $test_full_suite && [[ -n "${INKFLOW_TEST_PRIORITY:-}" ]]; then
   read -r -a priority_groups <<< "$INKFLOW_TEST_PRIORITY"
   prioritize_test_units "${priority_groups[@]}"
 fi
+if $test_full_suite; then
+  ensure_test_unit_dependency_order shared-core dictionary-activation
+fi
 if test_units_need_app; then
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
 fi
