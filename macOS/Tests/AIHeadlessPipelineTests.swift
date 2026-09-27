@@ -1,6 +1,7 @@
 @testable import InkFlowRime
 import AppKit
 @preconcurrency import InputMethodKit
+import Darwin
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowAITestSupport
@@ -26,10 +27,19 @@ struct AIHeadlessPipelineTests {
 
     @MainActor static func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
 
-    @MainActor static func until(_ predicate: () -> Bool, seconds: Double = 3) async {
+    @MainActor static func until(_ predicate: () -> Bool, seconds: Double = 15) async {
         let deadline = ContinuousClock.now.advanced(by: .seconds(seconds))
         while !predicate(), ContinuousClock.now < deadline { await wait(0.02) }
-        check(predicate(), "Timed out waiting for production pipeline presentation")
+        check(predicate(), "Timed out waiting for production pipeline state")
+    }
+
+    @MainActor static func expectSuggestion(_ endpoint: HeadlessAIInputPresentation,
+                                            seconds: Double = 15) async {
+        let presented = await endpoint.waitForSuggestion(timeout: .seconds(seconds))
+        check(presented,
+              "Timed out waiting for presentation event: candidatesVisible=\(endpoint.candidatesVisible) " +
+              "candidateCount=\(endpoint.candidates.count) refreshCount=\(endpoint.refreshCount) " +
+              "showCount=\(endpoint.showCount) hideCount=\(endpoint.hideCount)")
     }
 
     @MainActor static func fixture(settings: IFSettings, service: any AISuggestionServing,
@@ -76,6 +86,7 @@ struct AIHeadlessPipelineTests {
             }
             for value in AIHeadlessCase.effects { try await effect(value, settings: settings, live: live) }
             if !live {
+                try await schedulingStall(settings)
                 try await celebrationAdoption(settings)
                 try await ordinaryControls(settings)
                 try await adoptionLearning(settings)
@@ -93,6 +104,22 @@ struct AIHeadlessPipelineTests {
         }
     }
 
+    @MainActor static func schedulingStall(_ settings: IFSettings) async throws {
+        let service = AIHeadlessService(response: "你好")
+        let (controller, client, endpoint) = fixture(settings: settings, service: service)
+        defer { controller.engine?.clear(); controller.refresh(client) }
+        _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
+        Task { @MainActor in
+            // Reproduce a scheduler stall longer than the former three-second
+            // polling deadline while both the debounce and presentation are pending.
+            usleep(4_000_000)
+        }
+        await expectSuggestion(endpoint)
+        let calls = await service.captured()
+        check(calls.count == 1, "A scheduler stall must delay, not duplicate, the request")
+        print("PASS headless scheduling stall: event wait survives delayed MainActor recovery")
+    }
+
     @MainActor static func celebrationAdoption(_ settings: IFSettings) async throws {
         let service = AIHeadlessService(response: "你好")
         let thunder = HeadlessThunderPresentation()
@@ -101,7 +128,7 @@ struct AIHeadlessPipelineTests {
         let (controller, client, endpoint) = fixture(settings: settings, service: service,
                                                      thunderPresentation: thunder)
         _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
-        await until { endpoint.suggestionVisible }
+        await expectSuggestion(endpoint)
         client.onMutation = {
             check(!thunder.bursts.contains(.commit), "AI text must reach the editor before celebration feedback")
         }
@@ -116,7 +143,7 @@ struct AIHeadlessPipelineTests {
         let (disabledController, disabledClient, disabledEndpoint) = fixture(settings: settings,
             service: disabledService, thunderPresentation: disabledThunder)
         _ = await AIHeadlessKeyboard.type("nihao", into: disabledController, client: disabledClient)
-        await until { disabledEndpoint.suggestionVisible }
+        await expectSuggestion(disabledEndpoint)
         check(disabledController.handle(AIHeadlessKeyboard.event(48, "\t"), client: disabledClient))
         check(disabledThunder.bursts.isEmpty, "AI Tab adoption must remain undecorated when Celebration mode is off")
         print("PASS headless AI Celebration adoption: post-insertion exact-once commit and disabled suppression")
@@ -143,7 +170,11 @@ struct AIHeadlessPipelineTests {
             check(controller.handle(AIHeadlessKeyboard.event(125), client: client))
             check(controller.engine?.aiInputIdentity() == identity, "Paging and highlighting retain request identity")
             check(records.records.filter { $0.event == .scheduled }.count == scheduled, "Paging does not restart the input deadline")
-            await until({ endpoint.suggestionVisible || settings.smart.requestError != nil }, seconds: live ? 25 : 3)
+            if live {
+                await until({ endpoint.suggestionVisible || settings.smart.requestError != nil }, seconds: 25)
+            } else {
+                await expectSuggestion(endpoint)
+            }
             check(settings.smart.requestError == nil, settings.smart.requestError ?? "")
             let calls = await service.captured()
             check(calls.count == 1, "One request follows the input pause")
@@ -215,7 +246,7 @@ struct AIHeadlessPipelineTests {
         _ = await AIHeadlessKeyboard.type(raw, into: controller, client: client)
         let engine = controller.engine!
         check(engine.snapshot().candidates.first != word, "Novel adoption starts below first place")
-        await until { endpoint.suggestionVisible }
+        await expectSuggestion(endpoint)
         check(engine.snapshot().candidates.first != word, "Display alone never learns")
         client.mutations.removeAll()
         var callbacks = 0
@@ -237,7 +268,7 @@ struct AIHeadlessPipelineTests {
         let (ambiguous, ambiguousClient, ambiguousEndpoint) = fixture(settings: settings, service: ambiguousService)
         defer { ambiguous.engine?.clear(); ambiguous.refresh(ambiguousClient) }
         _ = await AIHeadlessKeyboard.type("h", into: ambiguous, client: ambiguousClient)
-        await until { ambiguousEndpoint.suggestionVisible }
+        await expectSuggestion(ambiguousEndpoint)
         let ambiguousEngine = ambiguous.engine!
         let ambiguousInput = ambiguousEngine.aiInputIdentity()!
         check(ambiguousEngine.aiPronunciation(input: ambiguousInput, text: "行").resolve(input: "h", text: "行") == nil,
@@ -268,7 +299,7 @@ struct AIHeadlessPipelineTests {
                 check(controller.handle(AIHeadlessKeyboard.event(digitCodes[index], String(index + 1)), client: client))
                 check(controller.engine?.aiInputIdentity()?.selectedPrefix == "你", "Physical digit selects a partial Rime prefix")
             }
-            await until { endpoint.suggestionVisible }
+            await expectSuggestion(endpoint)
             client.mutations.removeAll()
             if action == "partial" {
                 let calls = await service.captured()
@@ -367,7 +398,7 @@ struct AIHeadlessPipelineTests {
                 let reads = client.requests.count, lengthReads = client.lengthReads
                 if phase == "preview" {
                     await service.resolve(0)
-                    await until { endpoint.suggestionVisible }
+                    await expectSuggestion(endpoint)
                 }
                 let expectedBefore = unavailable ? preceding : preceding.replacingOccurrences(of: "记录", with: "修改")
                 let expectedAfter = unavailable ? following : following.replacingOccurrences(of: "候选", with: "词库")
@@ -378,7 +409,7 @@ struct AIHeadlessPipelineTests {
                 }
                 if phase == "request" {
                     await service.resolve(0)
-                    await until { endpoint.suggestionVisible }
+                    await expectSuggestion(endpoint)
                 }
                 client.mutations.removeAll()
                 check(controller.handle(AIHeadlessKeyboard.event(48, "\t"), client: client))
@@ -444,7 +475,7 @@ struct AIHeadlessPipelineTests {
             check(controller.handle(AIHeadlessKeyboard.event(121), client: client))
             check(controller.handle(AIHeadlessKeyboard.event(116), client: client))
             check(records.records.filter { $0.event == .scheduled }.count == scheduled)
-            await until { endpoint.suggestionVisible }
+            await expectSuggestion(endpoint)
             let readyCalls = await service.captured()
             check(readyCalls.count == 1 && lastKey.duration(to: readyCalls[0].started) < .milliseconds(1100),
                   "A late show requests on readiness without an extra debounce after paging")

@@ -18,6 +18,7 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
     package private(set) var hideCount = 0
     package let showDelay: Duration
     private var showTask: Task<Void, Never>?
+    private var suggestionWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     package var suggestionVisible: Bool { suggestion != nil }
 
     package init(showDelay: Duration = .zero) { self.showDelay = showDelay }
@@ -48,10 +49,32 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
     package func presentSuggestion(_ text: String) -> Bool {
         guard candidatesVisible, !candidates.isEmpty else { return false }
         suggestion = text
+        let waiters = suggestionWaiters.values
+        suggestionWaiters.removeAll()
+        for waiter in waiters { waiter.resume(returning: true) }
         return true
     }
 
     package func hideSuggestion() { suggestion = nil }
+
+    /// Functional tests wait on the presentation event. The timeout is only an
+    /// infrastructure watchdog and intentionally exceeds the production debounce.
+    package func waitForSuggestion(timeout: Duration = .seconds(15)) async -> Bool {
+        if suggestionVisible { return true }
+        let id = UUID()
+        return await withCheckedContinuation { continuation in
+            if suggestionVisible {
+                continuation.resume(returning: true)
+                return
+            }
+            suggestionWaiters[id] = continuation
+            Task { @MainActor [self] in
+                try? await Task.sleep(for: timeout)
+                guard let waiter = suggestionWaiters.removeValue(forKey: id) else { return }
+                waiter.resume(returning: suggestionVisible)
+            }
+        }
+    }
 }
 
 package struct AIHeadlessCase: Sendable {
