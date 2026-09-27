@@ -18,6 +18,39 @@ set -euo pipefail
 name=$(basename "$0" .sh)
 args=${*//${PWD}/REPO}
 echo "$name $args" >> "$INKFLOW_RUNNER_LOG"
+if [[ -n "${INKFLOW_RUNNER_PARALLEL_DIR:-}" ]]; then
+  parallel_key=''
+  case "$name $*" in
+    'test-ai-learning '*) parallel_key=ai-learning ;;
+    'test-dictionary-updates --worker') parallel_key=dictionary-worker ;;
+    'test-dictionary-activation '*) parallel_key=dictionary-activation ;;
+  esac
+  if [[ -n "$parallel_key" ]]; then
+    [[ "${INKFLOW_SWIFT_TEST_PREBUILT:-}" == 1 ]] || exit 41
+    [[ "$parallel_key" != dictionary-worker || "${INKFLOW_TEST_DEPENDENCIES_PREPARED:-}" == 1 ]] || exit 42
+    touch "$INKFLOW_RUNNER_PARALLEL_DIR/$parallel_key"
+    for _ in {1..200}; do
+      [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]] && break
+      sleep 0.01
+    done
+    [[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]] || exit 43
+    if [[ -n "${INKFLOW_RUNNER_HOLD_DIR:-}" ]]; then
+      printf '%s\n' "$$" > "$INKFLOW_RUNNER_HOLD_DIR/$parallel_key.pid"
+      trap 'touch "$INKFLOW_RUNNER_HOLD_DIR/'"$parallel_key"'.terminated"; exit 130' INT
+      trap 'touch "$INKFLOW_RUNNER_HOLD_DIR/'"$parallel_key"'.terminated"; exit 143' TERM
+      touch "$INKFLOW_RUNNER_HOLD_DIR/$parallel_key.ready"
+      while :; do sleep 1; done
+    fi
+  fi
+fi
+if [[ "$name" == test-quality-identity && -n "${INKFLOW_RUNNER_SERIAL_HOLD_DIR:-}" ]]; then
+  serial_key=serial-quality-identity
+  printf '%s\n' "$$" > "$INKFLOW_RUNNER_SERIAL_HOLD_DIR/$serial_key.pid"
+  trap 'touch "$INKFLOW_RUNNER_SERIAL_HOLD_DIR/serial-quality-identity.terminated"; exit 130' INT
+  trap 'touch "$INKFLOW_RUNNER_SERIAL_HOLD_DIR/serial-quality-identity.terminated"; exit 143' TERM
+  touch "$INKFLOW_RUNNER_SERIAL_HOLD_DIR/$serial_key.ready"
+  while :; do sleep 1; done
+fi
 case "$name" in
   test-test-runner|test-test-affected|test-workflow)
     [[ -z "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]] || {
@@ -42,6 +75,10 @@ STUB
 done
 cat > "$fixture/macOS/scripts/swift-test.sh" <<'STUB'
 build_swift_test() {
+  if [[ "${INKFLOW_SWIFT_TEST_PREBUILT:-}" == 1 ]]; then
+    [[ -x "$2" ]] || return 44
+    return 0
+  fi
   echo "build $1" >> "$INKFLOW_RUNNER_LOG"
   cat > "$2" <<'PROGRAM'
 #!/bin/bash
@@ -131,10 +168,16 @@ done
 mkdir -p "$fixture/build/InkFlow.app/Contents/MacOS"
 touch "$fixture/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
 chmod +x "$fixture/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
+export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/parallel"
+mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
 run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
+[[ $(find "$INKFLOW_RUNNER_PARALLEL_DIR" -type f | wc -l | tr -d ' ') == 3 ]]
+rm -f "$INKFLOW_RUNNER_PARALLEL_DIR"/*
 run all
-cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
+LC_ALL=C sort "$fixture/default.log" > "$fixture/default.sorted"
+LC_ALL=C sort "$INKFLOW_RUNNER_LOG" > "$fixture/commands.sorted"
+cmp "$fixture/default.sorted" "$fixture/commands.sorted"
 grep -Fxq 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG"
 [[ $(grep -Fxc 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG") == 1 ]]
 for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
@@ -152,6 +195,7 @@ for required in 'run deployment-tests ' 'run engine-tests --basic' 'run engine-t
 done
 [[ $(grep -c '^prepare-rime ' "$INKFLOW_RUNNER_LOG") == 1 ]]
 ! grep -E 'gui|keychain|--live' "$INKFLOW_RUNNER_LOG"
+unset INKFLOW_RUNNER_PARALLEL_DIR
 export INKFLOW_TEST_PRIORITY='quality-store ai-runtime'
 run all
 quality_line=$(grep -n '^test-quality-store ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
@@ -186,6 +230,57 @@ if run ai-runtime settings; then exit 1; else status=$?; fi
 expect 'dependencies ' 'test-ai-runtime '
 grep -q 'Not executed: settings' "$fixture/output.log"
 unset INKFLOW_RUNNER_FAIL
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/failure-evidence"
+export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/failure-parallel"
+mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
+export INKFLOW_RUNNER_FAIL=test-ai-learning
+if run all; then exit 1; else status=$?; fi
+[[ $status == 17 ]]
+grep -Eq $'^ai-learning\tFAIL\t[0-9]+\t.*/ai-learning.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^dictionary-worker\tPASS\t[0-9]+\t.*/dictionary-worker.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^dictionary-activation\tPASS\t[0-9]+\t.*/dictionary-activation.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -q '^Not executed: ai-headless preparation' "$fixture/output.log"
+! grep -q 'Not executed: .*dictionary-worker\|Not executed: .*dictionary-activation' "$fixture/output.log"
+unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_TEST_EVIDENCE_DIR
+signal_tmp="$fixture/signal-tmp"
+signal_parallel="$fixture/signal-parallel"
+signal_hold="$fixture/signal-hold"
+mkdir "$signal_tmp" "$signal_parallel" "$signal_hold"
+export INKFLOW_RUNNER_PARALLEL_DIR="$signal_parallel"
+export INKFLOW_RUNNER_HOLD_DIR="$signal_hold"
+export INKFLOW_RUNNER_SERIAL_HOLD_DIR="$signal_hold"
+TMPDIR="$signal_tmp" bash "$fixture/macOS/scripts/test.sh" all > "$fixture/signal-output.log" 2>&1 &
+runner_pid=$!
+for _ in {1..500}; do
+  [[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 4 ]] && break
+  sleep 0.01
+done
+[[ $(find "$signal_hold" -name '*.ready' -type f | wc -l | tr -d ' ') == 4 ]]
+signal_began=$(bash -c 'source macOS/scripts/test-timing.sh; inkflow_test_timing_now')
+kill -TERM "$runner_pid"
+set +e
+wait "$runner_pid"
+runner_status=$?
+set -e
+[[ $runner_status == 143 ]]
+signal_duration=$(( $(bash -c 'source macOS/scripts/test-timing.sh; inkflow_test_timing_now') - signal_began ))
+[[ $signal_duration -lt 2000 ]]
+for pid_file in "$signal_hold"/*.pid; do
+  held_pid=$(cat "$pid_file")
+  ! kill -0 "$held_pid" 2>/dev/null
+done
+[[ $(find "$signal_hold" -name '*.terminated' -type f | wc -l | tr -d ' ') == 4 ]]
+[[ -z $(find "$signal_tmp" -name 'inkflow-test-units.*' -type d -print -quit) ]]
+! grep -Eq 'No such file|status.*(missing|not found)|unbound variable' "$fixture/signal-output.log"
+echo "PASS runner TERM cleanup: serial plus parallel process groups reaped in ${signal_duration} ms"
+unset INKFLOW_RUNNER_PARALLEL_DIR INKFLOW_RUNNER_HOLD_DIR INKFLOW_RUNNER_SERIAL_HOLD_DIR
+export INKFLOW_TEST_DISABLE_PARALLEL=1
+run all
+! grep -q 'parallel-prebuild\| (parallel)' "$fixture/output.log"
+[[ $(grep -c '^test-ai-learning ' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -c '^test-dictionary-updates --worker$' "$INKFLOW_RUNNER_LOG") == 1 ]]
+[[ $(grep -c '^test-dictionary-activation ' "$INKFLOW_RUNNER_LOG") == 1 ]]
+unset INKFLOW_TEST_DISABLE_PARALLEL
 # Standalone source/store preparation must not inspect the installed app or worker.
 rm -rf "$fixture/build/InkFlow.app"
 cp macOS/scripts/test-dictionary-updates.sh "$fixture/macOS/scripts/"

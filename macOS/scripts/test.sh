@@ -36,15 +36,37 @@ done
 if $needs_shared || $needs_dependencies; then macOS/scripts/dependencies.sh; fi
 if $needs_shared; then bash macOS/scripts/prepare-rime.sh build/test-shared; fi
 source macOS/scripts/swift-test.sh
+parallel_pids=()
+current_foreground_pid=''
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
-trap 'rm -rf "$scratch"' EXIT
-remaining=("${test_units[@]}")
-report_failure() {
-  local status=$1
-  echo "FAIL test unit: $unit (exit $status)" >&2
-  echo "Not executed: ${remaining[*]:-none}" >&2
-  exit "$status"
+cleanup_done=false
+cleanup_runner() {
+  local exit_code=$1 signal_name=$2 pid
+  if $cleanup_done; then exit "$exit_code"; fi
+  cleanup_done=true
+  trap - EXIT INT TERM
+  if [[ -n "$current_foreground_pid" ]] && kill -0 "$current_foreground_pid" 2>/dev/null; then
+    kill "-$signal_name" -- "-$current_foreground_pid" 2>/dev/null || \
+      kill "-$signal_name" "$current_foreground_pid" 2>/dev/null || true
+  fi
+  if ((${#parallel_pids[@]} > 0)); then
+    for pid in "${parallel_pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        kill "-$signal_name" -- "-$pid" 2>/dev/null || kill "-$signal_name" "$pid" 2>/dev/null || true
+      fi
+    done
+    [[ -z "$current_foreground_pid" ]] || wait "$current_foreground_pid" 2>/dev/null || true
+    for pid in "${parallel_pids[@]}"; do wait "$pid" 2>/dev/null || true; done
+  elif [[ -n "$current_foreground_pid" ]]; then
+    wait "$current_foreground_pid" 2>/dev/null || true
+  fi
+  rm -rf "$scratch"
+  exit "$exit_code"
 }
+trap 'cleanup_runner "$?" TERM' EXIT
+trap 'cleanup_runner 130 INT' INT
+trap 'cleanup_runner 143 TERM' TERM
+remaining=("${test_units[@]}")
 engine_built=false
 run_test_unit() {
   case "$unit" in
@@ -101,24 +123,163 @@ run_test_unit_isolated() (
   set -e
   run_test_unit
 )
+run_serial_unit_tracked() {
+  local output=$1 tracked_status
+  # A background job with monitor mode gets an owned process group while the
+  # immediate wait preserves the existing serial execution semantics.
+  set -m
+  (run_test_unit_isolated > "$output" 2>&1) &
+  current_foreground_pid=$!
+  set +m
+  wait "$current_foreground_pid"
+  tracked_status=$?
+  current_foreground_pid=''
+  return "$tracked_status"
+}
+
+# Only these full-suite units are allowed to overlap. Their SwiftPM products are
+# built serially first; execution owns separate temp/user roots and treats the
+# app and shared Rime resources as read-only inputs.
+parallel_units=(ai-learning dictionary-worker dictionary-activation)
+parallel_began_ms=()
+parallel_prepare_ms=()
+parallel_prepare_logs=()
+parallel_run_logs=()
+parallel_status_files=()
+parallel_collected=()
+parallel_enabled=false
+parallel_index() {
+  local candidate index
+  for ((index = 0; index < ${#parallel_units[@]}; index++)); do
+    candidate=${parallel_units[$index]}
+    [[ "$candidate" != "$1" ]] || { echo "$index"; return 0; }
+  done
+  return 1
+}
+prepare_parallel_units() {
+  local began prepare_log unit_began unit_duration
+  began=$(inkflow_test_timing_now)
+  for unit in "${parallel_units[@]}"; do
+    prepare_log="$scratch/$unit.prepare.log"
+    : > "$prepare_log"
+    unit_began=$(inkflow_test_timing_now)
+    case "$unit" in
+      ai-learning)
+        build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests >> "$prepare_log" 2>&1
+        build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests >> "$prepare_log" 2>&1 ;;
+      dictionary-worker)
+        build_swift_test dictionary-worker-fixture build/dictionary-worker-fixture >> "$prepare_log" 2>&1
+        build_swift_test dictionary-update-tests build/dictionary-update-tests >> "$prepare_log" 2>&1 ;;
+      dictionary-activation)
+        build_swift_test dictionary-activation-tests build/dictionary-activation-tests >> "$prepare_log" 2>&1
+        build_swift_test serving-startup-tests build/serving-startup-tests >> "$prepare_log" 2>&1 ;;
+    esac
+    unit_duration=$(($(inkflow_test_timing_now) - unit_began))
+    parallel_prepare_ms+=("$unit_duration")
+    printf 'TIMING\tscope=test-runner\tstage=parallel-prebuild-%s\tduration_milliseconds=%s\n' \
+      "$unit" "$unit_duration" >> "$prepare_log"
+    parallel_prepare_logs+=("$prepare_log")
+  done
+  inkflow_test_timing_report test-runner parallel-prebuild "$began"
+}
+start_parallel_units() {
+  local index scheduled_unit run_log status_file
+  # Monitor mode gives each background wrapper its own process group. Cleanup
+  # can then terminate the wrapper and every test subprocess it currently owns.
+  set -m
+  for ((index = 0; index < ${#parallel_units[@]}; index++)); do
+    scheduled_unit=${parallel_units[$index]}
+    run_log="$scratch/$scheduled_unit.run.log"
+    status_file="$scratch/$scheduled_unit.status"
+    parallel_run_logs+=("$run_log")
+    parallel_status_files+=("$status_file")
+    parallel_began_ms+=("$(inkflow_test_timing_now)")
+    parallel_collected+=(false)
+    echo "BEGIN test unit: $scheduled_unit (parallel)"
+    (
+      unit=$scheduled_unit
+      set +e
+      INKFLOW_SWIFT_TEST_PREBUILT=1 INKFLOW_TEST_DEPENDENCIES_PREPARED=1 \
+        run_test_unit_isolated > "$run_log" 2>&1
+      parallel_status=$?
+      printf '%s\t%s\n' "$parallel_status" "$(inkflow_test_timing_now)" > "$status_file"
+      exit 0
+    ) &
+    parallel_pids+=("$!")
+  done
+  set +m
+}
+collect_parallel_unit() {
+  local index=$1 scheduled_unit completed_ms duration_ms duration result unit_log status
+  scheduled_unit=${parallel_units[$index]}
+  wait "${parallel_pids[$index]}"
+  IFS=$'\t' read -r status completed_ms < "${parallel_status_files[$index]}"
+  duration_ms=$((${parallel_prepare_ms[$index]} + completed_ms - ${parallel_began_ms[$index]}))
+  duration=$((duration_ms / 1000))
+  if [[ $status == 0 ]]; then result=PASS; else result=FAIL; fi
+  cat "${parallel_prepare_logs[$index]}" "${parallel_run_logs[$index]}"
+  echo "END test unit: $scheduled_unit ($result, ${duration}s)"
+  if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
+    unit_log="$INKFLOW_TEST_EVIDENCE_DIR/$scheduled_unit.log"
+    cat "${parallel_prepare_logs[$index]}" "${parallel_run_logs[$index]}" > "$unit_log"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$scheduled_unit" "$result" "$duration" "$unit_log" "$duration_ms" >> "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+  fi
+  parallel_collected[$index]=true
+  collected_status=$status
+}
+collect_unreported_parallel_units() {
+  local index
+  for ((index = 0; index < ${#parallel_units[@]}; index++)); do
+    [[ "${parallel_collected[$index]}" == true ]] || collect_parallel_unit "$index"
+  done
+}
+remove_started_parallel_from_remaining() {
+  local candidate scheduled_unit retained=()
+  for candidate in "${remaining[@]}"; do
+    scheduled_unit=false
+    parallel_index "$candidate" >/dev/null && scheduled_unit=true
+    $scheduled_unit || retained+=("$candidate")
+  done
+  remaining=("${retained[@]}")
+}
+report_failure() {
+  local failed_status=$1 failed_unit=$unit
+  if $parallel_enabled; then
+    collect_unreported_parallel_units
+    remove_started_parallel_from_remaining
+  fi
+  echo "FAIL test unit: $failed_unit (exit $failed_status)" >&2
+  echo "Not executed: ${remaining[*]:-none}" >&2
+  exit "$failed_status"
+}
 if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
   mkdir -p "$INKFLOW_TEST_EVIDENCE_DIR"
   printf 'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds\n' > "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
 fi
+if $test_full_suite && [[ "${INKFLOW_TEST_DISABLE_PARALLEL:-}" != 1 ]]; then
+  prepare_parallel_units
+  parallel_enabled=true
+  start_parallel_units
+fi
 for unit in "${test_units[@]}"; do
   remaining=("${remaining[@]:1}")
+  if $parallel_enabled && parallel_slot=$(parallel_index "$unit"); then
+    collect_parallel_unit "$parallel_slot"
+    status=$collected_status
+    [[ $status == 0 ]] || report_failure "$status"
+    continue
+  fi
   began_ms=$(inkflow_test_timing_now)
   echo "BEGIN test unit: $unit"
   unit_log="${INKFLOW_TEST_EVIDENCE_DIR:-}/$unit.log"
-  set +e
-  if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
-    run_test_unit_isolated 2>&1 | tee "$unit_log"
-    status=${PIPESTATUS[0]}
-  else
-    run_test_unit_isolated
-    status=$?
+  if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then serial_output=$unit_log
+  else serial_output="$scratch/$unit.log"
   fi
+  set +e
+  run_serial_unit_tracked "$serial_output"
+  status=$?
   set -e
+  cat "$serial_output"
   duration_ms=$(($(inkflow_test_timing_now) - began_ms))
   duration=$((duration_ms / 1000))
   if [[ $status == 0 ]]; then result=PASS; else result=FAIL; fi

@@ -10,7 +10,9 @@ trap 'rm -rf "$scratch"' EXIT
 source macOS/scripts/swift-test.sh
 source macOS/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
-bash macOS/scripts/dependencies.sh
+if [[ "${INKFLOW_TEST_DEPENDENCIES_PREPARED:-}" != 1 ]]; then
+  bash macOS/scripts/dependencies.sh
+fi
 if [[ $mode == all || $mode == --worker ]]; then
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
   build_swift_test dictionary-worker-fixture build/dictionary-worker-fixture

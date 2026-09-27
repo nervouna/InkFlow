@@ -74,7 +74,12 @@ import InkFlowTestSupport
                 check(sqlite3_exec(writer, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK)
                 check(store.submit(.init(composition: .init(outcome: .interrupted))) == .accepted)
                 let closed = await store.close()
-                check(!closed && store.statistics().droppedBusy == 1, "Real SQLite lock must fail pending close")
+                // The first close may return at its production timeout while the serial
+                // worker still owns the SQLite attempt. A second close waits behind that
+                // worker and makes its final failure accounting observable to the test.
+                let settled = await store.close()
+                check(!closed && !settled && store.statistics().droppedBusy == 1,
+                      "Real SQLite lock must fail pending close")
                 record("store-failed")
                 return closed
             }
