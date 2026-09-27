@@ -3,6 +3,17 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-verification.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
+parent_evidence="$fixture/parent-evidence"
+mkdir -p "$parent_evidence/gates"
+printf 'immutable parent marker\n' > "$parent_evidence/marker"
+printf '91\t12345\n' > "$parent_evidence/gates/core.status"
+printf '92\t23456\n' > "$parent_evidence/gates/release-tools.status"
+snapshot_parent_evidence() {
+  find "$parent_evidence" -exec stat -f '%N|%HT|%z|%m' {} \; | LC_ALL=C sort
+  find "$parent_evidence" -type f -exec shasum -a 256 {} \; | LC_ALL=C sort
+}
+parent_evidence_before=$(snapshot_parent_evidence)
+export INKFLOW_RELEASE_EVIDENCE_DIR="$parent_evidence"
 changed_file="$fixture/changed"
 plan() { printf '%s\n' "$@" > "$changed_file"; bash macOS/scripts/release-verification.sh --plan-only --changed-paths "$changed_file"; }
 expect() {
@@ -127,7 +138,8 @@ git -C "$fixture/repo" add Core/Sources/InkFlowDomain/InputPreferences.swift
 git -C "$fixture/repo" -c user.name=Fixture -c user.email=fixture@example.invalid commit -qm 'test: settings-only release candidate'
 git -C "$fixture/repo" worktree add --quiet --detach "$fixture/release-no-tools" HEAD
 : > "$INKFLOW_RELEASE_LOG"
-bash "$fixture/release-no-tools/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/output-no-tools"
+env -u INKFLOW_RELEASE_EVIDENCE_DIR \
+  bash "$fixture/release-no-tools/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/output-no-tools"
 [[ ! -e "$INKFLOW_RELEASE_BARRIER/release-tools.ready" ]]
 [[ $(grep -Fxc 'release-tools ' "$INKFLOW_RELEASE_LOG" || true) == 0 ]]
 
@@ -138,7 +150,8 @@ git -C "$fixture/repo" -c user.name=Fixture -c user.email=fixture@example.invali
 git -C "$fixture/repo" worktree add --quiet --detach "$fixture/release" HEAD
 rm -f "$INKFLOW_RELEASE_BARRIER"/*
 : > "$INKFLOW_RELEASE_LOG"
-INKFLOW_VERIFY_REQUIRE_OVERLAP=1 bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/output"
+env -u INKFLOW_RELEASE_EVIDENCE_DIR INKFLOW_VERIFY_REQUIRE_OVERLAP=1 \
+  bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/output"
 [[ $(grep -Fxc 'build ' "$INKFLOW_RELEASE_LOG") == 1 ]]
 [[ $(grep -Fxc 'test all' "$INKFLOW_RELEASE_LOG") == 1 ]]
 [[ $(grep -Fxc 'check-bundle --deep' "$INKFLOW_RELEASE_LOG") == 1 ]]
@@ -168,6 +181,7 @@ rm -f "$INKFLOW_RELEASE_BARRIER"/*
 : > "$INKFLOW_RELEASE_LOG"
 set +e
 INKFLOW_VERIFY_CORE_EXIT=17 INKFLOW_VERIFY_RELEASE_HOLD=1 \
+  env -u INKFLOW_RELEASE_EVIDENCE_DIR \
   bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/core-failure.output" 2>&1
 status=$?
 set -e
@@ -180,6 +194,7 @@ rm -f "$INKFLOW_RELEASE_BARRIER"/*
 : > "$INKFLOW_RELEASE_LOG"
 set +e
 INKFLOW_VERIFY_CORE_HOLD=1 INKFLOW_VERIFY_RELEASE_EXIT=19 \
+  env -u INKFLOW_RELEASE_EVIDENCE_DIR \
   bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/release-failure.output" 2>&1
 status=$?
 set -e
@@ -191,7 +206,8 @@ assert_stopped core
 rm -f "$INKFLOW_RELEASE_BARRIER"/*
 release_tmp="$fixture/release-tmp"
 mkdir "$release_tmp"
-TMPDIR="$release_tmp" INKFLOW_VERIFY_CORE_HOLD=1 INKFLOW_VERIFY_RELEASE_HOLD=1 \
+env -u INKFLOW_RELEASE_EVIDENCE_DIR TMPDIR="$release_tmp" \
+  INKFLOW_VERIFY_CORE_HOLD=1 INKFLOW_VERIFY_RELEASE_HOLD=1 \
   bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$fixture/term.output" 2>&1 &
 dispatcher_pid=$!
 for _ in {1..500}; do
@@ -208,6 +224,9 @@ set -e
 assert_stopped core
 assert_stopped release-tools
 [[ -z $(find "$release_tmp" \( -name 'inkflow-release-gates.*' -o -name 'inkflow-release-tests.*' \) -print -quit) ]]
+[[ $(find "$fixture/release-no-tools/build/release-verification-attempts" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') == 1 ]]
+[[ $(find "$fixture/release/build/release-verification-attempts" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ') == 4 ]]
+[[ "$(snapshot_parent_evidence)" == "$parent_evidence_before" ]]
 # Real version-only release changes retain build checks without a typing requirement.
 /usr/libexec/PlistBuddy -c 'Set :CFBundleVersion 900002' "$fixture/repo/macOS/Info.plist"
 git -C "$fixture/repo" add macOS/Info.plist
