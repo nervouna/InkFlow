@@ -3,9 +3,10 @@
 test_all_units=(shared-core quality-identity quality-store quality-timing quality-metadata quality-capture-query voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-statistics ai-learning ai-headless preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings dictionary-source dictionary-store dictionary-worker dictionary-activation startup-diagnostics local-diagnostics diagnostic-archive termination installer-core runner workflow)
 expand_test_groups() {
   test_units=()
+  test_full_suite=false
   local requested=' ' group unit expanded
   if [[ $# == 0 || ( $# == 1 && $1 == all ) ]]; then
-    test_units=("${test_all_units[@]}"); return 0
+    test_units=("${test_all_units[@]}"); test_full_suite=true; return 0
   fi
   for group in "$@"; do
     case "$group" in
@@ -23,6 +24,20 @@ expand_test_groups() {
   for unit in "${test_all_units[@]}"; do
     [[ "$requested" != *" $unit "* ]] || test_units+=("$unit")
   done
+}
+prioritize_test_units() {
+  local canonical=("${test_units[@]}") priority=() reordered=() candidate unit seen
+  expand_test_groups "$@" || return
+  priority=("${test_units[@]}")
+  for unit in "${priority[@]}" "${canonical[@]}"; do
+    seen=false
+    if [[ ${#reordered[@]} -gt 0 ]]; then
+      for candidate in "${reordered[@]}"; do [[ "$candidate" != "$unit" ]] || seen=true; done
+    fi
+    $seen || reordered+=("$unit")
+  done
+  test_units=("${reordered[@]}")
+  test_full_suite=true
 }
 test_units_need_app() {
   local unit

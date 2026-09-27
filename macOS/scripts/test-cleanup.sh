@@ -8,7 +8,10 @@ repo="$fixture/repo"; mkdir -p "$repo/macOS/scripts" "$repo/build/releases/histo
 cp macOS/scripts/cleanup.sh "$repo/macOS/scripts/"
 mkdir -p "$repo/build/build-number"
 printf 123 > "$repo/build/build-number/last"
-touch "$repo/build/releases/history/sentinel" "$repo/build/unknown-failure/sentinel" "$repo/build/gui-verification/failed.log"
+mkdir -p "$repo/build/release-verification-attempts/attempt/test-units"
+touch "$repo/build/releases/history/sentinel" "$repo/build/unknown-failure/sentinel" "$repo/build/gui-verification/failed.log" \
+  "$repo/build/release-verification-attempts/attempt/release.log" \
+  "$repo/build/release-verification-attempts/attempt/test-units/quality-store.log"
 for index in 1 2 3 4; do mkdir "$repo/build/backups/installation.$index"; touch -t "2026090${index}0101" "$repo/build/backups/installation.$index"; done
 (
   cd "$repo"
@@ -17,12 +20,14 @@ for index in 1 2 3 4; do mkdir "$repo/build/backups/installation.$index"; touch 
   grep -Fq '[SwiftPM cache]' "$fixture/dry.log"
   grep -Fq '[test harnesses]' "$fixture/dry.log"
   grep -Fq '[diagnostic logs, preserved]' "$fixture/dry.log"
+  grep -Fxq 'build/release-verification-attempts' "$fixture/dry.log"
   grep -Fq '[installation backups, keep 2]' "$fixture/dry.log"
   bash macOS/scripts/cleanup.sh --apply > "$fixture/apply.log"
   [[ ! -e build/swiftpm && ! -e build/SettingsHarness.app ]]
   [[ ! -e build/backups/installation.1 && ! -e build/backups/installation.2 ]]
   [[ -d build/backups/installation.3 && -d build/backups/installation.4 ]]
   [[ -f build/releases/history/sentinel && -f build/unknown-failure/sentinel && -f build/gui-verification/failed.log ]]
+  [[ -f build/release-verification-attempts/attempt/release.log && -f build/release-verification-attempts/attempt/test-units/quality-store.log ]]
   [[ $(cat build/build-number/last) == 123 ]]
 )
 echo 'PASS cleanup: dry-run default, scoped apply, two backups retained, releases/failure evidence preserved'

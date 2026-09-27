@@ -59,10 +59,29 @@ git_dir=$(cd "$(git rev-parse --git-dir)" && pwd -P)
 common_dir=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)
 [[ "$git_dir" != "$common_dir" ]] || { echo 'Release verification must run in an isolated linked worktree.' >&2; exit 1; }
 release_commit=$(git rev-parse HEAD)
+if [[ -z "${INKFLOW_RELEASE_EVIDENCE_DIR:-}" ]]; then
+  attempt_id="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+  export INKFLOW_RELEASE_EVIDENCE_DIR="$PWD/build/release-verification-attempts/$attempt_id"
+  mkdir -p "$INKFLOW_RELEASE_EVIDENCE_DIR/test-units"
+  set +e
+  bash "$0" --from "$from" 2>&1 | tee "$INKFLOW_RELEASE_EVIDENCE_DIR/release.log"
+  status=${PIPESTATUS[0]}
+  exit "$status"
+fi
+release_evidence_dir="$INKFLOW_RELEASE_EVIDENCE_DIR"
+mkdir -p "$release_evidence_dir/test-units"
+export INKFLOW_TEST_EVIDENCE_DIR="$release_evidence_dir/test-units"
+test_priority=""
+if [[ ${#impact_groups[@]} -gt 0 ]]; then
+  expand_test_groups "${impact_groups[@]}"
+  test_priority="${test_units[*]}"
+fi
 
 echo "Release verification range: $from..HEAD"
+echo "Release evidence: $release_evidence_dir"
+echo "Test priority: ${test_priority:-canonical}"
 bash macOS/scripts/build.sh
-bash macOS/scripts/test.sh all
+INKFLOW_TEST_PRIORITY="$test_priority" bash macOS/scripts/test.sh all
 bash macOS/scripts/check-bundle.sh --deep
 if $impact_release_tools; then bash .agents/skills/inkflow-release/scripts/test.sh; fi
 

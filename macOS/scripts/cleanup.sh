@@ -28,7 +28,7 @@ for name in "${harnesses[@]}"; do
 done
 for item in build/SettingsHarness.app build/installer-task/compiler; do [[ ! -e "$item" ]] || remove "$item"; done
 echo '[diagnostic logs, preserved]'
-for item in build/*.log build/*/*.log build/gui-verification build/ai-native-run.* build/serving-startup-run.* build/quality-evidence build/ai-statistics-evidence; do printf '%s\n' "$item"; done
+for item in build/*.log build/*/*.log build/gui-verification build/release-verification-attempts build/ai-native-run.* build/serving-startup-run.* build/quality-evidence build/ai-statistics-evidence; do printf '%s\n' "$item"; done
 echo "[installation backups, keep $keep]"
 backups=(build/backups/installation.*)
 if (( ${#backups[@]} > keep )); then
@@ -37,5 +37,5 @@ if (( ${#backups[@]} > keep )); then
   )
 fi
 echo '[always preserved]'
-echo 'build/releases, build/build-number (shared durable counter), and unknown failure artifacts'
+echo 'build/releases, build/release-verification-attempts, build/build-number (shared durable counter), and unknown failure artifacts'
 [[ "$apply" == true ]] && echo 'Cleanup applied.' || echo 'Dry run only; pass --apply to remove listed cache/harness/old-backup paths.'

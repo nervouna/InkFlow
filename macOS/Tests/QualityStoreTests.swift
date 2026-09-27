@@ -613,7 +613,11 @@ private extension QualityStoreTests {
         try locker.execute("BEGIN IMMEDIATE")
         expect(locked.submit(fixture("close-locked")) == .accepted, "writer lock does not block acceptance")
         let saved = await locked.close()
-        expect(!saved && locked.statistics().droppedBusy == 1, "actual close-time SQLite failure reports unsaved composition")
+        // A close timeout ends the caller's wait, not the serial worker's ownership of SQLite.
+        // Queue a second close behind that worker before inspecting its final failure accounting.
+        let settled = await locked.close()
+        expect(!saved && !settled && locked.statistics().droppedBusy == 1,
+               "actual close-time SQLite failure reports unsaved composition")
         try locker.execute("ROLLBACK")
         expect(try locker.scalar("SELECT count(*) FROM compositions") == "0", "failed close does not leave a partial composition")
         expect(!(await locked.close()), "closed store preserves its real failure result on retry")

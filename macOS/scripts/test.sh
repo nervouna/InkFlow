@@ -19,6 +19,10 @@ if [[ $# == 1 && $1 == --help ]]; then
   exit 0
 fi
 expand_test_groups "$@"
+if $test_full_suite && [[ -n "${INKFLOW_TEST_PRIORITY:-}" ]]; then
+  read -r -a priority_groups <<< "$INKFLOW_TEST_PRIORITY"
+  prioritize_test_units "${priority_groups[@]}"
+fi
 if test_units_need_app; then
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
 fi
@@ -35,18 +39,19 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 remaining=("${test_units[@]}")
 report_failure() {
-  local status=$?
+  local status=$1
   echo "FAIL test unit: $unit (exit $status)" >&2
   echo "Not executed: ${remaining[*]:-none}" >&2
   exit "$status"
 }
-trap report_failure ERR
-set -E
 engine_built=false
-for unit in "${test_units[@]}"; do
-  remaining=("${remaining[@]:1}")
+run_test_unit() {
   case "$unit" in
-    shared-core) bash Core/scripts/check-boundaries.sh; bash Core/scripts/test.sh "$PWD/build/test-shared" ;;
+    shared-core)
+      bash Core/scripts/check-boundaries.sh
+      if $test_full_suite; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-ai-learning
+      else bash Core/scripts/test.sh "$PWD/build/test-shared"
+      fi ;;
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
@@ -90,4 +95,34 @@ for unit in "${test_units[@]}"; do
     workflow) bash macOS/scripts/test-workflow.sh ;;
     *) bash "macOS/scripts/test-$unit.sh" ;;
   esac
+}
+run_test_unit_isolated() (
+  set -e
+  run_test_unit
+)
+if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
+  mkdir -p "$INKFLOW_TEST_EVIDENCE_DIR"
+  printf 'unit\tstatus\tduration_seconds\tlog\n' > "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+fi
+for unit in "${test_units[@]}"; do
+  remaining=("${remaining[@]:1}")
+  began=$(date +%s)
+  echo "BEGIN test unit: $unit"
+  unit_log="${INKFLOW_TEST_EVIDENCE_DIR:-}/$unit.log"
+  set +e
+  if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
+    run_test_unit_isolated 2>&1 | tee "$unit_log"
+    status=${PIPESTATUS[0]}
+  else
+    run_test_unit_isolated
+    status=$?
+  fi
+  set -e
+  duration=$(($(date +%s) - began))
+  if [[ $status == 0 ]]; then result=PASS; else result=FAIL; fi
+  echo "END test unit: $unit ($result, ${duration}s)"
+  if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
+    printf '%s\t%s\t%s\t%s\n' "$unit" "$result" "$duration" "$unit_log" >> "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+  fi
+  [[ $status == 0 ]] || report_failure "$status"
 done

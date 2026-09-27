@@ -82,6 +82,10 @@ bash "$fixture/release/macOS/scripts/release-verification.sh" --from HEAD~1 > "$
 [[ $(grep -Fxc 'build ' "$INKFLOW_RELEASE_LOG") == 1 ]]
 [[ $(grep -Fxc 'test all' "$INKFLOW_RELEASE_LOG") == 1 ]]
 [[ $(grep -Fxc 'check-bundle --deep' "$INKFLOW_RELEASE_LOG") == 1 ]]
+grep -q '^Test priority: shared-core voice-controller ai-runtime engine-options controller settings runner workflow$' "$fixture/output"
+grep -q '^Release evidence: .*/build/release-verification-attempts/' "$fixture/output"
+evidence_dir=$(sed -n 's/^Release evidence: //p' "$fixture/output")
+[[ -f "$evidence_dir/release.log" && -d "$evidence_dir/test-units" ]]
 ! grep -Eq 'gui|native|keychain|--live|installer-core|test-workflow' "$INKFLOW_RELEASE_LOG"
 grep -q 'PASS automated release verification' "$fixture/output"
 ! grep -q '^PASS release verification:' "$fixture/output"

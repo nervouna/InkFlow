@@ -127,6 +127,7 @@ run
 cp "$INKFLOW_RUNNER_LOG" "$fixture/default.log"
 run all
 cmp "$fixture/default.log" "$INKFLOW_RUNNER_LOG"
+grep -Fxq 'core-test REPO/build/test-shared --skip-ai-learning' "$INKFLOW_RUNNER_LOG"
 for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
@@ -142,6 +143,19 @@ for required in 'run deployment-tests ' 'run engine-tests --basic' 'run engine-t
 done
 [[ $(grep -c '^prepare-rime ' "$INKFLOW_RUNNER_LOG") == 1 ]]
 ! grep -E 'gui|keychain|--live' "$INKFLOW_RUNNER_LOG"
+export INKFLOW_TEST_PRIORITY='quality-store ai-runtime'
+run all
+quality_line=$(grep -n '^test-quality-store ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
+core_line=$(grep -n '^core-check-boundaries ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
+runtime_line=$(grep -n '^test-ai-runtime ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
+[[ $quality_line -lt $core_line && $runtime_line -lt $core_line ]]
+unset INKFLOW_TEST_PRIORITY
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/evidence"
+run ai-runtime
+grep -Fxq $'unit\tstatus\tduration_seconds\tlog' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -Eq $'^ai-runtime\tPASS\t[0-9]+\t.*/ai-runtime.log$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+[[ -f "$INKFLOW_TEST_EVIDENCE_DIR/ai-runtime.log" ]]
+unset INKFLOW_TEST_EVIDENCE_DIR
 export INKFLOW_RUNNER_FAIL=test-ai-runtime
 if run ai-runtime settings; then exit 1; else status=$?; fi
 [[ $status == 17 ]]
