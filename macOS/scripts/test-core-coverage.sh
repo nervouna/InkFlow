@@ -38,6 +38,18 @@ run_core() {
   : > "$INKFLOW_CORE_COVERAGE_LOG"
   (cd "$fixture" && bash Core/scripts/test.sh "$@") > "$fixture/output.log" 2>&1
 }
+require_exactly_once() {
+  local expected=$1 count
+  count=$(grep -Fxc "$expected" "$INKFLOW_CORE_COVERAGE_LOG" || true)
+  [[ $count == 1 ]] || { echo "Expected exactly once: $expected (found $count)" >&2; exit 1; }
+}
+require_absent() {
+  local unexpected=$1
+  ! grep -Fxq "$unexpected" "$INKFLOW_CORE_COVERAGE_LOG" || {
+    echo "Unexpected delegated execution: $unexpected" >&2
+    exit 1
+  }
+}
 
 # Standalone Core remains self-contained and owns every shared regression.
 run_core
@@ -45,22 +57,31 @@ for required in \
   'dependencies ' 'check-boundaries --standalone' 'test-dictionary-generator ' \
   'build ranking-tests' 'build ai-pronunciation-tests' 'build voice-learning-coordinator-tests' \
   'build voice-lexicon-tests' 'build dictionary-store-tests' 'build core-engine-tests'; do
-  grep -Fxq "$required" "$INKFLOW_CORE_COVERAGE_LOG"
+  require_exactly_once "$required"
 done
 [[ $(grep -c '^run core-engine-tests --' "$INKFLOW_CORE_COVERAGE_LOG") == 5 ]]
 [[ $(grep -c '^test-dictionaries ' "$INKFLOW_CORE_COVERAGE_LOG") == 1 ]]
 [[ $(grep -c '^test-ai-learning ' "$INKFLOW_CORE_COVERAGE_LOG") == 1 ]]
 
-# The embedded full suite delegates platform-owned engine and dictionary coverage
-# to the canonical macOS units while retaining Core-only ranking and voice learning.
+# The embedded full suite delegates expensive behavior assertions to canonical
+# macOS units, but the standalone package still owns compilation of every Core
+# test product and the native preparation host remains a unique execution path.
 run_core "$fixture/build/prepared" --skip-covered-units
-for required in 'build ranking-tests' 'run ranking-tests ' \
-                'build voice-learning-coordinator-tests' 'run voice-learning-coordinator-tests '; do
-  [[ $(grep -Fxc "$required" "$INKFLOW_CORE_COVERAGE_LOG") == 1 ]]
+for required in \
+  'build ranking-tests' 'run ranking-tests ' \
+  'build ai-pronunciation-tests' \
+  'build voice-learning-coordinator-tests' 'run voice-learning-coordinator-tests ' \
+  'build voice-lexicon-tests' 'build dictionary-store-tests' 'build core-engine-tests' \
+  'build core-dictionary-tests' 'build dictionary-preparation-fixture' 'build packaged-cache-tool'; do
+  require_exactly_once "$required"
 done
-for delegated in test-dictionary-generator ai-pronunciation-tests voice-lexicon-tests \
-                 dictionary-store-tests core-engine-tests test-dictionaries test-ai-learning; do
-  ! grep -q "$delegated" "$INKFLOW_CORE_COVERAGE_LOG"
+for delegated_run in \
+  'run ai-pronunciation-tests ' 'run voice-lexicon-tests ' \
+  'run dictionary-store-tests ' 'run core-engine-tests '; do
+  require_absent "$delegated_run"
 done
+! grep -q '^test-dictionary-generator ' "$INKFLOW_CORE_COVERAGE_LOG"
+! grep -q '^test-ai-learning ' "$INKFLOW_CORE_COVERAGE_LOG"
+! grep -q '^test-dictionaries ' "$INKFLOW_CORE_COVERAGE_LOG"
 
-echo 'PASS Core coverage ownership: standalone complete, embedded platform-owned regressions delegated'
+echo 'PASS Core coverage ownership: standalone targets compile, unique host executes, duplicate assertions delegated'

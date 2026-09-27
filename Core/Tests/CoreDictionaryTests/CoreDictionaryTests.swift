@@ -12,7 +12,9 @@ import InkFlowDictionaryTestSupport
             try await verifyDictionarySources(repository: repository)
             return
         }
-        guard arguments[1] == "--activation", arguments.count == 8 else { throw CocoaError(.fileReadInvalidFileName) }
+        guard ["--preparation", "--activation"].contains(arguments[1]), arguments.count == 8 else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
         let root = try IFDictionaryFiles.canonical(URL(fileURLWithPath: arguments[3]))
         let runtime = IFDictionaryRuntime(resources: URL(fileURLWithPath: arguments[4]),
             helper: URL(fileURLWithPath: arguments[5]),
@@ -23,6 +25,7 @@ import InkFlowDictionaryTestSupport
         }
         let preparation = DictionaryPreparationRegression(makeServices: makeServices, copyRuntime: NativePreparationFixture.copyRuntime)
         try await preparation.run(root: root.appendingPathComponent("preparation"), runtime: runtime, repository: repository)
+        if arguments[1] == "--preparation" { return }
         let regression = DictionaryActivationRegression(makeServices: makeServices, copyRuntime: NativePreparationFixture.copyRuntime)
         try await regression.run(root: root, runtime: runtime, repository: repository)
     }

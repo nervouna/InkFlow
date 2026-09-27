@@ -39,6 +39,12 @@ source macOS/scripts/swift-test.sh
 parallel_pids=()
 current_foreground_pid=''
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
+shared_core_status_file="$scratch/shared-core.status"
+publish_shared_core_status() {
+  local status=$1 temporary="$shared_core_status_file.${BASHPID:-$$}"
+  printf '%s\n' "$status" > "$temporary"
+  mv "$temporary" "$shared_core_status_file"
+}
 cleanup_done=false
 cleanup_runner() {
   local exit_code=$1 signal_name=$2 pid
@@ -71,10 +77,13 @@ engine_built=false
 run_test_unit() {
   case "$unit" in
     shared-core)
-      bash Core/scripts/check-boundaries.sh
-      if $test_full_suite; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-covered-units
-      else bash Core/scripts/test.sh "$PWD/build/test-shared"
-      fi ;;
+      if bash Core/scripts/check-boundaries.sh && {
+        if $test_full_suite; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-covered-units
+        else bash Core/scripts/test.sh "$PWD/build/test-shared"
+        fi
+      }; then core_status=0; else core_status=$?; fi
+      if $test_full_suite; then publish_shared_core_status "$core_status"; fi
+      return "$core_status" ;;
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh --require-engine ;;
@@ -111,7 +120,13 @@ run_test_unit() {
       bash macOS/scripts/test-dictionary-updates.sh "--${unit#dictionary-}" ;;
     dictionary-activation)
       bash macOS/scripts/test-dictionary-activation.sh
-      bash macOS/scripts/test-serving-startup.sh ;;
+      bash macOS/scripts/test-serving-startup.sh
+      if $test_full_suite; then
+        while [[ ! -f "$shared_core_status_file" ]]; do sleep 0.05; done
+        read -r core_status < "$shared_core_status_file"
+        [[ $core_status == 0 ]] || return "$core_status"
+        bash Core/scripts/test-dictionaries.sh "$PWD/build/test-shared" --preparation-only
+      fi ;;
     runner)
       env -u INKFLOW_TEST_EVIDENCE_DIR bash macOS/scripts/test-test-runner.sh
       env -u INKFLOW_TEST_EVIDENCE_DIR bash macOS/scripts/test-test-affected.sh ;;
@@ -157,27 +172,54 @@ parallel_index() {
   return 1
 }
 prepare_parallel_units() {
-  local began prepare_log unit_began unit_duration
+  local began prepare_log unit_began unit_duration prepare_status unit_log
   began=$(inkflow_test_timing_now)
   for unit in "${parallel_units[@]}"; do
     prepare_log="$scratch/$unit.prepare.log"
     : > "$prepare_log"
     unit_began=$(inkflow_test_timing_now)
+    set +e
     case "$unit" in
       ai-learning)
         build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests >> "$prepare_log" 2>&1
-        build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests >> "$prepare_log" 2>&1 ;;
+        prepare_status=$?
+        if [[ $prepare_status == 0 ]]; then
+          build_swift_test ai-adoption-learning-tests build/ai-adoption-learning-tests >> "$prepare_log" 2>&1
+          prepare_status=$?
+        fi ;;
       dictionary-worker)
         build_swift_test dictionary-worker-fixture build/dictionary-worker-fixture >> "$prepare_log" 2>&1
-        build_swift_test dictionary-update-tests build/dictionary-update-tests >> "$prepare_log" 2>&1 ;;
+        prepare_status=$?
+        if [[ $prepare_status == 0 ]]; then
+          build_swift_test dictionary-update-tests build/dictionary-update-tests >> "$prepare_log" 2>&1
+          prepare_status=$?
+        fi ;;
       dictionary-activation)
         build_swift_test dictionary-activation-tests build/dictionary-activation-tests >> "$prepare_log" 2>&1
-        build_swift_test serving-startup-tests build/serving-startup-tests >> "$prepare_log" 2>&1 ;;
+        prepare_status=$?
+        if [[ $prepare_status == 0 ]]; then
+          build_swift_test serving-startup-tests build/serving-startup-tests >> "$prepare_log" 2>&1
+          prepare_status=$?
+        fi ;;
     esac
+    set -e
     unit_duration=$(($(inkflow_test_timing_now) - unit_began))
-    parallel_prepare_ms+=("$unit_duration")
     printf 'TIMING\tscope=test-runner\tstage=parallel-prebuild-%s\tduration_milliseconds=%s\n' \
       "$unit" "$unit_duration" >> "$prepare_log"
+    if [[ $prepare_status != 0 ]]; then
+      cat "$prepare_log"
+      echo "END test unit: $unit (FAIL, $((unit_duration / 1000))s)"
+      if [[ -n "${INKFLOW_TEST_EVIDENCE_DIR:-}" ]]; then
+        unit_log="$INKFLOW_TEST_EVIDENCE_DIR/$unit.log"
+        cp "$prepare_log" "$unit_log"
+        printf '%s\tFAIL\t%s\t%s\t%s\n' \
+          "$unit" "$((unit_duration / 1000))" "$unit_log" "$unit_duration" >> "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+      fi
+      echo "FAIL test unit: $unit prebuild (exit $prepare_status)" >&2
+      echo "Not executed: ${remaining[*]:-none}" >&2
+      exit "$prepare_status"
+    fi
+    parallel_prepare_ms+=("$unit_duration")
     parallel_prepare_logs+=("$prepare_log")
   done
   inkflow_test_timing_report test-runner parallel-prebuild "$began"
@@ -245,6 +287,7 @@ remove_started_parallel_from_remaining() {
 report_failure() {
   local failed_status=$1 failed_unit=$unit
   if $parallel_enabled; then
+    if [[ ! -f "$shared_core_status_file" ]]; then publish_shared_core_status "$failed_status"; fi
     collect_unreported_parallel_units
     remove_started_parallel_from_remaining
   fi

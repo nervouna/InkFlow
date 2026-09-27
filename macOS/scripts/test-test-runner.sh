@@ -64,7 +64,7 @@ STUB
   chmod +x "$fixture/macOS/scripts/$script.sh"
 done
 mkdir -p "$fixture/Core/scripts"
-for script in check-boundaries test; do
+for script in check-boundaries test test-dictionaries; do
   cat > "$fixture/Core/scripts/$script.sh" <<'STUB'
 #!/bin/bash
 name="core-$(basename "$0" .sh)"
@@ -80,6 +80,10 @@ build_swift_test() {
     return 0
   fi
   echo "build $1" >> "$INKFLOW_RUNNER_LOG"
+  if [[ "$1" == "${INKFLOW_SWIFT_BUILD_FAIL:-}" ]]; then
+    echo "prebuild diagnostic: $1" >&2
+    return 37
+  fi
   cat > "$2" <<'PROGRAM'
 #!/bin/bash
 name=$(basename "$0")
@@ -180,6 +184,8 @@ LC_ALL=C sort "$INKFLOW_RUNNER_LOG" > "$fixture/commands.sorted"
 cmp "$fixture/default.sorted" "$fixture/commands.sorted"
 grep -Fxq 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG"
 [[ $(grep -Fxc 'core-test REPO/build/test-shared --skip-covered-units' "$INKFLOW_RUNNER_LOG") == 1 ]]
+grep -Fxq 'core-test-dictionaries REPO/build/test-shared --preparation-only' "$INKFLOW_RUNNER_LOG"
+[[ $(grep -Fxc 'core-test-dictionaries REPO/build/test-shared --preparation-only' "$INKFLOW_RUNNER_LOG") == 1 ]]
 for required in core-check-boundaries core-test test-quality-identity test-quality-store test-quality-timing test-quality-metadata \
   test-quality-capture test-quality-query test-voice-session test-apple-voice test-voice-lexicon test-voice-controller test-ai-credentials test-ai-suggestions test-ai-runtime test-ai-statistics \
   test-ai-statistics-query test-ai-learning test-ai-headless test-prepare-rime test-dictionary-generator \
@@ -203,6 +209,32 @@ core_line=$(grep -n '^core-check-boundaries ' "$INKFLOW_RUNNER_LOG" | cut -d: -f
 runtime_line=$(grep -n '^test-ai-runtime ' "$INKFLOW_RUNNER_LOG" | cut -d: -f1)
 [[ $quality_line -lt $core_line && $runtime_line -lt $core_line ]]
 unset INKFLOW_TEST_PRIORITY
+# A failed embedded Core unit must release the parallel dictionary unit instead
+# of leaving it waiting forever for Core SwiftPM ownership.
+: > "$INKFLOW_RUNNER_LOG"
+: > "$INKFLOW_RUNNER_LOG.paths"
+export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/core-failure-parallel"
+mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
+export INKFLOW_RUNNER_FAIL=core-test
+bash "$fixture/macOS/scripts/test.sh" all > "$fixture/output.log" 2>&1 &
+core_failure_pid=$!
+for _ in {1..500}; do
+  kill -0 "$core_failure_pid" 2>/dev/null || break
+  sleep 0.01
+done
+if kill -0 "$core_failure_pid" 2>/dev/null; then
+  kill -TERM "$core_failure_pid" 2>/dev/null || true
+  wait "$core_failure_pid" 2>/dev/null || true
+  echo 'FAIL: shared-core failure deadlocked dictionary-activation' >&2
+  exit 1
+fi
+set +e
+wait "$core_failure_pid"
+status=$?
+set -e
+[[ $status == 17 ]]
+! grep -q '^core-test-dictionaries ' "$INKFLOW_RUNNER_LOG"
+unset INKFLOW_RUNNER_FAIL INKFLOW_RUNNER_PARALLEL_DIR
 export INKFLOW_TEST_EVIDENCE_DIR="$fixture/evidence"
 run ai-runtime
 grep -Fxq $'unit\tstatus\tduration_seconds\tlog\tduration_milliseconds' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
@@ -224,6 +256,15 @@ grep -Fxq 'fixture output: test-test-runner' "$INKFLOW_TEST_EVIDENCE_DIR/runner.
 grep -Fxq 'fixture output: test-test-affected' "$INKFLOW_TEST_EVIDENCE_DIR/runner.log"
 grep -Fxq 'fixture output: test-workflow' "$INKFLOW_TEST_EVIDENCE_DIR/workflow.log"
 unset INKFLOW_TEST_EVIDENCE_DIR
+export INKFLOW_TEST_EVIDENCE_DIR="$fixture/prebuild-failure-evidence"
+export INKFLOW_SWIFT_BUILD_FAIL=ai-pronunciation-tests
+if run all; then exit 1; else status=$?; fi
+[[ $status == 37 ]]
+grep -q 'prebuild diagnostic: ai-pronunciation-tests' "$fixture/output.log"
+grep -Eq $'^ai-learning\tFAIL\t[0-9]+\t.*/ai-learning.log\t[1-9][0-9]*$' "$INKFLOW_TEST_EVIDENCE_DIR/summary.tsv"
+grep -q 'prebuild diagnostic: ai-pronunciation-tests' "$INKFLOW_TEST_EVIDENCE_DIR/ai-learning.log"
+! grep -q ' (parallel)' "$fixture/output.log"
+unset INKFLOW_SWIFT_BUILD_FAIL INKFLOW_TEST_EVIDENCE_DIR
 export INKFLOW_RUNNER_FAIL=test-ai-runtime
 if run ai-runtime settings; then exit 1; else status=$?; fi
 [[ $status == 17 ]]

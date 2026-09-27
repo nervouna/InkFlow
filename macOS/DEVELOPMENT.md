@@ -146,7 +146,7 @@ bash macOS/scripts/test-test-runner.sh # Isolated test-runner regression checks
 
 | Group | Coverage and prerequisites |
 | --- | --- |
-| `shared-core` | Standalone Core regression via `bash Core/scripts/test.sh`, including real Rime learning and dictionary activation; no app bundle required |
+| `shared-core` | Standalone Core regression via `bash Core/scripts/test.sh`, including real Rime learning and dictionary activation; in the embedded full suite every Core test product still compiles, while canonical macOS units own duplicate behavior assertions and the unique native preparation host executes inside the parallel `dictionary-activation` unit; no app bundle required |
 | `quality` | Store, metadata, engine capture, then query tests against freshly captured evidence |
 | `ai` | Transport, statistics, runtime, adoption learning and headless integration; see the subgroups in TESTING.md |
 | `preparation` | Rime preparation policy fixtures |
