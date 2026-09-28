@@ -104,6 +104,25 @@ Continue with the [release skill](../.agents/skills/inkflow-release/SKILL.md) fo
 
 ## Verification
 
+Personal-data backups reuse the dictionary worker through an explicit
+`--personal-data` command. It only receives closed copies under
+`PersonalData/staging/<UUID>`; the dictionary worker's original protocol and sandbox
+remain unchanged. Strict snapshot parsing and full native-map equality precede any
+live replacement. The coordinator reserves a settled, idle engine after the native
+undo grace, while a rollback-first journal covers the three fixed user dictionaries
+and allowlisted preferences. Existing and newly requested input sessions remain
+suspended until the journal and preference transaction finishes.
+
+Journal file synchronization and the transaction-only `UserDefaults.synchronize()`
+boundary cover process interruption, not power-loss durability. Failed persistence
+rolls back; failed rollback preserves evidence and disables input and relevant
+settings writes. Startup recovery runs before Settings or Rime initialization.
+Normal completion removes staging; startup captures abandoned UUID staging roots
+and removes validated roots on a utility task. Unknown names, symlinks and unreadable
+artifacts are retained. These private temporary files can contain personal words.
+Apple documents the preference synchronization result in
+[synchronize()](https://developer.apple.com/documentation/foundation/userdefaults/synchronize()).
+
 ### Daily development
 
 For development, commits, and local merges, run affected unit tests plus necessary related-module and integration checks. Select checks using behavior, callers, shared configuration, and resources, not only changed filenames. Build affected targets and verify the bundle when build inputs or packaged resources change. Documentation-only changes require scoped review and `git diff --check`, not application tests.

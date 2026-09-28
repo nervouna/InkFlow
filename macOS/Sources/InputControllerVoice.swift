@@ -26,6 +26,7 @@ final class IFInputControllerVoice {
         }
     }
     private static weak var activeOwner: IFInputControllerVoice?
+    static var personalDataIdle: Bool { activeOwner == nil }
     private weak var controller: IFInputControllerShell?
     private var target: Target?
     private var cleanupPending: Target?

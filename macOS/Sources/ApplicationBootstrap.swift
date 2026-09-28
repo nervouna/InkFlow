@@ -5,6 +5,11 @@ package enum InkFlowApplicationBootstrap {
     @MainActor package static func run(updaterAccess: IFUpdaterAccess) -> Int32 {
         autoreleasepool {
             let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
+            do { try PersonalDataTransaction.recover(user: user, defaults: .standard) }
+            catch { NSLog("InkFlow personal-data recovery requires attention; input startup stopped."); return 1 }
+            if let abandoned = try? PersonalDataFiles.abandonedStaging(user: user) {
+                Task.detached(priority: .utility) { PersonalDataFiles.cleanupStaging(abandoned) }
+            }
             LocalDiagnostics.shared.activate(directory: user.appendingPathComponent("Diagnostics"),
                 buildMetadataURL: Bundle.main.url(forResource: "QualityBuild", withExtension: "json"))
             let startup = IFStartupDiagnostics.shared

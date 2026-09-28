@@ -58,6 +58,10 @@ impact_classify() {
   esac
   # Producers share the content-free record contract in addition to their own feature behavior.
   case "$path" in
+    macOS/Sources/PersonalData*|macOS/Tests/PersonalDataTests.swift|Core/Sources/InkFlowRimeNative/*|Core/Sources/InkFlowRimeNative/include/*|macOS/Sources/Settings.swift|macOS/Sources/KeyboardShortcuts.swift|Core/Sources/InkFlowRime/DictionaryCoordinator.swift|macOS/Sources/DictionaryWorker*|macOS/DictionaryWorker/*|macOS/Sources/ApplicationBootstrap.swift)
+      impact_rule "$path" 'personal-data snapshot and recovery contract' personal-data ;;
+  esac
+  case "$path" in
     macOS/Sources/AIDiagnostics.swift|macOS/Sources/AIStatisticsStore.swift|macOS/Sources/AppleVoiceRecognizer.swift|macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/ApplicationLifecycle.swift|macOS/Sources/DictionaryCoordinator.swift|Core/Sources/InkFlowRime/DictionaryCoordinator.swift|Core/Sources/InkFlowRime/DictionaryUpdateModels.swift|Core/Sources/InkFlowRime/Engine.swift|macOS/Sources/InputControllerCore.swift|macOS/Sources/InputControllerVoice.swift|Core/Sources/InkFlowRime/QualityStore.swift|macOS/Sources/StartupDiagnostics.swift|macOS/Sources/VoiceSettings.swift)
       impact_rule "$path" 'local diagnostic producer contract' local-diagnostics ;;
   esac
@@ -75,6 +79,10 @@ impact_classify() {
       impact_rule "$path" 'input quality analysis skill' quality-capture-query ;;
     *.md|docs/*|LICENSE|LICENSE.*|NOTICE)
       impact_rule "$path" 'documentation: diff check only' ;;
+    macOS/Sources/PersonalData*|macOS/Tests/PersonalDataTests.swift)
+      impact_rule "$path" 'personal-data settings and engine lifecycle' personal-data settings dictionary-activation voice-controller
+      impact_bundle=true
+      impact_manual_add manual-input manual-settings ;;
     macOS/scripts/probe-imk-candidate-lifetime.sh|macOS/scripts/diagnostics/IMKCandidateLifetimeProbe.m)
       impact_rule "$path" 'standalone native diagnostic: run explicitly outside daily checks' ;;
     Package.swift|Core/Package.swift|Core/scripts/*|macOS/Info.plist)

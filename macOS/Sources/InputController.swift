@@ -139,6 +139,10 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             traditional.keyEquivalentModifierMask = settings.shortcuts.binding(for: .script).flags
             traditional.indentationLevel = 0
             traditional.state = settings.inputPreferences[.traditional] ? .on : .off
+            if settings.personalDataWriteBlocked {
+                punctuation.action = nil; punctuation.isEnabled = false
+                traditional.action = nil; traditional.isEnabled = false
+            }
             menu.addItem(.separator())
             let checkForUpdates = menu.addItem(withTitle: "检查更新…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
             checkForUpdates.target = self
@@ -184,6 +188,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     func toggleInputOption(_ option: InputOption, enabledStatus: InputStatus,
                            disabledStatus: InputStatus, client: IMKTextInput?) {
+        guard !settings.personalDataWriteBlocked else { return }
         let enabled = !settings.inputPreferences[option]
         settings.setInputOption(option, enabled: enabled)
         let state = engine?.snapshot() ?? EngineSnapshot()

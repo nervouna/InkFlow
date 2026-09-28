@@ -29,6 +29,17 @@ Voice coverage is split into `voice-session` (serial correction/fallback/cancell
 
 ## Daily use
 
+`bash macOS/scripts/test.sh personal-data` exercises the allowlisted backup format,
+atomic shortcut swaps, isolated native full-map snapshots (including empty metadata,
+deleted rows and weight values), bounded synthetic scale, malformed files, subprocess
+interruption at each dictionary rename, idempotent startup recovery, preference
+persistence with an independent reader, and production coordinator/restore sessions.
+The suite uses random defaults suites and temporary synthetic dictionaries; it never
+reads production learning data or credentials. Its engine lifecycle fixture uses the
+existing app's immutable bundled resources, so build the app before running it.
+Manual acceptance remains pending for export/import panels, restore confirmation,
+cross-app input resumption and preservation of destination AI/privacy preferences.
+
 ```sh
 bash macOS/scripts/test-affected.sh                 # staged + unstaged + untracked plan
 bash macOS/scripts/test-affected.sh --from main     # also include main..HEAD

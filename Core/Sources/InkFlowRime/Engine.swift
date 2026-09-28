@@ -47,7 +47,8 @@ package final class IFEngine {
     private var savedASCII = false
 
     package static var liveSessions: [IFEngine] { instances.values.compactMap(\.value) }
-    package var available: Bool { Self.ready && session != 0 && sessionGeneration == Self.generation }
+    package static var personalDataSuspended = false
+    package var available: Bool { Self.ready && !Self.personalDataSuspended && session != 0 && sessionGeneration == Self.generation }
     package var asciiMode: Bool {
         get { available ? Self.api.pointee.get_option(session, "ascii_mode") != 0 : savedASCII }
         set {
@@ -295,7 +296,7 @@ package final class IFEngine {
 
     package init?(qualityStore: QualityStore? = nil, qualityClock: QualityClock = QualityClock()) {
         qualityRecorder = (qualityStore ?? Self.productionQualityStore).map { QualityRecorder(store: $0, clock: qualityClock) }
-        guard Self.ready else { return nil }
+        guard Self.ready, !Self.personalDataSuspended else { return nil }
         do { try restoreSession() } catch { detachSession(); return nil }
         Self.instances[ObjectIdentifier(self)] = WeakSession(self)
         Self.voiceLexicon.markDirty()

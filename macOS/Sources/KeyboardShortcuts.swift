@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 
-enum ShortcutAction: String, CaseIterable, Identifiable {
+enum ShortcutAction: String, CaseIterable, Identifiable, Sendable {
     case inputMode, punctuation, script, voiceHold, voiceToggle
     var id: String { rawValue }
     var title: String {
@@ -15,7 +15,7 @@ enum ShortcutAction: String, CaseIterable, Identifiable {
     }
 }
 
-struct ShortcutBinding: Codable, Hashable {
+struct ShortcutBinding: Codable, Hashable, Sendable {
     let keyCode: UInt16?
     private let modifierBits: UInt
     private let keyLabel: String
@@ -106,9 +106,25 @@ struct ShortcutBinding: Codable, Hashable {
 
 @MainActor
 final class KeyboardShortcuts: ObservableObject {
+    nonisolated static func validateBackup(_ values: [String: ShortcutBinding]) throws {
+        guard Set(values.keys) == Set(ShortcutAction.allCases.map(\.rawValue)) else { throw PersonalDataError("shortcuts") }
+        for action in ShortcutAction.allCases {
+            let value = values[action.rawValue]!
+            guard value.validationError == nil, !(value.isModifier && [.punctuation, .script].contains(action)) else { throw PersonalDataError("shortcut-binding") }
+            for other in ShortcutAction.allCases where other != action {
+                if value != .none && values[other.rawValue] == value && Set([action, other]) != Set([.voiceHold, .voiceToggle]) { throw PersonalDataError("shortcut-conflict") }
+            }
+        }
+    }
+    func reloadBackupBindings() {
+        let replacement = KeyboardShortcuts(defaults: defaults)
+        bindings = replacement.bindings
+        error = nil; revision += 1
+    }
     @Published private var bindings: [ShortcutAction: ShortcutBinding] = [:]
     @Published var error: String?
     @Published private(set) var revision = 0
+    var personalDataRecoveryRequired = false
     private let defaults: UserDefaults
     init(defaults: UserDefaults) {
         self.defaults = defaults
@@ -139,6 +155,7 @@ final class KeyboardShortcuts: ObservableObject {
         return Set([action,other]) != Set([.voiceHold,.voiceToggle])
     }
     @discardableResult func set(_ value: ShortcutBinding, for action: ShortcutAction) -> Bool {
+        guard !personalDataRecoveryRequired else { return false }
         if let reason = validationError(value, for: action) { error = reason; return false }
         if let other = ShortcutAction.allCases.first(where: { conflicts(action, $0, value) }) {
             error = "此按键已用于“\(other.title)”，请先更改或清除该绑定。"; return false
@@ -149,6 +166,7 @@ final class KeyboardShortcuts: ObservableObject {
         return true
     }
     func restoreDefaults() {
+        guard !personalDataRecoveryRequired else { return }
         error = nil
         for action in ShortcutAction.allCases {
             let value = Self.defaultBinding(for: action)

@@ -73,6 +73,39 @@ package final class IFDictionaryCoordinator {
     @ObservationIgnored private let rankerLoader: @Sendable (String) throws -> IFContextRanker
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var rankerTask: Task<Void, Never>?
+    @ObservationIgnored private var personalDataReserved = false
+    package var personalDataLifecycleReady: Bool {
+        !isShuttingDown && !isBusy && !personalDataReserved && rankerTask == nil && task == nil &&
+            pending == nil && recoveryAlternatives.isEmpty && engineAvailable && configuration != nil
+    }
+
+    /// Reserve only a settled configuration; no dictionary or late ranker task may overlap.
+    package func beginPersonalData() throws -> IFEngineConfiguration {
+        guard IFEngine.allSessionsIdle else { throw IFDictionaryUpdateError(.apply, "personal-data-composition") }
+        guard IFEngine.voiceLexicon.canRead else { throw IFDictionaryUpdateError(.apply, "personal-data-undo-grace") }
+        guard personalDataLifecycleReady, let configuration else { throw IFDictionaryUpdateError(.apply, "personal-data-busy") }
+        personalDataReserved = true; isBusy = true
+        IFEngine.stop(); engineAvailable = false
+        IFEngine.personalDataSuspended = true
+        return configuration
+    }
+
+    package func restartPersonalData(_ configuration: IFEngineConfiguration, resumeInput: Bool = false, restoring: Bool = false) throws {
+        guard personalDataReserved else { throw IFDictionaryUpdateError(.apply, "personal-data-reservation") }
+        IFEngine.personalDataSuspended = false
+        defer { IFEngine.personalDataSuspended = !resumeInput }
+        try IFEngine.start(configuration, fault: { try activationFault($0, restoring) })
+        if resumeInput {
+            engineAvailable = IFEngine.ready
+            NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+        }
+    }
+
+    package func finishPersonalData() {
+        IFEngine.personalDataSuspended = false
+        personalDataReserved = false; isBusy = false; engineAvailable = IFEngine.ready
+        NotificationCenter.default.post(name: .engineAvailabilityDidChange, object: nil)
+    }
     @ObservationIgnored private var operationID: UUID?
     @ObservationIgnored private var checked: IFDictionaryCheck?
     @ObservationIgnored private var descriptor: IFDictionaryDescriptor?
@@ -308,6 +341,7 @@ package final class IFDictionaryCoordinator {
     /// Already-entered synchronous journal writes and native activation finish before shutdown can proceed.
     package func shutdown() async throws {
         isShuttingDown = true
+        while personalDataReserved { try await Task.sleep(for: .milliseconds(20)) }
         operationID = nil
         if let servingFallback { IFEngine.cancelPendingContextRanker(for: servingFallback.configuration) }
         IFEngine.idleHandler = nil

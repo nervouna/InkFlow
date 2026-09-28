@@ -131,6 +131,9 @@ run_test_unit() {
     settings)
       build_swift_test settings-tests build/settings-tests
       build/settings-tests ;;
+    personal-data)
+      build_swift_test personal-data-tests build/personal-data-tests
+      build/personal-data-tests ;;
     dictionary-source|dictionary-store|dictionary-worker)
       bash macOS/scripts/test-dictionary-updates.sh "--${unit#dictionary-}" ;;
     dictionary-activation)
