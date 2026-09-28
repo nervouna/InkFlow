@@ -119,6 +119,9 @@ final class IFSettings: ObservableObject {
     private(set) var voicePolishRules: [VoicePolishRule] = []
     private(set) var voicePolishRulesLoadError: String?
     @Published var inputSettingsError: String?
+    @Published var personalDataRecoveryRequired = false
+    @Published var personalDataApplying = false
+    var personalDataWriteBlocked: Bool { personalDataRecoveryRequired || personalDataApplying }
     var qualityStore: QualityStore?
     @Published private(set) var qualityCommandPending = false
     @Published private(set) var qualityControlMessage: String?
@@ -211,6 +214,7 @@ final class IFSettings: ObservableObject {
     }
 
     private func persistCustomPhrases(_ phrases: [CustomPhrase]) throws {
+        guard !personalDataWriteBlocked else { throw PersonalDataError("recovery-required") }
         if let customPhrasesLoadError { throw CustomPhraseError(customPhrasesLoadError) }
         try CustomPhrase.validate(phrases)
         let data = try JSONEncoder().encode(phrases)
@@ -260,6 +264,7 @@ final class IFSettings: ObservableObject {
     }
 
     private func persistVoicePolishRules(_ rules: [VoicePolishRule]) throws {
+        guard !personalDataWriteBlocked else { throw PersonalDataError("recovery-required") }
         if let voicePolishRulesLoadError { throw VoicePolishRuleError(voicePolishRulesLoadError) }
         try VoicePolishRule.validate(rules)
         let data = try JSONEncoder().encode(rules)
@@ -275,7 +280,47 @@ final class IFSettings: ObservableObject {
         return value.intValue
     }
 
+    func personalBackupSettings() throws -> PersonalBackupSettings {
+        guard customPhrasesLoadError == nil, voicePolishRulesLoadError == nil else { throw PersonalDataError("unreadable-settings") }
+        var integers = ["candidateCount": candidateCount, "fontSize": fontSize, "vertical": vertical ? 1 : 0, "thunderMode": thunderMode ? 1 : 0]
+        for option in InputOption.allCases { integers["input.\(option.rawValue)"] = inputPreferences[option] ? 1 : 0 }
+        let snapshot = PersonalBackupSettings(integers: integers,
+            shortcuts: Dictionary(uniqueKeysWithValues: ShortcutAction.allCases.map { ($0.rawValue, shortcuts.binding(for: $0)) }),
+            phrases: customPhrases, voiceRules: voicePolishRules)
+        try snapshot.validate()
+        return snapshot
+    }
+
+    func personalRollbackPreferences() async throws -> [String: Data] {
+        let store = PersonalDefaults(defaults: defaults)
+        return try await Task.detached(priority: .utility) { try store.rollbackPreferences() }.value
+    }
+    func synchronizePersonalPreferences() async -> Bool {
+        let store = PersonalDefaults(defaults: defaults)
+        return await Task.detached(priority: .utility) { store.synchronize() }.value
+    }
+
+    func applyPersonalPreferences(_ preferences: [String: Data]) throws {
+        try Self.writePersonalPreferences(preferences, defaults: defaults)
+        objectWillChange.send()
+        customPhrases = []; voicePolishRules = []
+        customPhrasesLoadError = nil; voicePolishRulesLoadError = nil
+        loadCustomPhrases(); loadVoicePolishRules(); shortcuts.reloadBackupBindings()
+        NotificationCenter.default.post(name: .settingsDidChange, object: self)
+    }
+
+    static func writePersonalPreferences(_ preferences: [String: Data], defaults: UserDefaults) throws {
+        guard Set(preferences.keys).isSubset(of: PersonalBackupSettings.keys) else { throw PersonalDataError("preferences") }
+        let decoded = try preferences.mapValues { try PropertyListSerialization.propertyList(from: $0, options: [], format: nil) }
+        for key in PersonalBackupSettings.keys {
+            if let value = decoded[key] { defaults.set(value, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+        // The committed journal remains authoritative until the next process startup.
+    }
+
     private func set(_ value: Int, for key: String) {
+        guard !personalDataWriteBlocked else { return }
         objectWillChange.send()
         defaults.set(value, forKey: key)
         NotificationCenter.default.post(name: .settingsDidChange, object: self)
@@ -347,6 +392,7 @@ final class IFSettings: ObservableObject {
     }
 
     private func setInputOptions(_ values: [InputOption: Bool]) {
+        guard !personalDataWriteBlocked else { return }
         guard values.contains(where: { inputValue($0.key) != $0.value }) else { return }
         objectWillChange.send()
         for (option, enabled) in values { defaults.set(enabled, forKey: "input.\(option.rawValue)") }
@@ -364,12 +410,13 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case smart = "AI 服务"
     case updates = "更新"
     case quality = "质量记录"
+    case personalData = "备份与恢复"
     case feedback = "反馈与诊断"
     case about = "关于"
     static let groups: [(title: String, sections: [Self])] = [
         ("输入体验", [.input, .shortcuts, .appearance]),
         ("语言与辅助", [.personalization, .dictionaries, .voice, .smart]),
-        ("应用", [.quality, .updates, .feedback, .about])
+        ("应用", [.personalData, .quality, .updates, .feedback, .about])
     ]
     static var defaultSection: Self { groups[0].sections[0] }
     var id: Self { self }
@@ -384,6 +431,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .dictionaries: "books.vertical"
         case .updates: "arrow.triangle.2.circlepath"
         case .quality: "chart.bar.doc.horizontal"
+        case .personalData: "externaldrive"
         case .feedback: "exclamationmark.bubble"
         case .about: "info.circle"
         }
@@ -431,6 +479,7 @@ struct SettingsView: View {
                 if section == .about { AboutSettingsView() }
                 else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter, diagnosticDependencies: diagnosticDependencies) }
                 else if section == .quality { QualitySettingsView(settings: settings) }
+                else if section == .personalData { PersonalDataSettingsView(settings: settings, coordinator: dictionaries) }
                 else if section == .appearance { appearance }
                 else if section == .shortcuts { ShortcutsSettingsView(shortcuts: settings.shortcuts) }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }
@@ -447,6 +496,10 @@ struct SettingsView: View {
             .navigationTitle((section ?? .defaultSection).rawValue)
         }
         .navigationSplitViewStyle(.balanced)
+        .disabled(settings.personalDataWriteBlocked)
+        .overlay {
+            if settings.personalDataRecoveryRequired { Text("个人数据恢复尚未完成。请退出并重新启动墨流后再修改设置。").padding().background(.regularMaterial) }
+        }
     }
 
     private var appearance: some View {

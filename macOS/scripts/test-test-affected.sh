@@ -252,3 +252,10 @@ for path in Core/Package.swift Core/scripts/test.sh Core/Sources/InkFlowDomain/F
   has 'shared-core'; has 'manual-input'; has 'manual-settings'
 done
 echo 'PASS affected selection: shared/platform domains, version metadata, preparation and failure propagation'
+
+for path in macOS/Sources/PersonalDataBackup.swift macOS/Sources/PersonalDataTransaction.swift macOS/Sources/PersonalDataSettingsView.swift macOS/Tests/PersonalDataTests.swift; do
+  new_case
+  change "$path"; plan
+  has 'personal-data'; has 'settings'; has 'dictionary-activation'; has 'voice-controller'
+  has 'Preparation: build.sh'; has 'manual-input'; has 'manual-settings'
+done

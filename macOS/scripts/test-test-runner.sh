@@ -186,6 +186,8 @@ done
 mkdir -p "$fixture/build/InkFlow.app/Contents/MacOS"
 touch "$fixture/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
 chmod +x "$fixture/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
+run personal-data
+expect 'dependencies ' 'build personal-data-tests' 'run personal-data-tests '
 export INKFLOW_RUNNER_PARALLEL_DIR="$fixture/parallel"
 mkdir "$INKFLOW_RUNNER_PARALLEL_DIR"
 run
@@ -213,7 +215,7 @@ for required in core-check-boundaries core-test test-quality-identity test-quali
 done
 for required in 'run deployment-tests ' 'run engine-tests --basic' 'run engine-tests --options' \
   'run engine-tests --english' 'run engine-tests --context' 'run engine-tests --custom-phrases' \
-  'run controller-tests ' 'run settings-tests ' \
+  'run controller-tests ' 'run settings-tests ' 'run personal-data-tests ' \
   'test-dictionary-updates --source' 'test-dictionary-updates --store' 'test-dictionary-updates --worker'; do
   [[ $(grep -Fxc "$required" "$INKFLOW_RUNNER_LOG") == 1 ]]
 done

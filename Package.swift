@@ -34,6 +34,7 @@ let inkFlowCoreSources = [
     "CustomPhrases.swift", "DictionaryCoordinator.swift",
     "DictionarySettings.swift",
     "PersonalLearningSettings.swift",
+    "PersonalDataBackup.swift", "PersonalDataTransaction.swift", "PersonalDataSettingsView.swift",
     "QualitySettingsView.swift",
     "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "InputController.swift",
@@ -47,6 +48,7 @@ let installerCoreSources = [
 ]
 let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "ai-statistics.py"]
 let testSwiftSources = [
+    "PersonalDataTests.swift",
     "AIControllerNativeTests.swift", "AICredentialTests.swift",
     "AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AIHeadlessPipelineTests.swift",
     "AILiveConfiguration.swift", "AILiveTests.swift", "AIRuntimeTestSupport.swift",
@@ -80,6 +82,7 @@ func executableTestTarget(_ name: String, sources: [String],
 }
 
 let executableTestProducts: [(String, String)] = [
+    ("personal-data-tests", "PersonalDataTests"),
     ("voice-learning-coordinator-tests", "VoiceLearningCoordinatorTests"),
     ("ai-adoption-learning-tests", "AIAdoptionLearningTests"),
     ("ai-credential-tests", "AICredentialTests"),
@@ -181,7 +184,7 @@ let package = Package(
         ),
         .target(
             name: "InkFlowCore",
-            dependencies: ["InkFlowDomain", "InkFlowRime", "CRime", "InkFlowNative"],
+            dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeNative", "CRime", "InkFlowNative"],
             path: "macOS/Sources",
             exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
             sources: inkFlowCoreSources,
@@ -280,6 +283,7 @@ let package = Package(
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
         .executableTarget(name: "AIAdoptionLearningTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/AIAdoptionLearningTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        executableTestTarget("PersonalDataTests", sources: ["PersonalDataTests.swift"], dependencies: ["InkFlowCore", "InkFlowRime", "InkFlowDomain", "InkFlowRimeNative"]),
         executableTestTarget("AICredentialTests", sources: ["AICredentialTests.swift"]),
         executableTestTarget("AIHeadlessTests", sources: ["AIHeadlessPipelineTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
