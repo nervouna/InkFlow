@@ -33,6 +33,7 @@ let inkFlowCoreSources = [
     "ThunderPanel.swift", "ThunderPresentation.swift",
     "CustomPhrases.swift", "DictionaryCoordinator.swift",
     "DictionarySettings.swift",
+    "PersonalLearningSettings.swift",
     "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "InputController.swift",
     "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",

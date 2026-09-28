@@ -18,7 +18,7 @@ extension IFEngine {
         let read = api.get_property(engine.session, "inkflow_clear_english_learning_result", &result, result.count)
         api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
         let cleared = read != 0 && Self.string(result) == "ok"
-        if cleared { voiceLexicon.markDirty(); signalIdle() }
+        if cleared { invalidatePersonalLearning() }
         withExtendedLifetime(temporary) {}
         return cleared
     }

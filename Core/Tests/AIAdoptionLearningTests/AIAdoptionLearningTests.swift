@@ -20,6 +20,17 @@ struct AIAdoptionLearningTests {
         defer { IFEngine.stop() }
         let engine = IFEngine()!
         engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: .init())
+        if scenario == "personal-management-read" {
+            let rows = try IFEngine.personalLearningEntries()
+            check(rows.filter { $0.text == "Codex" }.allSatisfy { $0.commits == 4 }, "Restored learning survives restart")
+            check(rows.count == 4, "Case variants and both namespaces survive restart")
+            return
+        }
+        if scenario == "personal-management" {
+            try await personalManagement(engine: engine)
+            print("PASS personal management: source identity, delete/undo, stale conflicts, cached sessions, native undo guard")
+            return
+        }
         if scenario.hasPrefix("contract-") {
             try learningContract(engine: engine, user: user, scenario: scenario)
             print("PASS Rime learning contract \(scenario)")
@@ -150,6 +161,59 @@ struct AIAdoptionLearningTests {
         print("PASS AI learning \(writing ? "write" : "restart"): novel words, preference, abbreviated/incomplete/typo, prefix, ambiguity")
     }
 
+    @MainActor private static func personalManagement(engine: IFEngine) async throws {
+        func verify(_ value: Bool, _ message: String) { check(value, message) }
+        func entry(_ source: IFEngine.PersonalLearningEntry.Source) throws -> IFEngine.PersonalLearningEntry {
+            guard let result = try IFEngine.personalLearningEntries().first(where: { $0.source == source && $0.text == "Codex" }) else {
+                fatalError("Missing fixture entry")
+            }
+            return result
+        }
+        func expectError(_ error: IFEngine.PersonalLearningError, _ operation: () throws -> Void) {
+            do { try operation(); check(false, "Expected management failure") }
+            catch let actual as IFEngine.PersonalLearningError { check(actual == error, "Management error identity") }
+            catch { check(false, "Unexpected error") }
+        }
+        verify(try IFEngine.personalLearningEntries().isEmpty, "Empty available management snapshot")
+        check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")), "Seed learning")
+        check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "CODEX")), "Distinct case identity")
+        let stale = try entry(.english)
+        check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")), "Repeat learning")
+        expectError(.conflict) { _ = try IFEngine.deletePersonalLearning(stale) }
+        let second = IFEngine()!
+        type(second, "codex"); _ = second.snapshot(); second.clear()
+        let alias = try entry(.voice)
+        let generation = IFEngine.voiceLexicon.snapshot.generation
+        let undo = try IFEngine.deletePersonalLearning(alias)
+        verify(try IFEngine.personalLearningEntries().filter { $0.source == .voice && $0.text == "Codex" }.isEmpty, "Delete only exact alias")
+        verify(try IFEngine.personalLearningEntries().filter { $0.text == "CODEX" }.count == 2, "Other display identity unchanged")
+        check(IFEngine.voiceLexicon.snapshot.generation != generation, "Management invalidates captured voice generation")
+        verify(try entry(.english).commits == 2, "Canonical record survives alias deletion")
+        try IFEngine.undoPersonalLearning(undo)
+        verify(try entry(.voice).commits == 3, "Native undo restores entry with one additional confirmation")
+        expectError(.conflict) { try IFEngine.undoPersonalLearning(undo) }
+        let canonicalUndo = try IFEngine.deletePersonalLearning(entry(.english))
+        type(second, "codex")
+        check(!second.qualitySnapshot().candidates.contains { $0.text == "Codex" && $0.source == "personal_exact_english" },
+              "Other session's warmed same-input cache invalidates")
+        expectError(.busy) { try IFEngine.undoPersonalLearning(canonicalUndo) }
+        second.clear()
+        try IFEngine.undoPersonalLearning(canonicalUndo)
+        verify(try entry(.english).commits == 3, "Canonical restoration adds one native confirmation")
+        let obsoleteUndo = try IFEngine.deletePersonalLearning(entry(.voice))
+        check(engine.learnVoiceCorrection(.init(sourceCode: "codux", canonicalText: "Codex")), "Relearn after deletion")
+        expectError(.conflict) { try IFEngine.undoPersonalLearning(obsoleteUndo) }
+        type(engine, "ni")
+        expectError(.busy) { _ = try IFEngine.personalLearningEntries() }
+        engine.clear()
+        type(engine, "ceshi"); engine.select(0); _ = engine.takeCommit()
+        expectError(.busy) { _ = try IFEngine.personalLearningEntries() }
+        // A rejected management read must not finish Rime's immediate-undo transaction.
+        engine.key(0xff08)
+        try await Task.sleep(for: .milliseconds(4100))
+        _ = try IFEngine.personalLearningEntries()
+    }
+
     @MainActor private static func voiceCorrectionLearning(engine: IFEngine, user: String,
                                                             scenario: String) throws {
         check(["voice-correction-write", "voice-correction-read", "voice-correction-clear", "voice-correction-cleared-read"].contains(scenario),
@@ -236,6 +300,17 @@ struct AIAdoptionLearningTests {
         }
         func expectAbsent(_ namespace: String, _ code: String, _ reason: String) {
             check(query(namespace, code) == "ok\t0", reason)
+        }
+        if scenario == "contract-management-limit" {
+            check(request("batch\tshared\tzzoverflow\tOverflow\t4096") == "ok", "Seed management bound")
+            do {
+                _ = try IFEngine.personalLearningEntries()
+                check(false, "Over-limit list must not masquerade as empty or partial")
+            } catch let error as IFEngine.PersonalLearningError {
+                check(error == .unavailable, "Oversized native list has explicit failure")
+            }
+            expectEntry("shared", "zzoverflow", "Overflow", "Failed management listing preserves stored entry")
+            return
         }
         func expectEntry(_ namespace: String, _ code: String, _ text: String, _ reason: String) {
             let result = query(namespace, code)

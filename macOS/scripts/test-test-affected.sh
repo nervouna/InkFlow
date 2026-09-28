@@ -136,6 +136,12 @@ new_case
 change macOS/Sources/DictionarySettings.swift; plan
 has 'settings'; has 'ai-learning'; has 'engine-english'; has 'voice-controller'; has 'manual-settings'
 
+for path in macOS/Sources/PersonalLearningSettings.swift Core/Sources/InkFlowRime/EnginePersonalLearning.swift; do
+  new_case
+  change "$path"; plan
+  has 'settings'; has 'ai-learning'; has 'engine-english'; has 'voice-controller'; has 'manual-settings'
+done
+
 new_case
 change schemas/lua/inkflow_ai_learning.lua; plan
 has 'voice-lexicon'; has 'ai-learning'; has 'ai-headless'; has 'preparation'; has 'dictionary-worker'; has 'bundle-fast'
