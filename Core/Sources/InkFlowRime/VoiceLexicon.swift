@@ -65,6 +65,8 @@ package final class VoiceLexiconStore {
     private var epoch: UInt64 = 0
     private var committedAt: Date?
     private var committedInstant: ContinuousClock.Instant?
+    /// Invalidates management snapshots/undo after any observed learning or reset.
+    package private(set) var learningRevision: UInt64 = 0
 
     /// Native Rime allows undo while time(NULL) - transaction_time <= 3 seconds.
     /// Check wall time as well as monotonic elapsed time, including backward clock changes.
@@ -74,16 +76,26 @@ package final class VoiceLexiconStore {
     }
 
     package func nativeCommit() {
+        learningRevision &+= 1
         committedAt = Date(); committedInstant = .now; dirty = true
     }
 
     package func reset() {
+        learningRevision &+= 1
         task?.cancel(); task = nil; dirty = true; epoch &+= 1
         snapshot = .unknown(generation: epoch)
         committedAt = nil; committedInstant = nil
     }
 
-    package func markDirty() { dirty = true }
+    package func markDirty() { dirty = true; learningRevision &+= 1 }
+
+    /// Explicit management invalidates snapshots already captured by a voice
+    /// operation, without shortening the ordinary native undo safety window.
+    package func invalidateLearningSnapshot() {
+        task?.cancel(); task = nil; dirty = true; epoch &+= 1
+        learningRevision &+= 1
+        snapshot = .unknown(generation: epoch)
+    }
 
     /// Called by the engine's deferred idle notification, independently of dictionary activation.
     package func prepareIfNeeded() {

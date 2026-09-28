@@ -90,6 +90,47 @@ local function apply_records(memory, records, direction)
   return called and result and finished
 end
 
+-- Management is invoked only at the host's idle boundary, after native undo
+-- expires. Transport is bounded; failure must never masquerade as an empty list.
+local function manage_learning(env, payload)
+  local action, source, code, text, count = payload:match("^(%a+)\t(%a+)\t([a-z]+)\t([^\t\n]+)\t(%d+)$")
+  if payload ~= "list" and (not action or (action ~= "delete" and action ~= "restore")
+      or (source ~= "english" and source ~= "voice") or #code > 64 or #text > 256
+      or text:find("[%c]") or not tonumber(count) or tonumber(count) < 1 or tonumber(count) > 2147483647) then
+    return "failed"
+  end
+  local function operate(memory, namespace)
+    local records = positive_records(memory)
+    if not records then return nil end
+    if payload == "list" then
+      local rows = {}
+      for _, row in ipairs(records) do
+        rows[#rows + 1] = namespace .. "\t" .. row.code .. "\t" .. row.text .. "\t" .. tostring(row.commits)
+      end
+      return table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
+    end
+    local current = 0
+    for _, row in ipairs(records) do
+      if row.code == code and row.text == text then current = row.commits end
+    end
+    if (action == "delete" and current ~= tonumber(count)) or (action == "restore" and current ~= 0) then
+      return "conflict"
+    end
+    -- Native negative updates tombstone the positive count. A single positive
+    -- confirmation revives it and adds one; never replay N negative updates.
+    if action == "restore" and tonumber(count) == 2147483647 then return "failed" end
+    return update(memory, code, text, action == "delete" and -1 or 1) and "ok" or "failed"
+  end
+  if payload ~= "list" and source == "english" then return operate(env.memory, source) or "failed" end
+  local called, result = with_voice(env, function(voice)
+    if payload ~= "list" then return operate(voice, source) end
+    local shared, aliases = operate(env.memory, "english"), operate(voice, "voice")
+    if not shared or not aliases then return "failed" end
+    return "ok\n" .. shared .. aliases
+  end)
+  return called and result or "failed"
+end
+
 local function clear_learning(env)
   local shared = positive_records(env.memory)
   if not shared then return false end
@@ -133,6 +174,17 @@ function M.init(env)
     return false
   end)
   env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
+    if name == "inkflow_learning_invalidate" then
+      env.input, env.entries, env.learnable = nil, nil, {}
+      return
+    end
+    if name == "inkflow_learning_manage" then
+      local payload = context:get_property(name)
+      if payload == "" then return end
+      local called, result = pcall(manage_learning, env, payload)
+      context:set_property("inkflow_learning_manage_result", called and result or "failed")
+      return
+    end
     if name == "inkflow_clear_english_learning" then
       if context:get_property(name) == "" then return end
       local cleared = clear_learning(env)

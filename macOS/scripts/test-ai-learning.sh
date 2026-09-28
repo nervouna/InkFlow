@@ -59,6 +59,9 @@ build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-wr
 (cd "$contract_user" && "$manager" -e pinyin_simp pinyin-after.txt)
 cmp "$contract_user/pinyin-before.txt" "$contract_user/pinyin-after.txt"
 build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-read
+management_limit_user="$user_dir/personal-management-limit-user"
+mkdir -p "$management_limit_user"
+build/ai-adoption-learning-tests "$contract_shared" "$management_limit_user" contract-management-limit
 (cd "$contract_user" && "$manager" -e inkflow_shared_english shared.txt)
 (cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
 echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
@@ -66,6 +69,12 @@ inkflow_test_timing_report ai-learning rime-contract "$stage_started"
 
 stage_started=$(inkflow_test_timing_now)
 voice_user="$user_dir/voice-correction-user"
+management_user="$user_dir/personal-management-user"
+mkdir -p "$management_user"
+build/ai-adoption-learning-tests "$shared" "$management_user" personal-management
+build/ai-adoption-learning-tests "$shared" "$management_user" personal-management-read
+(cd "$management_user" && "$manager" -e pinyin_simp management-pinyin.txt)
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$management_user/management-pinyin.txt"
 mkdir -p "$voice_user"
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-write
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-read

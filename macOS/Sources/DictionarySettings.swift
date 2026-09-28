@@ -7,92 +7,96 @@ struct DictionarySettingsView: View {
     @State private var detailsExpanded = false
     @State private var confirmClearLearning = false
     @State private var learningStatus: String?
+    @State private var learningRefresh = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let failure = coordinator?.failure {
-                Label(coordinator?.engineAvailable == true ? "更新失败" : "词库暂不可用",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.headline)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("dictionaries.failure")
-                Text(coordinator?.engineAvailable == true
-                     ? "当前词库仍可正常使用。"
-                     : "请恢复后继续输入。")
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("dictionaries.failureMessage")
-                DisclosureGroup("查看错误详情", isExpanded: $detailsExpanded) {
-                    ScrollView([.horizontal, .vertical]) {
-                        Text(failure.technicalDetails)
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: true, vertical: true)
-                            .accessibilityIdentifier("dictionaries.errorDetails")
-                            .padding(4)
-                    }
-                    .frame(height: 100)
-                    .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
-                }
-            } else if coordinator?.engineAvailable == true, let active = coordinator?.active {
-                Label("词库已启用", systemImage: "checkmark.circle")
-                    .font(.headline)
-                    .accessibilityIdentifier("dictionaries.state")
-                Text("\(active.manifest.entryCount.formatted()) 个中文词条")
-                    .accessibilityIdentifier("dictionaries.count")
-                Text(active.isBundled ? "正在使用随 InkFlow 提供的词库。" : "正在使用已更新的词库。")
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("dictionaries.engineStatus")
-            } else {
-                Label(coordinator == nil ? "正在准备词库…" : "词库暂不可用",
-                      systemImage: coordinator == nil ? "hourglass" : "exclamationmark.triangle")
-                    .font(.headline)
-                    .accessibilityIdentifier("dictionaries.state")
-                if coordinator != nil {
-                    Text("恢复后即可继续输入。")
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let failure = coordinator?.failure {
+                    Label(coordinator?.engineAvailable == true ? "更新失败" : "词库暂不可用",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.headline)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("dictionaries.failure")
+                    Text(coordinator?.engineAvailable == true
+                         ? "当前词库仍可正常使用。"
+                         : "请恢复后继续输入。")
                         .foregroundStyle(.secondary)
-                }
-            }
-
-            if let status {
-                HStack(spacing: 8) {
-                    if coordinator?.isBusy == true {
-                        ProgressView()
-                            .controlSize(.small)
-                            .accessibilityLabel("词库更新进行中")
+                        .accessibilityIdentifier("dictionaries.failureMessage")
+                    DisclosureGroup("查看错误详情", isExpanded: $detailsExpanded) {
+                        ScrollView([.horizontal, .vertical]) {
+                            Text(failure.technicalDetails)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: true, vertical: true)
+                                .accessibilityIdentifier("dictionaries.errorDetails")
+                                .padding(4)
+                        }
+                        .frame(height: 100)
+                        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
                     }
-                    Text(status)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("dictionaries.status")
+                } else if coordinator?.engineAvailable == true, let active = coordinator?.active {
+                    Label("词库已启用", systemImage: "checkmark.circle")
+                        .font(.headline)
+                        .accessibilityIdentifier("dictionaries.state")
+                    Text("\(active.manifest.entryCount.formatted()) 个中文词条")
+                        .accessibilityIdentifier("dictionaries.count")
+                    Text(active.isBundled ? "正在使用随 InkFlow 提供的词库。" : "正在使用已更新的词库。")
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("dictionaries.engineStatus")
+                } else {
+                    Label(coordinator == nil ? "正在准备词库…" : "词库暂不可用",
+                          systemImage: coordinator == nil ? "hourglass" : "exclamationmark.triangle")
+                        .font(.headline)
+                        .accessibilityIdentifier("dictionaries.state")
+                    if coordinator != nil {
+                        Text("恢复后即可继续输入。")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-            }
 
-            if coordinator?.canRetry == true {
-                Button(coordinator?.engineAvailable == true ? "重试" : "恢复词库", action: retry)
-                    .accessibilityIdentifier("dictionaries.retry")
-            } else if coordinator?.canUpdate == true {
-                Button("更新词库", action: downloadAndUpdate)
-                    .accessibilityIdentifier("dictionaries.update")
-            } else if coordinator?.canCheck == true {
-                Button("检查词库更新", action: checkForUpdates)
-                    .accessibilityIdentifier("dictionaries.check")
-            }
+                if let status {
+                    HStack(spacing: 8) {
+                        if coordinator?.isBusy == true {
+                            ProgressView()
+                                .controlSize(.small)
+                                .accessibilityLabel("词库更新进行中")
+                        }
+                        Text(status)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("dictionaries.status")
+                    }
+                }
 
-            Divider()
-            Text("个人英文学习")
-                .font(.headline)
-            Text("清除键盘英文学习和语音纠正别名，不影响内置词库、自定义短语或中文输入学习。")
-                .foregroundStyle(.secondary)
-            Button("清除个人英文学习", role: .destructive) { confirmClearLearning = true }
-                .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
-                .accessibilityIdentifier("dictionaries.clearEnglishLearning")
-            if let learningStatus {
-                Text(learningStatus).foregroundStyle(.secondary)
-                    .accessibilityIdentifier("dictionaries.clearEnglishLearningStatus")
-            }
+                if coordinator?.canRetry == true {
+                    Button(coordinator?.engineAvailable == true ? "重试" : "恢复词库", action: retry)
+                        .accessibilityIdentifier("dictionaries.retry")
+                } else if coordinator?.canUpdate == true {
+                    Button("更新词库", action: downloadAndUpdate)
+                        .accessibilityIdentifier("dictionaries.update")
+                } else if coordinator?.canCheck == true {
+                    Button("检查词库更新", action: checkForUpdates)
+                        .accessibilityIdentifier("dictionaries.check")
+                }
 
-            Spacer(minLength: 0)
+                Divider()
+                PersonalLearningSettingsView()
+                    .id(learningRefresh)
+                    .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
+                Text("清除键盘英文学习和语音纠正别名，不影响内置词库、自定义短语或中文输入学习。")
+                    .foregroundStyle(.secondary)
+                Button("清除个人英文学习", role: .destructive) { confirmClearLearning = true }
+                    .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
+                    .accessibilityIdentifier("dictionaries.clearEnglishLearning")
+                if let learningStatus {
+                    Text(learningStatus).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("dictionaries.clearEnglishLearningStatus")
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(20)
         }
-        .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: coordinator?.failure?.technicalDetails) { _, _ in detailsExpanded = false }
         .confirmationDialog("清除个人英文学习？", isPresented: $confirmClearLearning) {
@@ -100,6 +104,7 @@ struct DictionarySettingsView: View {
                 learningStatus = IFEngine.clearPersonalEnglishLearning()
                     ? "个人英文学习已清除。"
                     : "暂时无法清除，请结束当前输入后重试。"
+                learningRefresh += 1
             }
             Button("取消", role: .cancel) {}
         } message: {

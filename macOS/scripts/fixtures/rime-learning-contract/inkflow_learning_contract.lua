@@ -66,10 +66,10 @@ local function update(memory, code, text, commits)
   return wrote and updated and finished
 end
 
-local function seed_overflow(memory, code, text)
+local function seed_overflow(memory, code, text, count)
   if not memory:start_session() then return false end
   local written, updated = pcall(function()
-    for value = 0, 511 do
+    for value = 0, count - 1 do
       local entry = DictEntry()
       entry.text = "Bulk" .. tostring(value)
       entry.custom_code = string.format("a%c%c%c ",
@@ -128,8 +128,10 @@ function M.init(env)
       return
     end
     if operation == "batch" then
+      local count = tonumber(extra) or 512
+      if count ~= 512 and count ~= 4096 then set_result(context, "invalid"); return end
       local called, updated = with_memory(env, namespace, function(fresh)
-        return seed_overflow(fresh, code, text)
+        return seed_overflow(fresh, code, text, count)
       end)
       set_result(context, called and updated and "ok" or "failed")
       return

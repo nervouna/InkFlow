@@ -124,7 +124,7 @@ impact_classify() {
       impact_rule "$path" 'packaged resources and cache consumers' preparation dictionary-generator deployment engine dictionary-updates dictionary-activation
       impact_bundle=true
       impact_manual_add manual-input ;;
-    macOS/Sources/DictionarySettings.swift)
+    macOS/Sources/DictionarySettings.swift|macOS/Sources/PersonalLearningSettings.swift|Core/Sources/InkFlowRime/EnginePersonalLearning.swift)
       impact_rule "$path" 'dictionary and personal-learning lifecycle settings' settings ai-learning engine-english voice-controller
       impact_bundle=true
       impact_manual_add manual-input manual-settings ;;
