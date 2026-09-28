@@ -12,7 +12,9 @@ package enum InkFlowApplicationBootstrap {
             _ = NSApplication.shared
             let bundle = Bundle.main
             let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
-            let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version)
+            let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version,
+                paused: IFSettings.sharedSettings.qualityRecordingPaused)
+            IFSettings.sharedSettings.qualityStore = qualityStore
             let statisticsStore = AIStatisticsStore(url: user.appendingPathComponent("ai-statistics.sqlite3"),
                 pricingURL: user.appendingPathComponent("ai-pricing.json"),
                 buildIdentity: [bundle.bundleIdentifier, bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,

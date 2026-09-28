@@ -119,6 +119,41 @@ final class IFSettings: ObservableObject {
     private(set) var voicePolishRules: [VoicePolishRule] = []
     private(set) var voicePolishRulesLoadError: String?
     @Published var inputSettingsError: String?
+    var qualityStore: QualityStore?
+    @Published private(set) var qualityCommandPending = false
+    @Published private(set) var qualityControlMessage: String?
+
+    var qualityRecordingPaused: Bool { integer(for: "qualityRecordingPaused", allowed: [0, 1], fallback: 0) != 0 }
+    var qualityRecordingStatus: String {
+        guard qualityStore != nil else { return "未启动" }
+        if qualityStore?.statistics().disabled == true { return "本次记录不可用" }
+        return qualityRecordingPaused ? "已暂停" : "已开启"
+    }
+
+    func setQualityRecordingPaused(_ paused: Bool) async {
+        guard !qualityCommandPending, let qualityStore else { return }
+        qualityCommandPending = true
+        qualityControlMessage = nil
+        // Preserve the user's choice even if the optional writer has failed for this launch.
+        objectWillChange.send()
+        defaults.set(paused ? 1 : 0, forKey: "qualityRecordingPaused")
+        defer { qualityCommandPending = false }
+        do {
+            try await qualityStore.setPaused(paused)
+            qualityControlMessage = paused ? "已暂停记录。正在输入的内容不会补记。" : "已恢复记录，从下一段新输入开始。"
+        } catch { qualityControlMessage = "记录设置已保存，但本次操作未完成。请重新启动墨流后检查。" }
+    }
+
+    func clearQualityRecords() async {
+        guard !qualityCommandPending, let qualityStore else { return }
+        qualityCommandPending = true
+        qualityControlMessage = nil
+        defer { qualityCommandPending = false }
+        do {
+            try await qualityStore.clearRecords()
+            qualityControlMessage = "已清除全部质量记录。记录开关保持不变。"
+        } catch { qualityControlMessage = "清除未完成，原有记录可能仍然保留。请稍后重试。" }
+    }
 
     init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
          voiceService: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
@@ -328,12 +363,13 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case voice = "语音"
     case smart = "AI 服务"
     case updates = "更新"
+    case quality = "质量记录"
     case feedback = "反馈与诊断"
     case about = "关于"
     static let groups: [(title: String, sections: [Self])] = [
         ("输入体验", [.input, .shortcuts, .appearance]),
         ("语言与辅助", [.personalization, .dictionaries, .voice, .smart]),
-        ("应用", [.updates, .feedback, .about])
+        ("应用", [.quality, .updates, .feedback, .about])
     ]
     static var defaultSection: Self { groups[0].sections[0] }
     var id: Self { self }
@@ -347,6 +383,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .voice: "mic"
         case .dictionaries: "books.vertical"
         case .updates: "arrow.triangle.2.circlepath"
+        case .quality: "chart.bar.doc.horizontal"
         case .feedback: "exclamationmark.bubble"
         case .about: "info.circle"
         }
@@ -393,6 +430,7 @@ struct SettingsView: View {
             Group {
                 if section == .about { AboutSettingsView() }
                 else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter, diagnosticDependencies: diagnosticDependencies) }
+                else if section == .quality { QualitySettingsView(settings: settings) }
                 else if section == .appearance { appearance }
                 else if section == .shortcuts { ShortcutsSettingsView(shortcuts: settings.shortcuts) }
                 else if section == .personalization { CustomPhrasesView(settings: settings) }

@@ -71,13 +71,32 @@ package final class QualityRecorder {
     private var clientID: String?
     private weak var associatedClient: AnyObject?
     private var hadClient = false
+    private var captureGeneration: UInt64
+    private var privacySuppressed = false
 
-    package init(store: QualityStore, clock: QualityClock = QualityClock()) { self.store = store; self.clock = clock }
+    package init(store: QualityStore, clock: QualityClock = QualityClock()) {
+        self.store = store; self.clock = clock
+        captureGeneration = store.captureState.generation
+    }
 
-    package var activeCompositionID: String? { suppressed ? nil : envelope?.composition.id }
+    package var activeCompositionID: String? { captureAllowed() && !suppressed ? envelope?.composition.id : nil }
     package var timingSnapshot: QualityTiming? { snapshotTiming(at: offsetNow) }
     package var lastEditMonotonicTime: TimeInterval? { timing?.lastEditOffset.map { monotonicStart + $0 } }
     private var offsetNow: TimeInterval { max(0, clock.monotonic() - monotonicStart) }
+
+    /// A pause/clear invalidates the entire active composition, even when resumed before the next key.
+    /// Only an observed empty input before a new operation permits capture to start again.
+    private func captureAllowed(cleanBoundary: Bool = false) -> Bool {
+        let state = store.captureState
+        if captureGeneration != state.generation || !state.enabled {
+            captureGeneration = state.generation
+            reset()
+            privacySuppressed = true
+        }
+        guard state.enabled else { return false }
+        if cleanBoundary { privacySuppressed = false }
+        return !privacySuppressed
+    }
 
     package func recordEffectiveness(_ event: QualityEffectivenessEvent) {
         _ = store.submit(event)
@@ -94,6 +113,7 @@ package final class QualityRecorder {
     }
 
     package func observeCandidateVisibility(_ isVisible: Bool, at monotonicTime: TimeInterval? = nil) {
+        guard captureAllowed() else { return }
         guard timing != nil, timing?.endedOffset == nil else { return }
         let now = monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow
         if visible, let since = visibleSince { visibleAccumulated += max(0, now - since) }
@@ -107,6 +127,7 @@ package final class QualityRecorder {
 
     /// Physical keys intercepted by the controller, including held Tabs, never enter Rime.
     package func recordExternalKey(_ kind: QualityKeyKind, isRepeat: Bool, at monotonicTime: TimeInterval? = nil) {
+        guard captureAllowed() else { return }
         guard envelope != nil, !suppressed else { return }
         envelope?.composition.operations.keypresses += 1
         sinceDecision.keypresses += 1
@@ -135,6 +156,7 @@ package final class QualityRecorder {
 
     package func willMutate(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, action: QualityAction,
                     at monotonicTime: TimeInterval? = nil) {
+        guard captureAllowed(cleanBoundary: snapshot.rawInput.isEmpty && snapshot.selectedPrefix.isEmpty && action.keypress) else { return }
         if suppressed, snapshot.rawInput.isEmpty { reset() }
         guard !suppressed else { return }
         if snapshot.rawInput.isEmpty && snapshot.candidates.isEmpty {
@@ -198,6 +220,7 @@ package final class QualityRecorder {
     }
 
     package func didMutate(_ snapshot: QualityPageSnapshot, handled: Bool) {
+        guard captureAllowed() else { return }
         if suppressed {
             // Stay disabled through the drain for an oversized committing operation.
             if snapshot.rawInput.isEmpty { latest = snapshot }
@@ -282,6 +305,7 @@ package final class QualityRecorder {
 
     /// Called after the existing controller has made the candidate list available and requested its panel.
     package func presented(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, panelShowIssued: Bool) {
+        guard captureAllowed() else { return }
         guard !suppressed, !snapshot.rawInput.isEmpty else { return }
         self.revision = revision
         ensureComposition()
@@ -293,6 +317,7 @@ package final class QualityRecorder {
     }
 
     package func commitDrained(_ text: String, insertionIssued: Bool, clientID: String?) {
+        guard captureAllowed() else { return }
         if suppressed {
             if !text.isEmpty || latest?.rawInput.isEmpty == true { reset() }
             return
@@ -531,6 +556,7 @@ package final class QualityRecorder {
     }
 
     private func finish(_ outcome: QualityCompositionOutcome, reason: String?) {
+        guard captureAllowed() else { return }
         guard !suppressed else { reset(); return }
         guard var record = envelope else { reset(); return }
         for index in record.decisions.indices where record.decisions[index].outcome == .tentative {

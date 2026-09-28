@@ -101,8 +101,12 @@ impact_classify() {
     macOS/Tests/*Voice*.swift|macOS/scripts/test-*voice*.sh)
       impact_rule "$path" 'voice test domain' voice-session apple-voice voice-lexicon voice-controller ;;
 
+    macOS/Sources/QualitySettingsView.swift)
+      impact_rule "$path" 'quality recording controls' quality settings
+      impact_manual_add manual-input manual-settings ;;
     Core/Sources/InkFlowRime/Quality*|macOS/Sources/Quality*|macOS/Tests/Quality*|macOS/scripts/*quality*.sh|macOS/Tools/QualityBuildMetadata.swift|tools/quality*.py)
       impact_rule "$path" 'input quality domain' quality
+      case "$path" in Core/Sources/InkFlowRime/QualityStore.swift|Core/Sources/InkFlowRime/QualityRecords.swift|Core/Sources/InkFlowRime/QualityRecorder.swift) impact_rule "$path" 'quality settings store integration' settings; impact_manual_add manual-input manual-settings ;; esac
       case "$path" in macOS/Tools/QualityBuildMetadata.swift|macOS/scripts/*quality-metadata.sh) impact_release_tools=true ;; esac ;;
     macOS/Quality/*)
       impact_rule "$path" 'packaged quality identity' quality-metadata workflow
@@ -145,7 +149,7 @@ impact_classify() {
       impact_rule "$path" 'about settings presentation' settings
       impact_manual_add manual-settings ;;
     macOS/Sources/Settings.swift|macOS/Sources/SmartSettingsView.swift|macOS/Sources/KeyboardShortcuts.swift)
-      impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless
+      impact_rule "$path" 'shared settings and AI integration' settings engine-options controller voice-controller ai-transport ai-runtime ai-headless quality
       impact_manual_add manual-input manual-settings ;;
     macOS/Sources/AvailableUpdate.swift|macOS/Sources/GitHubRelease*.swift|macOS/Sources/SemanticVersion.swift|macOS/Sources/Update*.swift)
       impact_rule "$path" 'Sparkle updater settings and legacy preference migration' settings
@@ -184,7 +188,7 @@ impact_classify() {
       impact_rule "$path" 'startup diagnostics' startup-diagnostics ;;
 
     macOS/Sources/ApplicationBootstrap.swift|macOS/Sources/main.swift)
-      impact_rule "$path" 'Sparkle updater integration, bootstrap and application settings' settings local-diagnostics termination
+      impact_rule "$path" 'Sparkle updater integration, bootstrap and application settings' settings local-diagnostics termination quality
       impact_bundle=true; impact_release_tools=true
       impact_manual_add manual-settings ;;
     macOS/Sources/Application*|macOS/Sources/main.swift)

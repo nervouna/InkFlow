@@ -37,6 +37,12 @@ not_has() { ! grep -Fq -- "$1" "$fixture/output" || { cat "$fixture/output"; ech
 # macOS Bash 3.2 with nounset must accept the first manual item in an empty array.
 bash -c 'set -euo pipefail; source macOS/scripts/test-impact.sh; impact_reset; impact_manual_add manual-settings; [[ ${#impact_manual[@]} == 1 && ${impact_manual[0]} == manual-settings ]]'
 
+for path in macOS/Sources/QualitySettingsView.swift Core/Sources/InkFlowRime/QualityStore.swift macOS/Sources/Settings.swift macOS/Sources/ApplicationBootstrap.swift; do
+  new_case
+  change "$path"; plan
+  has 'quality-store'; has 'quality-capture-query'; has 'settings'; has 'manual-settings'
+done
+
 new_case
 mkdir -p "$case_root/build"; printf ignored > "$case_root/build/untracked.swift"
 plan --run; has 'Units: none'; [[ ! -s "$INKFLOW_AFFECTED_LOG" ]]
