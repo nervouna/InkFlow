@@ -60,7 +60,9 @@ package struct QualityStoreStatistics: Codable, Equatable, Sendable {
 }
 
 package enum QualitySubmission: Equatable, Sendable { case accepted, queueFull, oversized, invalid, disabled }
-package enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCommit, beforeMigrationCommit }
+package enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCommit, beforeMigrationCommit, beforeMaintenanceCommit }
+
+package enum QualityControlError: Error { case unavailable, commandPending, database(Int32) }
 
 /// Test hooks run on the worker only. Production leaves them empty.
 package struct QualityStoreHooks: Sendable {
@@ -91,6 +93,9 @@ package final class QualityStore: @unchecked Sendable {
     private var acceptedSequence = 0
     private var scheduled = false
     private var accepting = true
+    private var paused: Bool
+    private var commandPending = false
+    private var captureGeneration: UInt64 = 0
     private var stats = QualityStoreStatistics()
     private let database: QualityDatabase
     private let hooks: QualityStoreHooks
@@ -99,11 +104,16 @@ package final class QualityStore: @unchecked Sendable {
     private var ready = false
     private var closed = false
     private var closeSucceeded = false
+    private let maintenanceNow: @Sendable () -> Date
+    private var lastMaintenance: Date?
 
-    package init(url: URL, engineVersion: String, buildMetadata: QualityBuildMetadata? = nil,
-         metadataURL: URL? = nil, hooks: QualityStoreHooks = QualityStoreHooks()) {
+    package init(maintenanceNow: @escaping @Sendable () -> Date = { Date() },
+         url: URL, engineVersion: String, buildMetadata: QualityBuildMetadata? = nil,
+         metadataURL: URL? = nil, hooks: QualityStoreHooks = QualityStoreHooks(), paused: Bool = false) {
         runID = UUID().uuidString
         self.hooks = hooks
+        self.paused = paused
+        self.maintenanceNow = maintenanceNow
         database = QualityDatabase(url: url, runID: runID, engineVersion: engineVersion,
                                    buildMetadata: buildMetadata, metadataURL: metadataURL, hooks: hooks)
         // Queue/timer creation is in-memory; even locating the bundled manifest happens below.
@@ -135,7 +145,7 @@ package final class QualityStore: @unchecked Sendable {
         let bytes = bounded?.retainedBytes ?? 0
         return lock.withLock {
             stats.submitted += 1
-            guard accepting && !stats.disabled else { stats.droppedDisabled += 1; return .disabled }
+            guard accepting && !stats.disabled && !paused && !commandPending else { stats.droppedDisabled += 1; return .disabled }
             guard !invalid else { stats.droppedInvalid += 1; return .invalid }
             guard let bounded else { stats.droppedOversized += 1; return .oversized }
             guard pending.count + inFlight < QualityLimits.bufferedEnvelopes,
@@ -163,20 +173,20 @@ package final class QualityStore: @unchecked Sendable {
             lock.withLock { stats.submitted += 1; stats.droppedInvalid += 1 }
             return .invalid
         }
-        let accepted = lock.withLock { () -> Bool in
+        let generation = lock.withLock { () -> UInt64? in
             stats.submitted += 1
-            guard accepting && !stats.disabled else { stats.droppedDisabled += 1; return false }
+            guard accepting && !stats.disabled && !paused && !commandPending else { stats.droppedDisabled += 1; return nil }
             guard effectivenessInFlight < QualityLimits.bufferedEffectivenessEvents else {
                 stats.droppedQueue += 1
-                return false
+                return nil
             }
             effectivenessInFlight += 1
             stats.buffered = pending.count + inFlight + effectivenessInFlight
             stats.peakBuffered = max(stats.peakBuffered, stats.buffered)
-            return true
+            return captureGeneration
         }
-        guard accepted else { return statsDisabled ? .disabled : .queueFull }
-        queue.async { [weak self] in self?.write(event) }
+        guard let generation else { return captureState.enabled ? .queueFull : .disabled }
+        queue.async { [weak self] in self?.write(event, generation: generation) }
         return .accepted
     }
 
@@ -190,6 +200,74 @@ package final class QualityStore: @unchecked Sendable {
     }
 
     package func statistics() -> QualityStoreStatistics { lock.withLock { stats } }
+
+    package var captureState: (generation: UInt64, enabled: Bool) {
+        lock.withLock { (captureGeneration, accepting && !stats.disabled && !paused && !commandPending) }
+    }
+
+    /// The memory gate changes before the worker barrier. No caller waits for disk under the lock.
+    package func setPaused(_ paused: Bool) async throws {
+        try beginControl(paused: paused)
+        try await finishControl(clear: false)
+    }
+
+    package func clearRecords() async throws {
+        try beginControl(paused: nil)
+        try await finishControl(clear: true)
+    }
+
+    private func beginControl(paused newValue: Bool?) throws {
+        try lock.withLock {
+            guard accepting && !stats.disabled else { throw QualityControlError.unavailable }
+            guard !commandPending else { throw QualityControlError.commandPending }
+            commandPending = true
+            if let newValue { paused = newValue }
+            captureGeneration &+= 1
+            stats.droppedDisabled += pending.count
+            stats.bufferedBytes -= pending.reduce(0) { $0 + $1.bytes }
+            pending.removeAll()
+            stats.buffered = inFlight + effectivenessInFlight
+        }
+    }
+
+    private func finishControl(clear: Bool) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async { [self] in
+                guard startIfNeeded() else {
+                    lock.withLock { commandPending = false }
+                    continuation.resume(throwing: QualityControlError.unavailable)
+                    return
+                }
+                do {
+                    if clear { try database.removeRecords(before: nil, now: maintenanceNow()) }
+                    lock.withLock { commandPending = false }
+                    continuation.resume()
+                } catch {
+                    handle(error, count: 0)
+                    lock.withLock { commandPending = false }
+                    continuation.resume(throwing: QualityControlError.database((error as? QualityDatabaseError)?.code ?? SQLITE_IOERR))
+                }
+            }
+        }
+    }
+
+    /// Maintenance is also callable by deterministic tests; the timer uses the same worker path.
+    package func maintainRetention() async {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                if startIfNeeded() { pruneIfNeeded(force: true) }
+                continuation.resume()
+            }
+        }
+    }
+
+    private func pruneIfNeeded(force: Bool = false) {
+        let now = maintenanceNow()
+        guard force || lastMaintenance.map({ now.timeIntervalSince($0) >= QualityLimits.maintenanceInterval }) ?? true else { return }
+        lastMaintenance = now
+        do { try database.removeRecords(before: now.addingTimeInterval(-Double(QualityLimits.rawRetentionDays) * 86_400), now: now) }
+        catch { handle(error, count: 0) }
+    }
 
     /// Only lifecycle/tests/tools await this. Event handlers must never wait for disk.
     /// Drains the accepted prefix at invocation; later submissions need not have finished.
@@ -273,6 +351,7 @@ package final class QualityStore: @unchecked Sendable {
     private func tick() {
         guard !closed && !statsDisabled else { return }
         writeBatch(upTo: Int.max)
+        if ready { pruneIfNeeded() }
         saveRunStatistics()
     }
 
@@ -282,7 +361,8 @@ package final class QualityStore: @unchecked Sendable {
         do {
             try database.start(statistics: statistics())
             ready = true
-            return true
+            pruneIfNeeded()
+            return !statsDisabled
         } catch {
             handle(error, count: 0)
             return false
@@ -299,12 +379,12 @@ package final class QualityStore: @unchecked Sendable {
 
     private func writeBatch(upTo target: Int) {
         guard !closed else { return }
-        let retainedBatch = lock.withLock {
+        let (retainedBatch, generation) = lock.withLock {
             let count = pending.prefix(QualityLimits.batchEnvelopes).prefix { $0.sequence <= target }.count
             let batch = Array(pending.prefix(count))
             pending.removeFirst(count)
             inFlight += count
-            return batch
+            return (batch, captureGeneration)
         }
         let batch = retainedBatch.map(\.envelope)
         guard !batch.isEmpty else { _ = startIfNeeded(); return }
@@ -327,13 +407,17 @@ package final class QualityStore: @unchecked Sendable {
             return
         }
         hooks.beforeBatch?()
+        guard lock.withLock({ generation == captureGeneration }) else {
+            lock.withLock { stats.droppedDisabled += batch.count }
+            return
+        }
         do {
             outcome = try database.write(batch)
         } catch { handle(error, count: batch.count) }
     }
 
 
-    private func write(_ event: QualityEffectivenessEvent) {
+    private func write(_ event: QualityEffectivenessEvent, generation: UInt64) {
         var written = 0
         defer {
             lock.withLock {
@@ -342,12 +426,12 @@ package final class QualityStore: @unchecked Sendable {
                 stats.buffered = pending.count + inFlight + effectivenessInFlight
             }
         }
-        guard startIfNeeded() else {
+        guard lock.withLock({ generation == captureGeneration }), startIfNeeded() else {
             lock.withLock { stats.droppedDisabled += 1 }
             return
         }
         do {
-            try database.write(event)
+            try database.write(event, now: maintenanceNow())
             written = 1
         } catch { handle(error, count: 1) }
     }
@@ -388,7 +472,9 @@ package final class QualityStore: @unchecked Sendable {
             LocalDiagnostics.shared.submit(.init(module: .statistics, event: "qualityStoreDisabled", outcome: .failed,
                 errorDomain: .sqlite, errorCode: Int(code)))
             // No input, SQL, filesystem path, or arbitrary SQLite error text enters logs.
-            NSLog("InkFlow quality recording disabled (code %d)", code)
+            if let systemError = databaseError?.systemError {
+                NSLog("InkFlow quality recording disabled (code %d, system errno %d)", code, systemError)
+            } else { NSLog("InkFlow quality recording disabled (code %d)", code) }
             hooks.loggedFailure?(code)
             var finalStatistics = statistics()
             finalStatistics.buffered = 0
@@ -401,6 +487,7 @@ package final class QualityStore: @unchecked Sendable {
 private struct QualityDatabaseError: Error {
     package var code: Int32
     package var identityFailure: String? = nil
+    package var systemError: Int32? = nil
 }
 
 private enum QualitySQLValue {
@@ -454,6 +541,7 @@ private final class QualityDatabase: @unchecked Sendable {
         }
         try validateSchema()
         try execute("PRAGMA foreign_keys = ON")
+        try execute("PRAGMA secure_delete = ON")
         guard try scalar("PRAGMA foreign_keys") == "1" else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
         guard try scalar("PRAGMA journal_mode = DELETE") == "delete" else { throw QualityDatabaseError(code: Self.unsupportedSchema) }
         if !runStarted {
@@ -603,7 +691,7 @@ private final class QualityDatabase: @unchecked Sendable {
         } catch { rollback(); throw error }
     }
 
-    package func write(_ event: QualityEffectivenessEvent) throws {
+    package func write(_ event: QualityEffectivenessEvent, now: Date) throws {
         guard event.isValid else { throw QualityDatabaseError(code: SQLITE_CONSTRAINT) }
         try execute("BEGIN IMMEDIATE")
         do {
@@ -611,9 +699,44 @@ private final class QualityDatabase: @unchecked Sendable {
                         [.text(runID), .text(QualityJSON.timestamp(event.occurredAt)), .text(event.source.rawValue),
                          .text(event.event.rawValue), .optional(event.reason?.rawValue), .integer(event.count),
                          .optional(event.milliseconds)])
-            try execute("DELETE FROM effectiveness_events WHERE julianday(occurred_at) < julianday('now', '-\(QualityLimits.effectivenessRetentionDays) days')")
+            try execute("DELETE FROM effectiveness_events WHERE occurred_at < ?", [.text(QualityJSON.timestamp(now.addingTimeInterval(-Double(QualityLimits.effectivenessRetentionDays) * 86_400)))])
             try execute("DELETE FROM effectiveness_events WHERE id NOT IN (SELECT id FROM effectiveness_events ORDER BY id DESC LIMIT \(QualityLimits.effectivenessRetentionRows))")
             try inject(.beforeCommit)
+            try execute("COMMIT")
+        } catch { rollback(); throw error }
+    }
+
+    /// Delete children first because the existing schema intentionally has no cascading deletes.
+    /// Logical removal is atomic; secure_delete does not promise erasure from filesystem snapshots.
+    package func removeRecords(before cutoff: Date?, now: Date) throws {
+        try execute("BEGIN IMMEDIATE")
+        do {
+            let predicate = cutoff == nil ? "1" : "started_at < ?"
+            let values: [QualitySQLValue] = cutoff.map { [.text(QualityJSON.timestamp($0))] } ?? []
+            try execute("DELETE FROM candidate_decisions WHERE composition_id IN (SELECT id FROM compositions WHERE \(predicate))", values)
+            try execute("DELETE FROM commits WHERE composition_id IN (SELECT id FROM compositions WHERE \(predicate))", values)
+            try execute("DELETE FROM compositions WHERE \(predicate)", values)
+            // Compact historical pages can refer to a different revision than the final snapshot.
+            try execute("""
+                WITH referenced(id) AS (
+                    SELECT config_revision_id FROM candidate_decisions
+                    UNION SELECT json_extract(first_page_json, '$.configurationRevisionID')
+                        FROM candidate_decisions WHERE first_page_json IS NOT NULL
+                    UNION SELECT json_extract(value, '$.configurationRevisionID')
+                        FROM candidate_decisions, json_each(visited_pages_json)
+                )
+                DELETE FROM config_revisions WHERE id NOT IN (SELECT id FROM referenced WHERE id IS NOT NULL)
+                """)
+            if cutoff == nil { try execute("DELETE FROM effectiveness_events") }
+            else {
+                try execute("DELETE FROM effectiveness_events WHERE occurred_at < ?", [.text(QualityJSON.timestamp(now.addingTimeInterval(-Double(QualityLimits.effectivenessRetentionDays) * 86_400)))])
+                try execute("DELETE FROM effectiveness_events WHERE id NOT IN (SELECT id FROM effectiveness_events ORDER BY id DESC LIMIT \(QualityLimits.effectivenessRetentionRows))")
+            }
+            let age = cutoff == nil ? "" : " AND started_at < ?"
+            var runValues: [QualitySQLValue] = [.text(runID)]
+            if let cutoff { runValues.append(.text(QualityJSON.timestamp(cutoff))) }
+            try execute("DELETE FROM recording_runs WHERE id != ? AND id NOT IN (SELECT run_id FROM compositions) AND id NOT IN (SELECT run_id FROM effectiveness_events)\(age)", runValues)
+            try inject(.beforeMaintenanceCommit)
             try execute("COMMIT")
         } catch { rollback(); throw error }
     }
@@ -730,7 +853,12 @@ private final class QualityDatabase: @unchecked Sendable {
     private func rollback() {
         if sqlite3_get_autocommit(connection) == 0 { _ = sqlite3_exec(connection, "ROLLBACK", nil, nil, nil) }
     }
-    private func check(_ code: Int32) throws { if code != SQLITE_OK { throw QualityDatabaseError(code: code) } }
+    private func databaseError(_ code: Int32) -> QualityDatabaseError {
+        let extended = sqlite3_extended_errcode(connection)
+        return QualityDatabaseError(code: (extended & 0xff) == (code & 0xff) ? extended : code,
+                                    systemError: sqlite3_system_errno(connection))
+    }
+    private func check(_ code: Int32) throws { if code != SQLITE_OK { throw databaseError(code) } }
     private func execute(_ sql: String, _ values: [QualitySQLValue] = []) throws {
         _ = try query(sql, values)
     }
@@ -754,7 +882,7 @@ private final class QualityDatabase: @unchecked Sendable {
         while true {
             let code = sqlite3_step(statement)
             if code == SQLITE_DONE { return rows }
-            guard code == SQLITE_ROW else { throw QualityDatabaseError(code: code) }
+            guard code == SQLITE_ROW else { throw databaseError(code) }
             rows.append((0..<sqlite3_column_count(statement)).map { column in
                 guard let text = sqlite3_column_text(statement, column) else { return "" }
                 return String(decoding: UnsafeBufferPointer(start: text, count: Int(sqlite3_column_bytes(statement, column))), as: UTF8.self)

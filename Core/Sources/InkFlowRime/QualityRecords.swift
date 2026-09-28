@@ -709,6 +709,8 @@ package enum QualityLimits {
     package static let effectivenessMaxMilliseconds = 60_000
     package static let effectivenessRetentionRows = 4_096
     package static let effectivenessRetentionDays = 90
+    package static let rawRetentionDays = 28
+    package static let maintenanceInterval: TimeInterval = 3_600
 }
 
 /// Conservative logical retained-byte budget. The worker separately checks encoded bytes.

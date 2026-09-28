@@ -40,6 +40,8 @@ private final class Reader {
 }
 private enum TestError: Error { case failed }
 
+private let maintenanceDate = Date(timeIntervalSince1970: 1_768_435_200) // 2026-01-15 UTC
+
 private let metadata = QualityBuildMetadata(sourceRevision: "source", sourceTreeSHA256: String(repeating: "a", count: 64),
     sourceDirty: true, bundledResourcesSHA256: String(repeating: "b", count: 64),
     bundleSHA256: String(repeating: "c", count: 64), rankingSourceSHA256: String(repeating: "d", count: 64),
@@ -148,7 +150,7 @@ struct QualityStoreTests {
         }
         let url = try makeURL("reopen")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = QualityStore(url: url, engineVersion: "test-engine", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test-engine", buildMetadata: metadata)
         var record = fixture("reopen")
         record.composition.operations = QualityOperations(keypresses: 8, pageRequests: 2, pageTurns: 2, candidateMoves: 1, preeditEdits: 1)
         record.decisions[0].operations = record.composition.operations
@@ -186,7 +188,7 @@ struct QualityStoreTests {
         expect(decoded == expected, "rank mapping and Unicode JSON round trip")
         await store.close()
         expect(try reader.scalar("SELECT status FROM recording_runs") == "closed", "orderly close persisted")
-        let reopened = QualityStore(url: url, engineVersion: "test-engine", buildMetadata: metadata)
+        let reopened = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test-engine", buildMetadata: metadata)
         await reopened.flush()
         expect(try reader.scalar("SELECT count(*) FROM compositions") == "1", "reopen retains data")
         expect(try reader.scalar("SELECT count(*) FROM recording_runs") == "2", "each launch creates a run")
@@ -205,6 +207,10 @@ struct QualityStoreTests {
         try await identityFailures()
         try await schemaAndOpenFailures()
         try await metadataAndRevisions()
+        try await recordingControls()
+        try await queuedControlBarrier()
+        try await retentionAndRollback()
+        try await idleRetention()
         print("PASS quality store: 10 persistence/failure groups")
     }
 }
@@ -231,11 +237,152 @@ private final class Counter: @unchecked Sendable {
     func read() -> Int { lock.withLock { value } }
 }
 
+private final class MaintenanceClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var date = maintenanceDate
+    let observedAdvance = DispatchSemaphore(value: 0)
+    func now() -> Date {
+        let value = lock.withLock { date }
+        if value > maintenanceDate { observedAdvance.signal() }
+        return value
+    }
+    func advance() { lock.withLock { date = date.addingTimeInterval(29 * 86_400) } }
+    func waitForAdvance() -> Bool { observedAdvance.wait(timeout: .now() + 3) == .success }
+}
+
 private extension QualityStoreTests {
+    static func idleRetention() async throws {
+        let url = try makeURL("idle-retention")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let clock = MaintenanceClock()
+        let store = QualityStore(maintenanceNow: { clock.now() }, url: url, engineVersion: "test", buildMetadata: metadata)
+        var envelope = fixture("idle")
+        envelope.composition.startedAt = maintenanceDate
+        store.submit(envelope)
+        await store.flush()
+        try await store.setPaused(true)
+        expect(store.statistics().written == 1, "fresh record persisted before elapsed retention")
+        clock.advance()
+        // Observe the real timer on its injected clock, then await its worker barrier. Frequent
+        // same-process read-only SQLite queries race the system VFS locks on macOS (IOERR_LOCK).
+        let tickObserved = await Task.detached { clock.waitForAdvance() }.value
+        expect(tickObserved, "idle maintenance timer observed advanced clock; stats=\(store.statistics())")
+        await store.flush()
+        expect(!store.statistics().disabled, "idle maintenance writer remains healthy; stats=\(store.statistics())")
+        await store.close()
+        let reader = try Reader(url)
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "0", "idle timer prunes while paused without new input; stats=\(store.statistics())")
+        print("PASS quality idle retention: timer prunes while paused without new input")
+    }
+
+    static func queuedControlBarrier() async throws {
+        let url = try makeURL("queued-control")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let gate = Gate()
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
+                                 hooks: .init(beforeBatch: { gate.blockOnce() }))
+        for index in 0..<QualityLimits.batchEnvelopes { store.submit(fixture("blocked-\(index)")) }
+        await Task.detached { gate.wait() }.value
+        store.submit(fixture("queued"))
+        store.submit(.init(source: .voiceSession, event: .finalized))
+        let generation = store.captureState.generation
+        let clear = Task { try await store.clearRecords() }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while store.captureState.generation == generation && ContinuousClock.now < deadline { await Task.yield() }
+        expect(!store.captureState.enabled, "clear closes memory gate before worker completes")
+        expect(store.submit(fixture("during-clear")) == .disabled, "clear rejects concurrent capture")
+        gate.release.signal()
+        try await clear.value
+        await store.flush()
+        let reader = try Reader(url)
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "0", "queued and in-flight text cannot resurrect")
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "0", "queued events cannot resurrect")
+        expect(store.statistics().buffered == 0 && store.statistics().bufferedBytes == 0, "invalidated queue accounting drains")
+        await store.close()
+        print("PASS quality control barrier: blocked worker and queued text/events do not resurrect")
+    }
+
+    static func retentionAndRollback() async throws {
+        let url = try makeURL("retention")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let faults = Counter()
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
+            hooks: .init(fault: { point in
+                point == .beforeMaintenanceCommit && [2, 4].contains(faults.increment()) ? SQLITE_BUSY : nil
+            }))
+        for (id, offset) in [("expired", -1.0), ("boundary", 0.0), ("recent", 1.0)] {
+            var envelope = fixture(id)
+            envelope.composition.startedAt = maintenanceDate.addingTimeInterval(-28 * 86_400 + offset)
+            if id == "boundary" {
+                for suffix in ["first", "visited"] {
+                    var revision = envelope.revisions[0]
+                    revision.id += "-" + suffix
+                    var page = envelope.decisions[0].snapshot
+                    page.configurationRevisionID = revision.id
+                    envelope.revisions.append(revision)
+                    if suffix == "first" { envelope.decisions[0].firstPage = page }
+                    else { envelope.decisions[0].visitedPages = [page] }
+                }
+            }
+            store.submit(envelope)
+        }
+        await store.flush()
+        let reader = try Reader(url)
+        await store.maintainRetention() // Inject failure after all deletes, before commit.
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "3", "retention transaction rolls back all children")
+        expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "rollback restores FK integrity")
+        await store.maintainRetention()
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "2", "strict 28-day cutoff keeps exact boundary")
+        expect(try reader.scalar("SELECT count(*) FROM config_revisions") == "4", "prune removes orphan configurations but preserves compact first/visited page references")
+        do { try await store.clearRecords(); fatalError("injected clear failure was hidden") } catch { }
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "2", "failed clear reports failure and rolls back")
+        expect(store.captureState.enabled, "nonfatal clear failure leaves capture available")
+        store.submit(.init(source: .voiceSession, event: .finalized, occurredAt: maintenanceDate.addingTimeInterval(-90 * 86_400)))
+        store.submit(.init(source: .voiceSession, event: .finalized, occurredAt: maintenanceDate.addingTimeInterval(-90 * 86_400 - 1)))
+        await store.flush()
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "strict 90-day event cutoff")
+        let writer = try Reader(url, writable: true)
+        try writer.execute("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < 4100) INSERT INTO effectiveness_events (run_id, occurred_at, source, event, count) SELECT '\(store.runID)', '\(QualityJSON.timestamp(maintenanceDate))', 'voice_session', 'finalized', 1 FROM n")
+        await store.maintainRetention()
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "4096", "maintenance enforces event count without new submissions")
+        await store.close()
+        let reopened = QualityStore(maintenanceNow: { maintenanceDate.addingTimeInterval(91 * 86_400) },
+            url: url, engineVersion: "test", buildMetadata: metadata, paused: true)
+        await reopened.flush()
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "0", "startup prunes even when paused")
+        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "0", "startup prunes aged events without a new event")
+        expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "startup cleanup preserves run identity")
+        await reopened.close()
+        print("PASS quality retention: cutoff boundaries, rollback and paused startup maintenance")
+    }
+
+    static func recordingControls() async throws {
+        let url = try makeURL("controls")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata, paused: true)
+        expect(store.submit(fixture("paused")) == .disabled, "initial pause blocks capture")
+        try await store.setPaused(false)
+        expect(store.submit(fixture("before-clear")) == .accepted, "resume accepts new records")
+        await store.flush()
+        try await store.clearRecords()
+        let reader = try Reader(url)
+        for table in ["compositions", "commits", "candidate_decisions", "config_revisions", "effectiveness_events"] {
+            expect(try reader.scalar("SELECT count(*) FROM \(table)") == "0", "clear removes \(table)")
+        }
+        expect(store.submit(fixture("after-clear")) == .accepted, "clear allows future capture")
+        await store.flush()
+        expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "clear preserves current run FK")
+        try await store.setPaused(true)
+        expect(store.submit(.init(source: .voiceSession, event: .finalized)) == .disabled, "pause also blocks events")
+        await store.close()
+        do { try await store.setPaused(false); fatalError("closed store resumed") } catch { }
+        print("PASS quality controls: initial pause, resume, clear, FK, close")
+    }
+
     static func effectivenessEvents() async throws {
         let url = try makeURL("effectiveness")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         let events = [
             QualityEffectivenessEvent(source: .voiceSession, event: .finalized),
             QualityEffectivenessEvent(source: .voiceCorrection, event: .detected, milliseconds: 350),
@@ -252,7 +399,7 @@ private extension QualityStoreTests {
         expect(store.submit(.init(source: .voiceSession, event: .learned)) == .invalid,
                "invalid source/event pairing fails before the worker")
         expect(store.submit(.init(source: .voiceSession, event: .finalized,
-                                  occurredAt: Date(timeIntervalSinceNow: -100 * 86_400))) == .accepted,
+                                  occurredAt: maintenanceDate.addingTimeInterval(-100 * 86_400))) == .accepted,
                "old event reaches bounded retention")
         await store.flush()
         let reader = try Reader(url)
@@ -268,7 +415,7 @@ private extension QualityStoreTests {
         await store.close()
         let failedURL = try makeURL("effectiveness-failure")
         defer { try? FileManager.default.removeItem(at: failedURL.deletingLastPathComponent()) }
-        let failed = QualityStore(url: failedURL, engineVersion: "test", buildMetadata: metadata,
+        let failed = QualityStore(maintenanceNow: { maintenanceDate }, url: failedURL, engineVersion: "test", buildMetadata: metadata,
             hooks: .init(fault: { $0 == .beforeCommit ? SQLITE_IOERR : nil }))
         expect(failed.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
                "effectiveness producer never waits for writer success")
@@ -280,7 +427,7 @@ private extension QualityStoreTests {
         let v2URL = try makeURL("effectiveness-v2")
         defer { try? FileManager.default.removeItem(at: v2URL.deletingLastPathComponent()) }
         try createV2Database(at: v2URL)
-        let migrated = QualityStore(url: v2URL, engineVersion: "test", buildMetadata: metadata)
+        let migrated = QualityStore(maintenanceNow: { maintenanceDate }, url: v2URL, engineVersion: "test", buildMetadata: metadata)
         expect(migrated.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
                "v2 database accepts deferred v3 migration")
         await migrated.close()
@@ -296,7 +443,7 @@ private extension QualityStoreTests {
         let url = try makeURL("v1-migration")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         try createV1Database(at: url)
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         expect(store.submit(fixture("after-migration")) == .accepted, "migration stays off producer path")
         await store.close()
         let reader = try Reader(url)
@@ -319,7 +466,7 @@ private extension QualityStoreTests {
         defer { try? FileManager.default.removeItem(at: rollbackURL.deletingLastPathComponent()) }
         try createV1Database(at: rollbackURL)
         let before = try Data(contentsOf: rollbackURL)
-        let failed = QualityStore(url: rollbackURL, engineVersion: "test", buildMetadata: metadata,
+        let failed = QualityStore(maintenanceNow: { maintenanceDate }, url: rollbackURL, engineVersion: "test", buildMetadata: metadata,
             hooks: QualityStoreHooks(fault: { point in
                 if case .beforeMigrationCommit = point { return SQLITE_IOERR }
                 return nil
@@ -338,7 +485,7 @@ private extension QualityStoreTests {
             if version == 1 { try createV1Database(at: url) }
             else if version == 2 { try createV2Database(at: url) }
             else {
-                let seed = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+                let seed = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
                 await seed.close()
             }
             do {
@@ -354,7 +501,7 @@ private extension QualityStoreTests {
                 expect(try reader.scalar("PRAGMA user_version") == String(version),
                        "Fixture keeps requested schema version")
             }
-            let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+            let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
             expect(store.submit(fixture("malformed-\(label)")) == .accepted,
                    "Malformed topology detection stays off the producer path")
             await store.close()
@@ -387,7 +534,7 @@ private extension QualityStoreTests {
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         var incomplete = metadata
         incomplete.rankingSourceSHA256 = "unknown"
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: incomplete)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: incomplete)
         expect(store.submit(fixture("identity-a")) == .accepted && store.submit(fixture("identity-b")) == .accepted,
                "identity generation remains deferred from producer")
         await store.close()
@@ -409,7 +556,7 @@ private extension QualityStoreTests {
     static func configurationBudgetsAndReferences() async throws {
         let url = try makeURL("configuration-budgets")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         func configured(_ id: String, count: Int, text: String = "短语") -> QualityEnvelope {
             var value = fixture(id)
             let config = QualityAppliedConfiguration(candidateCount: 5, customPhrases: (0..<count).map {
@@ -460,7 +607,7 @@ private extension QualityStoreTests {
         expect(reference.retainedBytes > 60_000, "reference-only page configuration is charged")
         expect(store.submit(reference) == .accepted, "existing revision may be referenced without resending")
         await store.close()
-        let reopened = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let reopened = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         expect(reopened.submit(configured("after-reopen", count: 50)) == .accepted, "mixed legacy and compact database reopens")
         await reopened.flush()
         expect(try reader.scalar("SELECT count(*) FROM compositions") == "8", "legacy and compact records preserved on reopen")
@@ -501,7 +648,7 @@ private extension QualityStoreTests {
         let pressureURL = try makeURL("byte-pressure")
         defer { try? FileManager.default.removeItem(at: pressureURL.deletingLastPathComponent()) }
         let gate = Gate()
-        let pressure = QualityStore(url: pressureURL, engineVersion: "test", buildMetadata: metadata,
+        let pressure = QualityStore(maintenanceNow: { maintenanceDate }, url: pressureURL, engineVersion: "test", buildMetadata: metadata,
             hooks: QualityStoreHooks(beforeBatch: { gate.blockOnce() }))
         await pressure.flush()
         for index in 0..<16 { expect(pressure.submit(configured("byte-\(index)", count: 1, text: String(repeating: "x", count: 100_000))) == .accepted, "initial batch accepted") }
@@ -524,7 +671,7 @@ private extension QualityStoreTests {
         let url = try makeURL("atomicity")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let gate = Gate()
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
             hooks: QualityStoreHooks(fault: { point in
                 if case .beforeCommit = point { gate.blockOnce() }
                 return nil
@@ -554,7 +701,7 @@ private extension QualityStoreTests {
     static func busyLocks() async throws {
         let url = try makeURL("busy")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         await store.flush()
         let locker = try Reader(url, writable: true)
         try locker.execute("BEGIN IMMEDIATE")
@@ -584,7 +731,7 @@ private extension QualityStoreTests {
         let url = try makeURL("close")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let gate = Gate()
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
                                  hooks: .init(beforeOpen: { gate.blockOnce() }))
         gate.wait()
         expect(store.submit(fixture("close-pending")) == .accepted, "close fixture accepts pending composition")
@@ -607,7 +754,7 @@ private extension QualityStoreTests {
 
         let lockedURL = try makeURL("close-locked")
         defer { try? FileManager.default.removeItem(at: lockedURL.deletingLastPathComponent()) }
-        let locked = QualityStore(url: lockedURL, engineVersion: "test", buildMetadata: metadata)
+        let locked = QualityStore(maintenanceNow: { maintenanceDate }, url: lockedURL, engineVersion: "test", buildMetadata: metadata)
         await locked.flush()
         let locker = try Reader(lockedURL, writable: true)
         try locker.execute("BEGIN IMMEDIATE")
@@ -628,7 +775,7 @@ private extension QualityStoreTests {
         let url = try makeURL("pressure")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let gate = Gate()
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
                                  hooks: QualityStoreHooks(beforeBatch: { gate.blockOnce() }))
         await store.flush()
         for index in 0..<16 { store.submit(fixture("pressure-\(index)")) }
@@ -660,7 +807,7 @@ private extension QualityStoreTests {
     static func budgets() async throws {
         let url = try makeURL("budgets")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
         var history = fixture("history")
         var first = history.decisions[0].snapshot
         first.page = 0
@@ -693,7 +840,7 @@ private extension QualityStoreTests {
             let url = try makeURL("fatal")
             defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             let logged = Counter()
-            let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata,
+            let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
                 hooks: QualityStoreHooks(fault: { point in
                     if case .afterComposition = point { return code }
                     return nil
@@ -701,6 +848,8 @@ private extension QualityStoreTests {
             store.submit(fixture("fatal-\(code)"))
             await store.flush()
             expect(store.statistics().disabled && store.statistics().lastErrorCode == code, "fatal code disables run")
+            do { try await store.setPaused(false); fatalError("fatal store resumed") } catch { }
+            expect(!store.captureState.enabled, "resume cannot revive fatal writer failure")
             expect(store.submit(fixture("disabled-\(code)")) == .disabled, "disabled store rejects later record")
             await store.flush()
             await store.close()
@@ -719,7 +868,7 @@ private extension QualityStoreTests {
             defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             do { let writer = try Reader(url, writable: true); try writer.execute(setup) }
             let before = try Data(contentsOf: url)
-            let store = QualityStore(url: url, engineVersion: "test", buildMetadata: metadata)
+            let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
             store.submit(fixture())
             await store.close()
             expect(store.statistics().disabled, "foreign or unknown schema disabled")
@@ -729,7 +878,7 @@ private extension QualityStoreTests {
         defer { try? FileManager.default.removeItem(at: corrupt.deletingLastPathComponent()) }
         let original = Data("not a sqlite database".utf8)
         try original.write(to: corrupt)
-        let bad = QualityStore(url: corrupt, engineVersion: "test", buildMetadata: metadata)
+        let bad = QualityStore(maintenanceNow: { maintenanceDate }, url: corrupt, engineVersion: "test", buildMetadata: metadata)
         await bad.close()
         expect(try bad.statistics().disabled && Data(contentsOf: corrupt) == original, "corrupt database preserved")
 
@@ -741,7 +890,7 @@ private extension QualityStoreTests {
             try? FileManager.default.removeItem(at: readonlyParent)
         }
         let logged = Counter()
-        let unwritable = QualityStore(url: readonlyURL, engineVersion: "test", buildMetadata: metadata,
+        let unwritable = QualityStore(maintenanceNow: { maintenanceDate }, url: readonlyURL, engineVersion: "test", buildMetadata: metadata,
             hooks: QualityStoreHooks(loggedFailure: { _ in _ = logged.increment() }))
         unwritable.submit(fixture())
         await unwritable.flush()
@@ -756,7 +905,7 @@ private extension QualityStoreTests {
         let manifest = url.deletingLastPathComponent().appendingPathComponent("QualityBuild.json")
         try QualityJSON.encoder().encode(metadata).write(to: manifest)
         let gate = Gate()
-        let store = QualityStore(url: url, engineVersion: "test", metadataURL: manifest,
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", metadataURL: manifest,
                                  hooks: QualityStoreHooks(beforeOpen: { gate.blockOnce() }))
         gate.wait()
         expect(!FileManager.default.fileExists(atPath: url.path), "initialization and manifest reading are deferred to worker")
@@ -771,7 +920,7 @@ private extension QualityStoreTests {
         expect(saved == metadata, "background reads exact bundled metadata")
         var changed = metadata
         changed.sourceTreeSHA256 = String(repeating: "f", count: 64)
-        let next = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
+        let next = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: changed)
         next.submit(fixture("revision-c"))
         await next.close()
         expect(try reader.scalar("SELECT count(DISTINCT fingerprint) FROM config_revisions") == "2", "dirty source differences split revision comparisons")
@@ -779,7 +928,7 @@ private extension QualityStoreTests {
                "build-only changes retain one ranking identity")
         expect(try reader.scalar("SELECT count(DISTINCT build_identity) FROM config_revisions") == "2",
                "build-only changes retain both traceable build identities")
-        let mismatch = QualityStore(url: url, engineVersion: "test", buildMetadata: changed)
+        let mismatch = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: changed)
         var invalid = fixture("revision-mismatch")
         invalid.revisions[0].configuration.candidateCount = 9
         mismatch.submit(invalid)

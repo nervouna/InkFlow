@@ -747,15 +747,17 @@ struct ControllerTests {
     @MainActor static func contextReranking(settings: IFSettings) {
         func prepared(_ prefix: String = "准备午") -> (InkFlowInputController, RecordingClient) {
             let client = RecordingClient(document: prefix)
+            // Ordinary synthetic context is independent of the desktop's secure-input state.
             let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
-                                                    settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+                                                    settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
+                                                    secureInput: { false })!
             for character in "can" { check(controller.handle(keyEvent(0, String(character)), client: client)) }
             return (controller, client)
         }
         for action in ["space", "digit", "click", "arrow", "panel-highlight", "comma", "return", "shortcut", "toggle", "commit", "deactivate"] {
             let (controller, client) = prepared()
             let candidates = controller.candidates(nil) as! [String]
-            check(candidates.first == "餐")
+            check(candidates.first == "餐", "action=\(action) secure=\(controller.secureInput()) preceding=\(controller.engine!.qualitySnapshot().precedingContext) candidates=\(candidates)")
             check(client.mark.location == 3 && client.document == "准备午can")
             client.mutations.removeAll()
             var expected = "餐"

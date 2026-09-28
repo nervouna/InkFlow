@@ -143,9 +143,11 @@ struct AIRuntimeTests {
         client.mark = NSRange(location: 3, length: 5); client.selection = NSRange(location: 8, length: 0)
         func read() -> AISurroundingContext? {
             guard let anchor = AIClientAnchor.read(client, ownsMarkedText: true, secureInput: false) else { return nil }
-            return AISurroundingContext.read(client, anchor: anchor)
+            return AISurroundingContext.read(client, anchor: anchor, secureInput: { false })
         }
-        verify(read()?.precedingText == "前😀" && read()?.followingText == "后😀文")
+        let initialContext = read()
+        verify(initialContext?.precedingText == "前😀" && initialContext?.followingText == "后😀文",
+               "Explicit non-secure synthetic context: available=\(initialContext != nil) requests=\(client.requests.count)")
         verify(client.requests.allSatisfy { NSMaxRange($0) <= client.document!.utf16.count }, "Never overshoot known document end")
         client.updatesActualRange = false
         verify(read()?.followingText == "后😀文", "Client need not update an exact actualRange")
@@ -155,6 +157,9 @@ struct AIRuntimeTests {
         verify(read()?.precedingText == "" && read()?.precedingAvailable == false, "Unavailable context permits empty input")
         client.contextAvailable = true
         let count = client.requests.count
+        let secureAnchor = AIClientAnchor.read(client, ownsMarkedText: true, secureInput: false)!
+        verify(AISurroundingContext.read(client, anchor: secureAnchor, secureInput: { true }) == nil,
+               "Secure surrounding-context capture rejects without requesting document text")
         verify(AIClientAnchor.read(client, ownsMarkedText: true, secureInput: true) == nil)
         verify(AIClientAnchor.read(client, ownsMarkedText: false, secureInput: false) == nil)
         verify(client.requests.count == count, "Secure and foreign marks never request document text")
@@ -177,19 +182,19 @@ struct AIRuntimeTests {
         let bounded = RecordingClient(document: String(repeating: "前", count: 270) + "nihao" + String(repeating: "后", count: 270))
         bounded.mark = NSRange(location: 270, length: 5); bounded.selection = NSRange(location: 275, length: 0)
         let anchor = AIClientAnchor.read(bounded, ownsMarkedText: true, secureInput: false)!
-        let result = AISurroundingContext.read(bounded, anchor: anchor)!
+        let result = AISurroundingContext.read(bounded, anchor: anchor, secureInput: { false })!
         verify(result.precedingText.count == 256 && result.followingText.count == 256)
         let character = "👨‍👩‍👧‍👦"
         bounded.substringResponse = { request in
             if request.location < 270 { return ("省略" + String(repeating: character, count: 256), request) }
             return (String(repeating: character, count: 256) + "省略", request)
         }
-        let expanded = AISurroundingContext.read(bounded, anchor: anchor)!
+        let expanded = AISurroundingContext.read(bounded, anchor: anchor, secureInput: { false })!
         verify(expanded.precedingText == String(repeating: character, count: 256) &&
                expanded.followingText == String(repeating: character, count: 256),
                "Longer Unicode client text stays bounded without splitting extended graphemes")
         bounded.substringResponse = { request in ("😀", request) }
-        let shorter = AISurroundingContext.read(bounded, anchor: anchor)!
+        let shorter = AISurroundingContext.read(bounded, anchor: anchor, secureInput: { false })!
         verify(shorter.precedingText == "😀" && shorter.followingText == "😀", "Shorter returned Unicode text remains useful context")
         print("PASS AI context: both sides/end bounds, advisory length fallback, missing/secure/foreign/moved clients and character-safe limits")
     }

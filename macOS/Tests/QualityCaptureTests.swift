@@ -78,6 +78,7 @@ struct QualityCaptureTests {
         if files.fileExists(atPath: syntheticDB.url.path) { try files.removeItem(at: syntheticDB.url) }
         let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: qualityCaptureBuildMetadata)
         await synthetic(syntheticStore, syntheticDB)
+        try await recordingControlComposition(syntheticStore, syntheticDB)
         await syntheticStore.close()
         await store.close()
         check(store.statistics().droppedInvalid == 0 && store.statistics().errors == 0,
@@ -118,8 +119,11 @@ struct QualityCaptureTests {
     }
 
     @MainActor static func controller(_ settings: IFSettings, _ client: RecordingClient?, _ store: QualityStore?) -> InkFlowInputController {
+        // Synthetic ordinary-input fixtures must not inherit the desktop's secure-input state.
+        // QualityControllerTimingTests supplies its own explicit secure-input cases.
         InkFlowInputController(server: nil, delegate: nil, client: client, settings: settings,
-            settingsWindow: IFSettingsWindowController(settings: settings), qualityStore: store)!
+            settingsWindow: IFSettingsWindowController(settings: settings), qualityStore: store,
+            secureInput: { false })!
     }
     @MainActor static func input(_ text: String, _ controller: InkFlowInputController, _ client: RecordingClient?) {
         for character in text { check(controller.handle(keyEvent(0, String(character)), client: client)) }
@@ -214,7 +218,9 @@ struct QualityCaptureTests {
                 let client = RecordingClient(document: "准备午")
                 let control = controller(settings, client, store)
                 input("can", control, client)
-                check(control.engine!.snapshot().candidates[0] == "餐")
+                let contextSnapshot = control.engine!.qualitySnapshot()
+                check(control.engine!.snapshot().candidates.first == "餐",
+                    "panel=\(panel) move=\(move) ranker=\(IFEngine.contextRankingReady) secure=\(control.secureInput()) raw=\(contextSnapshot.rawInput) preceding=\(contextSnapshot.precedingContext) candidates=\(contextSnapshot.candidates.map(\.text))")
                 if move { client.selection = NSRange(location: 0, length: 0) }
                 else { client.contextAvailable = false }
                 if panel { control.candidateSelected(NSAttributedString(string: "餐")) }
@@ -664,22 +670,57 @@ struct QualityCaptureTests {
         print("PASS synthetic unknown-rank/first-page/not-shown evidence, bounded active overflow/resumption and preserved core after history truncation")
     }
 
+    @MainActor static func recordingControlComposition(_ store: QualityStore, _ db: CaptureDatabase) async throws {
+        let revision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 3))
+        func page(_ raw: String) -> QualityPageSnapshot {
+            QualityPageSnapshot(generation: 0, rawInput: raw, caret: raw.utf8.count, selectedPrefix: "",
+                precedingContext: "", configurationRevisionID: revision.id, configuration: revision.configuration,
+                page: 0, pageSize: 3, candidates: [], highlightedDisplayIndex: 0)
+        }
+        let recorder = QualityRecorder(store: store)
+        for clear in [false, true] {
+            recorder.willMutate(page(""), revision: revision, action: .key(110, 0))
+            recorder.didMutate(page("private-old"), handled: true)
+            if clear { try await store.clearRecords() }
+            else { try await store.setPaused(true); try await store.setPaused(false) }
+            let count = db.rows("SELECT id FROM commits").count
+            recorder.finishExternalSelection(reason: "fixture_external_finish")
+            recorder.presented(page("private-old"), revision: revision, panelShowIssued: true)
+            recorder.interrupt(reason: "fixture_interrupt_without_native_clear")
+            recorder.presented(page("private-old"), revision: revision, panelShowIssued: true)
+            recorder.willMutate(page("private-old"), revision: revision, action: .key(0xff0d, 0))
+            recorder.didMutate(page(""), handled: true)
+            recorder.willMutate(page(""), revision: revision, action: .flush(.other))
+            recorder.commitDrained("private-old", insertionIssued: true, clientID: nil)
+            await store.flush()
+            check(db.rows("SELECT id FROM commits").count == count, "pause/resume and clear never record old composition")
+            recorder.willMutate(page(""), revision: revision, action: .key(110, 0))
+            recorder.didMutate(page("new"), handled: true)
+            recorder.willMutate(page("new"), revision: revision, action: .key(0xff0d, 0))
+            recorder.didMutate(page(""), handled: true)
+            recorder.commitDrained("new", insertionIssued: true, clientID: nil)
+            await store.flush()
+            check(db.rows("SELECT id FROM commits").count == count + 1, "next clean composition records normally")
+        }
+        print("PASS recorder controls: active text invalidation across pause/resume and clear")
+    }
+
     @MainActor static func equivalence(shared: String, scratch: URL) async throws {
         let initial = scratch.appendingPathComponent("identical-initial")
         try IFEngine.start(shared: shared, user: initial.path)
         IFEngine.stop()
         let files = FileManager.default
         var transcripts: [[String]] = []
-        for enabled in [false, true] {
-            let user = scratch.appendingPathComponent(enabled ? "recording-on" : "recording-off")
+        for mode in ["off", "on", "paused"] {
+            let user = scratch.appendingPathComponent("recording-" + mode)
             try files.copyItem(at: initial, to: user)
             try IFEngine.start(shared: shared, user: user.path)
             let settings = IsolatedSettings()
             for index in 0..<200 {
                 try settings.settings.saveCustomPhrase(code: "zq\(String(repeating: "a", count: index / 26))\(Character(UnicodeScalar(97 + index % 26)!))", text: "短语\(index)")
             }
-            let store = enabled ? QualityStore(url: scratch.appendingPathComponent("equivalence.sqlite3"),
-                engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata) : nil
+            let store = mode != "off" ? QualityStore(url: scratch.appendingPathComponent("equivalence-\(mode).sqlite3"),
+                engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata, paused: mode == "paused") : nil
             var transcript: [String] = []
             do {
                 let client = RecordingClient(document: "准备午")
@@ -700,8 +741,8 @@ struct QualityCaptureTests {
             IFEngine.stop()
             transcripts.append(transcript)
         }
-        check(transcripts[0] == transcripts[1], "Recording on/off must preserve handled/candidates/commits/document reads/client transcript from identical initial Rime bytes")
-        print("PASS recording on/off equivalence with 200 custom phrases from two copies of identical initial isolated Rime state (including document read transcript)")
+        check(transcripts[0] == transcripts[1] && transcripts[0] == transcripts[2], "Recording on/off/paused must preserve handled/candidates/commits/document reads/client transcript from identical initial Rime bytes")
+        print("PASS recording on/off/paused equivalence with 200 custom phrases from identical initial isolated Rime state (including document read transcript)")
     }
 
     @MainActor static func stalledWriter(shared: String, scratch: URL) async throws {

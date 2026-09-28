@@ -27,7 +27,7 @@ private func near(_ value: Double?, _ expected: Double) -> Bool {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("quality.sqlite3")
-        let store = QualityStore(url: url, engineVersion: "synthetic", buildMetadata: qualityTimingBuildMetadata)
+        let store = QualityStore(maintenanceNow: { Date(timeIntervalSince1970: 1_000) }, url: url, engineVersion: "synthetic", buildMetadata: qualityTimingBuildMetadata)
         let time = Time()
         let recorder = QualityRecorder(store: store, clock: time.clock)
         let revision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))

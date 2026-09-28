@@ -1,4 +1,5 @@
 @testable import InkFlowDomain
+@testable import InkFlowRime
 import Foundation
 import AppKit
 #if SWIFT_PACKAGE
@@ -13,6 +14,20 @@ struct SettingsTests {
         defer { isolated.cleanup() }
         let defaults = isolated.defaults
         let settings = isolated.settings
+        let qualityDirectory = FileManager.default.temporaryDirectory.appendingPathComponent("quality-settings-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: qualityDirectory) }
+        let qualityStore = QualityStore(url: qualityDirectory.appendingPathComponent("quality.sqlite3"), engineVersion: "test")
+        settings.qualityStore = qualityStore
+        check(!settings.qualityRecordingPaused)
+        await settings.setQualityRecordingPaused(true)
+        check(!qualityStore.captureState.enabled && IFSettings(defaults: defaults).qualityRecordingPaused,
+              "pause applies to writer and persists across settings instances")
+        await settings.clearQualityRecords()
+        check(settings.qualityRecordingPaused && settings.qualityControlMessage?.contains("已清除") == true,
+              "clear reports completion and preserves pause")
+        await settings.setQualityRecordingPaused(false)
+        check(qualityStore.captureState.enabled && !IFSettings(defaults: defaults).qualityRecordingPaused)
+        await qualityStore.close()
         check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14 && !settings.thunderMode)
         check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],
               "Only square brackets page by default")
