@@ -71,6 +71,31 @@ import InkFlowRime
         let link = fixture.appendingPathComponent("link.json")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
         rejects("symlink") { _ = try PersonalBackupDocument.read(link) }
+        do {
+            // Each native row and snapshot fits its own limits. Quoted phrase text
+            // doubles during JSON escaping, making the final three-library file too large.
+            let phrase = String(repeating: "\"", count: 60_000)
+            let rows = (0..<512).map { "ni hao \t\($0)\(phrase)\tc=7 d=0.123456789 t=42\n" }.joined()
+            let snapshots = Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map {
+                ($0, Optional(snapshot($0, rows: false) + rows))
+            })
+            let escaped = PersonalBackupDocument(rime: "1.17.0", settings: preferences, dictionaries: snapshots)
+            for text in snapshots.values.compactMap({ $0 }) {
+                expect(text.utf8.count <= 32 * 1024 * 1024, "escape fixture fits snapshot budget")
+                let lines = text.split(separator: "\n")
+                expect(lines.count <= 250_000 && lines.allSatisfy { $0.utf8.count <= 65_536 }, "escape fixture fits native row budgets")
+            }
+            let destination = fixture.appendingPathComponent("existing-backup.json")
+            let original = Data("preserve-existing-backup".utf8)
+            try PersonalDataFiles.write(original, destination)
+            do {
+                try escaped.write(to: destination)
+                preconditionFailure("JSON escaping must exceed the final file budget")
+            } catch let error as PersonalDataError {
+                expect(error.code == "export-size", "reject actual encoded size, not a snapshot limit")
+            }
+            expect(try! Data(contentsOf: destination) == original, "oversized export preserves existing target")
+        }
         let worker = PersonalDataWorker(user: fixture, helper: URL(fileURLWithPath: CommandLine.arguments[0]))
         for empty in [false, true] {
             let stage = fixture.appendingPathComponent("PersonalData/staging/" + UUID().uuidString)

@@ -160,8 +160,7 @@ final class PersonalDataController {
                 } else { dictionaries[name] = .some(nil) }
             }
             let document = PersonalBackupDocument(rime: version, settings: preferences, dictionaries: dictionaries)
-            try document.validate()
-            try PersonalDataFiles.write(JSONEncoder().encode(document), destination)
+            try document.write(to: destination)
         }.value
     }
     func restore(_ document: PersonalBackupDocument) async throws {

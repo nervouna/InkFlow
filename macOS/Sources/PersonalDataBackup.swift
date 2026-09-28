@@ -13,6 +13,8 @@ struct PersonalDataError: LocalizedError, Sendable {
         let reason: StaticString
         let message: String
         switch code {
+        case "export-size":
+            reason = "exportSize"; message = "备份编码后超过 128 MiB 上限，未写入目标文件。"
         case "personal-data-busy", "personal-data-composition", "personal-data-undo-grace", "voice-busy":
             reason = "busy"; message = "请先完成所有应用中正在输入或听写的内容，等待词库准备结束并稍等片刻后重试。"
         case "incompatible", "snapshot", "unknown-fields", "settings", "shortcuts", "shortcut-binding", "shortcut-conflict", "worker-native-map", "worker-snapshot", "worker-size", "file-size-or-type":
@@ -78,6 +80,12 @@ struct PersonalBackupDocument: Codable, Sendable {
     var dictionaries: [String: String?]
     static let names = ["pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"]
     static let maximumBytes = 128 * 1024 * 1024
+    func write(to url: URL) throws {
+        try validate()
+        let bytes = try JSONEncoder().encode(self)
+        guard bytes.count <= Self.maximumBytes else { throw PersonalDataError("export-size") }
+        try PersonalDataFiles.write(bytes, url)
+    }
     func preview() -> String {
         let labels = ["中文", "英文", "语音词条"]
         return zip(Self.names, labels).map { name, label in
