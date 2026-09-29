@@ -53,7 +53,7 @@ struct SettingsUITests {
         defer { isolated.cleanup() }
         _ = NSApplication.shared
         NSApp.finishLaunching()
-        check(SettingsSection.allCases.map(\.rawValue) == ["输入", "快捷键", "外观", "自定义短语", "词库", "语音", "AI 服务", "更新", "质量记录", "反馈与诊断", "关于"],
+        check(SettingsSection.allCases.map(\.rawValue) == ["输入", "快捷键", "外观", "自定义短语", "词库", "语音", "AI 服务", "更新", "数据", "反馈与诊断", "关于"],
               "Settings must retain input and smart categories")
         try IFEngine.start(shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         runCases(settings: isolated.settings, defaults: isolated.defaults)

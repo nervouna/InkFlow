@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ShortcutsSettingsView: View {
     @ObservedObject var shortcuts: KeyboardShortcuts
+    @State private var errorAction: ShortcutAction?
 
     var body: some View {
         Form {
@@ -11,22 +12,26 @@ struct ShortcutsSettingsView: View {
                 shortcut(.punctuation)
                 shortcut(.script)
             }
-            Section("语音") {
+            Section {
                 shortcut(.voiceHold)
                 shortcut(.voiceToggle)
-            }
-            Section {
-                Text("点击快捷键后按下新的组合。Esc 取消，Delete 清除。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if let error = shortcuts.error {
-                    Text(error)
-                        .foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("shortcuts.error")
+            } header: {
+                Text("语音")
+            } footer: {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("重置快捷键", action: shortcuts.restoreDefaults)
+                        .accessibilityIdentifier("shortcuts.restoreDefaults")
+                    if let error = shortcuts.error {
+                        Text(errorAction.map { "\($0.title)：\(error)" } ?? error)
+                            .foregroundStyle(.red)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("shortcuts.error")
+                    }
                 }
-                Button("恢复默认快捷键", action: shortcuts.restoreDefaults)
-                    .accessibilityIdentifier("shortcuts.restoreDefaults")
+                .font(.body)
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 12)
             }
         }
         .formStyle(.grouped)
@@ -34,12 +39,18 @@ struct ShortcutsSettingsView: View {
     }
 
     private func shortcut(_ action: ShortcutAction) -> some View {
-        LabeledContent(action.title) {
+        HStack(alignment: .center) {
+            Text(action.title)
+            Spacer(minLength: 16)
             ShortcutRecorder(
                 label: action.title,
                 value: shortcuts.title(for: action),
                 identifier: "shortcuts.\(action.rawValue)",
-                save: { shortcuts.set($0, for: action) }
+                save: {
+                    errorAction = action
+                    return shortcuts.set($0, for: action)
+                },
+                cancel: { shortcuts.error = nil }
             )
             .frame(width: 200, height: 26)
             .accessibilityElement(children: .contain)
@@ -52,6 +63,7 @@ private struct ShortcutRecorder: NSViewRepresentable {
     let value: String
     let identifier: String
     let save: (ShortcutBinding) -> Bool
+    let cancel: () -> Void
 
     func makeNSView(context: Context) -> ShortcutRecorderContainer {
         let container = ShortcutRecorderContainer()
@@ -63,6 +75,7 @@ private struct ShortcutRecorder: NSViewRepresentable {
         let button = container.button
         button.bindingTitle = value
         button.save = save
+        button.cancel = cancel
         button.setAccessibilityElement(true)
         button.setAccessibilityRole(.button)
         button.setAccessibilityLabel(label)
@@ -94,6 +107,7 @@ private final class ShortcutRecorderContainer: NSView {
 private final class ShortcutRecorderButton: NSButton {
     var bindingTitle = "未设置"
     var save: (ShortcutBinding) -> Bool = { _ in false }
+    var cancel: () -> Void = {}
     private(set) var recording = false
     private var pendingModifier: ShortcutBinding?
 
@@ -148,7 +162,7 @@ private final class ShortcutRecorderButton: NSButton {
         guard !event.isARepeat else { return }
         pendingModifier = nil
         let flags = event.modifierFlags.intersection(ShortcutBinding.relevantFlags)
-        if flags.isEmpty, event.keyCode == 53 { finishRecording(); return }
+        if flags.isEmpty, event.keyCode == 53 { cancel(); finishRecording(); return }
         if flags.isEmpty, event.keyCode == 51 || event.keyCode == 117 {
             record(.none)
             return

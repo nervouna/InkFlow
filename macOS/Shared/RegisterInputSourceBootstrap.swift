@@ -6,7 +6,7 @@ package enum IFRegisterInputSourceBootstrap {
             FileHandle.standardError.write(Data("\(message)\n".utf8))
             exit(code)
         }
-        if arguments.count >= 3, ["--prepare-update", "--finish-update"].contains(arguments[2]) {
+        if arguments.count >= 3, ["--prepare-update", "--commit-update", "--finish-update"].contains(arguments[2]) {
             do { try await trialUpdate(arguments) }
             catch { fail("Installation lifecycle failed: \(error)", 1) }
             return
@@ -48,7 +48,7 @@ package enum IFRegisterInputSourceBootstrap {
     @MainActor private static func trialUpdate(_ arguments: [String]) async throws {
         let prepare = arguments[2] == "--prepare-update"
         guard arguments.count == (prepare ? 5 : 4) else {
-            throw IFInputError.unavailable("Usage: register-input-source target --prepare-update state.json staged.app | target --finish-update state.json")
+            throw IFInputError.unavailable("Usage: register-input-source target --prepare-update state.json staged.app | target --commit-update state.json | target --finish-update state.json")
         }
         let target = URL(fileURLWithPath: arguments[1]).standardizedFileURL
         let allowed = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods/InkFlow.app")
@@ -66,6 +66,17 @@ package enum IFRegisterInputSourceBootstrap {
             print("old_processes_stopped=\(state.oldPIDs.map(String.init).joined(separator: ","))")
         } else {
             let state = try JSONDecoder().decode(IFTrialInstallationState.self, from: Data(contentsOf: stateURL))
+            if arguments[2] == "--commit-update" {
+                let candidate = stateURL.deletingLastPathComponent().appendingPathComponent("InkFlow.app")
+                guard state.target == target.path,
+                      let bundle = Bundle(url: candidate), bundle.bundleIdentifier == IFInputIdentity.bundleID,
+                      bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String == state.build else {
+                    throw IFInputError.unavailable("prepared candidate identity differs from installation state")
+                }
+                try IFAtomicAppReplacement.replace(candidate: candidate, target: target)
+                print("application_replaced_atomically=1")
+                return
+            }
             guard let bundle = Bundle(url: target), bundle.bundleIdentifier == IFInputIdentity.bundleID,
                   let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
                 throw IFInputError.unavailable("installed candidate identity")

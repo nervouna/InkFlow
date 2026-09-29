@@ -1,5 +1,8 @@
 import Foundation
 import Darwin
+#if SWIFT_PACKAGE
+import InkFlowInputSources
+#endif
 
 /// Copy beside the destination, then publish with a single same-volume rename.
 /// After a swap the old app occupies the staging slot until cleanup.
@@ -31,10 +34,7 @@ final class IFFileTransaction {
     func commit() throws {
         guard let staging else { throw IFInstallerError.invalid("No prepared application") }
         let app = staging.appendingPathComponent("InkFlow.app")
-        let flags = UInt32(fm.fileExists(atPath: target.path) ? RENAME_SWAP : RENAME_EXCL)
-        guard renameatx_np(AT_FDCWD, app.path, AT_FDCWD, target.path, flags) == 0 else {
-            throw IFInstallerError.filesystem("Replace \(target.path)", errno)
-        }
+        try IFAtomicAppReplacement.replace(candidate: app, target: target)
     }
     func clean() throws {
         guard let staging else { return }

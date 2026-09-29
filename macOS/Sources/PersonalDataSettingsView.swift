@@ -13,19 +13,16 @@ struct PersonalDataSettingsView: View {
     @State private var preview = ""
     var body: some View {
         Form {
-            Section("个人数据") {
+            Section("备份与恢复") {
                 Text("备份输入与外观设置、快捷键、自定义短语、语音润色规则，以及中文、英文和语音词条的完整学习数据。")
-                Text("不包含 AI 服务配置与密钥、AI 和润色开关、质量记录、统计、更新偏好或系统权限。备份文件包含个人词语与提示词，请妥善保管。").foregroundStyle(.secondary)
                 HStack {
-                    Button("导出备份…", action: export)
-                    Button("选择备份恢复…", action: chooseRestore)
+                    Button("导出备份", action: export)
+                    Button("恢复备份", action: chooseRestore)
                 }.disabled(busy || coordinator == nil || coordinator?.isBusy == true)
                 if busy { ProgressView("正在处理个人数据…") }
                 if let message { Text(message).textSelection(.enabled) }
             }
-            Section {
-                Text("恢复会替换备份范围内的全部设置和学习数据，不与现有词条合并。请先完成所有应用中正在输入的内容，并稍等片刻；数据切换期间输入会短暂停止。").foregroundStyle(.secondary)
-            }
+            QualitySettingsView(settings: settings)
         }
         .formStyle(.grouped)
         .confirmationDialog("替换当前个人数据？", isPresented: $confirming, titleVisibility: .visible) {

@@ -380,6 +380,19 @@ private actor Files: IFInstallerFileOperations {
         try check(try fm.contentsOfDirectory(atPath: parent.path) == ["InkFlow.app"], "no staging, journal or persistent backup")
         try transaction.prepare(source); try transaction.clean()
         try check(try fm.contentsOfDirectory(atPath: parent.path) == ["InkFlow.app"], "cancel cleans prepared app")
+        let oldIdentity = try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber
+        let newIdentity = try fm.attributesOfItem(atPath: source.path)[.systemFileNumber] as? NSNumber
+        try IFAtomicAppReplacement.replace(candidate: source, target: target)
+        try check(try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber == newIdentity,
+                  "atomic replacement publishes the candidate inode")
+        try check(try fm.attributesOfItem(atPath: source.path)[.systemFileNumber] as? NSNumber == oldIdentity,
+                  "atomic replacement retains the original inode in the staging slot")
+        do {
+            try IFAtomicAppReplacement.replace(candidate: root.appendingPathComponent("missing.app"), target: target)
+            throw IFInstallerError.invalid("missing candidate must fail")
+        } catch is IFInputError {}
+        try check(try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber == newIdentity,
+                  "failed replacement leaves the installed app intact")
         print("PASS real filesystem: first install, replacement, failed partial copy preserves old, cleanup, no backup, no path/version gates")
     }
     @MainActor static func main() async throws {
