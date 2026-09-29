@@ -10,7 +10,6 @@ import InkFlowNative
 // The legacy superclass blocks inferred Sendable conformance. State stays on MainActor;
 // callback arguments only enter synchronous assumeIsolated scopes, never tasks or queues.
 class IFInputControllerShell: IMKInputController, @unchecked Sendable {
-    static var statisticsStore: AIStatisticsStore?
     var engine: IFEngine?
     var panel: IMKCandidates?
     var strings: [String] = []
@@ -36,7 +35,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         settings = MainActor.assumeIsolated { .sharedSettings }
         settingsWindow = MainActor.assumeIsolated { .sharedController }
         qualityClock = MainActor.assumeIsolated { QualityClock() }
-        ai = MainActor.assumeIsolated { IFInputControllerAI(statisticsStore: Self.statisticsStore) }
+        ai = MainActor.assumeIsolated { IFInputControllerAI() }
         voice = MainActor.assumeIsolated { IFInputControllerVoice() }
         inputDiagnostics = MainActor.assumeIsolated { IFInputLifecycleDiagnostics() }
         super.init(server: server, delegate: delegate, client: inputClient)
@@ -47,7 +46,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     init!(server: IMKServer!, delegate: Any!, client inputClient: Any!,
           settings: IFSettings, settingsWindow: IFSettingsWindowController, qualityStore: QualityStore? = nil,
           qualityClock: QualityClock = QualityClock(),
-          aiStatisticsStore: AIStatisticsStore? = nil,
           smartService: any AISuggestionServing = AIChatCompletionsClient(),
           secureInput: @escaping () -> Bool = { IsSecureEventInputEnabled() },
           presentation: (any AIInputPresentation)? = nil,
@@ -57,7 +55,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         self.qualityClock = qualityClock
         self.settings = settings
         self.settingsWindow = settingsWindow
-        ai = IFInputControllerAI(statisticsStore: aiStatisticsStore, service: smartService)
+        ai = IFInputControllerAI(service: smartService)
         voice = IFInputControllerVoice()
         inputDiagnostics = IFInputLifecycleDiagnostics()
         self.secureInput = secureInput
@@ -262,7 +260,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
 
     func associateQualityClient(_ client: IMKTextInput?) {
         let app = client?.bundleIdentifier()
-        ai.associate(appBundleID: app)
         engine?.qualityRecorder?.associateClient(client.map { $0 as AnyObject },
             id: client?.uniqueClientIdentifierString(), app: app)
     }

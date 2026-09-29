@@ -46,7 +46,7 @@ for path in macOS/Info.plist Package.swift macOS/Sources/Unknown.swift; do
   expect "$output" core bundle-deep manual-install
   reject "$output" manual-input manual-settings
 done
-for path in AIStatistics AIStatisticsStore StartupDiagnostics; do
+for path in StartupDiagnostics; do
   output=$(plan "macOS/Sources/$path.swift")
   expect "$output" core bundle-deep
   reject "$output" manual-input manual-settings manual-install

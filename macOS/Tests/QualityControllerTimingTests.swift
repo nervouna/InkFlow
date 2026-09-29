@@ -32,9 +32,6 @@ extension QualityCaptureTests {
         let db = CaptureDatabase(url: output.appendingPathComponent("controller-timing-" + UUID().uuidString + ".sqlite3"))
         defer { try? FileManager.default.removeItem(at: db.url) }
         let store = QualityStore(maintenanceNow: { Date(timeIntervalSince1970: 10_000) }, url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
-        let aiDB = CaptureDatabase(url: output.appendingPathComponent("controller-ai-" + UUID().uuidString + ".sqlite3"))
-        defer { try? FileManager.default.removeItem(at: aiDB.url) }
-        let aiStore = AIStatisticsStore(url: aiDB.url, now: { Date(timeIntervalSince1970: 10_000) })
         let isolated = IsolatedSettings(); defer { isolated.cleanup() }
         let settings = isolated.settings
         let time = ControllerTime()
@@ -42,7 +39,6 @@ extension QualityCaptureTests {
             let client = RecordingClient(document: "")
             let control = InkFlowInputController(server: nil, delegate: nil, client: client, settings: settings,
                 settingsWindow: IFSettingsWindowController(settings: settings), qualityStore: store, qualityClock: time.clock,
-                aiStatisticsStore: aiStore,
                 smartService: TimingService(), secureInput: secure, presentation: endpoint)!
             return (control, client, endpoint)
         }
@@ -123,7 +119,6 @@ extension QualityCaptureTests {
             typeInput(control, client)
             for _ in 0..<100 where !endpoint.suggestionVisible { try await Task.sleep(for: .milliseconds(20)) }
             check(endpoint.suggestionVisible, "fake AI suggestion reached production controller adoption")
-            let originalCompositionID = control.engine!.qualityRecorder!.activeCompositionID!
             time.now += 0.4
             let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                 windowNumber: 0, context: nil, characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: true, keyCode: 48)!
@@ -135,7 +130,6 @@ extension QualityCaptureTests {
             check(control.handle(keyEvent(48, "\t"), client: client))
             client.onMutation = nil; delayValidation = false
             await store.flush()
-            await aiStore.flush()
             let row = db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]
             let ops = db.ops(row)
             check(row["outcome"] == "committed" && row["outcome_reason"] == "ai_adopted", "AI adoption is explicit ordinary timing ending")
@@ -143,16 +137,6 @@ extension QualityCaptureTests {
             check(ops.timing?.keySamples.dropLast().last?.isRepeat == true)
             check(near(ops.timing?.postEditWait, 0.6) && near(ops.timing?.observedVisibleDuration, 0.6), "AI validation and insert callbacks excluded from terminal wait")
             check(db.rows("SELECT * FROM commits WHERE composition_id='" + row["id"]! + "'").isEmpty, "ordinary store does not duplicate AI recommendation text")
-            let attempt = aiDB.rows("SELECT * FROM attempts WHERE composition_id='" + originalCompositionID + "'").last!
-            check(attempt["dispatch_composition_id"] == originalCompositionID && row["id"] == originalCompositionID, "AI and ordinary DB share immutable composition identity")
-            let events = aiDB.rows("SELECT * FROM attempt_events WHERE attempt_id='" + attempt["id"]! + "'")
-            for kind in ["shown", "adoptionRequested", "insertionIssued", "insertionReturned"] {
-                check(events.filter { $0["kind"] == kind }.count == 1, "actual controller AI lifecycle recorded once")
-            }
-            let adoptionAt = Double(events.first { $0["kind"] == "adoptionRequested" }!["occurred_at"]!)!
-            let lastEditAt = Double(attempt["last_edit_at"]!)!
-            check(near(adoptionAt - lastEditAt, 0.6), "AI Tab uses callback-entry UTC before synchronous validation and insertion")
-            check(aiDB.rows("SELECT * FROM samples WHERE attempt_id='" + attempt["id"]! + "'")[0]["response_text"] == "你好", "Fake service result still records its real returned recommendation")
             settings.smart.isEnabled = false
         }
         do {
@@ -164,7 +148,6 @@ extension QualityCaptureTests {
                   "secure input does not accrue per-key timing")
         }
         await store.close()
-        await aiStore.close()
         check(store.statistics().written == 9 && store.statistics().droppedOversized == 0 && store.statistics().droppedInvalid == 0)
         print("PASS controller timing: real Rime first/final keys, digit/space/return/escape/click/AI Tab, callback time exclusion, delayed visibility without AI and secure input")
     }

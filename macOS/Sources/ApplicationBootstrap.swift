@@ -20,11 +20,6 @@ package enum InkFlowApplicationBootstrap {
             let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version,
                 paused: IFSettings.sharedSettings.qualityRecordingPaused)
             IFSettings.sharedSettings.qualityStore = qualityStore
-            let statisticsStore = AIStatisticsStore(url: user.appendingPathComponent("ai-statistics.sqlite3"),
-                pricingURL: user.appendingPathComponent("ai-pricing.json"),
-                buildIdentity: [bundle.bundleIdentifier, bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
-                                bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String].compactMap { $0 }.joined(separator: ":"))
-            InkFlowInputController.statisticsStore = statisticsStore
             IFEngine.configureQualityRecording(qualityStore)
             let dictionaries = IFDictionaryCoordinator(backendFactory: {
                 let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
@@ -43,9 +38,7 @@ package enum InkFlowApplicationBootstrap {
                 stopEngine: { IFEngine.stop() },
                 closeStore: {
                     let closed = await qualityStore.close()
-                    await statisticsStore.close()
                     IFEngine.configureQualityRecording(nil)
-                    InkFlowInputController.statisticsStore = nil
                     return closed
                 })
             NSApp.delegate = lifecycle
@@ -58,7 +51,7 @@ package enum InkFlowApplicationBootstrap {
                 IFEngine.stop()
                 let drained = DispatchSemaphore(value: 0)
                 Task.detached {
-                    await qualityStore.close(); await statisticsStore.close()
+                    await qualityStore.close()
                     await LocalDiagnostics.shared.store?.drain()
                     drained.signal()
                 }
@@ -68,7 +61,6 @@ package enum InkFlowApplicationBootstrap {
                     NSLog("InkFlow startup statistics cleanup timed out")
                 }
                 IFEngine.configureQualityRecording(nil)
-                InkFlowInputController.statisticsStore = nil
                 return 1
             }
             let candidateLifetime = NativeCandidateLifetime(server: server)
@@ -76,7 +68,7 @@ package enum InkFlowApplicationBootstrap {
             startup.end(processSpan)
             let eventLoop = startup.begin(.eventLoop)
             DispatchQueue.main.async { startup.end(eventLoop) }
-            withExtendedLifetime((server, candidateLifetime, dictionaries, lifecycle, statisticsStore, updaterAccess)) { NSApp.run() }
+            withExtendedLifetime((server, candidateLifetime, dictionaries, lifecycle, updaterAccess)) { NSApp.run() }
             return 0
         }
     }

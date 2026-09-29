@@ -194,7 +194,7 @@ includes process versions, module observation states and the optional note. All 
 are Unix milliseconds in UTC. Missing/unreadable modules or unsupported crash reports
 are explicitly distinguished from successful collection. Crash attachments are bounded
 safe summaries, not original crash files. The default archive excludes raw system logs,
-`quality.sqlite3`, `ai-statistics.sqlite3`, preferences, document text and audio.
+`quality.sqlite3`, preferences, document text and audio.
 
 If InkFlow cannot start, open Finder → Go → Go to Folder and enter
 `~/Library/Application Support/InkFlow/Diagnostics/`. Copy **only that directory** to a

@@ -26,7 +26,7 @@ let nativeCxxSettings: [CXXSetting] = [.unsafeFlags([
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
 let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
-    "AISettings.swift", "AIStatistics.swift", "AIStatisticsStore.swift",
+    "AISettings.swift",
     "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
     "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLearning.swift", "VoicePolishApplicationPicker.swift", "VoicePolishPrompt.swift", "VoicePolishRule.swift", "VoicePolishRuleEditor.swift", "VoicePolishRuleRow.swift", "VoicePolishRulesView.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "InputControllerAI.swift",
     "EngineEvent.swift", "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
@@ -46,13 +46,13 @@ let installerCoreSources = [
     "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
     "InstallerValidation.swift", "NativeWindow.swift", "ShippedPayload.swift",
 ]
-let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "ai-statistics.py"]
+let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift"]
 let testSwiftSources = [
     "PersonalDataTests.swift",
     "AIControllerNativeTests.swift", "AICredentialTests.swift",
     "AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AIHeadlessPipelineTests.swift",
     "AILiveConfiguration.swift", "AILiveTests.swift", "AIRuntimeTestSupport.swift",
-    "AIRuntimeTests.swift", "AIStatisticsTestSupport.swift", "AIStatisticsTests.swift", "AISuggestionTests.swift",
+    "AIRuntimeTests.swift", "AISuggestionTests.swift",
     "ControllerInitializationTests.swift", "ControllerTests.swift", "DeploymentTests.swift",
     "DictionaryActivationTests.swift", "DictionarySettingsUITests.swift",
     "BundleArtifactSmokeTests.swift", "DictionaryUpdateTests.swift", "DictionaryWorkerFixture.swift", "EngineTests.swift", "InstallerCoreTests.swift",
@@ -62,7 +62,7 @@ let testSwiftSources = [
     "TerminationTests.swift", "TestSupport.swift", "UpdateTests.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceControllerTests.swift",
 ]
 let testAuxiliarySources = [
-    "AIStatisticsQueryTests.py", "NativeTestSupport.m", "QualityQueryTests.py", "ServingStartupHarness.plist", "include",
+    "NativeTestSupport.m", "QualityQueryTests.py", "ServingStartupHarness.plist", "include",
 ]
 let standardTestDependencies: [Target.Dependency] = [
     "InkFlowCore", "InkFlowTestSupport", "InkFlowNativeTestSupport",
@@ -91,7 +91,6 @@ let executableTestProducts: [(String, String)] = [
     ("ai-native-tests", "AINativeTests"),
     ("ai-pronunciation-tests", "AIPronunciationTests"),
     ("ai-runtime-tests", "AIRuntimeTests"),
-    ("ai-statistics-tests", "AIStatisticsTests"),
     ("ai-suggestion-tests", "AISuggestionTests"),
     ("controller-initialization-tests", "ControllerInitializationTests"),
     ("controller-tests", "ControllerTests"),
@@ -275,10 +274,10 @@ let package = Package(
             path: "macOS/Tests",
             exclude: testSwiftSources.filter {
                 !["AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AILiveConfiguration.swift",
-                  "AIRuntimeTestSupport.swift", "AIStatisticsTestSupport.swift"].contains($0)
+                  "AIRuntimeTestSupport.swift"].contains($0)
             } + testAuxiliarySources,
             sources: ["AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AILiveConfiguration.swift",
-                      "AIRuntimeTestSupport.swift", "AIStatisticsTestSupport.swift"],
+                      "AIRuntimeTestSupport.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
@@ -293,8 +292,6 @@ let package = Package(
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         .executableTarget(name: "AIPronunciationTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/AIPronunciationTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         executableTestTarget("AIRuntimeTests", sources: ["AIRuntimeTests.swift"],
-            dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
-        executableTestTarget("AIStatisticsTests", sources: ["AIStatisticsTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         executableTestTarget("AISuggestionTests", sources: ["AISuggestionTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),

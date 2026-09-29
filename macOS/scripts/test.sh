@@ -106,9 +106,6 @@ run_test_unit() {
     voice-session) bash macOS/scripts/test-voice-session.sh ;;
     ai-credentials) bash macOS/scripts/test-ai-credentials.sh ;;
     ai-transport) bash macOS/scripts/test-ai-suggestions.sh ;;
-    ai-statistics)
-      bash macOS/scripts/test-ai-statistics.sh
-      bash macOS/scripts/test-ai-statistics-query.sh ;;
     preparation) bash macOS/scripts/test-prepare-rime.sh ;;
     deployment)
       build_swift_test deployment-tests build/deployment-tests

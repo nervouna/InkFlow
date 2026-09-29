@@ -5,35 +5,22 @@ import Carbon
 @MainActor
 final class IFInputControllerAI {
     private weak var controller: IFInputControllerShell?
-    private let statisticsStore: AIStatisticsStore?
     private let service: any AISuggestionServing
     private var client: IMKTextInput?
     private(set) var isAccepting = false
     private var suggestions: AISuggestionCoordinator?
     private let diagnosticSession = UUID()
     private var gateReason: AIDiagnosticReason?
-    private var statisticsAppBundleID: String?
 
-    init(statisticsStore: AIStatisticsStore?, service: any AISuggestionServing = AIChatCompletionsClient()) {
-        self.statisticsStore = statisticsStore
+    init(service: any AISuggestionServing = AIChatCompletionsClient()) {
         self.service = service
     }
 
     func configure(_ controller: IFInputControllerShell) {
         self.controller = controller
         suggestions = AISuggestionCoordinator(settings: controller.settings.smart, service: service,
-            diagnosticSession: diagnosticSession, statisticsStore: statisticsStore,
-            statisticsAssociation: { [weak self] in
-                guard let self, let controller = self.controller else { return .init() }
-                let recorder = controller.engine?.qualityRecorder
-                return .init(compositionID: recorder?.activeCompositionID, appBundleID: self.statisticsAppBundleID,
-                    lastEditAt: recorder?.timingSnapshot?.lastEditAt, lastEditMonotonic: recorder?.lastEditMonotonicTime,
-                    observedVisibleAfterEdit: recorder?.timingSnapshot?.observedVisibleDuration,
-                    candidates: controller.strings, candidatePage: controller.engine?.snapshot().page)
-            }, statisticsNow: { [weak self] in
-                guard let controller = self?.controller else { return .now }
-                return .init(utc: controller.qualityClock.utc(), monotonic: controller.qualityClock.monotonic())
-            }, current: { [weak self] in self?.smartState() },
+            diagnosticSession: diagnosticSession,
+            current: { [weak self] in self?.smartState() },
             candidatesVisible: { [weak self] in self?.controller?.candidatePresentation?.candidatesVisible ?? false },
             context: { [weak self] anchor in
                 guard let self, let client = self.client, let controller = self.controller else {
@@ -66,7 +53,6 @@ final class IFInputControllerAI {
     func beginRefresh(client: IMKTextInput?) { suggestions?.beginRefresh(); self.client = client }
     func endRefresh() { suggestions?.endRefresh() }
     func validate() { suggestions?.validate() }
-    func associate(appBundleID: String?) { statisticsAppBundleID = appBundleID }
     func invalidate(_ reason: AIDiagnosticReason) { suggestions?.invalidate(reason: reason) }
     func settingsChanged() { invalidate(.settingsChanged); suggestions?.synchronize() }
     func teardown() { invalidate(.teardown); controller?.aiPresentation?.hideSuggestion() }
@@ -126,9 +112,7 @@ final class IFInputControllerAI {
             return true
         }
         if event.isARepeat { return false }
-        let stamp = AIStatisticsStamp(utc: controller.qualityClock.utc().addingTimeInterval(
-            entered - controller.qualityClock.monotonic()), monotonic: entered)
-        guard let adoption = suggestions?.takeSuggestion(at: stamp) else { return false }
+        guard let adoption = suggestions?.takeSuggestion() else { return false }
         isAccepting = true
         engine.beginDelivery()
         controller.qualityInsertionDepth += 1
@@ -137,12 +121,8 @@ final class IFInputControllerAI {
         engine.qualityRecorder?.finishExternalSelection(reason: "ai_adopted", at: entered)
         engine.prepareConsumedAIAdoption(input: input, text: adoption.text)
         controller.ownsMarkedText = false
-        adoption.statistics?.record(.insertionIssued,
-            at: .init(utc: controller.qualityClock.utc(), monotonic: controller.qualityClock.monotonic()))
         AIDiagnostics.emit(.insertionIssued, attempt: adoption.attempt, session: diagnosticSession)
         eventClient.insertText(adoption.text, replacementRange: NSRange(location: NSNotFound, length: 0))
-        adoption.statistics?.record(.insertionReturned,
-            at: .init(utc: controller.qualityClock.utc(), monotonic: controller.qualityClock.monotonic()))
         AIDiagnostics.emit(.insertionReturned, attempt: adoption.attempt, session: diagnosticSession)
         if controller.settings.thunderMode {
             controller.thunderPresentation?.burst(.commit, client: eventClient, characterIndex: 0)

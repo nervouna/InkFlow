@@ -17,7 +17,7 @@ echo '[SwiftPM cache]'
 echo '[test harnesses]'
 shopt -s nullglob
 harnesses=(ai-adoption-learning-tests ai-credential-tests ai-headless-tests ai-live-tests ai-native-tests
-  ai-pronunciation-tests ai-runtime-tests ai-statistics-tests ai-suggestion-tests bundle-engine-tests
+  ai-pronunciation-tests ai-runtime-tests ai-suggestion-tests bundle-engine-tests
   controller-initialization-tests controller-tests deployment-tests dictionary-activation-tests
   dictionary-generator-tests dictionary-update-tests engine-tests installer-core-tests installer-window-tests
   metadata-tests quality-capture-tests quality-store-tests quality-timing-tests serving-startup-tests settings-tests

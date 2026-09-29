@@ -1,6 +1,6 @@
 #!/bin/bash
 # Shared canonical order and expansion. Sourcing this file performs no preparation.
-test_all_units=(shared-core quality-identity quality-store quality-timing quality-metadata quality-capture-query voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-statistics ai-learning ai-headless preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation startup-diagnostics local-diagnostics diagnostic-archive termination installer-core runner workflow)
+test_all_units=(shared-core quality-identity quality-store quality-timing quality-metadata quality-capture-query voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-learning ai-headless preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation startup-diagnostics local-diagnostics diagnostic-archive termination installer-core runner workflow)
 expand_test_groups() {
   test_units=()
   test_full_suite=false
@@ -12,7 +12,7 @@ expand_test_groups() {
     case "$group" in
       engine) expanded='engine-basic engine-options engine-english engine-context engine-custom-phrases' ;;
       quality) expanded='quality-identity quality-store quality-timing quality-metadata quality-capture-query' ;;
-      ai) expanded='ai-credentials ai-transport ai-runtime ai-statistics ai-learning ai-headless' ;;
+      ai) expanded='ai-credentials ai-transport ai-runtime ai-learning ai-headless' ;;
       dictionary-updates) expanded='dictionary-source dictionary-store dictionary-worker' ;;
       *)
         expanded=''

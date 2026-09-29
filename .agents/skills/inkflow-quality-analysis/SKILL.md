@@ -46,10 +46,7 @@ comparing configurations, investigating incomplete evidence, or changing queries
 Use `timing` for composition-level key intervals, last-edit waits and observed
 candidate visibility. It has no raw input text and does not multiply timing by
 decision count. Old or suppressed timing remains unknown; bounded key distributions
-cover retained samples only. For separate AI request, usage, cost and adoption
-statistics, use `macOS/Tools/ai-statistics.py`; read
-[its contract](../../../macOS/AI_STATISTICS.md) before interpreting its rates or
-inspecting the deliberately retained 30-day AI samples.
+cover retained samples only.
 
 Most commands accept `--db`, `--since`, `--until`, `--app`, `--config`,
 `--ranking-config`, `--kind` and `--format table|json|csv` after the command. Time

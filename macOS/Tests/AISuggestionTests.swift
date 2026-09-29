@@ -12,7 +12,6 @@ struct AISuggestionTests {
             try configuration()
             try requests()
             try await responses(diagnostics)
-            try await statisticsResponses()
         }
         for event in [AIDiagnosticEvent.settingsLoaded, .settingsSaved, .settingsToggled, .credentialFailed,
                       .transportStarted, .httpResponse, .transportSucceeded, .transportFailed, .transportCancelled] {
@@ -96,10 +95,6 @@ struct AISuggestionTests {
             let messages = json["messages"] as! [[String: String]]
             expect(messages[0]["content"]!.contains("MUST NOT add meaning") &&
                    messages[0]["content"]!.contains("typing-error correction"), "Conversion prompt permits correction but prohibits expansion")
-            let recorded = AIChatCompletionsClient.statisticsConfiguration(config)
-            expect(recorded.promptTemplate == messages[0]["content"] &&
-                   recorded.strategyVersion == "pinyin-conversion-v2" && recorded.promptVersion == "pinyin-replacement-v2",
-                   "Statistics identify the actual conversion strategy and transmitted prompt")
             let input = try JSONSerialization.jsonObject(with: Data(messages[1]["content"]!.utf8)) as! [String: String]
             expect(input["precedingText"] == fixture.precedingText && input["followingText"] == fixture.followingText && input["pinyin"] == "nihao" && input["selectedPrefix"] == "", "Both context sides, Pinyin and prefix must reach the model")
         }
@@ -113,8 +108,7 @@ struct AISuggestionTests {
                 let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
                 expect(json["reasoning_effort"] as? String == "none" && json["thinking"] == nil,
                        "Local Ollama Qwen disables thinking through the OpenAI-compatible field")
-                expect(json["max_tokens"] as? Int == 256 && AIChatCompletionsClient.statisticsConfiguration(configuration).thinkingDisabled,
-                       "Ollama keeps the bounded budget and records the actual thinking policy")
+                expect(json["max_tokens"] as? Int == 256, "Ollama keeps the bounded budget")
             }
         }
         for (base, model) in [("https://compatible.example/v1", "qwen3.5:4b-mlx"),
@@ -125,7 +119,7 @@ struct AISuggestionTests {
             let configuration = AISuggestionConfiguration(baseURL: base, apiKey: "fixture-key", model: model)
             let request = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: configuration)
             let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
-            expect(json["reasoning_effort"] == nil && !AIChatCompletionsClient.statisticsConfiguration(configuration).thinkingDisabled,
+            expect(json["reasoning_effort"] == nil,
                    "Unidentified servers and other model families retain their request contract")
         }
         for invalid in ["bad URL", "file:///tmp/fixture", "https://user:secret@compatible.example", "https://compatible.example?key=secret", "https://compatible.example/#secret"] {
@@ -186,42 +180,6 @@ struct AISuggestionTests {
             _ = try await client.suggest(input: fixture, configuration: config)
             fatalError("Synthetic network failure must fail")
         } catch { expect(error as? AIServiceError == .network, "Network error remains sanitized") }
-    }
-
-    @MainActor static func statisticsResponses() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-ai-transport-" + UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let db = AIStatisticsTestDatabase(url: root.appendingPathComponent("ai-statistics.sqlite3"))
-        let store = AIStatisticsStore(url: db.url)
-        let sessionConfig = URLSessionConfiguration.ephemeral
-        sessionConfig.protocolClasses = [AIStubURLProtocol.self]
-        let client = AIChatCompletionsClient(session: URLSession(configuration: sessionConfig))
-        for choices in [#"{}"#, #"[]"#, #"[{"message":{"content":"incomplete-private"},"finish_reason":"length"}]"#] {
-            let handle = store.begin(configuration: AIChatCompletionsClient.statisticsConfiguration(config))
-            AIStubURLProtocol.state.configure(status: 200, body: "{\"model\":\"returned-fixture\",\"choices\":\(choices),\"usage\":{\"prompt_tokens\":250,\"completion_tokens\":50}}")
-            do {
-                _ = try await AIStatisticsScope.$attempt.withValue(handle) { try await client.suggest(input: fixture, configuration: config) }
-                fatalError("Invalid content must retain metadata while still failing")
-            } catch { expect(error is AIServiceError, "Original content error is preserved") }
-        }
-        let cancelled = store.begin(configuration: AIChatCompletionsClient.statisticsConfiguration(config))
-        AIStubURLProtocol.state.configure(status: 200, body: #"{"model":"returned-fixture","choices":[{"message":{"content":"cancelled-private"}}],"usage":{"prompt_tokens":250,"completion_tokens":50}}"#)
-        let operation = Task {
-            try await AIStatisticsScope.$attempt.withValue(cancelled) {
-                try await AIDiagnostics.$observe.withValue({ record in
-                    if record.event == .httpResponse { withUnsafeCurrentTask { $0?.cancel() } }
-                }) { try await client.suggest(input: fixture, configuration: config) }
-            }
-        }
-        do { _ = try await operation.value; fatalError("Cancellation after observed HTTP response must reject content") }
-        catch { expect(error is CancellationError, "Cancellation stays distinct") }
-        await store.close()
-        let attempts = db.rows("SELECT * FROM attempts")
-        expect(attempts.count == 4 && attempts.allSatisfy { $0["usage_state"] == "valid" && $0["prompt_tokens"] == "250" && $0["returned_model"] == "returned-fixture" }, "Usage and returned model do not depend on valid choices, stop, or uncancelled task")
-        expect(db.scalar("SELECT response_text FROM samples WHERE attempt_id='\(cancelled.id)'") == "cancelled-private", "Response observed before diagnostic cancellation retains its bounded sample")
-        expect(db.scalar("SELECT reason FROM attempt_events WHERE attempt_id='\(cancelled.id)' AND kind='transportEnded'") == "cancelled", "Transport cancellation remains an independent fact")
-        expect(db.rows("SELECT * FROM configurations").allSatisfy { !String(describing: $0).contains("fixture-key") }, "Configuration snapshots never serialize API keys")
-        print("PASS AI statistics transport: invalid choices/content and cancellation after HTTP preserve original usage and bounded response")
     }
 }
 

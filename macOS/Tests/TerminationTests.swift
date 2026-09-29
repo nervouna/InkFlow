@@ -42,8 +42,6 @@ import InkFlowTestSupport
         if mode == "quality-stall" { qualityHooks.beforeOpen = { stalledWorker.wait() } }
         let store = QualityStore(url: storeURL, engineVersion: "test", buildMetadata: metadata,
             hooks: qualityHooks)
-        let statistics = mode == "ai-stall" ? AIStatisticsStore(url: root.appendingPathComponent("ai.sqlite3"),
-            hooks: .init(beforeOpen: { stalledWorker.wait() })) : nil
         var engine: IFEngine?
         if mode == "success" {
             try IFEngine.start(shared: CommandLine.arguments[3], user: root.appendingPathComponent("rime-user").path, qualityStore: store)
@@ -85,8 +83,7 @@ import InkFlowTestSupport
             }
             let began = ContinuousClock.now
             let closed = await store.close()
-            await statistics?.close()
-            if mode == "quality-stall" || mode == "ai-stall" {
+            if mode == "quality-stall" {
                 check(began.duration(to: .now) < .seconds(2), "Stalled auxiliary IO must have a bounded close")
                 check(mode != "quality-stall" || !closed, "Timed-out quality close must report unsaved state")
             } else {

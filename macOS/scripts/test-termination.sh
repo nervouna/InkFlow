@@ -20,7 +20,7 @@ cat > "$probe/Contents/Info.plist" <<'PLIST'
 <key>LSUIElement</key><true/>
 </dict></plist>
 PLIST
-for mode in success dictionary-failure store-failure disabled quality-stall ai-stall; do
+for mode in success dictionary-failure store-failure disabled quality-stall; do
   mkdir "$termination_root/$mode"
   "$probe/Contents/MacOS/TerminationProbe" "$termination_root/$mode" "$mode" "$PWD/build/InkFlow.app/Contents/Resources/Rime"
   case "$mode" in
