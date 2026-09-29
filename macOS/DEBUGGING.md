@@ -617,7 +617,21 @@ Observed on macOS 26.6.2, 2026-09-05.
 
 **Fix:** Restart only the current user's `TextInputMenuAgent`. Its system LaunchAgent has `KeepAlive` enabled. In this case, a new process plus reopening the menu made both changes visible; the user confirmed the result. No logout, input-source removal, or cache-file deletion was needed.
 
-Routine updates now run `bash macOS/scripts/refresh-menu.sh` after successful installation and registration. The helper sends TERM once to existing current-user menu agents and waits up to 10 seconds for replacement PIDs. If no agent is running it skips the refresh. A process restart proves refresh execution, not correct visual rendering. It does not restart InkFlow's engine; functional acceptance must separately ensure the new engine is running.
+`bash macOS/scripts/refresh-menu.sh` remains an explicit diagnostic for this stale-name/icon symptom. Routine installation no longer invokes it, following the macOS 27 investigation below. The helper sends TERM once to existing current-user menu agents and waits up to 10 seconds for replacement PIDs; it skips the refresh if none is running. A replacement PID proves restart execution, not correct rendering or recovery. It does not restart InkFlow's engine.
+
+## Input menu disappears after a local update
+
+Observed on macOS 27.0 (26A428), 2026-09-29, with local Developer ID builds 134–137.
+
+**Symptom and evidence:** The entire input-source menu icon disappeared, including access to ABC, while Keyboard Settings still listed InkFlow. During a user-confirmed persistent incident on build 135, TIS still reported ABC and InkFlow enabled, the menu visibility preference was on, and both InkFlow and `TextInputMenuAgent` were alive. Restarting only the menu agent did not restore the icon. Removing and re-adding InkFlow restored it without restarting either process.
+
+**Controlled results:** With the same installed payload and InkFlow selected, the normal local installation flow repeatedly caused a brief disappearance. Omitting only the final menu-agent restart produced ABC → InkFlow with no disappearance in two user-observed trials (builds 134 and 137). Restarting only the menu agent from a healthy build 137 state also caused a brief disappearance while the InkFlow PID and input-source state remained unchanged. A version-only 135 → 135.1 trial caused a brief disappearance but did not reproduce the persistent failure; the original 135 was then restored.
+
+**Conclusion and mitigation:** Restarting the menu agent is sufficient to cause the brief disappearance and is the leading suspected trigger for the persistent failure. The mechanism that prevents recovery in the persistent case remains unresolved. Local `install.sh` now preserves the menu agent after registration, fresh-process verification, and selection restoration. The existing install fixture checks that a successful update does not invoke the refresh helper. This removes the observed trigger; longer daily use and future name/icon-changing upgrades remain pending acceptance.
+
+**Diagnostic limits:** TIS state and an independent menu-model probe do not establish the running menu agent's internal state or visible output. AX showed an unnamed menu and “loading” even when the user saw a healthy icon. Menu-bar-only `screencapture` frames also omitted the icon during a trial the user confirmed was continuously visible. Neither is a reliable standalone disappearance detector. CoreUI bundle and CharacterPalette errors also occurred in healthy controls and do not identify the cause.
+
+Raw logs, temporary probes, frozen experiment bundles, and menu-bar-only screenshots were retained under `/tmp/inkflow-menu-rootcause`, `/tmp/inkflow-menu-134-live-failure` (the build 135 incident), and `/tmp/inkflow-menu-135-refresh-only`. These disposable local artifacts are not required to use this record and may be removed after investigation; no input text was collected.
 
 ## Blank name or icon in Keyboard Settings
 

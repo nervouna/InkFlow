@@ -214,7 +214,10 @@ install --developer-id > "$fixture/output" 2>&1
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$target/Contents/MacOS/InkFlow"
 grep -Fq ':--prepare-update' "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
-grep -Fxq refresh "$EVENTS"
+if grep -Fxq refresh "$EVENTS"; then
+  echo 'FAIL: routine update restarted the input menu agent' >&2
+  exit 1
+fi
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]]
 assert_no_persistent_backups

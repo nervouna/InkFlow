@@ -63,10 +63,7 @@ bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json"
 verified=true
 echo "Installed and verified fresh process: $target ($mode)"
 if [[ "$updating" == true ]]; then
-  if ! bash macOS/scripts/refresh-menu.sh; then
-    echo '应用已更新，但输入菜单刷新未完成。可重试 bash macOS/scripts/refresh-menu.sh。' >&2
-    exit 1
-  fi
+  # Preserve the menu agent: restarting it can make the input menu disappear.
   echo '更新完成：新进程路径和构建号已核验，原输入源状态已恢复。实际输入及语音仍需手动试用。'
 else
   echo '首次安装：在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'
