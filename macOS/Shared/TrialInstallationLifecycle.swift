@@ -1,6 +1,16 @@
 import AppKit
 import Darwin
 
+/// Keep the installed path present throughout an update; the old app remains at candidate.
+package enum IFAtomicAppReplacement {
+    package static func replace(candidate: URL, target: URL) throws {
+        let flags = UInt32(FileManager.default.fileExists(atPath: target.path) ? RENAME_SWAP : RENAME_EXCL)
+        guard renameatx_np(AT_FDCWD, candidate.path, AT_FDCWD, target.path, flags) == 0 else {
+            throw IFInputError.api("Atomic application replacement", errno)
+        }
+    }
+}
+
 @MainActor package protocol IFInstallationProcess {
     var processIdentifier: pid_t { get }
     var isTerminated: Bool { get }

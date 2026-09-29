@@ -39,25 +39,23 @@ mkdir -p "$(dirname "$target")"
 [[ ! -L "$target" ]] || { echo 'Refusing to replace a symlinked installation.' >&2; exit 1; }
 stage=$(mktemp -d "$(dirname "$target")/.inkflow-install.XXXXXX")
 verified=false
+candidate_identity=''
 cleanup() {
-  if [[ "$verified" != true && -e "$target" && ! -e "$stage/InkFlow.app" && -s "$stage/state.json" ]]; then
+  # Also detects replacement when the helper exits before reporting success.
+  if [[ "$verified" != true && -n "$candidate_identity" && -e "$target" && -s "$stage/state.json" &&
+        "$(stat -f '%d:%i' "$target")" == "$candidate_identity" ]]; then
     echo "Installation verification failed; staged state retained at $stage" >&2
     return
-  fi
-  if [[ "$verified" != true && -e "$stage/previous" ]]; then
-    if [[ ! -e "$target" ]]; then
-      mv "$stage/previous" "$target"
-    fi
   fi
   rm -rf "$stage"
 }
 trap cleanup EXIT
 ditto "$app" "$stage/InkFlow.app"
 codesign --verify --deep --strict "$stage/InkFlow.app"
+candidate_identity=$(stat -f '%d:%i' "$stage/InkFlow.app")
 # The lifecycle helper waits for graceful shutdown before any installed file moves.
 bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$stage/InkFlow.app"
-if [[ -e "$target" ]]; then mv "$target" "$stage/previous"; fi
-mv "$stage/InkFlow.app" "$target"
+bash macOS/scripts/register.sh "$target" --commit-update "$stage/state.json"
 codesign --verify --deep --strict "$target"
 bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json"
 verified=true

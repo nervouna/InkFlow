@@ -18,11 +18,21 @@ printf rime > "$repo/build/InkFlow.app/Contents/Frameworks/librime.1.dylib"
 printf lua > "$repo/build/InkFlow.app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 chmod +x "$repo/build/InkFlow.app/Contents/MacOS/"*
 cat > "$repo/macOS/scripts/register.sh" <<'STUB'
+set -e
 echo "register:$1:$2" >> "$EVENTS"
 if [[ "$2" == --prepare-update ]]; then
   [[ "${LIFECYCLE_FAILURE:-}" != prepare ]] || exit 1
   [[ ! -f "$1/old-marker" ]] || echo old-intact-before-stop >> "$EVENTS"
   printf 'fixture lifecycle snapshot\n' > "$3"
+elif [[ "$2" == --commit-update ]]; then
+  [[ "${REPLACE_FAILURE:-}" != before-candidate ]] || exit 1
+  stage=$(dirname "$3")
+  # Fixture models the helper's exchanged slots; real atomic semantics are covered
+  # by InstallerCoreTests using the shared replacement primitive.
+  if [[ -e "$1" ]]; then /bin/mv "$1" "$stage/old"; fi
+  /bin/mv "$stage/InkFlow.app" "$1"
+  if [[ -e "$stage/old" ]]; then /bin/mv "$stage/old" "$stage/InkFlow.app"; fi
+  [[ "${REPLACE_FAILURE:-}" != after-candidate ]] || exit 1
 elif [[ "$2" == --finish-update ]]; then
   [[ ! -f "$1/old-marker" ]] || exit 1
   [[ "${LIFECYCLE_FAILURE:-}" != finish ]] || exit 1
@@ -84,15 +94,8 @@ fi
 STUB
 cat > "$fixture/bin/mv" <<'STUB'
 #!/bin/bash
-if [[ "${MV_FAILURE:-}" == before-candidate && "$1" == */.inkflow-install.*/InkFlow.app && "$2" == */Library/Input\ Methods/InkFlow.app ]]; then
-  exit 1
-fi
-/bin/mv "$@"
-status=$?
-[[ $status -eq 0 ]] || exit "$status"
-if [[ "${MV_FAILURE:-}" == after-candidate && "$1" == */.inkflow-install.*/InkFlow.app && "$2" == */Library/Input\ Methods/InkFlow.app ]]; then
-  exit 1
-fi
+echo 'FAIL: installation must delegate replacement to the atomic helper' >&2
+exit 99
 STUB
 chmod +x "$fixture/bin/"* "$repo/macOS/scripts/"*.sh
 export TEST_IDENTITY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
@@ -153,7 +156,7 @@ stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 assert_no_persistent_backups
 
 printf old > "$target/old-marker"
-if MV_FAILURE=before-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
+if REPLACE_FAILURE=before-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 [[ -f "$target/old-marker" ]]
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]]
@@ -174,7 +177,7 @@ for phase in source staged installed; do
   stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
   if [[ "$phase" == installed ]]; then
     [[ ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]]
-    [[ -f "${stages[0]}/previous/old-marker" && -s "${stages[0]}/state.json" ]]
+    [[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]]
     grep -Fxq old-intact-before-stop "$EVENTS"
     grep -Fq ':--prepare-update' "$EVENTS"
     # Remove only this test-owned recovery fixture before the next scenario.
@@ -185,10 +188,10 @@ for phase in source staged installed; do
   fi
 done
 printf old > "$target/old-marker"
-if MV_FAILURE=after-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
+if REPLACE_FAILURE=after-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ -e "$target" && ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]]
-[[ -f "${stages[0]}/previous/old-marker" && -s "${stages[0]}/state.json" ]]
+[[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]]
 grep -Fq 'staged state retained' "$fixture/output"
 rm -rf "${stages[0]}"
 printf old > "$HOME/Library/Input Methods/InkFlow.app/old-marker"
@@ -213,6 +216,7 @@ install --developer-id > "$fixture/output" 2>&1
 [[ -x "$target/Contents/MacOS/InkFlow" && ! -e "$target/old-marker" ]]
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$target/Contents/MacOS/InkFlow"
 grep -Fq ':--prepare-update' "$EVENTS"
+grep -Fq ':--commit-update' "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
 if grep -Fxq refresh "$EVENTS"; then
   echo 'FAIL: routine update restarted the input menu agent' >&2
