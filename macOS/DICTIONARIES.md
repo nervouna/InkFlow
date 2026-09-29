@@ -207,7 +207,7 @@ another pane is selected. Reopening never replays an earlier error or a failure
 that completed while closed. Switching panes or bringing an already visible
 window forward preserves the current error. Starting the next operation clears
 the old error. Sanitized diagnostics remain in the unified log independently;
-see [DEBUGGING.md](DEBUGGING.md#dictionary-activation-waits-or-recovers-a-previous-version)
+see [DEBUGGING.md](DEBUGGING.md#dictionary-activation-waits-or-falls-back)
 for the `log show` filter. No error is restored from logs or saved in preferences,
 manifests or the recovery journal.
 

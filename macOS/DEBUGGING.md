@@ -1,763 +1,136 @@
 # Debugging index
 
-## Input disappears until switching to ABC and back: candidate lifetime
+Known failures: symptom, cause, fix, and where to look. Git history has the full investigation notes.
 
-**Incident (2026-09-14, macOS 26.6.2 / 25G83):** The user reported no text or
-candidate window in Codex, restored by switching to ABC and back. Installed
-v0.4.4 (11) crashed at 23:03:07 (PID 2624), 23:03:14 (28242), and 23:04:47
-(28382), each with `EXC_BAD_ACCESS` in `objc_msgSend` called from
-`-[_IMKServerLegacy deactivateServer_CommonWithClientWrapper:controller:] + 368`.
-The next process, 30174, started at 23:05:15, became ready in 240 ms and recorded
-a handled Rime key with a marked-text update at 23:05:17. Logs do not identify
-the ABC switch itself. An earlier v0.4.1 (8) report at 01:14:56 has the same
-stack, so the recent Ollama change does not explain the origin of this failure.
+## Logs and incident archives
 
-**Source and platform evidence:** Each `IFInputControllerShell.configure` creates
-an `IMKCandidates`; controller teardown releases it. On this OS, the server keeps
-a non-zeroing candidate pointer. Native disassembly shows the failing `+368`
-return address follows `_windowIsOpen`, which tail-calls `isVisible` on that
-candidate pointer. This occurs before calling the application's `deactivateServer:`.
-Controller-release events precede all three crashes; the latest created controllers
-were released at 23:03:05.337, 23:03:11.266 and 23:03:24.421 respectively.
-
-**Independent reproduction:** An isolated process creates a real server and native
-candidate panel, hides/releases the panel, then inspects the server's pointer
-without retaining or messaging the freed object. A weak reference becomes nil
-while the server still returns the same pointer. Calling the native common
-deactivation method with Zombies enabled reports:
-
-```text
-panel_released=1 server_still_references_panel=1
-*** -[IMKCandidates isVisible]: message sent to deallocated instance
--[_IMKServerLegacy deactivateServer_CommonWithClientWrapper:controller:] + 368
-```
-
-Keeping the panel alive through that same call instead records
-`panel_released=0` and `native_deactivation_returned`. This establishes a concrete
-candidate use-after-free mechanism matching the production instruction and selector.
-The production heap was not captured; the exact production object's allocation and
-release stack remain unobserved. This reproduction is not real-client acceptance.
-
-Run the explicit diagnostic from an unlocked GUI session outside a restricted
-sandbox:
+Unified log subsystem `io.damao.inputmethod.inkflow`; categories `startup`, `input`, `dictionary`, `ai`:
 
 ```sh
-bash macOS/scripts/probe-imk-candidate-lifetime.sh --inspect
-bash macOS/scripts/probe-imk-candidate-lifetime.sh --keep-alive
-bash macOS/scripts/probe-imk-candidate-lifetime.sh --zombie
+/usr/bin/log show --last 1h --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "input"'
+/usr/bin/log stream --style compact \
+  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
+ps -Ao pid=,etime=,comm= | rg '/InkFlow.app/Contents/MacOS/InkFlow$'   # match PID to the installed app
 ```
 
-The final mode intentionally stops its own child in LLDB; LLDB exit status zero
-does not mean a passing regression. The probe uses private methods only to inspect
-and reproduce this OS-specific behavior and reports unsupported when unavailable.
-It creates an independently named IMK server connection, never registers/selects
-an input source, reads no input content or production settings, and does not attach
-to the installed process. Its temporary executable is removed on exit. macOS may
-retain its own diagnostic reports. Investigation transcripts in ignored
-`build/imk-investigation/` can be removed after this diagnosis is no longer needed.
+Logs contain only fixed labels, random correlation IDs, status and timing — never text, Pinyin, candidates, keys or URLs. Keep it that way.
 
-**Repair:** `NativeCandidateLifetime` is owned by application bootstrap through the
-event loop and retains only the latest registered panel for its server. Controllers
-keep their independent panels. Replacing the retained panel releases the previous
-one when its controller no longer owns it. The server links to this lifetime owner
-weakly through a public Objective-C association: a strong association would create
-a cycle because the native panel itself retains its server. No private server
-pointer is changed. The borrowed US selection-key layout has process lifetime.
-Controller teardown hides its own panel and submits an empty candidate array before
-releasing ownership. The native line-to-identifier query still returns a cell
-identifier after an empty array in an isolated live-panel control, so it is not
-used as evidence of native internal data erasure.
+- **Startup:** one `run` UUID per process; each stage has a paired begin/end `span`. A begin without an end means pending work or a process exit, not necessarily a deadlock.
+- **Input:** per activation, `firstKeyEntered` → `firstKeyCompleted` (with outcome), then `deactivationEntered/BeforeSuper/AfterSuper/Finished`. A missing checkpoint points at that interval; correlate PID/time with `~/Library/Logs/DiagnosticReports/` before blaming InkFlow or macOS.
+- **AI:** gate → `scheduled` → `dispatched` → HTTP status/elapsed → `shown` → `adoptionRequested` → `insertionIssued` → `insertionReturned`, all with the same attempt ID. No dispatch: check the gate reason (config, secure input, candidate visibility, mark). `insertionReturned` doesn't prove the editor displayed the text.
+- **Dictionary:** errors at error level, long payloads split into `part=i/n` chunks sharing an event ID.
 
-**Regression:** Headless controller tests replace native activation/deactivation
-and cannot establish this fix. `test-controller-initialization.sh` now exercises
-the exact production initializer, controller release, the native post-release
-deactivation path, repeated bounded panel replacement, borrowed layout validity,
-and lifetime-owner teardown. Its pre-fix regression failed with
-`Server candidate must survive controller release`. Private inspection is confined
-to the explicit native diagnostic; a future OS without the selector is unsupported,
-not a passing result. Installed-input-method trial and user-owned cross-app input
-acceptance remain separate from these tests.
+**Incident archive:** Settings → 反馈 → **保存问题现场** freezes the preceding 30 minutes; **导出诊断包…** exports a ZIP (open `manifest.json` first, then `events.jsonl`, `summary.json`; timestamps are UTC Unix ms). Stored in `~/Library/Application Support/InkFlow/Diagnostics/`, capped at 7 days / 50 MiB. If InkFlow can't start, copy only that directory plus matching DiagnosticReports. Archives exclude `quality.sqlite3`, preferences, document text and audio. Nothing is uploaded automatically.
+
+## Input disappears until switching to ABC and back
+
+**Cause:** `EXC_BAD_ACCESS` in `-[_IMKServerLegacy deactivateServer_CommonWithClientWrapper:controller:] + 368`. The IMK server keeps a non-zeroing pointer to the last `IMKCandidates`; after a controller released its panel, deactivation messaged the freed panel (`isVisible`). Seen on macOS 26.6.2 with v0.4.1 and v0.4.4.
+
+**Fix:** `NativeCandidateLifetime` (owned by bootstrap) retains the latest registered panel per server, linked weakly via an Objective-C association. Controller teardown hides its panel and submits an empty candidate array. `test-controller-initialization.sh` covers release → native deactivation. To reproduce the OS behavior (unlocked GUI session, outside the sandbox): `probe-imk-candidate-lifetime.sh --inspect | --keep-alive | --zombie`.
 
 ## Settings disappears after first microphone authorization (GitHub #3)
 
-**Observed cause:** On macOS 26.6.2 (25G83), the Settings window used accessory
-activation. Granting microphone permission moved activation from InkFlow to
-`com.apple.UserNotificationCenter`, then to the preceding regular app (Codex or
-WeChat), leaving Settings behind its windows. The user confirmed no intervening
-click on another app. The process stayed alive, the window was neither closed nor
-hidden, and speech preparation succeeded. Window `occlusionState` only establishes
-partial visibility; it does not prove that other windows do not cover Settings.
-The user also reported the symptom on a single-display Mac, without Stage Manager.
-
-**Controlled comparison:** Removing only `LSBackgroundOnly` did not help. Calling
-`activate()` plus either `makeKeyAndOrderFront` or `orderFrontRegardless` at permission
-completion also failed user-visible acceptance. With the original permission code
-and regular activation while Settings was open, the same permission prompt returned
-both application activation and key-window status to Settings; the user confirmed
-the window stayed in front. Existing v0.4.1 IMK deactivation crash reports are a
-separate symptom and are not evidence of the cause of this window disappearance.
-
-**Fix:** `IFSettingsWindowController.present()` uses regular activation; its close
-delegate returns to accessory activation. Settings therefore has the existing
-InkFlow Dock icon and Cmd-Tab presence while open. Closing it removes that presence.
-There are no delayed focus retries, floating window levels, permission-flow changes,
-or changes to the installed input source. Apple describes [activation as a request,
-not a guarantee](https://developer.apple.com/documentation/macos-release-notes/appkit-release-notes-for-macos-14).
-[Handy #1618](https://github.com/cjpais/Handy/issues/1618) reports a similar permission
-flow symptom; [AnyDoor's window coordinator](https://github.com/ZingerLittleBee/AnyDoor/blob/main/Sources/AnyDoor/Services/RegularWindowCoordinator.swift)
-uses regular activation while settings/editor windows are open. These references
-informed the comparison; the local user-visible result is the acceptance evidence.
-
-Run `bash macOS/scripts/test-settings-ui.sh --settings-window-lifecycle` for the
-focused native open/repeated-present/close/reopen policy regression. It requests no
-microphone permission. Use `--microphone-reproduction` instead for an explicit
-interactive real-permission diagnostic. Both build an ad-hoc signed app with the
-production Settings controller, the existing app icon, isolated defaults and a
-separate bundle ID. Neither registers an IME, reads production credentials or records
-audio. The microphone variant can prepare Apple's speech assets; allow the system
-prompt yourself. It ends on window close or after ten minutes, not merely on hiding.
-App/window notifications and changed front-app/state samples are recorded only in
-this diagnostic. Logs remain in ignored `build/settings-window-run.*/` until removed
-after investigation; close one diagnostic before starting another. The defaults
-suite is removed on normal exit, and the app remains under `build/` for inspection.
-
-Launch through LaunchServices as the script does. Direct executable launch can
-inherit the terminal host's permission. Check for initial authorization status 0;
-status 3 only tests an already-authorized path. The isolated TCC decision belongs to
-`io.damao.inkflow.microphone-reproduction`. Rebuilding ad-hoc code can invalidate it;
-an explicit `tccutil reset Microphone io.damao.inkflow.microphone-reproduction` can
-repeat first authorization. Never implicitly reset production permission. The
-diagnostic has no registered IMK client lifecycle; installed-input-method typing,
-focus and cross-app behavior remain separate user-owned acceptance.
-
-**Final isolated acceptance (2026-09-14):** The user confirmed the existing InkFlow
-Dock icon displayed correctly, Settings stayed in front after first microphone
-authorization, and closing Settings removed the Dock icon. The final diagnostic
-recorded authorization changing from 0 to 3, application/key-window activation
-returning to the harness, successful preparation, and normal window-close exit.
-The native window lifecycle check and focused `settings`, `engine-options`,
-`controller`, `voice-controller`, `ai-transport`, `ai-runtime` and `ai-headless`
-regressions passed. No installed-IME acceptance or release was performed.
-
-## Cold startup versus same-process app-switch delay
-
-Collect process startup, dictionary recovery and input callbacks separately, or combine
-them for one incident window:
-
-```sh
-/usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "startup"'
-/usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "dictionary"'
-/usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "input"'
-/usr/bin/log show --last 1h --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND (category == "startup" OR category == "dictionary" OR category == "input")'
-```
-
-Startup events use one process `run` UUID plus PID; each stage has a paired `span`
-UUID, source kind, outcome and monotonic `elapsed_ms`. A begin without its matching
-end identifies work still pending (or a process exit), not proof of a deadlock.
-No document text, custom phrases, paths or error descriptions enter these events.
-Dictionary errors retain their existing detailed bounded diagnostic channel.
-Startup events are emitted only at stage transitions and native activation/deactivation.
-The input category records the first key-down callback in each activation and bounded
-composition/insertion transitions, not a permanent per-key stream. Allowlisted startup,
-input, AI, voice, dictionary, update, termination and statistics events also enter the
-local diagnostic store described below. Existing detailed dictionary system logs are
-separate and are not copied into the default diagnostic archive.
-
-### Save an incident and bring its evidence to another computer
-
-In Settings → 反馈, use **保存问题现场** when a problem occurs. The default occurrence
-time is the button click; enable **问题发生在更早时间** to select an earlier time.
-Saving freezes the preceding 30 minutes that are still available. The optional note
-is exported verbatim, so do not enter passwords, input contents or other sensitive text.
-After saving, the export selection points to that incident. **导出诊断包…** can also
-export the last 30 minutes, 24 hours, or all retained history. Cancelling the destination
-dialog creates no archive. Transfer the ZIP yourself through an allowed channel;
-InkFlow performs no automatic upload, remote collection, or GitHub issue submission.
-The existing GitHub feedback action and its opt-in system-log attachment remain separate.
-
-Production records are under `~/Library/Application Support/InkFlow/Diagnostics/`.
-Rolling records and saved incidents share an upper limit of **7 days / 50 MiB**;
-capacity can evict evidence sooner, and saving a scene does not exempt it from expiry.
-Diagnostics use a bounded queue and normally flush within one second on a background
-worker. A stalled disk, abnormal exit or full disk can lose buffered records. A normal
-quit makes only a bounded best-effort drain. Zero observed loss counters never establish
-complete history. A begin without its end establishes neither deadlock nor its cause;
-an insertion return does not prove text appeared in another application.
-
-Open `manifest.json` in the ZIP first for collection status, loss observations and the
-requested/observed window; `events.jsonl` contains complete records, and `summary.json`
-includes process versions, module observation states and the optional note. All timestamps
-are Unix milliseconds in UTC. Missing/unreadable modules or unsupported crash reports
-are explicitly distinguished from successful collection. Crash attachments are bounded
-safe summaries, not original crash files. The default archive excludes raw system logs,
-`quality.sqlite3`, preferences, document text and audio.
-
-If InkFlow cannot start, open Finder → Go → Go to Folder and enter
-`~/Library/Application Support/InkFlow/Diagnostics/`. Copy **only that directory** to a
-local evidence folder and compress the copy. Do not copy the parent InkFlow folder or
-its statistical databases. This manual copy is raw diagnostic evidence and may include
-an explicitly written incident note or unfinished export staging; inspect it before
-sharing. A live copy may race writes, so record its collection time and do not claim it
-is a complete snapshot. Separately preserve matching InkFlow reports from
-`~/Library/Logs/DiagnosticReports/` (and `/Library/Logs/DiagnosticReports/` when readable).
-Original crash reports are separate sensitive attachments requiring manual review;
-they are not automatically added to the local ZIP. The system-log commands above are
-an additional manual investigation path, not a substitute for the frozen incident.
-
-Read server construction, event-loop progress, and engine readiness separately.
-Production starts the immutable `RimePrebuilt` bundled fallback before constructing
-the server. Packaged-cache validation and native Rime initialization still precede
-server construction, so no zero-latency cold-start claim is made. The large context
-ranking index no longer blocks server construction: baseline Rime starts without it,
-the index is built on a detached executor, and it is published only when all sessions
-are idle. Until then candidate order is Rime's original order. Downloaded-cache recovery
-and its potentially long worker waits also run detached after the fallback is usable.
-Per-worker timeouts do not bound the total fallback chain, but that chain now leaves
-the bundled engine serving. Activation/deactivation spans in the same run/PID indicate
-client lifecycle callbacks rather than a new process. A ready activation reports
-engine availability at callback return; it does not prove first-key/preedit delivery.
-An activation marked skipped means the engine was unavailable then.
-
-Input records carry random `controller` and `activation` UUIDs. Follow one activation
-from `activationReady` or `activationSkipped` to a `firstKeyEntered` /
-`firstKeyCompleted` pair with the same random `key` UUID, then through deactivation.
-`firstKeyEntered` is emitted immediately and proves that one key-down callback reached
-InkFlow. `firstKeyCompleted` adds its fixed `outcome` and `reason`, distinguishing Rime
-handled/pass-through, missing or unavailable engine, and voice/AI/control-shortcut
-early paths. A lone entered record means the synchronous callback did not return through
-an observed outcome; it does not by itself identify a hang, crash, client reentry or
-process exit. The pair retains its original activation IDs even if an editor callback
-synchronously deactivates or reactivates the controller. Both stages are deliberately
-deduplicated until the next activation, so they cannot describe later keys or prove
-that a missing later keystroke never reached the controller.
-
-When the first key enters ordinary Rime refresh, `client_present`, `commit_insertion`,
-`marked_text_update`, and `marked_text_clear` report only whether the corresponding
-editor call was issued. They do not prove that another application displayed the text.
-`deactivationEntered`, `deactivationBeforeSuper`, `deactivationAfterSuper`, and
-`deactivationFinished` bracket InputMethodKit teardown. A missing later checkpoint is
-evidence of interruption in that interval, not proof of its cause; correlate the PID
-and timestamp with a DiagnosticReports crash before attributing it to InkFlow or macOS.
-Controller creation/release can occur without a complete activation when a client exits.
-
-Input messages contain only allowlisted event/reason/outcome labels, random UUIDs and
-booleans. They exclude key codes, modifier flags, characters, Pinyin, candidates,
-document text and length, client identifiers, paths, URLs and arbitrary error text.
-
-`bash macOS/scripts/test-startup-diagnostics.sh` verifies a deliberately gated
-stage retains its begin event while server readiness has not occurred, then
-attributes a controlled monotonic delay to that stage. It also verifies bounded
-content-free failure/cancel/timeout/skip events. This is a deterministic diagnostics
-fixture, not a native IMK responsiveness test or evidence that GitHub #1 is caused
-by startup. Use the isolated dictionary activation/update suites for real recovery
-paths, and retain a native incident with matching run/PID before attributing #1.
-
-Isolated activation-suite baseline, 2026-09-10: unified logs for PID 24671,
-run `45248F97-33ED-4064-8BB7-3119259C0AD0`, retained a real worker preparation of
-20,551.723 ms, bundled engine initialization of 23.256 ms, and synchronous
-maintenance of 769.807 ms. A prepared engine skipped maintenance and reached
-engine readiness in 92.240 ms. The injected fingerprint failure retained a failed
-stage of 10.788 ms. These are synthetic-root test observations with shared system
-load, not production cold-start timings or a first-key/preedit measurement.
-
-The transient fallback does not overwrite a readable saved current/previous journal.
-Recovery switches only when every client is idle, retains the confirmed activation
-date for equal content, and rolls back to the live fallback if activation fails.
-Unreadable journals are repaired only after bundled input actually started. Failed
-downloaded recovery preserves its saved versions for retry. Shutdown drains owned
-preparation before cleanup and prevents a late native switch.
-
-`RimePrebuilt/inkflow-cache.json` binds the bundled resources and compiled files.
-It deliberately excludes helper/library binary hashes that signing can change.
-Build and bundle verification compile/smoke-test this cache. A missing or invalid
-packaged cache reports engine unavailability and leaves Settings/retry reachable;
-it never falls back to synchronous maintenance. The normal-input guarantee requires
-a valid packaged bundle and does not cover keys before its fallback engine is ready.
-
-Run `bash macOS/scripts/test-serving-startup.sh` after building for actual coordinator
-recovery gates, heartbeat/input/journal/idle-switch/shutdown checks and read-only
-cache profile/custom-phrase/reopen checks. This is included in the
-`test.sh dictionary-activation` group. Add `--native` in a logged-in, unlocked GUI
-session for a focused host, real candidate panel and two-client exact-delivery check.
-It retains the framework-init/client-lookup shim needed for RecordingClient; it does
-not establish external-application cross-process routing or resolve GitHub #1.
-
-## Uppercase English drops itself and following Pinyin from mixed candidates
-
-**Symptoms:** An admitted word works in standalone English, but mixed input such as
-`woyongAPIkeyihuifuwo` or `woyongSwiftUIhenhao` keeps only the Chinese prefix in
-the candidate list. `Email` can appear to work because its existing literal code
-already satisfies the older four-character mixed rule.
-
-**Cause:** The generated mixed dictionary previously retained only records whose
-display text exactly equaled their code and had at least four letters. Admitted
-forms such as `API` (`api` / `Api`), `SwiftUI` (`swiftui`), and the one-letter `D`
-therefore had no matching mixed code. Broadly admitting short uppercase records is
-also unsafe: native sentence composition can join admitted fragments such as
-`WOMEN` + `S` and reconstruct an explicitly excluded `WOMENS`.
-
-**Fix:** Keep the conservative lowercase literal rule. For already admitted
-ASCII-letter records, retain sourced uppercase codes and add the exact displayed
-spelling as a code when it contains uppercase letters. The mixed Lua filter then
-requires each contiguous ASCII output run to be an exact admitted mixed-dictionary
-entry. Do not clear the Shift modifier, append unknown raw tails, or add a global
-uppercase Pinyin algebra rule; those approaches do not repair the missing-code
-contract and can broaden unrelated decoding.
-
-**Regression:** `bash macOS/scripts/test.sh` covers dictionary aliases for `D`,
-`API`, and `SwiftUI`, actual Shift-modified key events, following Pinyin, backspaces
-at complete Pinyin boundaries, rejected case variants, and ordinary Chinese input.
-After building, `bash macOS/scripts/check-bundle.sh --deep` verifies the generated
-dictionary and Lua filter are packaged. Real-client typing remains a separate
-acceptance step.
-## AI suggestions do not appear
-
-### Local Ollama Qwen reports an incomplete suggestion (GitHub #4)
-
-The issue used `http://localhost:11434/v1/` with `qwen3.5:4b-mlx`.
-On Ollama 0.34.0, a synthetic `nihao` request using the production prompt and
-256-token limit reproduced `finish_reason=length`, empty content, and 256
-completion tokens consumed by thinking. This is a request-policy compatibility
-failure, not an HTTP connectivity failure. The original issue log alone records
-only `incompleteSuggestion`; it does not identify the provider's finish reason.
-
-Ollama's [OpenAI adapter](https://github.com/ollama/ollama/blob/main/openai/openai.go)
-maps `reasoning_effort: "none"` to `think: false`. With that field, the same
-synthetic request returned `你好`, `finish_reason=stop`, and no reasoning text.
-Prediction requests now send this field for `qwen3` / `qwen3.5` model families
-on loopback hosts (`localhost`, `127.0.0.1`, `::1`) at port 11434. This is a
-default-endpoint convention, not server discovery. Custom ports, remote/proxied
-servers and other model families retain their existing request behavior.
-
-The 256-token budget, timeout, and rejection of incomplete responses remain in
-place. No retry, additional request, preference, or stored user content is added.
-`test-ai-suggestions.sh` covers request boundaries, statistics policy and
-reasoning-only truncated responses. Local synthetic transport verification does
-not establish candidate-panel display or Tab insertion in an external editor.
-
-### Native acceptance timing and prerequisites
-
-`test-ai-native.sh` retains each invocation's compile log, combined stdout/stderr,
-and isolated harness app under `build/ai-native-run.*`. `TRACE` records contain a
-run ID, monotonic elapsed time and the existing allowlisted attempt/session labels.
-`WAIT`/`READY` identify each bounded phase. Only `PASS native AI final` after the
-diagnostic assertions is complete acceptance. Focus prerequisites exit 2 as
-`BLOCKED`, distinct from a product assertion failure; a visible window alone is
-not proof of keyboard focus.
-
-The original suite reproduced a request-count failure after its fixed 0.58-second
-wait despite completing host focus and all five adoption/ordinary-key scenarios.
-This establishes a timing-sensitive assertion, not a diagnosed product defect.
-Positive waits now observe one service dispatch and an attempt-correlated response
-terminal event emitted after resolution. Schedule-to-dispatch timestamps separately
-require at least 0.5 seconds; secure input retains a negative observation window.
-Navigation must immediately retain the same ready window and request attempt,
-not eventually show a replacement. Context-read and passive-focus negative windows
-remain intact. The delayed-visibility headless suite still verifies the natural
-trigger without forcing visibility. No paid API call is needed for these checks.
-
-Start with the installed process and its retained unified log, before restarting the
-input method or changing configuration. Match the process ID to the installed app;
-unit tests and native harnesses also use the same logging subsystem.
-
-```sh
-ps -Ao pid=,etime=,comm= | rg '/InkFlow.app/Contents/MacOS/InkFlow$'
-/usr/bin/log show --last 10m --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
-```
-
-To observe one reproduction in real time:
-
-```sh
-/usr/bin/log stream --style compact \
-  --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "ai"'
-```
-
-The AI category records settings availability, controller eligibility gates,
-debounce scheduling, request dispatch, HTTP status and elapsed time, cancellation,
-stale results, presentation, adoption commands and insertion calls. Follow the controller and attempt IDs
-across stages. Gate changes are deduplicated; an unchanged invalid state does not
-produce a new record on every validation tick. Important events use notice/error
-levels so they remain queryable after the process exits, subject to macOS log
-retention. This follows Apple's [unified logging guidance](https://developer.apple.com/documentation/os/generating-log-messages-from-your-code).
-
-- If there is no dispatch, inspect the gate or context failure reason: configuration,
-  secure input, candidate visibility or owned mark/selection.
-- If dispatch occurs, inspect transport status/error and elapsed time. Cancellation
-  is distinct from service failure. Do not infer that a request was never sent merely
-  because no suggestion appeared.
-- If a result arrives, inspect stale-state and presentation failures before
-  attributing the problem to the provider. A successful result can be discarded when
-  the active input session changes.
-- After Tab, follow `adoptionRequested`, `insertionIssued` and `insertionReturned`
-  with the same attempt/session IDs. These distinguish consuming a preview from
-  issuing an editor insertion and returning from that call. A return does not prove
-  that the external editor displayed the text.
-- Deactivation checkpoints help separate normal controller cleanup from interruption
-  by a crash. A missing completion checkpoint is a clue, not proof of the crash cause;
-  consult the matching macOS DiagnosticReports file.
-
-Logs contain fixed event/reason labels, random correlation IDs, status/timing and
-availability and document-length/marked-end scalars. They never include input text, Pinyin, suggestions, API keys,
-URLs, model names, HTTP bodies or arbitrary provider/error descriptions. Keep this
-boundary when extending diagnostics; do not enable raw request/response dumps.
-
-The earlier build `1e88aa4` did not log the AI lifecycle. Its in-memory Settings
-request error cannot reconstruct a failed session after process exit. Missing records
-from that build do not establish which trigger or response guard failed.
-
-### Document length is shorter than the owned composition
-
-**Observed failure:** Installed build `8024ac03` repeatedly logged
-`contextRejected reason=documentShorterThanMark`, followed by
-`discarded reason=contextUnavailable`, without dispatching a request. Its context
-reader treated document length shorter than the owned mark as an inference blocker.
-
-**Experiment:** Treat length as advisory and read surrounding text once when the
-request starts. A usable length clips the suffix at document end; shorter, negative
-or unknown lengths use a bounded request instead. Unavailable text becomes empty
-context. Returned Unicode text is limited to 256 characters per side without
-requiring exact returned-range metadata. Valid owned mark, client, selection and
-secure-input checks still surround capture. Response display and Tab revalidate the
-current composition and visibility without rereading or comparing document text.
-
-The fallback records `contextCaptured reason=documentShorterThanMark` with
-`reported_document_length`, `marked_end` and both availability flags. Follow that
-attempt through dispatch, shown and the insertion checkpoints. A missing suffix can reduce contextual
-quality, but no longer prevents a same-composition suggestion or Tab adoption.
-
-The headless regression first reproduced `zero-length: requests=0 suggestion=false`
-against the previous code. Its success checks require request, preview and exact-once
-Tab with both committed sides preserved for zero, short and negative reported lengths.
-It also covers unavailable or changed surroundings during the request and preview,
-with no response/Tab document reads. These simulated client results establish the
-new functional path; the installed editor behavior still requires a typing trial.
-
-### Tab removes the Pinyin but the suggestion does not appear
-
-**Observed failure:** In installed build `4e502fa`, the user reported this behavior
-in Codex. Its `accepted` event was emitted when the coordinator consumed the preview,
-before any editor call; that event did not establish successful insertion. Other
-editors were not verified. The AI path first refreshed an empty Rime composition,
-clearing the client's mark, then inserted at a cached explicit offset. The regression
-records two mutations, no active mark at insertion and a nondefault replacement
-range. It does not establish why Codex rejected or lost that later insertion.
-
-**Fix:** Match ordinary candidate commits: clear Rime internally, release controller
-mark ownership, insert once with `NSNotFound` while the client still has its mark,
-then refresh the empty composition. The delivery lease and callback reentry guards
-remain in effect. `adoptionRequested` replaces the misleading `accepted` label;
-`insertionIssued` and `insertionReturned` bracket the editor call with the original
-attempt/session IDs and no text or additional document reads.
-
-The headless regression requires the active-mark/default-range contract, one editor
-mutation, preserved surrounding text and selected prefix, and exact-once insertion
-under repeated Tab and synchronous callbacks. It also checks checkpoint ordering
-and correlation. The native harness uses real candidate/AppKit windows but still
-uses `RecordingClient` for text delivery; neither harness proves an external
-editor's cross-process behavior. Confirm actual visible text in an installed typing
-trial rather than treating an insertion-return record as display confirmation.
-
-### Candidate visibility becomes ready after the final input refresh
-
-**Reproduced failure:** If the candidate window was still hidden when the final
-controller refresh returned, the previous eligibility check discarded the composition
-and its tracker. Becoming visible later did not schedule another check. A per-key
-`nihao` regression with a window endpoint delayed by 160 ms reached
-`visible=true requests=0 suggestion=false`, without filling candidate data or forcing
-a request. This establishes a trigger defect; it cannot retrospectively identify the
-cause of an earlier user session whose logs are missing.
-
-**Fix:** Keep stable composition identity separate from candidate visibility. The
-0.5-second deadline starts at the last actual input change. After that deadline,
-wait for visible candidates while the composition, client and configuration remain
-valid. This wait reads no surrounding document text and makes no network request.
-Paging and highlighting preserve the deadline. Once visibility permits capture,
-hiding the candidates invalidates an in-flight request or displayed suggestion;
-secure input, changed state and lifecycle callbacks also cancel the attempt. The
-same injected secure-input source checks eligibility and both context anchors;
-production still reads the actual system secure-input state each time.
-
-**Automated regression:** Prepare the isolated Rime resources with
-`bash macOS/scripts/test.sh`, then run:
-
-```sh
-bash macOS/scripts/test-ai-headless.sh
-bash macOS/scripts/test-ai-headless.sh --delayed-visibility
-# Optional paid acceptance; the parser requires an ignored, untracked configuration.
-bash macOS/scripts/test-ai-headless.sh --live /absolute/path/to/ignored/.env
-```
-
-The stub suite covers delayed visibility before and after the debounce deadline,
-hidden-context isolation, pending and in-flight cancellation, partial selected
-prefixes, ordinary candidate keys, client range/length profiles and exact-once Tab
-adoption. The delayed-show regression now reaches
-`visible=true requests=1 suggestion=true`. Live mode performs the four short, long,
-mixed-language and long-typo fixtures through the same pipeline with DeepSeek V4
-Flash. Live fixtures now report document length zero and require the best-effort
-capture diagnostic, available prefix and unavailable suffix. The ordinary stub
-fixtures retain healthy two-sided context. Both modes verify complete original
-Pinyin (including `zhegn`), required meaning-bearing phrases, one request, correlated diagnostic stages
-and exact insertion preserving the surrounding document. It never falls back to a
-stub response.
-
-**Evidence boundary:** These tests deliver timed `NSEvent` sequences with actual
-physical key codes and modifiers through the production controller, Rime engine,
-normal candidate refresh, marked-text/context handling, coordinator and Tab adoption.
-Live mode also uses the production HTTP client. Window rendering and visibility are
-simulated endpoints; `RecordingClient` simulates an editor's document, and the
-existing test shim substitutes IMK framework initialization, client lookup and
-deactivation. No key window, app activation or global secure-input change is needed,
-so screen locking does not invalidate this automation. These checks do not establish
-native panel geometry or an external editor's cross-process IMK behavior. The native
-harness checks panel geometry but still uses `RecordingClient` for editor calls;
-installed-process logs trace actual calls, and a typing trial confirms visible text.
-## Settings window loses its fixed width and minimum height
-
-**Cause:** The SwiftUI migration retained `NSWindow.contentMinSize`, but the default
-`NSHostingController` sizing options generated minimum-size constraints from the
-current page. After layout, the appearance page replaced the intended 700 × 380
-minimum with 248 × 112 on macOS 26. The required width is fixed at 700;
-the height may grow from 380.
-
-**Fix:** `SettingsHostingController` disables automatic sizing constraints and adds
-explicit AppKit constraints for width 700 and height >=380 to its view. It remains
-the top-level content controller to preserve native title-bar/sidebar integration.
-No window property overrides or layout callback resets are needed. This follows Apple's
-[SwiftUI/AppKit layout guidance](https://developer.apple.com/videos/play/wwdc2022/10075/).
-The 380-point bound applies to the full-size content view, including the title-bar
-region, rather than 380 points below the title bar.
-The detail group declares a flexible minimum height of zero so the native split
-view does not retain a taller page's minimum during dictionary state changes.
-
-**Regression:** `bash macOS/scripts/test-settings-ui.sh` requests 500 × 200 and
-900 × 560 and checks actual content-view sizes of 700 × 380 and 700 × 560 after
-presentation, page replacement and close/reopen. Existing layout checks run at the
-minimum and increased heights. `contentMinSize` alone does not report the effective
-minimum enforced by Auto Layout.
-
-**Discarded experiments:** Window-property overrides and layout callback resets
-are not needed. A separate AppKit container changed native sidebar/title integration.
-A SwiftUI root minimum of 380 instead produced a 432-point window minimum because
-hosting added the title-bar inset. No fixed title-bar subtraction is used.
-
-## English steals unfinished Pinyin candidates
-
-**Symptoms:** `d` prefers the alias `D`; partial Chinese such as `niyebuxiangnid` or `womenshenzh` yields ASCII tails. Checking only fully typed sentences misses this regression.
-
-**Cause:** Easy English contains many unweighted abbreviations and aliases. Admitting all literal entries into the mixed dictionary lets them consume unfinished Pinyin. A fixed mixed quality boost then overrides better Chinese sentences. Standalone English completions can similarly outrank a Chinese sentence whose native quality is zero. Rime compares covered input length before quality, so a global quality reduction alone is insufficient.
-
-**Fix:** Apply one frequency admission gate to both supplemental dictionaries, retain the mixed dictionary's additional spelling/length restrictions, and put both streams below native Chinese at equal input coverage. This includes Chinese candidates interpreting an unfinished final syllable. Thus `email` can follow `额买了`, while the admitted English candidate remains selectable. Admitted single-letter English remains available through exact lookup; ranking keeps `d` → 的 first without deleting `a` or `i` → `I`. The original Chinese translator and learned dictionary stay intact. See `DEPENDENCIES.md` for the reproducible admission threshold and coverage rule.
-
-**Regression:** `bash macOS/scripts/test.sh` prints every forward/backspace state for representative Chinese input, then verifies mixed composition and English selection/ranking. The baseline had 143 ASCII-first failures over the initial 415 states. Also run `bash macOS/scripts/check-bundle.sh --deep` against a freshly built app to verify the same Lua modules and dictionaries are packaged. Actual user typing remains a separate acceptance step.
-
-## Low-weight English still fills later Chinese candidate positions
-
-**Symptoms:** `women` offers `WOMENS` and `womenfolk`, `tamen` offers `tameness`, `nime` offers zero-weight `Nimes`/`nimetti`/`nimetz`, and `haiti` offers `Haiti` variants, even when Chinese remains first.
-
-**Cause:** The earlier gate filtered only automatic mixed sentences. The standalone English translator still queried the complete upstream dictionary, so exact matches, prefix completions, and later pages bypassed admission. Its weight ordering faithfully exposed unreliable upstream rankings.
-
-**Fix:** Generate admitted `easy_en.dict.yaml` first and derive the mixed dictionary from that result. The complete upstream dictionary is a build input only. Use the pinned observed wordfreq snapshot, apply explicit exact-word overrides before the common inclusive Zipf threshold, then map admitted frequencies to English weights and apply mixed-only scaling. Missing observations cannot fall back to upstream weights. The measured `women` is intentionally retained after Chinese “我们”; low-frequency `WOMENS` and `womenfolk` are excluded. Startup runs Rime's full maintenance check so schema/dictionary changes are considered even when bundled YAML timestamps predate the user's last deployment; version changes alone cannot bypass the timestamp-only shortcut. Native content checks reuse unchanged compiled tables without deleting user dictionaries. Do not add runtime bypasses for exact words or case variants.
-
-**Regression:** `test-prepare-rime.sh` covers both generated dictionaries, known/missing observations, boundary Zipf values, override/exclusion/case/alias behavior, scaling isolation, and failure without fallback. `DeploymentTests.swift` first deploys the full upstream English dictionary, then starts with admitted resources whose timestamps are older than `user.yaml`'s `last_build_time`; it requires rejected candidates to disappear, unchanged compiled tables to retain their bytes/mtimes on another restart, and the existing Chinese user dictionary to remain. Engine tests enumerate all pages for rejected spellings and case variants, repeat editing and selection, and check mixed boundaries. `check-bundle.sh --deep` compares packaged resources against regenerated output and repeats the engine transcript. Inspect the installed dictionaries and restart the installed engine before real-client typing acceptance; source tests alone cannot prove deployment.
-
-## Minimum width for the vertical candidate panel
-
-Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.
-
-**Requirement:** The vertical panel has a minimum width of 150 points. Preserve the native height behavior and horizontal layout; longer candidates may make the panel wider.
-
-**Compatibility fix:** The [public IMKCandidates API](https://developer.apple.com/documentation/inputmethodkit/imkcandidates) does not expose a minimum window width. After applying font and direction, use the SDK's protected `_private` reference and guarded, typed `candidateWindowController` / `layoutTraits` accessors to set `lineDefaultLength` to 150 (`double` ABI). This changes the native vertical layout's minimum width before it sizes and positions the window. Font and direction setters rebuild these traits, so the width must be applied afterward. No height parameter is changed.
-
-**Limitation:** These accessors and the layout setter are private implementation details. If any selector is unavailable, the adjustment is skipped and the native width is retained. This compatibility path is verified only on the OS above.
-
-**Regression:** Run `bash macOS/scripts/test-settings-ui.sh` after building, in a logged-in GUI session. Actual candidate frames verify width >=150 for all allowed font sizes, stable height as 1/3/5/9 candidates grow and shrink, expansion for longer text, unchanged horizontal sizing after direction switches, and preserved candidate identifiers / selection keys. At 14 points with one short candidate, the baseline was 47x247 and the fix is 150x247. Evidence for this session is under `/private/tmp/inkflow-panel-size/width-{red,green}.log`.
-
-**Discarded experiments:** `setPopoverMinimumSize:` affects a popover controller rather than this native window. `setWindowShouldAdjustToTotalCandidateSize:`, `setWindowSizeCanShrink:`, and changing selection-key counts did not enforce the requested dimensions in the isolated probe. They are not part of the fix.
-
-## Candidate font setting changes but rendered text stays the same
-
-Observed on macOS 26.6.2 (25G83), arm64, 2026-09-06.
-
-**Cause:** `IMKCandidates setAttributes:` stores `NSFontAttributeName`, but the native candidate window's `itemLayout` title font stays at 16 points in both orientations, even when the attributes getter returns 14 or 36. A getter round-trip alone does not verify rendering.
-
-**Compatibility fix:** Keep the documented attributes call, then call the existing private `setFontSize:` only when the panel responds to that selector. A typed category declares its scalar argument as `double`, matching the observed runtime ABI. This setter rebuilds the native font layout on the observed OS. Production code does not traverse private objects or use KVC for this fix.
-
-**Limitation:** The setter is absent from public SDK headers and may change or disappear on another macOS version. If unavailable, InkFlow skips it and retains the documented attributes path; actual font rendering is not guaranteed by this fallback or by selector availability on untested OS versions.
-
-**Regression:** After building, run `bash macOS/scripts/test-settings-ui.sh` in a logged-in GUI session. Test-only private layout inspection checks all allowed sizes (14/16/18/24/36), 14→36→14 in each orientation, direction switches, and preservation of composition and digit keys. A simulated unavailable selector verifies that public attributes still apply without calling the private setter. If the diagnostic layout path changes, the test fails explicitly and needs investigation. Baseline public-only behavior failed 18 of 20 layout checks, retaining 16 points; the requested-16 checks passed. Diagnosis and exact RED/GREEN logs are under `/private/tmp/inkflow-font-diagnosis` and `/private/tmp/inkflow-font-fix` for this session.
+**Cause:** Settings used accessory activation; the permission prompt handed activation back to the previous regular app, leaving Settings behind it.
+
+**Fix:** `IFSettingsWindowController.present()` switches to regular activation (Dock icon and Cmd-Tab while open); closing returns to accessory. No focus retries or floating levels. Diagnostics: `test-settings-ui.sh --settings-window-lifecycle`, or `--microphone-reproduction` for a real prompt (bundle ID `io.damao.inkflow.microphone-reproduction`; reset with `tccutil reset Microphone <that ID>`, never production).
+
+## Slow cold start vs app-switch delay
+
+The bundled `RimePrebuilt` engine starts before the IMK server is created; the context-ranking index and downloaded-dictionary recovery build in the background and switch in only when all sessions are idle. Until then, candidate order is Rime's. Activation spans in the same run/PID are client callbacks, not a new process. `RimePrebuilt/inkflow-cache.json` binds bundled resources; an invalid packaged cache reports the engine unavailable rather than running synchronous maintenance. Tests: `test.sh startup-diagnostics dictionary-activation`; `test-serving-startup.sh --native` for a real candidate panel.
+
+## Uppercase English drops itself and following Pinyin in mixed input
+
+**Symptom:** `woyongAPIkeyihuifuwo` keeps only the Chinese prefix.
+
+**Cause:** The mixed dictionary kept only lowercase literal codes of ≥4 letters, so `API`, `SwiftUI`, `D` had no mixed code. Broadly admitting short uppercase codes lets fragments rebuild excluded words (`WOMEN` + `S`).
+
+**Fix:** For admitted ASCII words, keep sourced uppercase codes and add the exact display spelling as a code; the mixed Lua filter requires each ASCII run to be an exact admitted entry. Don't clear Shift, append raw tails or add global uppercase algebra.
+
+## English steals unfinished Pinyin / low-weight English fills later positions
+
+**Symptoms:** `d` prefers `D`; `womenshenzh` yields ASCII tails; `women` offers `WOMENS`, `nime` offers `Nimes`.
+
+**Cause:** Easy English has many unweighted aliases; a fixed mixed boost outranked Chinese; the standalone English translator queried the full upstream dictionary. Rime compares coverage length before quality.
+
+**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Startup runs full Rime maintenance so older bundled timestamps still replace stale caches; unchanged compiled tables are reused. Details: `DEPENDENCIES.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
+
+## AI: local Ollama Qwen reports an incomplete suggestion (GitHub #4)
+
+**Cause:** With `qwen3`/`qwen3.5` on Ollama, thinking consumed all 256 tokens (`finish_reason=length`, empty content).
+
+**Fix:** For those families on loopback port 11434, send `reasoning_effort: "none"` (Ollama maps it to `think: false`). Other hosts, ports and models are unchanged.
+
+## AI: no suggestion when document length is shorter than the mark
+
+**Cause:** The context reader rejected `documentShorterThanMark`, so no request was sent.
+
+**Fix:** Document length is advisory; read surrounding text once at dispatch with bounded fallbacks (256 characters per side). Headless client profiles cover zero/short/negative lengths.
+
+## AI: Tab removes the Pinyin but the suggestion doesn't appear
+
+**Cause:** Adoption refreshed an empty composition (clearing the client's mark) before inserting at a cached explicit offset; Codex dropped that insertion.
+
+**Fix:** Same order as ordinary commits: clear Rime internally, release mark ownership, `insertText` once with `NSNotFound` while the mark is still present, then refresh.
+
+## AI: candidates become visible after the last refresh
+
+**Cause:** Eligibility discarded the composition if the candidate window was still hidden at the final refresh.
+
+**Fix:** The 0.5 s deadline starts at the last input change; after it, wait for visible candidates while composition/client/config stay valid. Test: `test-ai-headless.sh --delayed-visibility`. Paid live check (explicit approval only): `test-ai-headless.sh --live /abs/path/ignored/.env`.
+
+## Settings window loses its fixed width / minimum height
+
+**Cause:** Default `NSHostingController` sizing options generated min-size constraints from the current page (248 × 112 instead of 700 × 380).
+
+**Fix:** `SettingsHostingController` disables automatic sizing constraints and adds explicit width 700 / height ≥380; the detail group has a flexible minimum height of 0. Test: `test-settings-ui.sh`.
+
+## Vertical candidate panel minimum width
+
+No public API. After setting font and direction (which rebuild traits), set `lineDefaultLength = 150` through the guarded private `_private` → `candidateWindowController` → `layoutTraits` path (`double` ABI). Skipped if a selector is missing. `setPopoverMinimumSize:`, `setWindowShouldAdjustToTotalCandidateSize:` and `setWindowSizeCanShrink:` don't work.
+
+## Candidate font setting doesn't change rendered text
+
+`setAttributes:` stores the font but the native `itemLayout` stays at 16 pt. Also call the private `setFontSize:` (`double`) when the panel responds to it.
 
 ## Cursor input switcher icon disappears when selected
 
-Observed on macOS 26.6.2, 2026-09-05. The user accepted the template-flag fix: Ink remains visible when selected and reverses colors normally.
+**Fix:** `TISIconIsTemplate = true` at bundle and mode level (the `Template` filename suffix isn't enough). The switcher still shows the Ink badge rather than a bare glyph — accepted. `tsInputModePaletteIconFileKey` and `TISIconLabels` have no effect. Don't kill `CursorUIViewService`.
 
-**Fix:** Declare `TISIconIsTemplate = true` at bundle and mode level, keeping the approved `MenuIconTemplate.tiff` resource. A fresh diagnostic process confirmed the indicator's template flag changed from false to true. The filename's `Template` suffix alone did not supply this flag to the cursor switcher.
+## Updated name/icon stale in the input menu
 
-**Known limitation:** The switcher still displays the Ink badge rather than the background-free glyph used by Apple's built-in input sources. This visual difference is accepted as a known issue; no further workaround is required. The non-template fallback was not attempted because the template configuration passed visual acceptance.
+Run `bash macOS/scripts/refresh-menu.sh` (restarts the user's `TextInputMenuAgent`), then reopen the menu. Not part of routine installs — see the next item.
 
-**Discarded experiments and evidence:** `TISIconLabels` with `Primary = Ink` did not create a built-in label entry and was removed after acceptance. It was present in the visually accepted test build; the final package retains only the template flags.
+## Input menu disappears after a local update (macOS 27)
 
-Community references: [EurKEY-Next known issues](https://github.com/felixfoertsch/EurKEY-Next/blob/main/README.md#known-issues) reports disappearing third-party template icons on Sonoma/Sequoia; [Ukelele discussion](https://groups.google.com/g/ukelele-users/c/xRo9BwPeFpg) investigates `TISIconLabels`. These are community observations, not Apple API guarantees. Apple's [text cursor documentation](https://developer.apple.com/documentation/AppKit/adopting-the-system-text-cursor-in-custom-text-views) describes automatic accessories and their placement, not an input-method icon customization contract.
+**Cause:** While the bundle path was briefly missing during replacement, macOS rebuilt its private UI-order cache (`AppleInputSourcesInUIOrderPasteboard`) with only ABC. Restarting `TextInputMenuAgent` also causes a brief flicker.
 
-Changing `tsInputModePaletteIconFileKey` to a separate transparent glyph did not change the cursor switcher, even after `CursorUIViewService` restarted. Installed resource hashes matched the source. A fresh diagnostic process using the system's `KLInputSourceIconManager` reproduced the fallback: InkFlow has no built-in label entry, and the indicator reads `TSMInputSourcePropertyIconImage` and `TSMInputSourcePropertyIconShouldBeTemplate`. TIS returned the menu image URL, and the indicator's template flag was false. Apple's Pinyin has a built-in image entry and returns a template indicator. These private implementation details are diagnostic evidence for this OS version, not APIs to add to InkFlow.
-
-Do not interpret the first appearance of Ink after a service restart as proof that the palette key is used. The separate palette-resource experiment was removed.
-
-`CursorUIViewService` did not exit on TERM in this session. After KILL it eventually restarted, but the cursor switcher was absent for a noticeable interval. Do not add this disruptive refresh to routine updates or promise immediate recovery. Restarting only `TextInputMenuAgent` does not refresh the cursor service.
-
-## Updated name and icon remain stale in the input menu
-
-Observed on macOS 26.6.2, 2026-09-05.
-
-**Symptom:** The installed bundle contains the new localized name and menu icon, and TIS registration/enabled checks pass, but the input menu still shows both old values.
-
-**Fix:** Restart only the current user's `TextInputMenuAgent`. Its system LaunchAgent has `KeepAlive` enabled. In this case, a new process plus reopening the menu made both changes visible; the user confirmed the result. No logout, input-source removal, or cache-file deletion was needed.
-
-`bash macOS/scripts/refresh-menu.sh` remains an explicit diagnostic for this stale-name/icon symptom. Routine installation no longer invokes it, following the macOS 27 investigation below. The helper sends TERM once to existing current-user menu agents and waits up to 10 seconds for replacement PIDs; it skips the refresh if none is running. A replacement PID proves restart execution, not correct rendering or recovery. It does not restart InkFlow's engine.
-
-## Input menu disappears after a local update
-
-Observed on macOS 27.0 (26A428), 2026-09-29, with local Developer ID builds 134–139.
-
-**Symptom and evidence:** The entire input-source menu icon disappeared, including access to ABC, while Keyboard Settings still listed InkFlow. During a user-confirmed persistent incident on build 135, TIS still reported ABC and InkFlow enabled, the menu visibility preference was on, and both InkFlow and `TextInputMenuAgent` were alive. Restarting only the menu agent did not restore the icon. Removing and re-adding InkFlow restored it without restarting either process.
-
-**Controlled results:** With the same installed payload and InkFlow selected, the normal local installation flow repeatedly caused a brief disappearance. Omitting only the final menu-agent restart produced ABC → InkFlow with no disappearance in two user-observed trials (builds 134 and 137). Restarting only the menu agent from a healthy build 137 state also caused a brief disappearance while the InkFlow PID and input-source state remained unchanged. A version-only 135 → 135.1 trial caused a brief disappearance but did not reproduce the persistent failure; the original 135 was then restored.
-
-**Follow-up on build 139:** The persistent failure recurred after installing with the automatic restart removed. `TextInputMenuAgent` had the same PID before and after installation, so restarting it is not necessary for this failure. Fresh probes found InkFlow enabled and selected, but `_TSMCopySelectableInputSourcesInUIOrder` returned only ABC. The full menu model likewise omitted InkFlow. The raw `AppleInputSourcesInUIOrderPasteboard` / `AppleInputSourcesInUIOrderFlavor` cache contained only the ABC descriptor. These are private system implementation details, not production APIs.
-
-**Recovery and trigger:** Clearing only that named cache restored the UI-order list and independent menu model, but the user still saw no icon. Restarting only the menu agent afterward restored the icon; InkFlow and the enabled/selected source state were unchanged. A same-build diagnostic then extended the interval between moving the old bundle away and placing the replacement to two seconds. The list contained InkFlow after stopping the old process, but contained only ABC after the missing-path interval. A diagnostic query failed while the bundle was absent, so the script rolled back the original bundle; re-registration and selection restoration still left the UI-order cache incomplete. This reproduces the stale-cache mechanism through a widened replacement gap, without proving the exact timing of the original installation.
-
-**Repair:** `install.sh` preserves the menu agent, and its fixture guards against automatic restarts; this avoids the confirmed restart-induced flicker but did not fix the persistent defect. A temporary same-build control using the Installer's existing `RENAME_SWAP` mechanism kept the path present and retained InkFlow in the UI-order list before/after exchange and registration, with the same two-second wait after exchange. The user confirmed ABC → InkFlow with the icon continuously visible. The local script now invokes `--commit-update`, sharing the Installer's atomic replacement primitive. First installation uses `RENAME_EXCL`; updates use `RENAME_SWAP` and retain the old app in the staging slot until verification completes. On post-replacement failure, the candidate inode identifies whether replacement happened even if the helper did not report success, preserving the old app and lifecycle state for recovery. Regression fixtures cover first install, exchanged inode ownership, replacement failures and interrupted helper completion. No private pasteboard manipulation is used in production. Continued daily-use acceptance remains pending.
-
-**Diagnostic limits:** TIS state and an independent menu-model probe do not establish the running menu agent's internal state or visible output. AX showed an unnamed menu and “loading” even when the user saw a healthy icon. Menu-bar-only `screencapture` frames also omitted the icon during a trial the user confirmed was continuously visible. Neither is a reliable standalone disappearance detector. CoreUI bundle and CharacterPalette errors also occurred in healthy controls and do not identify the cause.
-
-Raw logs, temporary probes, frozen experiment bundles, and menu-bar-only screenshots were retained under `/tmp/inkflow-menu-rootcause`, `/tmp/inkflow-menu-134-live-failure` (the build 135 incident), and `/tmp/inkflow-menu-135-refresh-only`. The build 139 recurrence and replacement controls are under `/tmp/inkflow-menu-recurrence`. These disposable local artifacts are not required to use this record and may be removed after investigation; no input text was collected.
+**Fix:** `install.sh` uses the Installer's atomic replacement (`--commit-update`: `RENAME_SWAP` for updates, `RENAME_EXCL` for first install) so the path never disappears, and it no longer restarts the menu agent. **Manual recovery:** remove and re-add InkFlow in Keyboard Settings. AX dumps and menu-bar screenshots are unreliable detectors here.
 
 ## Blank name or icon in Keyboard Settings
 
-Observed on macOS 26.6.2, 2026-09-05.
+Keyboard Settings has its own stale cache. Quit System Settings and its `KeyboardSettings` extension, back up and remove `com.apple.IntlDataCache.le` and `.le.kbdx` from `$(getconf DARWIN_USER_CACHE_DIR)/com.apple.Keyboard-Settings.extension`, then re-add InkFlow.
 
-**Symptom:** Command-line TIS queries show InkFlow correctly, but Keyboard Settings shows a blank entry. Adding it does not make InkFlow selectable.
+## Enable API succeeds but the input method stays disabled
 
-**Cause:** Keyboard Settings uses a separate input-source cache. It still referenced removed input methods and did not contain InkFlow.
+`TISEnableInputSource` only opens System Settings for third-party IMEs. Add InkFlow there, then check: `macOS/scripts/register.sh "$HOME/Library/Input Methods/InkFlow.app" --verify-enabled`.
 
-**Fix:**
+## Dictionary activation waits or falls back
 
-1. Quit System Settings and stop its `KeyboardSettings` extension using Activity Monitor.
-2. Back up and remove only `com.apple.IntlDataCache.le` and `com.apple.IntlDataCache.le.kbdx` in this directory:
+The switch waits until every live session (including inactive clients) has no composition or pending commit; a controller holds a delivery lease during `insertText`/marked-text callbacks. Finish or cancel composition in each client. After an interrupted process, recovery validates the confirmed cache, then tries the previous version, then the bundled dictionary. Test: `test.sh dictionary-activation` (needs `build.sh`).
 
-   ```sh
-   echo "$(getconf DARWIN_USER_CACHE_DIR)/com.apple.Keyboard-Settings.extension"
-   ```
+## Settings GUI tests: no accessible content or window won't activate
 
-3. Reopen System Settings, add InkFlow, and confirm its name, icon, and actual selection.
+Run in a logged-in, unlocked session with Accessibility access. SwiftUI builds its accessibility tree lazily, so the harness reads it from a short-lived child process. A timeout reports the foreground app's bundle ID/PID.
 
-The cache is rebuilt automatically. No logout or reboot was needed. Leave input-source preferences and user dictionaries intact; the cache location may differ on other macOS versions.
+## Settings fields ignore Command-V
 
-## Enable API succeeds but the input method remains disabled
+Accessory apps have no main Edit menu. Settings presentation installs one standard Edit menu (nil-target actions). Test: `test-settings-ui.sh --smart-only`.
 
-Observed on macOS 26.6.2, 2026-09-05.
+## Disabled prediction item looks clickable in the input menu
 
-**Symptom:** `TISEnableInputSource` returns success, but the parent input method remains disabled and its mode cannot be selected.
+IMK serialization enables any item with an action. An unavailable item needs both `isEnabled = false` and a nil action.
 
-**Cause:** The third-party enable request opens System Settings without completing enablement.
+## Dictionary error details missing from accessibility
 
-**Fix:** Add InkFlow through System Settings, then check that both parent and mode are enabled:
-
-```sh
-macOS/scripts/register.sh "$HOME/Library/Input Methods/InkFlow.app" --verify-enabled
-```
-
-Select InkFlow to confirm it works as a system input source. If Settings shows a blank entry, use the preceding case.
-
-## Dictionary activation waits or recovers a previous version
-
-Dictionary preparation leaves the current engine running. The final switch waits for every live session, including inactive clients, to have no composition or pending commit. A controller owns a delivery lease until its `insertText` and marked-text callbacks return, so a nested client run loop cannot activate halfway through delivery. Complete or cancel the composition in each client to release this wait.
-
-The coordinator records a pending transaction before waiting. After an interrupted process it discards that pending choice, validates the confirmed cache, and rebuilds incompatible caches from inert dictionary data with the current app's resources. If recovery fails it tries the previous confirmed version and then the immutable bundled dictionary. Settings reports whether the combined dictionary is ready and offers recovery when the engine is unavailable. A failed rollback leaves the engine unavailable; the input menu and Settings remain reachable for retry.
-
-Closing Settings clears its displayed diagnostic, while the process continues the task. Reopening shows current progress and does not replay earlier failures. Operational diagnostics remain in the macOS unified log:
-
-```sh
-/usr/bin/log show --last 1d --style compact --predicate 'subsystem == "io.damao.inputmethod.inkflow" AND category == "dictionary"'
-```
-
-The coordinator logs failures at error level. Large diagnostics use UTF-8-safe chunks of at most 700 payload bytes, sharing an event ID and numbered `part=i/n` fields; collect every part of that event for complete details. Details include stage, source/file identity, HTTP or helper exit status, and bounded worker diagnostics. They exclude document input/context, custom phrases and learned database contents; error payloads are never saved in the dictionary journal, manifest or preferences.
-
-Run `bash macOS/scripts/build.sh`, then `bash macOS/scripts/test-dictionary-activation.sh` for isolated multi-session, commit-delivery, semantic-learning, failure/rollback, task-lifetime and restart-recovery checks. The tests use synthetic temporary user roots. They do not replace real-client typing acceptance.
-
-## Settings GUI tests have no accessible content or cannot become active
-
-Run the native Settings harness in a logged-in, unlocked desktop session. A locked
-desktop can prevent keyboard focus even when a window reports itself visible.
-Separately, SwiftUI initializes accessibility lazily when an assistive client connects;
-an in-process walk can lack SwiftUI controls even in an active, unlocked window.
-
-The harness starts a short-lived child process that reads only its own application's
-windows through the public accessibility API. This initializes the real accessibility
-tree, with a two-second messaging timeout and a five-second parent wait. The runner
-needs existing Accessibility access; the test never prompts or changes global settings.
-Run `bash macOS/scripts/test-settings-ui.sh` after resolving the reported prerequisite.
-Keep genuine control and layout assertions enabled. Headless engine/coordinator tests
-remain separate evidence and cannot substitute for native window-lifecycle acceptance.
-
-The harness waits up to five seconds for a visible, key window and an active app,
-then fails with the foreground application's bundle ID/PID and the public console/login
-session flags. An activation request is asynchronous; a timeout alone does not identify
-whether the desktop was locked or another application held focus.
-
-## Settings fields ignore Command-V and other editing shortcuts
-
-Observed on macOS 26.6.2 (25G83), 2026-09-08.
-
-**Cause:** The accessory application's programmatic settings window had no main Edit
-menu. Normal typing reached the native field editor, but AppKit had no menu key
-equivalents for Command-A or Command-V, including in SwiftUI `SecureField`.
-
-**Fix:** Settings presentation installs one standard Edit menu, preserving other main
-menu items. Its nil-target editing actions use AppKit's responder chain. Native text
-and secure field editors retain their own validation and editing behavior.
-
-**Regression:** `bash macOS/scripts/test-settings-ui.sh --smart-only` sends mouse and
-keyboard events through `NSApplication`, pastes synthetic values into all three LLM
-fields, presses Save through accessibility, and checks isolated configuration and
-defaults. The test preserves all clipboard items and data types without printing
-their contents. It also checks repeated presentation does not duplicate the menu.
-
-## Disabled prediction menu item still appears clickable in the input-source menu
-
-Observed on macOS 26.6.2 (25G83), 2026-09-08.
-
-**Cause:** IMK's menu serialization enables entries with a nonempty action, overriding
-the local `NSMenuItem.isEnabled` value. Checking only the returned menu object misses
-the state sent to the system's menu host; ordinary menu validation does not fix it.
-
-**Fix:** An unavailable prediction item has both `isEnabled = false` and a nil action.
-The action is restored when all three configuration fields are nonempty. The action
-handler separately guards incomplete configuration, including stale menu dispatch.
-
-**Regression:** The Settings GUI harness checks IMK's actual serialized enabled state
-and action for empty, complete, and each individually missing field. A test-only
-private inspection method fails explicitly if unavailable on a future OS. Production
-uses only public menu APIs. System menu rendering remains a separate installed-app
-acceptance check.
-
-## Dictionary error details are missing from accessibility
-
-**Symptom:** “查看错误详情” expands visually, but the technical diagnostic cannot be
-found or selected through accessibility.
-
-**Cause:** Applying `accessibilityIdentifier` to a SwiftUI `DisclosureGroup` can override
-the identifier on its descendant text on the observed macOS 26 runtime.
-
-**Fix:** Keep the identifier on the diagnostic text. The native GUI test locates the
-disclosure by its `AXDisclosureTriangle` role and label, toggles it, and checks the full
-selectable diagnostic through its independent identifier.
-
-**Regression:** Run `bash macOS/scripts/test-settings-ui.sh` after building. The suite
-checks compact ready, update, busy, failure and recovery states plus expanded/collapsed
-diagnostics. It does not replace installed-input-method typing acceptance.
+An `accessibilityIdentifier` on a SwiftUI `DisclosureGroup` overrides its descendants' identifiers. Put the identifier on the diagnostic text instead.

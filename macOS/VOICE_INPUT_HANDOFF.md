@@ -1,7 +1,7 @@
 # 语音输入现状
 
 语音输入已随 InkFlow 0.4.0 进入主线。本文只记录当前产品契约；实验过程和当时的
-性能数据保留在同目录的 `VOICE_*_EXPERIMENT.md` 与 `VOICE_INPUT_RESEARCH.md`。
+性能数据归档在 `docs/archive/VOICE_*.md`。
 
 ## 使用方式
 

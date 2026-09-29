@@ -51,138 +51,37 @@ Each engine coalesces requested phrases and page size until its composition is i
 
 The TSV starts with `# no comment` so literal phrases beginning with `#` are supported. This header and parsing behavior are defined by [librime 1.17.0's TSV reader](https://github.com/rime/librime/blob/1.17.0/src/rime/dict/tsv.cc). Decreasing positive row weights preserve insertion order within each code. Codes are normalized lowercase ASCII letters; controls and multiline text are rejected before persistence or TSV generation. Filesystem/configuration failures appear in Personalization and logs without phrase contents. Failed temporary-file cleanup is retained for retry. A process crash during the synchronous load can leave a temporary TSV in the data directory; it is not authoritative storage and is not reused on subsequent loads.
 
+## Personal data backup
+
+Backups reuse the dictionary worker through `--personal-data`, which only sees closed copies under `PersonalData/staging/<UUID>`. Snapshot parsing and full native-map equality are checked before any live replacement. A rollback-first journal covers the three user dictionaries and allowlisted preferences while input sessions are suspended; startup recovery runs before Settings or Rime initialize. This covers process interruption, not power loss. Staging files can contain personal words.
+
+## AI suggestions
+
+`AISettings.swift` / `AIChatCompletions.swift` (BYOK settings and OpenAI-compatible transport), `AIContext.swift` (bounded document reads), `AISuggestionCoordinator.swift` (debounce, stale-result checks), `AISuggestionPanel.swift` (passive presentation). `InputControllerAI.swift` owns Tab delivery. Request identity is raw input + caret + selected prefix; paging and highlighting don't reset the 0.5 s deadline. Document context is read only at dispatch, never by the 100 ms tracker.
+
 ## Workflows
 
 ### Install a released version
 
-For stable personal use, download the latest DMG from the [GitHub Releases page](https://github.com/nervouna/InkFlow/releases/latest), open `InkFlow Installer.app`, and choose Install and Enable. Do not build the source tree or run repository tests for this path. After installation, confirm the displayed version and select InkFlow Pinyin from the input menu; real typing remains user-owned acceptance.
+Download the latest DMG from [Releases](https://github.com/nervouna/InkFlow/releases/latest), open `InkFlow Installer.app`, choose Install and Enable.
 
 ### Try the current development version
 
-Every `build.sh` invocation reserves a new positive build number before compilation,
-including release builds. Only the staged app's `CFBundleVersion` changes; the source
-plist remains a minimum baseline. The allocator uses the greatest source baseline,
-previous local app, installed app, and shared counter, then adds one. Linked worktrees
-share the main checkout's ignored `build/build-number/last`. Preserve that directory
-across cleanup and worktree removal; failed builds consume their reservation and may
-leave gaps. Concurrent allocations are serialized, while two builds in the same
-checkout are rejected. Interrupted lock directories require inspection before removal.
-Separate clones do not share a global sequence.
-
-After every successful app build, include the Markdown metadata table printed by
-`build-summary.sh` in the result. It reads the actual bundle version/build, provenance,
-hashes and signature state. Its timestamp is report time, not an embedded build date.
-Installation, process launch, and notarization remain separate evidence. Installer
-assembly inherits the version/build from its embedded payload ZIP. Release packaging
-uses the build frozen in the verified installer receipt, while continuing to compare
-all other app plist fields and verify source/resource provenance.
-
-Select and run the affected `test.sh` groups, create a fresh staged bundle with `build.sh`, run the repeatable fast bundle checks, then install with Developer ID signing:
-
 ```sh
-bash macOS/scripts/test.sh GROUP ...
 bash macOS/scripts/build.sh
-bash macOS/scripts/check-bundle.sh --fast
-bash macOS/scripts/install.sh --developer-id
+bash macOS/scripts/install.sh --developer-id     # needs INKFLOW_SIGN_IDENTITY (team T7976FL2LP)
 ```
 
-Choose groups from `bash macOS/scripts/test.sh --help` using behavior, callers, shared configuration, and resources. Set `INKFLOW_SIGN_IDENTITY` to the already verified Developer ID Application certificate SHA-1 with team `T7976FL2LP`; `install.sh` verifies the resulting team and bundle ID. Confirm the installed path and active process before user-owned typing acceptance. `install.sh --debug` is only for development debugging, never for a trial build or release evidence. The install script does not run tests or build automatically.
+Every `build.sh` reserves a new build number (shared across worktrees via `build/build-number/last`; keep that directory). Only the staged app's `CFBundleVersion` changes. Run builds and installs outside the sandbox in the logged-in session. `install.sh` swaps the app atomically, preserves enabled/selected input sources, waits for the old process to exit, and verifies the new PID and build. First installs need InkFlow added in System Settings. `install.sh --debug` is for debugging only.
 
-Run installation and input-source verification outside a restricted sandbox in the logged-in desktop session. The installer stages and signs first, preserves enabled/selected input sources, revalidates that each observed PID still belongs to the installed target, requests normal termination, and waits for exit before replacing files. An unknown or changed process identity stops without sending termination. AppKit confirmation or a missing PID proves exit; all other process-probe results fail closed. Refusal or timeout leaves the old app in place. It then restores input-source state and verifies a fresh PID, the actual installed executable path, and the candidate build number. This proves process replacement, not typing or microphone acceptance. First installation preserves the existing input-source selection and requires adding InkFlow in System Settings. Connection errors mean input-source state is unknown. Trial installation creates no permanent backup archive. The same-volume `.inkflow-install.*` staging directory holds the previous app for rollback during replacement. Successful installs remove it; a failure before publishing the candidate restores the previous app, while any failure after publishing the candidate retains the reported state directory for inspection, including on first installation when no previous app exists.
+`check-bundle.sh --fast` checks plist, architecture, library closure and signed structure; `--deep` also regenerates resources and runs the bundled-engine transcript (release verification runs it once).
 
 ### Publish a release
 
-Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all` once, runs one deep bundle check, and freezes the Installer executable/icon receipt used by packaging.
+Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all`, runs one deep bundle check, and freezes the Installer executable/icon receipt for packaging.
 
-## Verification
+Testing: see [TESTING.md](TESTING.md).
 
-Personal-data backups reuse the dictionary worker through an explicit
-`--personal-data` command. It only receives closed copies under
-`PersonalData/staging/<UUID>`; the dictionary worker's original protocol and sandbox
-remain unchanged. Strict snapshot parsing and full native-map equality precede any
-live replacement. The coordinator reserves a settled, idle engine after the native
-undo grace, while a rollback-first journal covers the three fixed user dictionaries
-and allowlisted preferences. Existing and newly requested input sessions remain
-suspended until the journal and preference transaction finishes.
+## Native installer
 
-Journal file synchronization and the transaction-only `UserDefaults.synchronize()`
-boundary cover process interruption, not power-loss durability. Failed persistence
-rolls back; failed rollback preserves evidence and disables input and relevant
-settings writes. Startup recovery runs before Settings or Rime initialization.
-Normal completion removes staging; startup captures abandoned UUID staging roots
-and removes validated roots on a utility task. Unknown names, symlinks and unreadable
-artifacts are retained. These private temporary files can contain personal words.
-Apple documents the preference synchronization result in
-[synchronize()](https://developer.apple.com/documentation/foundation/userdefaults/synchronize()).
-
-### Daily development
-
-See [TESTING.md](TESTING.md#which-tests-to-run). UI-only changes need a build, not tests. Logic changes run `test.sh quick` or the specific units. Typing, focus and Settings interaction are checked by hand.
-
-AI input suggestions are split between `AISettings.swift` / `AIChatCompletions.swift` (BYOK settings and compatible transport), `AIContext.swift` (bounded document access), `AISuggestionCoordinator.swift` (debounce and stale-result checks), and `AISuggestionPanel.swift` (passive AppKit presentation). `InputController.swift` owns client lifecycle and Tab delivery. Engine request identity includes raw input, caret and selected prefix, excluding candidate pages, highlights and display preedit. Controller-authored display range changes retain the input deadline; externally changed client ranges invalidate it. Full document context is captured only at dispatch, response validation and acceptance, never by the 100 ms position tracker.
-
-`bash macOS/scripts/test-ai-runtime.sh` tests real 0.5-second debounce timing, changed display ranges during navigation, late services that ignore cancellation, repeated compositions, context and configuration invalidation, secure/foreign marks, UTF-16 boundaries, and reentrant document reads. It uses in-memory credentials, synthetic context and an injected service. The `ai` group in `test.sh` includes this suite plus isolated no-prompt Keychain startup, transport, adoption-learning and headless production-chain tests. Settings remains a separate group. The Keychain fixture owns a random service and synthetic keys, never the production service.
-
-`bash macOS/scripts/test-ai-native.sh` requires a logged-in GUI session. Its separate app uses real Rime, IMK candidate windows and the production controller with a recording document client; the existing framework-initialization/client-lookup shim supplies the synthetic client because IMK normally requires its own cross-process proxy. It checks passive window geometry/focus, ordinary space/digit/click selection, partial composition prefixes, exact-once Tab, delivery leases under synchronous client reentry, and stale lifecycle events. It neither registers an input source nor changes production preferences or Keychain entries. The script requires a final acceptance marker as well as a successful exit code.
-
-For explicitly authorized paid verification, run `bash macOS/scripts/test-ai-live.sh /absolute/path/to/ignored/.env` for transport fixtures or `bash macOS/scripts/test-ai-native.sh --live /absolute/path/to/ignored/.env` for one complete production API-to-panel-to-Tab fixture. The file must be untracked and Git-ignored and contain `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL`; the parser treats it as data and never executes shell contents. Live fixtures require official DeepSeek and `deepseek-v4-flash`, use synthetic text only, and never print credentials. No retries or benchmarks are implicit.
-
-Real typing acceptance remains separate: configure and enable smart prediction, pause with candidates visible, browse pages, accept with Tab, and compare ordinary space/digit/click behavior in the user's text editor and browser. Verify composition edits, moving the insertion point, input-source switching, service failure and disabling the feature while a request is pending. Build and native harness results do not establish this user-owned acceptance.
-
-### Test coverage and focused entry points
-
-The `dictionary-activation` group includes `test-serving-startup.sh`: the production
-startup entry point serves its packaged fallback while actual recovery is gated,
-then switches at all-client idle. It checks saved journal/date preservation,
-failure/retry/shutdown, read-only cache bytes, all spelling profiles, custom phrases,
-and user-root reopen. Run `test-serving-startup.sh --native` for the focused host,
-native candidate panel and two-client delivery variant. Its IMK initialization and
-client-lookup shim is the same synthetic-client boundary used by the AI native
-harness. External application routing remains separate. Each run retains its own
-ignored `build/serving-startup-run.*/run.log`; a failed host-focus prerequisite is
-unsuccessful evidence, not a product assertion or PASS. This new startup check is
-not covered by previously recorded Settings/controller GUI evidence.
-
-`test.sh` usage and unit list: `bash macOS/scripts/test.sh --help`.
-
-The test scenarios are Swift executables. `Tests/NativeTestSupport.m` contains the small Objective-C runtime/exception helper needed to inspect native font rendering and accessibility objects, and to intercept framework initialization/teardown and supplied-client lookup in the headless controller test. Swift controllers always run their real initializers. Settings tests use isolated defaults suites; the production initializer test overrides only its process-local argument domain.
-
-`test.sh` reuses the previously built application/worker and includes dictionary generation, source/update preparation, and native activation/recovery suites, plus `test-termination.sh` and `test-installer-core.sh`. `test-settings-ui.sh` exercises the Dictionary pane's ready, available, busy, recoverable-failure and unavailable states through native accessibility actions. It requires one contextual action, compact copy, collapsed selectable diagnostics and minimum/enlarged layout. Its backend is explicitly injected with synthetic transport results and temporary dictionary/user roots; it never contacts update repositories or reads real learning/preferences. Detailed stage, transaction, window-lifetime and rollback behavior stays in lower-layer tests. GUI assertions do not substitute for those tests or for the real-client checks in [DICTIONARIES.md](DICTIONARIES.md#manual-acceptance).
-
-Custom phrase tests cover normalized CRUD, stable IDs and persistence, duplicate/control rejection, corrupt-data preservation, real Rime priority/deduplication and ordinary candidates, exact matching, multiple pages and native selection, composing-session isolation, settings notifications, pending-commit preservation, deletion after selection, engine restart, failed writes/retry, temporary-file removal and unchanged deployed schema bytes. The GUI harness starts Personalization explicitly to check native table/control layout and empty state at minimum/enlarged sizes. For interactive acceptance, navigate to Personalization, add two phrases under one code, reject an invalid/duplicate entry, cancel an editor, edit and delete the selection, then reopen settings and inspect the list. The harness uses an isolated preferences suite.
-
-Context regressions use the real bundled dictionary for ordering and selection, plus a tiny test-only dictionary for frequency/tie rules. A headless document client verifies UTF-16 and adjusted ranges, selection replacement, marked text, unreadable/secure clients, settings and session isolation. It also verifies that a client losing context or moving its selection before a selection/flush event cannot silently change the candidate already displayed. The test helper preserves the initializer's client for actual click/highlight callbacks. Existing librime user-dictionary learning still applies, so session-isolation checks compare against a contemporaneous no-context engine rather than assuming a permanent first candidate.
-
-For interactive UI inspection, `bash macOS/scripts/test-settings-ui.sh --hold` leaves an isolated settings harness open after its checks. It never launches the installed input method. `--dump-accessibility` prints its accessibility tree for layout diagnosis.
-
-`bash macOS/scripts/test-settings-ui.sh --input-only --dump-accessibility` checks the compact Input page through native fuzzy/radio/popup actions, mutual exclusion, disabled mapping preservation and error display, then exits before unrelated pane scenarios.
-
-`check-bundle.sh --fast [app]` checks plist metadata, arm64 architecture, dynamic-library closure, resource summaries, and signed structure when present. It is safe to repeat during development installation and packaging. `check-bundle.sh --deep [app]` additionally regenerates resources and runs the real bundled-engine transcript; release verification runs it once for the candidate bundle. Neither mode establishes installed-IME typing acceptance, signing, or behavior on an older macOS host.
-
-## Native installer packaging
-
-`Installer/CoreAPI.md` describes the core/window/payload boundary. Compile the core
-and registration CLI with `bash macOS/scripts/check-installer-core.sh`. The full
-regression includes isolated termination and installer transaction/state tests.
-`test-installer-window.sh` exercises an isolated native window with fake backends;
-it needs an unlocked desktop and never operates the installed input source. Run it
-only as an explicit diagnostic.
-
-`bash macOS/scripts/build-installer.sh /absolute/path/to/InkFlow.zip /new/output.app`
-compiles the installer and copies version/build from `macOS/Info.plist` without
-signing, registration or installation. The output path must not exist. After
-Developer ID signing, execute `"/new/output.app/Contents/MacOS/InkFlowInstaller" --check-payload`
-to check extraction of the embedded ZIP and app metadata, print payload version/build,
-then clean up temporary files. Signature and notarization checks remain separate release QA. This read-only probe does not use TIS or start
-the input method. Local signed, unnotarized fixtures do not prove release trust.
-
-The release helper consumes the verified Installer executable/icon receipt produced by
-`release-verification.sh`, then uses `package.sh prepare` and `package.sh finish`. Between them,
-explicitly submit the retained input-method ZIP through the existing notary wrapper,
-wait for acceptance, and staple/validate the input-method app. Finish creates a fresh
-ZIP of that app, assembles/signs the installer from the verified snapshot, checks arm64 and system dependency
-closure, runs its actual `--check-payload`, and creates a DMG containing only the
-installer and Chinese instructions. Packaging uses `check-bundle.sh --fast [app]`;
-the release candidate's resource rebuild and engine transcript have already run once.
-The final DMG requires its own external notarization and stapling. See the
-[release workflow](../.agents/skills/inkflow-release/SKILL.md) for commands and recovery.
+`Installer/CoreAPI.md` describes the core/window/payload boundary; `check-installer-core.sh` compiles the core and registration CLI. `build-installer.sh /abs/InkFlow.zip /new/output.app` builds an unsigned installer; after signing, `.../Contents/MacOS/InkFlowInstaller --check-payload` verifies the embedded ZIP. Packaging (`package.sh prepare`, then the release runner) signs, notarizes and staples the app, assembles the installer from the verified receipt, and builds a DMG with the installer and Chinese instructions; the DMG is notarized separately.
