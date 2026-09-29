@@ -628,7 +628,9 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         dictionaries?.presentationClosed()
-        NSApp.setActivationPolicy(.accessory)
+        if IFPersonalLearningWindowController.sharedController.window?.isVisible != true {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
     private let settings: IFSettings
 

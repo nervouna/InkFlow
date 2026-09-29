@@ -5,16 +5,12 @@ import SwiftUI
 struct DictionarySettingsView: View {
     var coordinator: IFDictionaryCoordinator?
     @State private var detailsExpanded = false
-    @State private var confirmClearLearning = false
-    @State private var learningStatus: String?
-    @State private var learningRefresh = 0
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 if let failure = coordinator?.failure {
-                    Label(coordinator?.engineAvailable == true ? "更新失败" : "词库暂不可用",
-                          systemImage: "exclamationmark.triangle")
+                    Text(coordinator?.engineAvailable == true ? "更新失败" : "词库暂不可用")
                         .font(.headline)
                         .foregroundStyle(.red)
                         .accessibilityIdentifier("dictionaries.failure")
@@ -36,7 +32,7 @@ struct DictionarySettingsView: View {
                         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 5))
                     }
                 } else if coordinator?.engineAvailable == true, let active = coordinator?.active {
-                    Label("词库已启用", systemImage: "checkmark.circle")
+                    Text("词库已启用")
                         .font(.headline)
                         .accessibilityIdentifier("dictionaries.state")
                     Text("\(active.manifest.entryCount.formatted()) 个中文词条")
@@ -45,8 +41,7 @@ struct DictionarySettingsView: View {
                         .foregroundStyle(.secondary)
                         .accessibilityIdentifier("dictionaries.engineStatus")
                 } else {
-                    Label(coordinator == nil ? "正在准备词库…" : "词库暂不可用",
-                          systemImage: coordinator == nil ? "hourglass" : "exclamationmark.triangle")
+                    Text(coordinator == nil ? "正在准备词库…" : "词库暂不可用")
                         .font(.headline)
                         .accessibilityIdentifier("dictionaries.state")
                     if coordinator != nil {
@@ -80,18 +75,15 @@ struct DictionarySettingsView: View {
                 }
 
                 Divider()
-                PersonalLearningSettingsView()
-                    .id(learningRefresh)
-                    .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
-                Text("清除键盘英文学习和语音纠正别名，不影响内置词库、自定义短语或中文输入学习。")
+                Text("英文自学习")
+                    .font(.headline)
+                Text("本地学习输入习惯，提升中英混输体验。")
                     .foregroundStyle(.secondary)
-                Button("清除个人英文学习", role: .destructive) { confirmClearLearning = true }
-                    .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
-                    .accessibilityIdentifier("dictionaries.clearEnglishLearning")
-                if let learningStatus {
-                    Text(learningStatus).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("dictionaries.clearEnglishLearningStatus")
+                Button("管理学习词条") {
+                    IFPersonalLearningWindowController.sharedController.present(coordinator: coordinator)
                 }
+                .disabled(coordinator?.engineAvailable != true || coordinator?.isBusy == true)
+                .accessibilityIdentifier("dictionaries.manageLearning")
 
                 Spacer(minLength: 0)
             }
@@ -99,17 +91,6 @@ struct DictionarySettingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: coordinator?.failure?.technicalDetails) { _, _ in detailsExpanded = false }
-        .confirmationDialog("清除个人英文学习？", isPresented: $confirmClearLearning) {
-            Button("清除", role: .destructive) {
-                learningStatus = IFEngine.clearPersonalEnglishLearning()
-                    ? "个人英文学习已清除。"
-                    : "暂时无法清除，请结束当前输入后重试。"
-                learningRefresh += 1
-            }
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("此操作会清除已学习的英文候选和语音英文别名，无法撤销。")
-        }
     }
 
     private var status: String? {
