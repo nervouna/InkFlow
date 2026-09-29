@@ -409,14 +409,13 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case voice = "语音"
     case smart = "AI 服务"
     case updates = "更新"
-    case quality = "质量记录"
-    case personalData = "备份与恢复"
+    case personalData = "数据"
     case feedback = "反馈与诊断"
     case about = "关于"
     static let groups: [(title: String, sections: [Self])] = [
         ("输入体验", [.input, .shortcuts, .appearance]),
         ("语言与辅助", [.personalization, .dictionaries, .voice, .smart]),
-        ("应用", [.personalData, .quality, .updates, .feedback, .about])
+        ("应用", [.personalData, .updates, .feedback, .about])
     ]
     static var defaultSection: Self { groups[0].sections[0] }
     var id: Self { self }
@@ -430,7 +429,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         case .voice: "mic"
         case .dictionaries: "books.vertical"
         case .updates: "arrow.triangle.2.circlepath"
-        case .quality: "chart.bar.doc.horizontal"
         case .personalData: "externaldrive"
         case .feedback: "exclamationmark.bubble"
         case .about: "info.circle"
@@ -478,7 +476,6 @@ struct SettingsView: View {
             Group {
                 if section == .about { AboutSettingsView() }
                 else if section == .feedback { FeedbackSettingsView(reporter: feedbackReporter, diagnosticDependencies: diagnosticDependencies) }
-                else if section == .quality { QualitySettingsView(settings: settings) }
                 else if section == .personalData { PersonalDataSettingsView(settings: settings, coordinator: dictionaries) }
                 else if section == .appearance { appearance }
                 else if section == .shortcuts { ShortcutsSettingsView(shortcuts: settings.shortcuts) }
