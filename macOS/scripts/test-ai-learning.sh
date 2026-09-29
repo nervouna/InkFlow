@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# macOS awk collates distinct CJK strings as equal under UTF-8 locales; compare bytes.
+awk() { LC_ALL=C command awk "$@"; }
 source macOS/scripts/swift-test.sh
 source macOS/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
