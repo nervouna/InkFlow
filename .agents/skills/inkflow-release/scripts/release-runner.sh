@@ -158,13 +158,9 @@ else
   done < <(git tag --merged HEAD --sort=-version:refname)
   [[ -n "$previous_tag" ]] || fail 'No previous stable release tag is an ancestor of HEAD.'
   git merge-base --is-ancestor "$previous_tag" "$release_commit" || fail 'Previous tag is not an ancestor of the release commit.'
-  plan=$(bash macOS/scripts/release-verification.sh --plan-only --from "$previous_tag")
-  manual_install=false
-  printf '%s\n' "$plan" | grep -Fxq manual-install && manual_install=true
-  write_plist "$state" schema 2 releaseCommit "$release_commit" version "$version" build "$build" tag "$tag" previousTag "$previous_tag" repo "$repo" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" sparkleUpdateZIPName "$(basename "$sparkle_update_zip")" sparkleFeedURL "$(plutil -extract SUFeedURL raw macOS/Info.plist)" notesPath "$notes" notesSHA256 "$notes_sha" manualInstallNeeded "$manual_install"
+  write_plist "$state" schema 2 releaseCommit "$release_commit" version "$version" build "$build" tag "$tag" previousTag "$previous_tag" repo "$repo" sourcePlistSHA256 "$source_sha" payloadZIPSHA256 "$payload_sha" sparkleUpdateZIPName "$(basename "$sparkle_update_zip")" sparkleFeedURL "$(plutil -extract SUFeedURL raw macOS/Info.plist)" notesPath "$notes" notesSHA256 "$notes_sha"
 fi
 state_sha=$(sha256 "$state")
-manual_install=$(plist_get "$state" manualInstallNeeded)
 
 verified_repo=$(gh repo view "$repo" --json nameWithOwner --jq .nameWithOwner)
 require_equal "$verified_repo" "$repo" 'GitHub repository identity mismatch.'
@@ -574,10 +570,6 @@ rm -rf "$download"
 
 is_draft=$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft)
 if [[ "$is_draft" == true ]]; then
-  if [[ "$manual_install" == true ]]; then
-    acceptance="Release-Installation-Acceptance: version=$version build=$build releaseCommit=$release_commit dmgSHA256=$(sha256 "$dmg") scope=installation-upgrade result=pass"
-    grep -Fxq "$acceptance" "$internal_notes" || fail "Draft and assets are ready; internal build/release-notes.md still needs: $acceptance"
-  fi
   gh release edit "$tag" --repo "$repo" --draft=false --latest
 elif [[ "$is_draft" != false ]]; then fail "Unknown GitHub draft state: $is_draft"; fi
 

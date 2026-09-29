@@ -1,17 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-prebuilt=false
-if [[ $# == 1 && $1 == --prebuilt ]]; then
-  [[ "${INKFLOW_SWIFT_TEST_PREBUILT:-}" == 1 ]] || {
-    echo 'The --prebuilt mode is reserved for the prepared full-suite runner.' >&2
-    exit 2
-  }
-  prebuilt=true
-elif [[ $# != 0 ]]; then
-  echo 'Usage: test-quality-metadata.sh [--prebuilt]' >&2
-  exit 2
-fi
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-quality-metadata.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repository"
@@ -46,14 +35,7 @@ git -C "$repo" add macOS Core
 git -C "$repo" commit -qm fixture
 
 source macOS/scripts/swift-package.sh
-if $prebuilt; then
-  [[ -x build/quality-build-metadata ]] || {
-    echo 'Missing prebuilt quality-build-metadata product.' >&2
-    exit 1
-  }
-else
-  build_swift_product quality-build-metadata build/quality-build-metadata release
-fi
+build_swift_product quality-build-metadata build/quality-build-metadata release
 build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
 build/quality-build-metadata "$repo" "$app" --verify

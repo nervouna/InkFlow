@@ -29,7 +29,7 @@ Request required narrow sandbox/signing/Keychain/network elevation for the comma
 | Writing/freezing public release notes | [public-notes.md](references/public-notes.md) |
 | External command/API compatibility question | [command-references.md](references/command-references.md) |
 
-Run from the release worktree root. Read `macOS/DEVELOPMENT.md` for verification requirements and use `$apple-signing-workflow` for certificate selection/artifact verification. Helpers below are under `.agents/skills/inkflow-release/scripts/`.
+Run from the release worktree root. Use `$apple-signing-workflow` for certificate selection/artifact verification. Helpers below are under `.agents/skills/inkflow-release/scripts/`.
 
 ## 1. Preflight and version commit
 
@@ -40,17 +40,15 @@ Run from the release worktree root. Read `macOS/DEVELOPMENT.md` for verification
 5. Record the previous published stable tag as `previous_tag`, verify its ancestry, and check the proposed tag/Release locally and remotely **before editing**. Existing state requires recovery, not a new bump.
 6. Run `bash .agents/skills/inkflow-release/scripts/bump-version.sh TYPE`; review the diff. Derive `version`, provisional `build`, and `tag="v$version"` from the plist. Record starting commit/version/build and subsequent results in ignored `build/release-notes.md`. Commit only `macOS/Info.plist` as `chore(release): $tag (build $build)`; retain the clean detached `release_commit`. Never amend it after verification; notes are not a second version source.
 
-## 2. Verify once and retain evidence
+## 2. Verify once
 
 ```sh
-bash macOS/scripts/release-verification.sh --from "$previous_tag"
+bash macOS/scripts/release-verification.sh
 ```
 
-The sole verification entry builds the clean isolated candidate, runs `test.sh all` once (including Installer fixtures), one deep bundle check and change-selected release-helper fixtures, and freezes Installer executable/icon receipts. Do not separately repeat core/deep/package fixtures. GUI, Keychain-adapter and paid-live suites are never automatic; GUI scripts are explicit diagnostics only.
+Builds the clean candidate, runs `test.sh all` once, one deep bundle check, and freezes the Installer executable/icon receipt for packaging. If a unit fails, fix it (new commit, bump nothing) or rerun that unit if it was flaky, then rerun verification. Do not add extra verification rounds, evidence reconciliation or coverage bookkeeping.
 
-Input/Settings interaction is preaccepted at release entry: do not ask again, mark it pending or gate publication on it. Hand off only selected installation/upgrade checks with operations and expected outcomes; missing manual results are pending. Build, notarization and draft preparation may proceed meanwhile.
-
-Confirm the semantic version. Each `build.sh` allocates a fresh build above the source floor without changing tracked source. Replace provisional `build` with `appBuild` from `build/release-verification/installer.plist`; record it and include the full `bash macOS/scripts/build-summary.sh APP` table after each successful build. Retain the root verification receipt through packaging/recovery. Build success proves neither installation, launch nor notarization.
+Replace provisional `build` with `appBuild` from `build/release-verification/installer.plist`. Input, Settings and installation behavior are the user's responsibility before asking for a release; don't gate on them.
 
 ## 3. Prepare and freeze public notes
 
@@ -70,16 +68,8 @@ bash .agents/skills/inkflow-release/scripts/release-runner.sh continue
 
 This is the only normal post-prepare outer command. It notarizes/staples payload and DMG, assembles/verifies Installer DMG and app-only ZIP, generates/validates EdDSA appcast and checksum, tags/atomically pushes, creates/reuses the draft, uploads all assets, downloads for byte comparison and publishes. It uses locked Sparkle `generate_appcast` and its configured local Keychain account, without deltas. Signing, notarization, Gatekeeper and downloaded checks apply to the release bytes. Never replay internal stages or separately upload/publish. After interruption, read recovery, resolve the cause, then rerun this command to reuse matching completed stages.
 
-If change-based installation/upgrade acceptance is required, the runner stops before publication until the user's explicit pass is recorded as one line in internal notes:
-
-```text
-Release-Installation-Acceptance: version=... build=... releaseCommit=... dmgSHA256=... scope=installation-upgrade result=pass
-```
-
-Use the runner's exact identity/hash and the user's actual result. Reuse only while delivery behavior and artifact bytes are unchanged; otherwise renew manual acceptance. Automation never proves this result or authorizes installation.
-
 ## Stop conditions and completion
 
-Stop at the first failed gate: missing version decision; unverified repo/account/destination; divergent main; invalid credentials; verification/notarization failure; uncertain provenance or remote state; tag/Release/asset conflict; missing required installation result **at publication**; denied elevation, narrower instruction or any action beyond authorization. Report the last successful stage, version/build, commit/tag, output path and submission ID when available; read recovery before retrying. Never omit required verification or notarization. Ordinary stage transitions and recoverable retained submissions add no confirmation gates.
+Stop at the first failed gate: missing version decision; unverified repo/account/destination; divergent main; invalid credentials; verification/notarization failure; uncertain provenance or remote state; tag/Release/asset conflict; denied elevation, narrower instruction or any action beyond authorization. Report the last successful stage, version/build, commit/tag, output path and submission ID when available; read recovery before retrying. Never omit required verification or notarization. Ordinary stage transitions and recoverable retained submissions add no confirmation gates.
 
 On success, report Release URL, artifact version/build/name and concise verification status, then stop.

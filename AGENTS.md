@@ -1,14 +1,21 @@
 # Project guidance
 
-After every successful app build, include the full Markdown table from `bash macOS/scripts/build-summary.sh APP`. Build success proves neither installation, launch nor notarization. Every `build.sh` invocation allocates a fresh build number, including release verification; use the artifact's identity, not the source floor.
+Solo project. Keep changes small and direct; prefer deleting code over adding guards, layers or process.
 
-1. For known failures, start with [macOS/DEBUGGING.md](macOS/DEBUGGING.md); distinguish source, configuration, InkFlow, platform and test-environment evidence.
-2. Run `iconutil` build paths in a suitable non-restricted environment on the first attempt; investigate resources only if the unchanged command still fails there. API names, simulated clients and timing alone prove neither behavior nor cause.
-3. Preserve offline Rime as baseline. Optional AI, downloads, telemetry and recovery must not block or corrupt it; keep network, disk, SQLite/JSON and long preparation off the key-event path.
-4. For dictionary, learning, candidate selection, ranking and related strategies, evaluate existing Rime capabilities and configuration first. Prefer reuse; add custom mechanisms or abstractions only when necessary.
-5. Candidate/dictionary consumers share one reproducible generated-data contract with explicit admission, ranking, deduplication and source priority. Missing evidence is `unknown`, never zero or success.
-6. Telemetry must not change ranking or input. Multi-stage/module/network features retain correlation IDs, stages, timing and skip/cancel/failure reasons while suppressing repeats. Log no secrets or user content; store only minimal, bounded local data with explicit retention; keep AI default-off.
-7. Distinguish released-DMG installation, Developer ID development trials, Debug diagnosis and release; record visible typing only after user confirmation.
-8. Keep auxiliary worktrees under the main checkout's ignored `.worktrees/<name>/`. Test the exact prospective integration tree; remove only proven task-owned artifacts.
-9. Follow [DEVELOPMENT.md](macOS/DEVELOPMENT.md#verification) and [TESTING.md](macOS/TESTING.md#daily-use). Use `test-affected.sh`; extend impact rules when dependencies change. Real typing, focus and cross-App acceptance belong to the user; report daily pending checks. GUI harnesses are explicit diagnostics only. For release, follow [human/release checks](macOS/TESTING.md#human-and-release-checks): affected input/Settings interaction is assumed manually accepted; change-based installation/upgrade still requires confirmation before publication.
-10. Trial an Issue-and-remote-PR workflow: develop and verify locally, and use `gh` to update GitHub Projects at task start, review, merge, and acceptance. Keep issues open while required user acceptance is pending. After a few tasks, review the workflow with the user before moving stable, repetitive steps into GitHub Actions.
+## Product rules
+
+- Offline Rime typing is the baseline. AI, downloads and telemetry must never block or break it; keep network, disk and SQLite work off the key-event path.
+- For dictionary, learning and ranking work, try existing Rime capabilities and configuration before writing custom mechanisms.
+- Quality telemetry exists to iterate ranking and English mixing. It must not change ranking or input, and must not log secrets. AI stays default-off.
+
+## Workflow
+
+- Build: `bash macOS/scripts/build.sh`. Build numbers increase on every build by design; don't comment on them.
+- Test only what you touched: `bash macOS/scripts/test.sh quick` for logic changes, or name units (`test.sh engine controller`). UI-only changes (SwiftUI views, layout, copy): build and stop — the user checks them in the app.
+- Run `test.sh all` only for releases or when explicitly asked. If one unit fails, fix it and rerun that unit.
+- Typing, focus and Settings behavior are checked by the user. List what they should try in one or two lines; don't track it further.
+- `iconutil` fails inside the sandbox; run builds outside it from the first attempt.
+- Extra worktrees go under `.worktrees/<name>/`.
+- Roadmap lives in GitHub Issues. Reference the issue in the PR (`Fixes #N`); GitHub moves the Project item. Don't update Project fields by hand.
+- Release: use the `inkflow-release` skill. It runs the full suite once; don't add extra verification rounds.
+- Known failures: see [macOS/DEBUGGING.md](macOS/DEBUGGING.md).
