@@ -1,75 +1,29 @@
 ---
 name: inkflow-release
-description: Execute or resume an InkFlow macOS release end to end from a clean main candidate through verification, Developer ID signing, notarization, upload, and public GitHub Release. A release request naming a semantic version or bump type authorizes the whole workflow without repeated stage confirmation; not for routine local installation.
+description: Release InkFlow for macOS from main — version bump, one verification run, Developer ID signing, notarization, Installer DMG, Sparkle appcast and GitHub Release. A request naming a version or major/minor/patch authorizes the whole workflow; `--draft` stops before tagging and publishing. Not for routine local installs.
 ---
 
 # InkFlow release
 
-Deliver a public GitHub Release with a signed/notarized Installer DMG, legacy SHA-256 checksum, Sparkle-signed app-only ZIP and `appcast.xml`, from `main` with an annotated `vX.Y.Z` tag. Do not maintain a release branch.
+Ships a notarized Installer DMG, `SHA256SUMS`, a Sparkle app-only ZIP and `appcast.xml` as a GitHub Release tagged `vX.Y.Z` on `main`. Scripts live in `.agents/skills/inkflow-release/scripts/`.
 
-## Authorization and hard boundaries
+A release request with a version or bump type authorizes every step below, including both Apple notarization submissions, the tag/main push and publication. Don't ask for confirmation between steps. Never force-push, overwrite a published Release or tag, create Apple credentials, or install the app for the user. Run signing, notarization and network steps outside the sandbox.
 
-A direct release request naming a semantic version or `major`/`minor`/`patch` durably authorizes that release end to end in the verified `origin`: version update/commit, verification, signing, packaging, both Apple submissions, polling, stapling, tag and atomic main/tag push, draft/assets, downloaded-byte verification and publication. Generated paths, names and submission IDs are included. Skill inspection/editing alone authorizes no release; honor narrower instructions.
+Input, Settings and installation behavior are the user's responsibility before they ask for a release; don't gate on them.
 
-Proceed through successful stages without repeated conversational confirmation or separate approvals for runner internals. Pending notarization means wait and poll at reasonable intervals in this task, not hand off. Execute sequentially in the current task; never delegate release execution or split mutations across agents.
+## Steps
 
-Request required narrow sandbox/signing/Keychain/network elevation for the command being run. After prepare, the `continue` command below is the single stable outer execution/approval boundary. Do not first ask the same question in chat. After approval, continue directly; unavoidable host/Keychain prompts still require the user to satisfy them.
+1. **Preflight.** On a clean, up-to-date `main` (`git fetch origin --tags`; fast-forward only). Check `gh auth status` and `bash scripts/check-credentials.sh` (credentials: [configuration.md](references/configuration.md)). Confirm the tag doesn't exist yet.
+2. **Bump.** `bash scripts/bump-version.sh major|minor|patch`, then commit only `macOS/Info.plist` as `chore(release): vX.Y.Z (build N)`.
+3. **Verify once.** `bash macOS/scripts/release-verification.sh` — build, `test.sh all`, deep bundle check, installer receipt. If a unit fails: fix it and commit, or rerun that unit if it was flaky, then rerun verification. No extra rounds.
+4. **Prepare.** `bash scripts/package.sh prepare` signs a copy of the app and its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
+5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md` ([public-notes.md](references/public-notes.md)).
+6. **Release.** `bash scripts/release.sh` notarizes and staples the app, builds and notarizes the DMG, checks the mounted installer and embedded app, generates the appcast, tags and pushes `main` + tag, uploads assets, verifies the downloaded bytes, and publishes.
 
-- Never install or register the input method on the publisher's behalf, create credentials automatically, expose secrets, force-update history, overwrite remote state or change repository visibility.
-- Never overwrite an existing tag, Release or asset. Only matching retained state may be reused through the runner; conflicts stop execution.
-- Unknown remote submission state is fail-closed. A lost response with zero history matches is **unknown**, not failure; multiple matches are ambiguous. Never automatically resubmit, delete an intent to unlock retry, or use elapsed time as retry permission. `retry-notary` is a scoped exception requiring the recovery reference and authorization covering that uncertainty.
-- Preserve failed attempts, receipts and logs until explicitly authorized cleanup. Do not bump again just to retry or rebuild after prepare.
+   `bash scripts/release.sh --draft` does everything except the tag, push and publish, leaving a GitHub draft for inspection. Running `release.sh` afterwards reuses that draft.
 
-## Read only when needed
+## If something fails
 
-| Trigger | Required reading before acting |
-| --- | --- |
-| Setup, authentication-mode change, missing/invalid credentials, sandbox/Keychain diagnosis, unattended acceptance | [configuration.md](references/configuration.md) |
-| Failure/interruption, existing tag/Release/output, uncertain submission, stale lock, any retry-notary decision | [recovery.md](references/recovery.md) |
-| Writing/freezing public release notes | [public-notes.md](references/public-notes.md) |
-| External command/API compatibility question | [command-references.md](references/command-references.md) |
+Every step in `release.sh` is skipped when its output already exists, so fix the cause and rerun the same command. Don't bump the version again to retry. If `package.sh prepare` refuses an existing output directory from a broken attempt, move it aside and rerun prepare. A notarization interrupted mid-upload is simply resubmitted on rerun; a duplicate submission is harmless.
 
-Run from the release worktree root. Use `$apple-signing-workflow` for certificate selection/artifact verification. Helpers below are under `.agents/skills/inkflow-release/scripts/`.
-
-## 1. Preflight and version commit
-
-1. Verify clean `main`, no merge/rebase, worktree state, intended `origin` (`git remote get-url origin`, `gh repo view`) and account (`gh auth status`). Set `repo` to verified `OWNER/REPO`; use `--repo "$repo"` for release commands. Fetch with `git fetch origin --tags`; stop on divergence/conflicting tags, fast-forward behind-only main, review ahead commits.
-2. Create an isolated detached linked worktree at that main commit under the main checkout's ignored `.worktrees/`. Build, verify, package and tag there. Do not switch another worktree's branch, stash or reset. Supply its existing ignored `.release.local.plist` or explicit `INKFLOW_RELEASE_CONFIG`; read configuration guidance before setup/change.
-3. Run `bash .agents/skills/inkflow-release/scripts/check-credentials.sh` before bump/build. Require Developer ID Application, exact certificate subject OU `T7976FL2LP` and configured Apple authentication. Missing/invalid credentials block packaging, not inspection; prepare repeats the checks.
-4. Read version/build from `macOS/Info.plist`. An explicit version or bump is final; ask 大版本升级 / 新增功能 / Bugfix only if neither was supplied. Match a target to the next major/minor/patch result; otherwise route a retained attempt to recovery or stop on mismatch. Major resets minor/patch, minor resets patch, patch increments alone; never infer 1.0 graduation. The source build increments independently once.
-5. Record the previous published stable tag as `previous_tag`, verify its ancestry, and check the proposed tag/Release locally and remotely **before editing**. Existing state requires recovery, not a new bump.
-6. Run `bash .agents/skills/inkflow-release/scripts/bump-version.sh TYPE`; review the diff. Derive `version`, provisional `build`, and `tag="v$version"` from the plist. Record starting commit/version/build and subsequent results in ignored `build/release-notes.md`. Commit only `macOS/Info.plist` as `chore(release): $tag (build $build)`; retain the clean detached `release_commit`. Never amend it after verification; notes are not a second version source.
-
-## 2. Verify once
-
-```sh
-bash macOS/scripts/release-verification.sh
-```
-
-Builds the clean candidate, runs `test.sh all` once, one deep bundle check, and freezes the Installer executable/icon receipt for packaging. If a unit fails, fix it (new commit, bump nothing) or rerun that unit if it was flaky, then rerun verification. Do not add extra verification rounds, evidence reconciliation or coverage bookkeeping.
-
-Replace provisional `build` with `appBuild` from `build/release-verification/installer.plist`. Input, Settings and installation behavior are the user's responsibility before asking for a release; don't gate on them.
-
-## 3. Prepare and freeze public notes
-
-```sh
-bash .agents/skills/inkflow-release/scripts/package.sh prepare
-```
-
-Prepare checks the bundle, signs a copy in nested order at `build/releases/InkFlow-X.Y.Z-BUILD/payload/InkFlow.app`, retains `inputmethod-submission.zip` and refuses an existing output directory. It does not submit, install, register or publish. Packaging uses the verified artifact build and repeatable fast structural checks.
-
-Read [public-notes.md](references/public-notes.md), write/review Chinese `build/public-release-notes.md`, and freeze it before continuing. Keep internal recovery/acceptance data in `build/release-notes.md`; never publish it. The public-note digest is immutable during recovery.
-
-## 4. Continue through publication
-
-```sh
-bash .agents/skills/inkflow-release/scripts/release-runner.sh continue
-```
-
-This is the only normal post-prepare outer command. It notarizes/staples payload and DMG, assembles/verifies Installer DMG and app-only ZIP, generates/validates EdDSA appcast and checksum, tags/atomically pushes, creates/reuses the draft, uploads all assets, downloads for byte comparison and publishes. It uses locked Sparkle `generate_appcast` and its configured local Keychain account, without deltas. Signing, notarization, Gatekeeper and downloaded checks apply to the release bytes. Never replay internal stages or separately upload/publish. After interruption, read recovery, resolve the cause, then rerun this command to reuse matching completed stages.
-
-## Stop conditions and completion
-
-Stop at the first failed gate: missing version decision; unverified repo/account/destination; divergent main; invalid credentials; verification/notarization failure; uncertain provenance or remote state; tag/Release/asset conflict; denied elevation, narrower instruction or any action beyond authorization. Report the last successful stage, version/build, commit/tag, output path and submission ID when available; read recovery before retrying. Never omit required verification or notarization. Ordinary stage transitions and recoverable retained submissions add no confirmation gates.
-
-On success, report Release URL, artifact version/build/name and concise verification status, then stop.
+Report the release URL, version/build and what was verified when done.

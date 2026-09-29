@@ -4,7 +4,7 @@ if [[ "${1:-}" == --help ]]; then
   echo 'Usage: bash package.sh prepare|finish'
   echo 'Prepare signs the input method and retains its notarization ZIP. Finish requires its stapled app.'
   echo 'Finish preserves the installer DMG and adds a Sparkle ZIP containing only InkFlow.app.'
-  echo 'No installation, notarization submission or publication. Existing outputs are preserved.'
+  echo 'No installation, notarization submission or publication.'
   exit 0
 fi
 [[ $# -eq 1 && ( "$1" == prepare || "$1" == finish ) ]] || { echo 'Use package.sh prepare|finish.' >&2; exit 2; }
@@ -74,26 +74,21 @@ if [[ "$phase" == prepare ]]; then
   verify_app "$app" io.damao.inputmethod.inkflow
   INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
   ditto -c -k --sequesterRsrc --keepParent "$app" "$release_dir/inputmethod-submission.zip"
-  printf 'Prepare complete. Finalize build/public-release-notes.md, then run:\nbash .agents/skills/inkflow-release/scripts/release-runner.sh continue\n'
+  printf 'Prepare complete. Finalize build/public-release-notes.md, then run:\nbash .agents/skills/inkflow-release/scripts/release.sh [--draft]\n'
   exit 0
 fi
 [[ -d "$release_dir" && ! -L "$release_dir" && -f "$release_dir/inputmethod-submission.zip" && -d "$app" && ! -L "$app" ]] || fail 'Missing prepared payload; run prepare first or inspect the interrupted attempt.'
-[[ ! -e "$dmg" && ! -L "$dmg" ]] || fail 'Final DMG already exists; preserve it and inspect/resume notarization.'
-[[ ! -e "$update_zip" && ! -L "$update_zip" ]] || fail 'Sparkle update ZIP already exists; preserve it and inspect the interrupted attempt.'
 verified_installer="$release_dir/verified/InkFlowInstaller"
 verified_icon="$release_dir/verified/AppIcon.icns"
 installer_receipt="$release_dir/verified/installer.plist"
 bash macOS/scripts/release-receipt.sh verify "$verified_installer" "$verified_icon" "$installer_receipt"
-# Prevent concurrent finish attempts. An interrupted lock requires explicit inspection/removal.
-mkdir "$release_dir/finishing" 2>/dev/null || fail 'Finish already running or interrupted; inspect finishing lock.'
-trap 'rmdir "$release_dir/finishing"' EXIT
 verify_app "$app" io.damao.inputmethod.inkflow
 bash macOS/scripts/release-build.sh "$installer_receipt" "$app/Contents/Info.plist" >/dev/null
 xcrun stapler validate "$app"
 INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed "$app"
 bash .agents/skills/inkflow-release/scripts/check-credentials.sh
 scratch=$(mktemp -d "$release_dir/assembly.XXXXXX")
-printf 'Retained assembly: %s\n' "$scratch"
+trap 'rm -rf "$scratch"' EXIT
 # This single post-notarization archive is both the Sparkle update payload and
 # the app payload embedded by the legacy Installer DMG.
 ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/$update_zip_name"
@@ -143,8 +138,7 @@ assembled="$scratch/InkFlow-$version-$build-arm64.dmg"
 hdiutil create -volname "InkFlow $version" -srcfolder "$scratch/stage" -format UDZO "$assembled"
 codesign --force --timestamp --sign "$identity" "$assembled"
 codesign --verify --strict --verbose=2 "$assembled"
-# Exclusive publication on the same volume; never overwrite even an unknown existing output.
-ln "$assembled" "$dmg"
-ln "$scratch/$update_zip_name" "$update_zip"
+mv -f "$assembled" "$dmg"
+mv -f "$scratch/$update_zip_name" "$update_zip"
 printf 'Signed installer DMG (not yet notarized): %s\n' "$dmg"
 printf 'Sparkle update ZIP (signed app only): %s\n' "$update_zip"

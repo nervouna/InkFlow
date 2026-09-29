@@ -21,12 +21,6 @@ public_key=$(plutil -extract SUPublicEDKey raw macOS/Info.plist)
 expected_feed='https://github.com/nervouna/InkFlow/releases/latest/download/appcast.xml'
 expected_bundle='io.damao.inputmethod.inkflow'
 account='io.damao.inputmethod.inkflow'
-if [[ ${INKFLOW_SPARKLE_TEST_MODE:-0} == 1 ]]; then
-  account=${INKFLOW_SPARKLE_TEST_ACCOUNT:-}
-  [[ -n "$account" && "$account" != io.damao.inputmethod.inkflow ]] || fail 'Sparkle fixture mode requires an isolated test account.'
-elif [[ -n ${INKFLOW_SPARKLE_TEST_ACCOUNT:-} ]]; then
-  fail 'Sparkle test account override requires fixture mode.'
-fi
 sparkle_version='2.10.0'
 sparkle_revision='eef1a539a373c1f1a320624b1130fc5de7b2e100'
 download_prefix="https://github.com/nervouna/InkFlow/releases/download/$tag/"
