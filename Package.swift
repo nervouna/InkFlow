@@ -36,6 +36,7 @@ let inkFlowCoreSources = [
     "PersonalLearningSettings.swift",
     "PersonalDataBackup.swift", "PersonalDataTransaction.swift", "PersonalDataSettingsView.swift",
     "QualitySettingsView.swift",
+    "QualityExport.swift",
     "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
     "DictionaryWorkerRunner.swift", "InputController.swift",
     "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",
@@ -46,9 +47,9 @@ let installerCoreSources = [
     "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
     "InstallerValidation.swift", "NativeWindow.swift", "ShippedPayload.swift",
 ]
-let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift"]
+let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "quality_exchange.py"]
 let testSwiftSources = [
-    "PersonalDataTests.swift",
+    "PersonalDataTests.swift", "QualityExportFixture.swift",
     "AIControllerNativeTests.swift", "AICredentialTests.swift",
     "AIDiagnosticTestSupport.swift", "AIHeadlessPipelineSupport.swift", "AIHeadlessPipelineTests.swift",
     "AILiveConfiguration.swift", "AILiveTests.swift", "AIRuntimeTestSupport.swift",

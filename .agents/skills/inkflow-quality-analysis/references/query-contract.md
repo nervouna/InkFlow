@@ -5,7 +5,8 @@
 The entrypoint is `scripts/quality.py`, relative to this skill. It uses stdlib
 `sqlite3`, opens an encoded file URI with `mode=ro`, enables `query_only`, and
 closes a single command's consistent read transaction before rendering. It never
-creates a database, migrates schemas, or writes analysis indexes. Queries aggregate
+creates or migrates a local database. Joint analysis of `--input` exports builds
+only an ephemeral in-memory database and indexes; it never writes the daily database. Queries aggregate
 history in SQLite; `inspect` reads only one composition's records. A busy or damaged
 database returns a diagnostic and exit 2. Success, including an empty compatible
 database or empty filter result, exits 0. Help is available at each command.
@@ -267,3 +268,23 @@ interval is precision context, not an exact render timestamp or human attention.
 Direct engine fixtures may record key timing without any visibility observations.
 Individual `inspect` already exposes the persisted timing object for detailed
 evidence. The AI sample expiry policy does not change ordinary quality retention.
+
+
+## Manual exchange
+
+See [quality export and joint-analysis contract](../../../../macOS/QUALITY-EXPORT.md).
+`export --output PATH` serializes all retained v3 records to format v1 and creates
+an adjacent stable source-UUID marker if needed. Existing records gain source
+identity at export time without a database backfill. Full applied configuration
+and legacy page configuration copies are omitted; fingerprints, page revision
+links, build metadata and timestamps remain. Thus `inspect` on exchanged data
+returns `{}` for applied configuration rather than the original settings.
+
+Every analysis command accepts repeatable `--input PATH`, `--exports-only` and
+`--source ID`. All input validation/union completes before producing results.
+Source namespaces preserve original record identity across overlapping exports;
+mutable run counters use the latest snapshot, while conflicting immutable rows
+fail the whole query. Pooled and per-source results reuse the existing metric
+functions. Source provenance and ranges are explicit, and invalid/unknown metric
+cohorts retain the original unavailable/excluded behavior. Joint dates use the
+analysis host timezone; original UTC times remain unchanged.
