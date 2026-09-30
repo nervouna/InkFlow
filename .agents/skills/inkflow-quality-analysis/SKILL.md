@@ -5,7 +5,7 @@ description: Review InkFlow's locally recorded input quality with 7-day or 28-da
 
 # InkFlow Quality Analysis
 
-Use the read-only [query script](scripts/quality.py). It uses Python's standard
+Use the [query script](scripts/quality.py). It uses Python's standard
 library and defaults to `~/Library/Application Support/InkFlow/quality.sqlite3`.
 Use `python3` from `PATH`; no dependency setup is needed. Run commands from this
 repository root, or use the script's absolute path.
@@ -48,6 +48,16 @@ candidate visibility. It has no raw input text and does not multiply timing by
 decision count. Old or suppressed timing remains unknown; bounded key distributions
 cover retained samples only.
 
+For manual cross-device analysis, add repeatable `--input /path/to/export.json` to
+any analysis command. Local records participate by default; `--exports-only` uses
+only the supplied files. Use `--source UUID` to isolate one device. Joint results
+include deduplicated `sources` and `by_source` results with the same metric rules.
+`inspect` uses the namespaced composition IDs returned by `ranking-issues`.
+Imports remain in memory and never enter the local quality database. Reject
+incompatible/damaged or conflicting inputs; never report partial pooled counts.
+Read [export and joint-analysis usage](../../../macOS/QUALITY-EXPORT.md) for the
+versioned file contract, privacy scope, retention and two-device acceptance.
+
 Most commands accept `--db`, `--since`, `--until`, `--app`, `--config`,
 `--ranking-config`, `--kind` and `--format table|json|csv` after the command. Time
 defaults to all saved history. `trend` derives `--since` from `--days` (default 28),
@@ -68,7 +78,16 @@ or that the user saw a panel. Missing first-page evidence, unknown ranks, candid
 sources and consumed spans must remain unknown. Missing targets do not establish
 recall failure. Configuration fingerprints do not freeze learned dictionaries.
 
-This skill reads evidence. It does not modify the database, tune ranking, install
+The analysis commands read evidence. They do not modify the local database, tune ranking, install
 InkFlow or create monitoring. Missing/incompatible databases produce an error and
 remain untouched. For a supplied test database, identify its results as synthetic
 test evidence, not the user's production input quality.
+
+Manual export is a separate explicitly requested operation:
+`python3 "$query" export --output /path/to/new.json --format json`.
+It exports all retained records, including legacy rows, assigns the file a stable
+random source UUID, and creates only the adjacent `quality-source-id` metadata
+marker on first export. It does not change the quality database or retention.
+The file may contain input/candidate/preceding text; the user chooses the path and
+transfers it. CLI export refuses to overwrite files. Do not export the user's raw
+input history as an incidental part of a read-only review.

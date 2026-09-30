@@ -3,12 +3,17 @@
 import argparse
 from contextlib import closing
 import csv
+from copy import copy
 from datetime import date, datetime, time, timedelta, timezone
 from html import escape
 import json
 from pathlib import Path
 import sqlite3
 import sys
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / 'macOS/Tools'))
+import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
@@ -118,6 +123,9 @@ def filters(args):
         if (value := getattr(args, option)) is not None:
             decision.append(condition)
             parameters[option] = value
+    if getattr(args, 'source', None) is not None:
+        composition.append('c.source_id = :source')
+        parameters['source'] = args.source
     if decision:
         composition.append('EXISTS (SELECT 1 FROM candidate_decisions d JOIN config_revisions r '
                            'ON r.id=d.config_revision_id WHERE d.composition_id=c.id AND '
@@ -285,20 +293,25 @@ def summary(db, args):
         WHERE valid AND display_rank IS NOT NULL GROUP BY {group},display_rank ORDER BY {group},display_rank''', parameters)
     run_counters = ('submitted', 'written', 'droppedQueue', 'droppedOversized', 'droppedDisabled',
                     'droppedBusy', 'droppedInvalid', 'errors', 'truncatedEnvelopes')
+    run_filter = ' WHERE source_id=:source' if getattr(args, 'source', None) else ''
+    run_parameters = {'source': args.source} if run_filter else {}
     run_sql = ','.join(f"COALESCE(SUM(json_extract(stats_json,'$.{key}')),0) AS {key}" for key in run_counters)
     return dict(coverage=coverage(db, sql, parameters),
                 learning_effectiveness=effectiveness(db, args),
                 identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'),
                 groups=[rates(g) for g in groups], rank_counts=ranks,
                 recording_runs=dict(scope='whole_db_lifetime_unfiltered',
-                    totals=rows(db, 'SELECT COUNT(*) AS runs,' + run_sql + ' FROM recording_runs')[0],
-                    statuses=rows(db, 'SELECT status,error_code,COUNT(*) AS runs FROM recording_runs GROUP BY status,error_code')))
+                    totals=rows(db, 'SELECT COUNT(*) AS runs,' + run_sql + ' FROM recording_runs' + run_filter, run_parameters)[0],
+                    statuses=rows(db, 'SELECT status,error_code,COUNT(*) AS runs FROM recording_runs' + run_filter + ' GROUP BY status,error_code', run_parameters)))
 
 
 def effectiveness(db, args):
     """Keep voice-learning denominators independent from ordinary candidate accuracy."""
     unsupported = any(getattr(args, key) is not None for key in ('app', 'config', 'ranking_config', 'kind'))
     conditions, parameters = [], {}
+    if getattr(args, 'source', None):
+        conditions.append('source_id=:source')
+        parameters['source'] = args.source
     for option, operator in (('since', '>='), ('until', '<')):
         if (value := getattr(args, option)) is not None:
             conditions.append(f'occurred_at {operator} :{option}')
@@ -701,8 +714,14 @@ def render(result, output_format):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest='command', required=True)
-    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing'):
+    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'export'):
         sub = commands.add_parser(command)
+        if command == 'export':
+            sub.add_argument('--output', type=Path, required=True, help='New JSON file; contains input text, candidates and preceding context. Never uploaded.')
+        else:
+            sub.add_argument('--input', type=Path, action='append', default=[], help='Quality export JSON; repeat for multiple files')
+            sub.add_argument('--exports-only', action='store_true', help='Analyze files without the local database')
+            sub.add_argument('--source', help='Exact source UUID from the export; isolates one device')
         if command == 'inspect':
             sub.add_argument('composition_id', help='Composition ID returned by ranking-issues')
         if command == 'ranking-issues':
@@ -729,15 +748,47 @@ def main(argv=None):
         if (args.since and args.until and datetime.fromisoformat(args.since)
                 >= datetime.fromisoformat(args.until)):
             raise QueryError('--since must be earlier than the exclusive --until boundary.')
-        with closing(connect(args.db)) as db:
-            db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
-            result = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues,
-                      'inspect': inspect, 'timing': timing}[args.command](db, args)
+        if args.command == 'export':
+            if any(getattr(args, key) is not None for key in ('since', 'until', 'app', 'config', 'ranking_config', 'kind')):
+                raise QueryError('Export includes all retained records; query filters apply only during analysis.')
+            render(quality_exchange.export(args.db, args.output, connect, TABLE_COLUMNS), args.format)
+            return 0
+        handler = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues,
+                   'inspect': inspect, 'timing': timing}[args.command]
+        if args.input or args.exports_only or args.source:
+            if args.exports_only and not args.input:
+                raise QueryError('--exports-only requires at least one --input file.')
+            documents = [quality_exchange.load(path, TABLE_COLUMNS) for path in args.input]
+            if not args.exports_only:
+                local = quality_exchange.snapshot(args.db, connect, TABLE_COLUMNS)
+                local['_input_path'] = str(args.db.expanduser().resolve())
+                documents.append(local)
+            db, sources = quality_exchange.combine(documents, TABLE_COLUMNS)
+            with closing(db):
+                if args.source and args.source not in sources:
+                    raise QueryError('Requested source is not present in these inputs.')
+                original_args = copy(args)
+                result = handler(db, args)
+                result['sources'] = list(sources.values())
+                result['analysis_storage'] = 'memory_only; external records never written to local quality database'
+                if args.command != 'inspect' and not args.source:
+                    result['by_source'] = {}
+                    for sid in sources:
+                        device_args = copy(original_args); device_args.source = sid
+                        result['by_source'][sid] = handler(db, device_args)
+        else:
+            with closing(connect(args.db)) as db:
+                db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
+                result = handler(db, args)
         if args.command == 'trend' and args.chart is not None:
             result['chart_path'] = str(write_trend_svg(result, args.chart))
         result = dict(command=args.command, filters={k: str(v) if isinstance(v, Path) else v
                       for k, v in vars(args).items()
-                      if k in ('db','since','until','app','config','ranking_config','kind','days')}, **result)
+                      if k in ('db','since','until','app','config','ranking_config','kind','days','source','exports_only')}, **result)
+        if args.exports_only:
+            result['filters']['db'] = None
+        if args.input:
+            result['filters']['input'] = [str(p) for p in args.input]
         render(result, args.format)
         return 0
     except SystemExit as error:

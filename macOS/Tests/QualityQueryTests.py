@@ -137,10 +137,139 @@ class QueryTests(unittest.TestCase):
         with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             code = self.quality.main([*args, '--db', str(db or self.db)])
         self.assertEqual(code, 0 if success else 2, stderr.getvalue())
+        if not success:
+            self.assertEqual(stdout.getvalue(), '', 'Failed input must not emit a partial summary')
         return stdout.getvalue() if success else stderr.getvalue()
 
     def result(self, command='summary', *args, db=None):
         return json.loads(self.run_cli(command, *args, '--format', 'json', db=db))
+
+    def export_file(self, name='A.json'):
+        path = Path(self.temp.name) / name
+        self.run_cli('export', '--output', str(path), '--format', 'json')
+        return path
+
+    def test_export_roundtrip_overlap_and_two_devices(self):
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE config_revisions SET applied_config_json=?", (json.dumps(dict(customPhrases=[dict(code='private', text='unused-private-phrase')])),))
+            for rid, raw in db.execute('SELECT id,snapshot_json FROM candidate_decisions').fetchall():
+                page = json.loads(raw); page['configuration'] = dict(customPhrases=['unused-private-phrase'])
+                db.execute('UPDATE candidate_decisions SET snapshot_json=? WHERE id=?', (json.dumps(page), rid))
+        before = self.db.read_bytes()
+        a = self.export_file()
+        self.assertEqual(before, self.db.read_bytes())
+        self.assertNotIn('unused-private-phrase', a.read_text())
+        document = json.loads(a.read_text())
+        self.assertEqual(document['format_version'], 1)
+        self.assertEqual(document['range'], dict(first=STAMP, last=STAMP))
+        self.assertEqual(document['tables']['config_revisions'][0]['applied_config_json'], '{}')
+        self.assertNotIn('configuration', json.loads(document['tables']['candidate_decisions'][0]['snapshot_json']))
+        # Same device, another export after extending an active run and adding an event.
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE recording_runs SET stats_json=?", (json.dumps(dict(written=22)),))
+            db.execute("INSERT INTO effectiveness_events(run_id,occurred_at,source,event,count) VALUES('run',?,'voice_session','finalized',1)", (STAMP,))
+        overlap = self.export_file('overlap.json')
+        local = self.result()
+        merged = self.result('summary', '--input', str(a), '--input', str(a), '--input', str(overlap))
+        self.assertEqual(merged['coverage'], local['coverage'])
+        self.assertEqual(merged['recording_runs'], local['recording_runs'])
+        self.assertEqual(merged['learning_effectiveness'], local['learning_effectiveness'])
+        self.assertEqual(len(merged['sources']), 1)
+        external = json.loads(self.run_cli('summary', '--exports-only', '--input', str(a), '--format', 'json'))
+        self.assertEqual(external['coverage']['compositions'], 21)
+        for field in ('groups', 'rank_counts', 'identity_coverage'):
+            self.assertEqual(external[field], local[field])
+        # Device B intentionally uses identical fixture IDs, but must remain a distinct cohort.
+        document['source_id'] = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        b = Path(self.temp.name) / 'B.json'; b.write_text(json.dumps(document))
+        union = self.result('summary', '--input', str(a), '--input', str(b))
+        self.assertEqual(union['coverage']['compositions'], 42)
+        self.assertEqual(len(union['sources']), 2)
+        self.assertEqual(union['by_source'][document['source_id']]['coverage'], external['coverage'])
+        isolated = self.result('summary', '--input', str(b), '--source', document['source_id'])
+        self.assertEqual(isolated['coverage'], external['coverage'])
+        inspected = self.result('inspect', document['source_id'] + ':a', '--input', str(b))
+        self.assertEqual(inspected['composition']['source_id'], document['source_id'])
+        # Local file stayed unchanged by analysis (the deliberate fixture writes above are excluded).
+        current = self.db.read_bytes()
+        self.result('trend', '--input', str(b), '--until', '2026-09-08', '--days', '7')
+        self.assertEqual(current, self.db.read_bytes())
+        self.assertNotEqual(before, current)
+        # Retention can free INTEGER PRIMARY KEY 1 within the same recording run.
+        with sqlite3.connect(self.db) as db:
+            db.execute('DELETE FROM effectiveness_events')
+            db.execute("INSERT INTO effectiveness_events(id,run_id,occurred_at,source,event,count) VALUES(1,'run','2026-09-07T16:00:00.000Z','voice_session','finalized',1)")
+        after_cleanup = self.export_file('after-cleanup.json')
+        retained = self.result('summary', '--exports-only', '--input', str(overlap), '--input', str(after_cleanup))
+        self.assertEqual(retained['sources'][0]['counts']['effectiveness_events'], 10)
+
+    def test_export_empty_invalid_and_conflicting_inputs_fail_without_summary(self):
+        empty = Path(self.temp.name) / 'empty.sqlite3'; db = empty_db(empty); db.close()
+        out = Path(self.temp.name) / 'empty.json'
+        self.run_cli('export', '--output', str(out), db=empty)
+        result = self.result('summary', '--exports-only', '--input', str(out))
+        self.assertEqual(result['coverage']['compositions'], 0)
+        self.assertIsNone(json.loads(out.read_text())['range']['first'])
+        # Text history expires before content-free events; versions must remain traceable.
+        with sqlite3.connect(empty) as db:
+            insert(db, 'recording_runs', id='events-run', started_at=STAMP, status='closed', engine_version='1.17.0',
+                   build_metadata_json=json.dumps(dict(appVersion='0.5.0', appBuild='80')), metric_rule_version=1, stats_json='{}')
+            insert(db, 'effectiveness_events', run_id='events-run', occurred_at=STAMP, source='voice_session', event='finalized', count=1)
+        events_file = Path(self.temp.name) / 'events-only.json'
+        self.run_cli('export', '--output', str(events_file), db=empty)
+        events = self.result('summary', '--exports-only', '--input', str(events_file))
+        self.assertEqual(events['sources'][0]['versions'][0]['app_version'], '0.5.0')
+        self.assertEqual(events['sources'][0]['counts']['compositions'], 0)
+        a = self.export_file()
+        for mutation in ('version', 'missing-parent', 'bad-json', 'duplicate', 'shape', 'type', 'range', 'huge-integer', 'offset-time'):
+            doc = json.loads(a.read_text())
+            if mutation == 'version': doc['format_version'] = 99
+            elif mutation == 'missing-parent': doc['tables']['compositions'][0]['run_id'] = 'missing'
+            elif mutation == 'bad-json': doc['tables']['candidate_decisions'][0]['snapshot_json'] = '{'
+            elif mutation == 'duplicate': doc['tables']['commits'].append(doc['tables']['commits'][0])
+            elif mutation == 'type': doc['tables']['compositions'][0]['page_history_truncated'] = '1'
+            elif mutation == 'range': doc['range']['first'] = None
+            elif mutation == 'huge-integer': doc['tables']['compositions'][0]['dropped_page_count'] = 1 << 70
+            elif mutation == 'offset-time':
+                doc['tables']['compositions'][0]['started_at'] = '2026-09-07T00:00:00.000+08:00'
+                doc['range']['last'] = '2026-09-07T00:00:00.000+08:00'
+            else: doc['tables']['commits'] = None
+            bad = Path(self.temp.name) / 'bad.json'; bad.write_text(json.dumps(doc))
+            self.run_cli('summary', '--exports-only', '--input', str(bad), success=False)
+        bad.write_text('{')
+        self.run_cli('summary', '--input', str(bad), success=False)
+        doc = json.loads(a.read_text()); doc['tables']['commits'][0]['text'] = 'conflict'
+        bad.write_text(json.dumps(doc))
+        self.assertIn('conflicting', self.run_cli('summary', '--input', str(a), '--input', str(bad), success=False))
+        self.run_cli('export', '--output', str(self.db), success=False)
+        self.run_cli('export', '--output', str(a), success=False)
+
+    def test_native_settings_export_is_readable_and_preserves_database(self):
+        executable = os.environ.get('INKFLOW_QUALITY_EXPORT_FIXTURE')
+        if not executable:
+            self.skipTest('Native export fixture not built; use test-quality-query.sh')
+        import subprocess
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE commits SET text=? WHERE id='raw-commit'", ('raw\0tail',))
+        before = self.db.read_bytes()
+        out = Path(self.temp.name) / 'native.json'
+        subprocess.run([executable, str(self.db), str(out)], check=True, capture_output=True)
+        result = self.result('summary', '--exports-only', '--input', str(out))
+        self.assertEqual(result['coverage'], self.result()['coverage'])
+        self.assertEqual(self.db.read_bytes(), before)
+        document = json.loads(out.read_text())
+        self.assertEqual(len(document['tables']), 6)
+        self.assertEqual(next(r['text'] for r in document['tables']['commits'] if r['id'] == 'raw-commit'), 'raw\0tail')
+        self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
+        self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
+        # Invalid native source schemas are rejected before any output is saved.
+        bad = Path(self.temp.name) / 'bad-native.sqlite3'; bad.write_bytes(self.db.read_bytes())
+        with sqlite3.connect(bad) as db:
+            db.execute('PRAGMA user_version=99')
+        rejected = Path(self.temp.name) / 'rejected-native.json'
+        failure = subprocess.run([executable, str(bad), str(rejected)], capture_output=True)
+        self.assertEqual(failure.returncode, 2)
+        self.assertFalse(rejected.exists())
 
     def test_inspect_compact_and_legacy_page_revisions(self):
         with sqlite3.connect(self.db) as db:
@@ -599,6 +728,17 @@ class QueryTests(unittest.TestCase):
         inspected=self.result('inspect',selected,db=ENGINE_DB)
         self.assertTrue(inspected['commits'][0]['insertion_issued'])
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        exported = Path(self.temp.name) / 'engine.json'
+        self.run_cli('export', '--output', str(exported), db=ENGINE_DB)
+        exchanged = self.result('summary', '--exports-only', '--input', str(exported))
+        self.assertEqual(exchanged['coverage'], result['coverage'])
+        self.assertEqual(exchanged['groups'], result['groups'])
+        for command, options in [('timing', []), ('trend', ['--days', '28', '--until', '2026-10-01'])]:
+            local = self.result(command, *options, db=ENGINE_DB)
+            imported = self.result(command, *options, '--exports-only', '--input', str(exported))
+            for key, value in local.items():
+                if key not in ('filters', 'command'):
+                    self.assertEqual(imported[key], value, f'{command}.{key}')
 
 
 if __name__ == '__main__':
