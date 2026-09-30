@@ -1,0 +1,1013 @@
+{
+  "corpus" : {
+    "candidateCount" : 9,
+    "formatVersion" : 1,
+    "learningSelections" : 5,
+    "pageLimit" : 20,
+    "samples" : [
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-hello",
+        "input" : "nihao",
+        "source" : "curated control",
+        "target" : "你好"
+      },
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-china",
+        "input" : "zhongguo",
+        "source" : "curated control",
+        "target" : "中国"
+      },
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-now",
+        "input" : "xianzaiwomenlai",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "现在我们来"
+      },
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-two",
+        "input" : "womenlia",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "我们俩"
+      },
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-homophone",
+        "input" : "shanghai",
+        "source" : "curated homophone learning control, not a collected user incident",
+        "target" : "上海"
+      },
+      {
+        "category" : "ordinary-control",
+        "id" : "ordinary-paging",
+        "input" : "shi",
+        "source" : "curated paged homophone learning control, not a collected user incident",
+        "target" : "誓"
+      },
+      {
+        "category" : "long-sentence",
+        "id" : "long-friends",
+        "input" : "niyebuxiangnidepengyoushangxin",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "你也不想你的朋友伤心"
+      },
+      {
+        "category" : "long-sentence",
+        "id" : "long-better",
+        "input" : "womenshenzhikeyizuodegenghao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "我们甚至可以做得更好"
+      },
+      {
+        "category" : "long-sentence",
+        "id" : "long-weather",
+        "input" : "jintiantianqihenhao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "今天天气很好"
+      },
+      {
+        "category" : "abbreviation",
+        "id" : "abbreviation-internet",
+        "input" : "hlw",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "互联网"
+      },
+      {
+        "category" : "abbreviation",
+        "id" : "abbreviation-not",
+        "input" : "bs",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "不是"
+      },
+      {
+        "category" : "abbreviation",
+        "id" : "abbreviation-china",
+        "input" : "zhguo",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "中国"
+      },
+      {
+        "category" : "technical",
+        "id" : "technical-api",
+        "input" : "API",
+        "source" : "macOS/DEBUGGING.md uppercase English regression",
+        "target" : "API"
+      },
+      {
+        "category" : "technical",
+        "id" : "technical-swiftui",
+        "input" : "SwiftUI",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "SwiftUI"
+      },
+      {
+        "category" : "technical",
+        "id" : "technical-api-lookup",
+        "input" : "Api",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift domainVocabulary case alias",
+        "target" : "API"
+      },
+      {
+        "category" : "technical",
+        "id" : "technical-swiftui-lookup",
+        "input" : "swiftui",
+        "source" : "macOS/Data/english-technology.tsv canonical lookup code",
+        "target" : "SwiftUI"
+      },
+      {
+        "category" : "technical",
+        "id" : "technical-github",
+        "input" : "github",
+        "source" : "curated technology vocabulary control",
+        "target" : "GitHub"
+      },
+      {
+        "category" : "mixed",
+        "id" : "mixed-api",
+        "input" : "woyongAPIkeyihuifuwo",
+        "source" : "macOS/DEBUGGING.md uppercase English regression",
+        "target" : "我用API可以回复我"
+      },
+      {
+        "category" : "mixed",
+        "id" : "mixed-swiftui",
+        "input" : "woyongSwiftUIhenhao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "我用SwiftUI很好"
+      },
+      {
+        "category" : "mixed",
+        "id" : "mixed-email",
+        "input" : "wofaleemail",
+        "source" : "macOS/DEBUGGING.md and EngineRegression mixed collision",
+        "target" : "我发了email"
+      },
+      {
+        "category" : "mixed",
+        "id" : "mixed-offer",
+        "input" : "niruguoxiangyaozhefenofferkeyihuifuwo",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "你如果想要这份offer可以回复我"
+      }
+    ]
+  },
+  "formatVersion" : 1,
+  "inputOptions" : {
+    "abbreviation" : true,
+    "bracketPaging" : true,
+    "cornerQuotes" : true,
+    "emoji" : true,
+    "englishPunctuation" : false,
+    "fullwidthPipe" : true,
+    "fuzzyC" : false,
+    "fuzzyS" : false,
+    "fuzzyZ" : false,
+    "ideographicComma" : true,
+    "middleDot" : true,
+    "minusEqualPaging" : true,
+    "traditional" : false,
+    "typoTolerance" : true
+  },
+  "provenance" : {
+    "Core/Package.swiftSHA256" : "7442bf7152dc8e81cef4c14f6500366c3e60fa9e7579f58afcfdf97439d86dd3",
+    "Core/SourcesSHA256" : "722aede41e0ea707d8e4bb32dd5025ec4ea5c172d9be1627c6f0eddaf9952a44",
+    "Core/scripts/swift-package.shSHA256" : "cfb9ff33e8c4041df1d6b893f9ba4002ce3ca95fddcf6f956baf7678e9411a09",
+    "Core/scripts/test-quality-baseline.shSHA256" : "367faac1ed124db6b958a828b4bef773b2b29a8dbf4d6279bbea5fe81b5d8ad8",
+    "appVersion" : "0.6.0",
+    "compiledResourcesSHA256" : "5a0747c24e74dc2120c4ac7ff5fc9371364788e36b2fbb7158847eb704865fda",
+    "fixtureSHA256" : "79bfeb612416bb805d0bd524f20a29b8175e65c3f04b9565b2f6ab7a36ab7d28",
+    "librimeSHA256" : "1adb725a081b0accc1451034f6f1bb78cbfe8252a65245f1511f4b3f2038c487",
+    "luaPluginSHA256" : "9e5086f73b90481530bb2aa08a615044c90242eee4b98eef12fcdd1a1c391e68",
+    "macOS/DataSHA256" : "0fdec88687c8cf79577e5145378e5712663d56914abccf28a813ea9584361bc4",
+    "macOS/configSHA256" : "b0f3f6b084b83151b0447939b0cfd0cc29c3bbf99a3ea708615a9d7cece3ac99",
+    "macOS/scripts/dependencies.shSHA256" : "4e684ca4c32bec2218173a6e98d1579cecf9b4d88e0c08a8be8a21183cd481d8",
+    "macOS/scripts/prepare-rime.shSHA256" : "92493eea62e3e5f17a04b72c454a6242ebca4237112e66208c2a24bc1cfe49ce",
+    "resourcesSHA256" : "eb5ae40db047187fd8efcf66bd567eec4e1237407c16d29680d83d25a99eedf1",
+    "runnerBinarySHA256" : "d8178d146a1b64caa6dbd34b3567490a6e445ae2b9042e5686ca4f1c1ca29674",
+    "runnerSHA256" : "f9ba99f367e09c7697a27e8738dfd87483363f86e4d3e6808953c4afa6c611fa",
+    "schemasSHA256" : "c2737bef43d4464927033851254f772c4b3988615ac81bea9205824f11b1653b",
+    "sourceRevision" : "676972187bfde29193c236017bbc82ac9720cfae-dirty",
+    "system" : "Version 27.0 (Build 26A428)"
+  },
+  "results" : [
+    {
+      "initial" : {
+        "committedText" : "你好",
+        "first" : "你好",
+        "inputOperations" : 5,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "你好",
+          "👋",
+          "拟好"
+        ],
+        "totalOperations" : 6
+      },
+      "learned" : {
+        "committedText" : "你好",
+        "first" : "你好",
+        "inputOperations" : 5,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "你好",
+          "👋",
+          "拟好"
+        ],
+        "totalOperations" : 6
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-hello",
+        "input" : "nihao",
+        "source" : "curated control",
+        "target" : "你好"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "中国",
+        "first" : "中国",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "中国",
+          "🇨🇳",
+          "种过"
+        ],
+        "totalOperations" : 9
+      },
+      "learned" : {
+        "committedText" : "中国",
+        "first" : "中国",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "中国",
+          "🇨🇳",
+          "种过"
+        ],
+        "totalOperations" : 9
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-china",
+        "input" : "zhongguo",
+        "source" : "curated control",
+        "target" : "中国"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "现在我们来",
+        "first" : "现在我们来",
+        "inputOperations" : 15,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "现在我们来",
+          "现在我",
+          "现在"
+        ],
+        "totalOperations" : 16
+      },
+      "learned" : {
+        "committedText" : "现在我们来",
+        "first" : "现在我们来",
+        "inputOperations" : 15,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "现在我们来",
+          "现在我",
+          "现在"
+        ],
+        "totalOperations" : 16
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-now",
+        "input" : "xianzaiwomenlai",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "现在我们来"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "我们俩",
+        "first" : "我们俩",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我们俩",
+          "我们",
+          "我么"
+        ],
+        "totalOperations" : 9
+      },
+      "learned" : {
+        "committedText" : "我们俩",
+        "first" : "我们俩",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我们俩",
+          "我们",
+          "我么"
+        ],
+        "totalOperations" : 9
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-two",
+        "input" : "womenlia",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "我们俩"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "上海",
+        "first" : "伤害",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 3,
+        "topThree" : [
+          "伤害",
+          "Shanghai",
+          "上海"
+        ],
+        "totalOperations" : 9
+      },
+      "learned" : {
+        "committedText" : "上海",
+        "first" : "上海",
+        "inputOperations" : 8,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "上海",
+          "Shanghai",
+          "伤害"
+        ],
+        "totalOperations" : 9
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-homophone",
+        "input" : "shanghai",
+        "source" : "curated homophone learning control, not a collected user incident",
+        "target" : "上海"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "誓",
+        "first" : "是",
+        "inputOperations" : 3,
+        "pagingOperations" : 3,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 36,
+        "topThree" : [
+          "是",
+          "时",
+          "事"
+        ],
+        "totalOperations" : 7
+      },
+      "learned" : {
+        "committedText" : "誓",
+        "first" : "誓",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "誓",
+          "是",
+          "时"
+        ],
+        "totalOperations" : 4
+      },
+      "sample" : {
+        "category" : "ordinary-control",
+        "id" : "ordinary-paging",
+        "input" : "shi",
+        "source" : "curated paged homophone learning control, not a collected user incident",
+        "target" : "誓"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "你也不想你的朋友伤心",
+        "first" : "你也不想你的朋友伤心",
+        "inputOperations" : 30,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "你也不想你的朋友伤心",
+          "你也不",
+          "你也"
+        ],
+        "totalOperations" : 31
+      },
+      "learned" : {
+        "committedText" : "你也不想你的朋友伤心",
+        "first" : "你也不想你的朋友伤心",
+        "inputOperations" : 30,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "你也不想你的朋友伤心",
+          "你也不",
+          "你也"
+        ],
+        "totalOperations" : 31
+      },
+      "sample" : {
+        "category" : "long-sentence",
+        "id" : "long-friends",
+        "input" : "niyebuxiangnidepengyoushangxin",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "你也不想你的朋友伤心"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "我们甚至可以做得更好",
+        "first" : "我们甚至可以做得更好",
+        "inputOperations" : 28,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我们甚至可以做得更好",
+          "我们",
+          "我么"
+        ],
+        "totalOperations" : 29
+      },
+      "learned" : {
+        "committedText" : "我们甚至可以做得更好",
+        "first" : "我们甚至可以做得更好",
+        "inputOperations" : 28,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我们甚至可以做得更好",
+          "我们",
+          "我么"
+        ],
+        "totalOperations" : 29
+      },
+      "sample" : {
+        "category" : "long-sentence",
+        "id" : "long-better",
+        "input" : "womenshenzhikeyizuodegenghao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "我们甚至可以做得更好"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "今天天气很好",
+        "first" : "今天天气很好",
+        "inputOperations" : 19,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "今天天气很好",
+          "今天天气",
+          "今天"
+        ],
+        "totalOperations" : 20
+      },
+      "learned" : {
+        "committedText" : "今天天气很好",
+        "first" : "今天天气很好",
+        "inputOperations" : 19,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "今天天气很好",
+          "今天天气",
+          "今天"
+        ],
+        "totalOperations" : 20
+      },
+      "sample" : {
+        "category" : "long-sentence",
+        "id" : "long-weather",
+        "input" : "jintiantianqihenhao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes",
+        "target" : "今天天气很好"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "互联网",
+        "first" : "互联网",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "互联网",
+          "好莱坞",
+          "葫芦娃"
+        ],
+        "totalOperations" : 4
+      },
+      "learned" : {
+        "committedText" : "互联网",
+        "first" : "互联网",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "互联网",
+          "好莱坞",
+          "葫芦娃"
+        ],
+        "totalOperations" : 4
+      },
+      "sample" : {
+        "category" : "abbreviation",
+        "id" : "abbreviation-internet",
+        "input" : "hlw",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "互联网"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "不是",
+        "first" : "不是",
+        "inputOperations" : 2,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "不是",
+          "本身",
+          "表示"
+        ],
+        "totalOperations" : 3
+      },
+      "learned" : {
+        "committedText" : "不是",
+        "first" : "不是",
+        "inputOperations" : 2,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "不是",
+          "本身",
+          "表示"
+        ],
+        "totalOperations" : 3
+      },
+      "sample" : {
+        "category" : "abbreviation",
+        "id" : "abbreviation-not",
+        "input" : "bs",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "不是"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "中国",
+        "first" : "中国",
+        "inputOperations" : 5,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "中国",
+          "🇨🇳",
+          "赵国"
+        ],
+        "totalOperations" : 6
+      },
+      "learned" : {
+        "committedText" : "中国",
+        "first" : "中国",
+        "inputOperations" : 5,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "中国",
+          "🇨🇳",
+          "赵国"
+        ],
+        "totalOperations" : 6
+      },
+      "sample" : {
+        "category" : "abbreviation",
+        "id" : "abbreviation-china",
+        "input" : "zhguo",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings",
+        "target" : "中国"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "first" : "",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : true,
+        "selectionOperations" : 0,
+        "topThree" : [
+
+        ]
+      },
+      "learned" : {
+        "first" : "",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : true,
+        "selectionOperations" : 0,
+        "topThree" : [
+
+        ]
+      },
+      "sample" : {
+        "category" : "technical",
+        "id" : "technical-api",
+        "input" : "API",
+        "source" : "macOS/DEBUGGING.md uppercase English regression",
+        "target" : "API"
+      },
+      "trainingCommits" : 0
+    },
+    {
+      "initial" : {
+        "first" : "",
+        "inputOperations" : 7,
+        "pagingOperations" : 0,
+        "searchExhausted" : true,
+        "selectionOperations" : 0,
+        "topThree" : [
+
+        ]
+      },
+      "learned" : {
+        "first" : "",
+        "inputOperations" : 7,
+        "pagingOperations" : 0,
+        "searchExhausted" : true,
+        "selectionOperations" : 0,
+        "topThree" : [
+
+        ]
+      },
+      "sample" : {
+        "category" : "technical",
+        "id" : "technical-swiftui",
+        "input" : "SwiftUI",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "SwiftUI"
+      },
+      "trainingCommits" : 0
+    },
+    {
+      "initial" : {
+        "committedText" : "API",
+        "first" : "API",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "API"
+        ],
+        "totalOperations" : 4
+      },
+      "learned" : {
+        "committedText" : "API",
+        "first" : "API",
+        "inputOperations" : 3,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "API"
+        ],
+        "totalOperations" : 4
+      },
+      "sample" : {
+        "category" : "technical",
+        "id" : "technical-api-lookup",
+        "input" : "Api",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift domainVocabulary case alias",
+        "target" : "API"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "SwiftUI",
+        "first" : "SwiftUI",
+        "inputOperations" : 7,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "SwiftUI",
+          "所谓",
+          "思维"
+        ],
+        "totalOperations" : 8
+      },
+      "learned" : {
+        "committedText" : "SwiftUI",
+        "first" : "SwiftUI",
+        "inputOperations" : 7,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "SwiftUI",
+          "所谓",
+          "思维"
+        ],
+        "totalOperations" : 8
+      },
+      "sample" : {
+        "category" : "technical",
+        "id" : "technical-swiftui-lookup",
+        "input" : "swiftui",
+        "source" : "macOS/Data/english-technology.tsv canonical lookup code",
+        "target" : "SwiftUI"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "GitHub",
+        "first" : "GitHub",
+        "inputOperations" : 6,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "GitHub",
+          "GitHub Actions",
+          "GitHub Copilot"
+        ],
+        "totalOperations" : 7
+      },
+      "learned" : {
+        "committedText" : "GitHub",
+        "first" : "GitHub",
+        "inputOperations" : 6,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "GitHub",
+          "GitHub Actions",
+          "GitHub Copilot"
+        ],
+        "totalOperations" : 7
+      },
+      "sample" : {
+        "category" : "technical",
+        "id" : "technical-github",
+        "input" : "github",
+        "source" : "curated technology vocabulary control",
+        "target" : "GitHub"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "我用API可以回复我",
+        "first" : "我用API可以回复我",
+        "inputOperations" : 20,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我用API可以回复我",
+          "我用",
+          "我哟"
+        ],
+        "totalOperations" : 21
+      },
+      "learned" : {
+        "committedText" : "我用API可以回复我",
+        "first" : "我用API可以回复我",
+        "inputOperations" : 20,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我用API可以回复我",
+          "我用",
+          "我哟"
+        ],
+        "totalOperations" : 21
+      },
+      "sample" : {
+        "category" : "mixed",
+        "id" : "mixed-api",
+        "input" : "woyongAPIkeyihuifuwo",
+        "source" : "macOS/DEBUGGING.md uppercase English regression",
+        "target" : "我用API可以回复我"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "我用SwiftUI很好",
+        "first" : "我用SwiftUI很好",
+        "inputOperations" : 19,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我用SwiftUI很好",
+          "我用",
+          "我哟"
+        ],
+        "totalOperations" : 20
+      },
+      "learned" : {
+        "committedText" : "我用SwiftUI很好",
+        "first" : "我用SwiftUI很好",
+        "inputOperations" : 19,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 1,
+        "topThree" : [
+          "我用SwiftUI很好",
+          "我用",
+          "我哟"
+        ],
+        "totalOperations" : 20
+      },
+      "sample" : {
+        "category" : "mixed",
+        "id" : "mixed-swiftui",
+        "input" : "woyongSwiftUIhenhao",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "我用SwiftUI很好"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "我发了email",
+        "first" : "我发了而买了",
+        "inputOperations" : 11,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 2,
+        "topThree" : [
+          "我发了而买了",
+          "我发了email",
+          "我发了"
+        ],
+        "totalOperations" : 12
+      },
+      "learned" : {
+        "committedText" : "我发了email",
+        "first" : "我发了而买了",
+        "inputOperations" : 11,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 2,
+        "topThree" : [
+          "我发了而买了",
+          "我发了email",
+          "我发了"
+        ],
+        "totalOperations" : 12
+      },
+      "sample" : {
+        "category" : "mixed",
+        "id" : "mixed-email",
+        "input" : "wofaleemail",
+        "source" : "macOS/DEBUGGING.md and EngineRegression mixed collision",
+        "target" : "我发了email"
+      },
+      "trainingCommits" : 5
+    },
+    {
+      "initial" : {
+        "committedText" : "你如果想要这份offer可以回复我",
+        "first" : "你如果想要这份哦方法二可以回复我",
+        "inputOperations" : 37,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 2,
+        "topThree" : [
+          "你如果想要这份哦方法二可以回复我",
+          "你如果想要这份offer可以回复我",
+          "你如果"
+        ],
+        "totalOperations" : 38
+      },
+      "learned" : {
+        "committedText" : "你如果想要这份offer可以回复我",
+        "first" : "你如果想要这份哦方法二可以回复我",
+        "inputOperations" : 37,
+        "pagingOperations" : 0,
+        "searchExhausted" : false,
+        "selectionOperations" : 1,
+        "targetRank" : 2,
+        "topThree" : [
+          "你如果想要这份哦方法二可以回复我",
+          "你如果想要这份offer可以回复我",
+          "你如果"
+        ],
+        "totalOperations" : 38
+      },
+      "sample" : {
+        "category" : "mixed",
+        "id" : "mixed-offer",
+        "input" : "niruguoxiangyaozhefenofferkeyihuifuwo",
+        "source" : "Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates",
+        "target" : "你如果想要这份offer可以回复我"
+      },
+      "trainingCommits" : 5
+    }
+  ]
+}

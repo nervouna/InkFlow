@@ -20,6 +20,7 @@ let package = Package(
     name: "InkFlowShared",
     platforms: [.macOS(.v26), .iOS(.v26)],
     products: [
+        .executable(name: "quality-baseline", targets: ["QualityBaseline"]),
         .executable(name: "dictionary-preparation-fixture", targets: ["DictionaryPreparationFixture"]),
         .executable(name: "core-dictionary-tests", targets: ["CoreDictionaryTests"]),
         .executable(name: "voice-learning-coordinator-tests", targets: ["VoiceLearningCoordinatorTests"]),
@@ -36,6 +37,7 @@ let package = Package(
         .executable(name: "ranking-tests", targets: ["RankingTests"])
     ],
     targets: [
+        .executableTarget(name: "QualityBaseline", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Tests/QualityBaseline", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         .target(name: "InkFlowRimeNative", path: "Sources/InkFlowRimeNative",
                 publicHeadersPath: "include", cxxSettings: nativeCxxSettings, linkerSettings: rimeLinkerSettings),
         .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeWorker"], path: "Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),

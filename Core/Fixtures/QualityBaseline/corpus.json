@@ -1,0 +1,29 @@
+{
+  "formatVersion": 1,
+  "learningSelections": 5,
+  "candidateCount": 9,
+  "pageLimit": 20,
+  "samples": [
+    {"id":"ordinary-hello","category":"ordinary-control","input":"nihao","target":"你好","source":"curated control"},
+    {"id":"ordinary-china","category":"ordinary-control","input":"zhongguo","target":"中国","source":"curated control"},
+    {"id":"ordinary-now","category":"ordinary-control","input":"xianzaiwomenlai","target":"现在我们来","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings"},
+    {"id":"ordinary-two","category":"ordinary-control","input":"womenlia","target":"我们俩","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings"},
+    {"id":"ordinary-homophone","category":"ordinary-control","input":"shanghai","target":"上海","source":"curated homophone learning control, not a collected user incident"},
+    {"id":"ordinary-paging","category":"ordinary-control","input":"shi","target":"誓","source":"curated paged homophone learning control, not a collected user incident"},
+    {"id":"long-friends","category":"long-sentence","input":"niyebuxiangnidepengyoushangxin","target":"你也不想你的朋友伤心","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes"},
+    {"id":"long-better","category":"long-sentence","input":"womenshenzhikeyizuodegenghao","target":"我们甚至可以做得更好","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes"},
+    {"id":"long-weather","category":"long-sentence","input":"jintiantianqihenhao","target":"今天天气很好","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift conservativeChinesePrefixes"},
+    {"id":"abbreviation-internet","category":"abbreviation","input":"hlw","target":"互联网","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings"},
+    {"id":"abbreviation-not","category":"abbreviation","input":"bs","target":"不是","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings"},
+    {"id":"abbreviation-china","category":"abbreviation","input":"zhguo","target":"中国","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift inputSettings"},
+    {"id":"technical-api","category":"technical","input":"API","target":"API","source":"macOS/DEBUGGING.md uppercase English regression"},
+    {"id":"technical-swiftui","category":"technical","input":"SwiftUI","target":"SwiftUI","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates"},
+    {"id":"technical-api-lookup","category":"technical","input":"Api","target":"API","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift domainVocabulary case alias"},
+    {"id":"technical-swiftui-lookup","category":"technical","input":"swiftui","target":"SwiftUI","source":"macOS/Data/english-technology.tsv canonical lookup code"},
+    {"id":"technical-github","category":"technical","input":"github","target":"GitHub","source":"curated technology vocabulary control"},
+    {"id":"mixed-api","category":"mixed","input":"woyongAPIkeyihuifuwo","target":"我用API可以回复我","source":"macOS/DEBUGGING.md uppercase English regression"},
+    {"id":"mixed-swiftui","category":"mixed","input":"woyongSwiftUIhenhao","target":"我用SwiftUI很好","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates"},
+    {"id":"mixed-email","category":"mixed","input":"wofaleemail","target":"我发了email","source":"macOS/DEBUGGING.md and EngineRegression mixed collision"},
+    {"id":"mixed-offer","category":"mixed","input":"niruguoxiangyaozhefenofferkeyihuifuwo","target":"你如果想要这份offer可以回复我","source":"Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift mixedEnglishCandidates"}
+  ]
+}

@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-all_units=(shared-core quality-identity quality-store quality-timing quality-metadata quality-capture-query
+all_units=(shared-core quality-baseline quality-identity quality-store quality-timing quality-metadata quality-capture-query
   voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-learning ai-headless
   preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases
   controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation
@@ -57,6 +57,7 @@ filter_engine_stderr() {
 engine_built=false
 run_unit() {
   case "$1" in
+    quality-baseline) bash Core/scripts/test-quality-baseline.sh ;;
     shared-core)
       bash Core/scripts/check-boundaries.sh
       if $full; then bash Core/scripts/test.sh "$PWD/build/test-shared" --skip-covered-units

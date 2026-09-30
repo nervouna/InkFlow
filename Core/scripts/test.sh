@@ -49,6 +49,7 @@ if $skip_covered_units; then
   inkflow_test_timing_report shared-core native-host-build "$stage_started"
 fi
 if ! $skip_covered_units; then
+  bash Core/scripts/test-quality-baseline.sh
   stage_started=$(inkflow_test_timing_now)
   for group in basic options english context custom-phrases; do
     mkdir -p "$scratch/$group"
