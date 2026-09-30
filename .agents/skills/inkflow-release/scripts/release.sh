@@ -1,7 +1,7 @@
 #!/bin/bash
 # After release-verification.sh and package.sh prepare: notarize, package, verify,
-# generate the appcast, tag, upload and publish. Each step is skipped when its output
-# already exists, so rerunning after a failure resumes where it stopped.
+# generate the appcast, tag, upload and publish. Existing outputs are reused after
+# receipt and artifact validation, so rerunning after a failure resumes the release.
 #
 #   release.sh           full release (tag + push + publish)
 #   release.sh --draft   everything except tag/push/publish; leaves a GitHub draft
@@ -38,6 +38,8 @@ appcast="$release_dir/appcast.xml"
 checksum="$release_dir/SHA256SUMS"
 notes="$PWD/build/public-release-notes.md"
 [[ -d "$app" && -f "$release_dir/inputmethod-submission.zip" ]] || fail 'Run package.sh prepare first.'
+bash macOS/scripts/release-receipt.sh verify "$release_dir/verified/InkFlowInstaller" \
+  "$release_dir/verified/AppIcon.icns" "$release_dir/verified/installer.plist"
 [[ -f "$notes" ]] || fail 'Write build/public-release-notes.md first.'
 previous_tag=$(git tag --merged HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$tag" | head -1)
 [[ -n "$previous_tag" ]] || fail 'No previous release tag is an ancestor of HEAD.'
@@ -82,7 +84,7 @@ hdiutil detach "$mount_point" >/dev/null
 trap 'rm -rf "$extract"' EXIT
 
 # 4. Appcast and checksum.
-[[ -f "$appcast" ]] || bash "$scripts/release-appcast.sh" generate "$previous_tag"
+bash "$scripts/release-appcast.sh" generate "$previous_tag"
 printf '%s  %s\n' "$(sha256 "$dmg")" "$(basename "$dmg")" > "$checksum"
 assets=("$dmg" "$checksum" "$update_zip" "$appcast")
 
