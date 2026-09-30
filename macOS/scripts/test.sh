@@ -47,7 +47,7 @@ if $needs_dependencies || $needs_shared; then macOS/scripts/dependencies.sh; fi
 if $needs_shared; then bash macOS/scripts/prepare-rime.sh build/test-shared; fi
 source macOS/scripts/swift-test.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
-trap 'rm -rf "$scratch"' EXIT
+trap 'for pid in ${background_pids[@]+"${background_pids[@]}"}; do kill -- "-$pid" 2>/dev/null || true; done; rm -rf "$scratch"' EXIT
 
 # Drop librime's routine startup chatter from passing engine runs.
 filter_engine_stderr() {
@@ -90,15 +90,37 @@ run_unit() {
       bash macOS/scripts/test-dictionary-updates.sh "--${1#dictionary-}" ;;
     dictionary-activation)
       bash macOS/scripts/test-dictionary-activation.sh
-      bash macOS/scripts/test-serving-startup.sh
+      bash macOS/scripts/test-serving-startup.sh ;;
+    core-preparation)
       # The full suite runs shared-core with --skip-covered-units; this covers the rest.
-      if $full; then bash Core/scripts/test-dictionaries.sh "$PWD/build/test-shared" --preparation-only; fi ;;
+      bash Core/scripts/test-dictionaries.sh "$PWD/build/test-shared" --preparation-only ;;
     *) bash "macOS/scripts/test-$1.sh" ;;
   esac
 }
 
+# In the full suite, the two slowest units (about 6 min each) run in the background
+# while everything else runs serially. Their binaries are built first.
+background=() background_pids=()
+if $full; then
+  background=(ai-learning dictionary-activation)
+  units=("${units[@]/ai-learning}"); units=("${units[@]/dictionary-activation}")
+  units+=(core-preparation)
+  for product in ai-pronunciation-tests ai-adoption-learning-tests dictionary-activation-tests serving-startup-tests; do
+    build_swift_test "$product" "build/$product"
+  done
+  set -m  # own process group per job, so a failure can stop the whole job
+  for unit in "${background[@]}"; do
+    echo "BEGIN $unit (background)"
+    ( (set -e; export INKFLOW_TEST_PREBUILT=1; run_unit "$unit") > "$scratch/$unit.log" 2>&1
+      echo $? > "$scratch/$unit.status" ) &
+    background_pids+=($!)
+  done
+  set +m
+fi
+
 passed=()
 for unit in "${units[@]}"; do
+  [[ -n "$unit" ]] || continue
   echo "BEGIN $unit"
   began=$SECONDS
   # set -e only applies inside the subshell when it is not an if/|| condition.
@@ -112,6 +134,13 @@ for unit in "${units[@]}"; do
     exit 1
   fi
   echo "END $unit ($((SECONDS - began))s)"
+  passed+=("$unit")
+done
+wait
+for unit in ${background[@]+"${background[@]}"}; do
+  cat "$scratch/$unit.log"
+  [[ $(cat "$scratch/$unit.status") == 0 ]] || { echo "FAIL $unit (background)" >&2; echo "Passed: ${passed[*]}" >&2; exit 1; }
+  echo "END $unit (background)"
   passed+=("$unit")
 done
 echo "PASS ${#passed[@]} units: ${passed[*]}"
