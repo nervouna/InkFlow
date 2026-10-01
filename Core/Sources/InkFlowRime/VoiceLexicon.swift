@@ -10,8 +10,8 @@ package struct VoiceLexiconSnapshot: Sendable, Equatable {
         let commits: Int
         var explicit = false
     }
-    package static let entryLimit = 512
-    package static let byteLimit = 64 * 1024
+    package static let entryLimit = 8192
+    package static let byteLimit = 512 * 1024
     package let generation: UInt64
     package let revision: UInt64
     package let availability: Availability
@@ -147,6 +147,10 @@ package enum VoiceAlternativeReranker {
     package static func select(_ ranges: [[String]], snapshot: VoiceLexiconSnapshot, fixedPrefix: String = "") -> String {
         let primary = ranges.compactMap(\.first).joined()
         guard ranges.count <= 64, primary.utf16.count <= 16_000, !snapshot.entries.isEmpty else { return primary }
+        // Only entries present in some alternative can score; keep the beam cheap for a large lexicon.
+        let offered = Set(String(fixedPrefix.suffix(8)) + ranges.flatMap { $0.prefix(8) }.joined())
+        let entries = snapshot.entries.filter { $0.text.allSatisfy(offered.contains) }
+        guard !entries.isEmpty else { return primary }
         // Explicit character spelling is stronger evidence than a learned homophone.
         guard primary.range(of: #"([\p{Han}])[\p{Han}]{0,4}的\1"#, options: .regularExpression) == nil else { return primary }
         let prefix = String(fixedPrefix.suffix(8))
@@ -169,14 +173,14 @@ package enum VoiceAlternativeReranker {
             // Stable beam ordering retains Apple order on ties. Score each path only once.
             var scored: [(text: String, index: Int, value: Int)] = []
             for (index, text) in next.enumerated() {
-                scored.append((text, index, score(prefix + text, entries: snapshot.entries)))
+                scored.append((text, index, score(prefix + text, entries: entries)))
             }
             scored.sort { $0.value == $1.value ? $0.index < $1.index : $0.value > $1.value }
             paths = scored.map(\.text)
         }
-        var best = primary, bestScore = score(prefix + primary, entries: snapshot.entries)
+        var best = primary, bestScore = score(prefix + primary, entries: entries)
         for path in paths {
-            let candidateScore = score(prefix + path, entries: snapshot.entries)
+            let candidateScore = score(prefix + path, entries: entries)
             if candidateScore > bestScore { best = path; bestScore = candidateScore }
         }
         return best

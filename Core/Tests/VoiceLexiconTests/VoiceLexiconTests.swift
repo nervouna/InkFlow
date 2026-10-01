@@ -33,15 +33,15 @@ struct VoiceLexiconTests {
         precondition(select([["张伟", "张玮"]], tied) == "张伟")
         let duplicates = Array(repeating: snapshot.entries[0], count: 1000)
         precondition(VoiceLexiconSnapshot(generation: 0, revision: 0, availability: .available, entries: duplicates).entries.count == 1)
-        let many = (0..<700).map { VoiceLexiconSnapshot.Entry(text: "测试\($0)", code: "ce shi ", commits: 1) }
+        let many = (0..<9000).map { VoiceLexiconSnapshot.Entry(text: "测试\($0)", code: "ce shi ", commits: 1) }
         let capped = VoiceLexiconSnapshot(generation: 0, revision: 0, availability: .available, entries: many)
-        precondition(capped.entries.count == 512)
+        precondition(capped.entries.count == 8192)
         let huge = many.map { VoiceLexiconSnapshot.Entry(text: $0.text, code: String(repeating: "a", count: 10_000), commits: 1) }
         let byteCapped = VoiceLexiconSnapshot(generation: 0, revision: 0, availability: .available, entries: huge)
-        precondition(byteCapped.entries.reduce(0) { $0 + $1.text.utf8.count + $1.code.utf8.count + 32 } <= 64 * 1024)
+        precondition(byteCapped.entries.reduce(0) { $0 + $1.text.utf8.count + $1.code.utf8.count + 32 } <= VoiceLexiconSnapshot.byteLimit)
         precondition(VoiceLexiconSnapshot(payload: "unknown", generation: 0, revision: 0).availability == .unknown)
         precondition(VoiceLexiconSnapshot(payload: "ok\n", generation: 0, revision: 0).availability == .available)
-        precondition(VoiceLexiconSnapshot(payload: "ok\n" + String(repeating: "a", count: 65536), generation: 0, revision: 0).availability == .unknown)
+        precondition(VoiceLexiconSnapshot(payload: "ok\n" + String(repeating: "a", count: 524_288), generation: 0, revision: 0).availability == .unknown)
         let groups = Array(repeating: ["伟", "玮", "炜", "苇", "委", "尾", "纬", "伪"], count: 64)
         precondition(select(groups) == String(repeating: "伟", count: 64), "Bounded alternative explosion retains stable ties")
         precondition(select(Array(repeating: ["张伟", "张玮"], count: 65)) == String(repeating: "张伟", count: 65))
