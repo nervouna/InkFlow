@@ -59,15 +59,15 @@ function M.init(env)
       -- call this transport directly from a key callback or retain its raw pointer.
       local ok, result = with_memory(env, function(memory)
         if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
-        -- Empty predictive prefix caps accepted rows in native LookupWords. Deleted
-        -- records may still be scanned; this is a bounded view, not a time guarantee.
-        local iterator = memory.user_dict:lookup_words("", true, 512)
+        -- Empty predictive prefix caps accepted rows in native LookupWords, in key order:
+        -- keep the cap above a typical user dictionary so later codes stay visible.
+        local iterator = memory.user_dict:lookup_words("", true, 8192)
         local rows, bytes = {"ok"}, 3
         for entry in iterator:iter() do
           local text, code = entry.text, entry.custom_code
           if text and code and not text:find("[%c]") and code:match("^[a-z ]+$") then
             local row = text .. "\t" .. code .. "\t" .. tostring(entry.commit_count)
-            if bytes + #row + 1 > 65536 then break end
+            if bytes + #row + 1 > 524288 then break end
             rows[#rows + 1] = row
             bytes = bytes + #row + 1
           end
