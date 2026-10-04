@@ -1,5 +1,5 @@
 import Foundation
-import InkFlowDomain
+@testable import InkFlowDomain
 
 /// Reads only the tab-separated body. Remote headers, imports and executable configuration are never interpreted.
 package enum IFReferenceDictionaryGenerator {
