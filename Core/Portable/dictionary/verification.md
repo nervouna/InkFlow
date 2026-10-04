@@ -1,5 +1,23 @@
 # Dictionary generator verification
 
+## In-process native boundary
+
+The Mac `dictionary` action passed at revision `3143f99b295781c2c2b768ff5151173ed7379d83`. A standalone Swift consumer linked `libinkflow_dictionary.a`, validated each pinned source through the C ABI, and generated the complete 969,894-row dictionary and all 32 spelling profiles. Its bytes and manifest matched the Rust CLI, which also matched the fresh Swift reference. The consumer released input storage before reading outputs.
+
+The C layout/linking/ownership checks passed on Linux x86_64 and macOS arm64. Rust boundary tests covered all 44 synthetic cases, malformed requests, panic containment, independent concurrent calls, and retained outputs. Linux Clippy with warnings denied and formatting passed. The panic-containment test deliberately triggers a caught panic; its diagnostic in the log is expected.
+
+Evidence is under `build/mac-remote/20261004T232727Z-f8e39566/`:
+
+| File | SHA-256 |
+| --- | --- |
+| `run.json` | `87e9ef33ab1a5c20162bf8efd3deee05c2d658ae723d9b4230fb86e0a88e5651` |
+| `00-dictionary.log` | `7075a1bb9af7e443ed92b6d5bec22245da8918452f6c6142388f606bc8fa8492` |
+| `swift-ffi-corpus.json` and `rust-corpus.json` | `63bb2d4234e0470a0549e00303f21192065ee10683ce2ff603b5371f6375b16d` |
+
+Shipping preparation and the update worker still use Swift. Worker sandboxing, packaging, activation, and target-native production cache preparation were not tested by this boundary comparison. Nothing was installed or activated.
+
+## Initial generator comparison
+
 Revision `4d1c939e5f80dc2f934e0be08632b41ec3b52dac` passed on Linux x86_64 and macOS 27.0.1 arm64 with Rust 1.98.1. The Mac used Xcode 27.0 to build the Swift reference. Rust ran in release mode; the existing Swift test recipe retained its normal build configurations.
 
 - All 44 shared contract cases matched, including manifests, parser failures, and hashes for all 32 spelling profiles in successful cases.
