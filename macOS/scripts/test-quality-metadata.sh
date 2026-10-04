@@ -277,7 +277,8 @@ before=$("$tool" "$identity_repo" --build-snapshot)
 printf 'documentation only\n' >> "$identity_repo/README.md"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
 for resource in Core/Data/english-wordfreq.tsv Core/config/english.conf Core/scripts/prepare-rime.sh \
-  Core/scripts/build-dictionary-generator.sh; do
+  Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs \
+  Core/Portable/dictionary/Cargo.lock Core/config/chinese-sources.json rust-toolchain.toml; do
   cp "$identity_repo/$resource" "$fixture/resource-before"
   printf '\n# changed shared resource input\n' >> "$identity_repo/$resource"
   snapshot=$("$tool" "$identity_repo" --build-snapshot)

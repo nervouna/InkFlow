@@ -24,6 +24,8 @@ typedef struct { const uint8_t* data; size_t len; } IFDBytes;
 typedef struct { IFDBytes receipt; IFDBytes data; } IFDInput;
 typedef struct IFDResult IFDResult;
 
+/* Immutable compiled catalog, valid for the process lifetime; do not free. */
+IFDBytes ifd_catalog(void);
 IFDResult* ifd_generate(IFDBytes catalog, const IFDInput* inputs, size_t count,
                         IFDBytes corrections);
 IFDResult* ifd_spelling(IFDBytes dictionary);

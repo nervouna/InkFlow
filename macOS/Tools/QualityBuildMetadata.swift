@@ -131,8 +131,8 @@ struct QualityBuildMetadataTool {
     }
 
     private static func isBuildInput(_ path: String) -> Bool {
-        if ["Package.swift", "Package.resolved", "Core/Package.swift", "macOS/Info.plist"].contains(path) { return true }
-        let prefixes = ["Core/Sources/", "Core/Tools/", "Core/scripts/", "macOS/Sources/", "macOS/Quality/", "macOS/SwiftPM/", "macOS/DictionaryWorker/", "macOS/DictionaryTool/", "macOS/Tools/", "macOS/Resources/",
+        if ["Package.swift", "Package.resolved", "Core/Package.swift", "rust-toolchain.toml", "macOS/Info.plist"].contains(path) { return true }
+        let prefixes = ["Core/Portable/dictionary/", "Core/Sources/", "Core/Tools/", "Core/scripts/", "macOS/Sources/", "macOS/Quality/", "macOS/SwiftPM/", "macOS/DictionaryWorker/", "macOS/DictionaryTool/", "macOS/Tools/", "macOS/Resources/",
             "macOS/Design/", "Core/Data/", "Core/config/", "macOS/Licenses/", "schemas/"]
         if prefixes.contains(where: path.hasPrefix) { return true }
         let scripts = ["build.sh", "build-number.sh", "build-summary.sh", "build-icon.sh", "build-dictionary-generator.sh", "build-dictionary-worker.sh",

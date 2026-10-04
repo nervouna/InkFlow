@@ -14,6 +14,7 @@ build_swift_product() {
     echo "SwiftPM configuration must be debug or release." >&2
     return 2
   }
+  bash Core/scripts/build-dictionary-generator.sh || return $?
   # Every consumer must resolve CRime's headers during explicit module scanning.
   local build_args=(--disable-sandbox --cache-path "$swiftpm_cache"
     --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch"

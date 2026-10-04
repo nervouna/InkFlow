@@ -5,6 +5,11 @@ mod spelling;
 pub use model::*;
 pub use spelling::spelling;
 
+pub const CATALOG_JSON: &[u8] = include_bytes!("../../../config/chinese-sources.json");
+pub fn catalog() -> Result<Vec<SourceSpec>> {
+    serde_json::from_slice(CATALOG_JSON).map_err(|_| Error::new("catalog-format"))
+}
+
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use unicode_general_category::{GeneralCategory, get_general_category};

@@ -6,4 +6,7 @@ destination=${1:?Usage: prepare-spelling.sh DESTINATION}
 # spelling and the context-ranking index after dictionary changes, using the same
 # generator as the update worker.
 bash Core/scripts/build-dictionary-generator.sh
-build/dictionary-generator spelling "$destination/pinyin_simp.dict.yaml" "$destination"
+staging=$(mktemp -d build/.spelling.XXXXXX)
+trap 'rm -rf "$staging"' EXIT
+build/dictionary-generator spelling "$destination/pinyin_simp.dict.yaml" "$staging/generated"
+cp "$staging/generated/"*.schema.yaml "$destination/"
