@@ -1,0 +1,308 @@
+{
+  "formatVersion": 1,
+  "configuration": "release",
+  "target": "arm64-apple-macosx26.0",
+  "sourceRevision": "774bb557b57512ef0d74ce73cc3bf8a604bec75e",
+  "behaviorProvenance": {
+    "Core/Package.swiftSHA256": "b3010fbd3bbbe1a940b9d1d34a03ed0f697d022cbad7043fbe5f82029422f84a",
+    "Core/SourcesSHA256": "bbe881690b9aab5939d4f3eb838b5263eb672f18f2c18d4f36ae9e4320edafec",
+    "Core/scripts/swift-package.shSHA256": "cfb9ff33e8c4041df1d6b893f9ba4002ce3ca95fddcf6f956baf7678e9411a09",
+    "Core/scripts/test-quality-baseline.shSHA256": "367faac1ed124db6b958a828b4bef773b2b29a8dbf4d6279bbea5fe81b5d8ad8",
+    "appVersion": "0.6.1",
+    "compiledResourcesSHA256": "748cb257887508d9c1744ff3898bcee757cbced7f00d390bfc841ae350f980e1",
+    "fixtureSHA256": "79bfeb612416bb805d0bd524f20a29b8175e65c3f04b9565b2f6ab7a36ab7d28",
+    "librimeSHA256": "1adb725a081b0accc1451034f6f1bb78cbfe8252a65245f1511f4b3f2038c487",
+    "luaPluginSHA256": "9e5086f73b90481530bb2aa08a615044c90242eee4b98eef12fcdd1a1c391e68",
+    "macOS/DataSHA256": "0fdec88687c8cf79577e5145378e5712663d56914abccf28a813ea9584361bc4",
+    "macOS/configSHA256": "b0f3f6b084b83151b0447939b0cfd0cc29c3bbf99a3ea708615a9d7cece3ac99",
+    "macOS/scripts/dependencies.shSHA256": "4e684ca4c32bec2218173a6e98d1579cecf9b4d88e0c08a8be8a21183cd481d8",
+    "macOS/scripts/prepare-rime.shSHA256": "92493eea62e3e5f17a04b72c454a6242ebca4237112e66208c2a24bc1cfe49ce",
+    "resourcesSHA256": "6ad50c8cb8746032d7492c1431f797c0140ab35b03b73a888bed7d9ebfab8734",
+    "runnerBinarySHA256": "f04c328aceaf5eae5d7102c1fe9263dbf5ab25c7fef46a1fbc27af48746f473d",
+    "runnerSHA256": "f9ba99f367e09c7697a27e8738dfd87483363f86e4d3e6808953c4afa6c611fa",
+    "schemasSHA256": "a2b03669d40cd3686112e773f4cb4ba5000c54fc14a8c1e1d2c499dd4a0b3191",
+    "sourceRevision": "774bb557b57512ef0d74ce73cc3bf8a604bec75e",
+    "system": "Version 27.0.1 (Build 26A434)"
+  },
+  "system": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "cpu": "Apple M1 Pro",
+  "memoryBytes": 34359738368,
+  "swift": "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)\nTarget: arm64-apple-macosx27.0.0",
+  "rust": "rustc 1.98.1 (48a229cea 2026-09-01)",
+  "fingerprints": {
+    "rust-toolchain.toml": "72da9f9e503464ba7393560f6f51a69fb06be72633d52ae7725fa0ba59dfda22",
+    "macOS/scripts/dependencies.sh": "4e684ca4c32bec2218173a6e98d1579cecf9b4d88e0c08a8be8a21183cd481d8",
+    "Core/Package.swift": "b3010fbd3bbbe1a940b9d1d34a03ed0f697d022cbad7043fbe5f82029422f84a",
+    "Core/Tests/PerformanceBaseline/PerformanceBaseline.swift": "82fb12b403b7dc1216a0dbedd8cf6fb1707077755523b7938d847183bfd9f569",
+    "Core/scripts/capture-migration-baseline.sh": "d3a3e2e21688c36d5767fd2f1696828dc75f2201c9fe0e4bb1dee09f7aad73b2",
+    "Core/scripts/summarize-performance.py": "56f76cf30767320e48352e82ade3bf4248c277e0672ebdddf900c5483cfaa7b8",
+    "build/core-tests/performance-baseline": "ee71388d657350bcbc405be1c64ea4034bd77cda4a4b45ad76be415f8ebe92bc"
+  },
+  "rawReportSHA256": {
+    "behavior.json": "b9f8a573d0a68a5b0e02fb986fcc81483004f85f7100013d9ab9d9973ebb2710",
+    "performance-1.json": "0993dd7b7a4f3e4d9cfe60a6bc5dc8d4010a69ace2707d89661dddf9402ed0ed",
+    "performance-2.json": "2902a5d54b16bb918fc9ddcd802c62f594ce5aeafd6b7efca402fbec818267af",
+    "performance-3.json": "ed6d2f407438cc444bf96eb76eb437829b1643270fd9be1fc9c60d7465e06071",
+    "performance-4.json": "ddd4c16237f68a4b9bf61ccd4e823b1732cea427a505c87dc1d5ca0b6c0ad101",
+    "performance-5.json": "048686a95db6356c0d6107412c255cf3258eade394cdc22232f851f191af9a45"
+  },
+  "protocol": {
+    "processTrials": 5,
+    "corpusPassesPerProcess": 5,
+    "startup": "Prepared-cache descriptor, context index, Rime start, session creation and default configuration; excludes process launch and dictionary compilation",
+    "key": "Synchronous IFEngine.input + takeCommit + snapshot; excludes platform delivery, UI, queued actor work and telemetry",
+    "state": "Absent user directory per process, no commits/training, empty context and no custom phrases",
+    "cache": "Fresh processes; OS filesystem cache is not flushed. First-pass and repeated-pass timings are separate",
+    "memory": "Darwin getrusage ru_maxrss bytes: process peak RSS, not current resident memory or app footprint",
+    "percentile": "Nearest rank; median is the midpoint average for even counts"
+  },
+  "startupMilliseconds": {
+    "count": 5,
+    "median": 1995.8625,
+    "p95": 2023.503375,
+    "p99": 2023.503375,
+    "max": 2023.503375
+  },
+  "peakResidentBytesAfterStartup": {
+    "count": 5,
+    "median": 305201152,
+    "p95": 305430528,
+    "p99": 305430528,
+    "max": 305430528
+  },
+  "peakResidentBytesAfterInput": {
+    "count": 5,
+    "median": 326991872,
+    "p95": 327122944,
+    "p99": 327122944,
+    "max": 327122944
+  },
+  "firstPassKeyMilliseconds": {
+    "count": 1235,
+    "median": 0.5375,
+    "p95": 1.809333,
+    "p99": 2.237875,
+    "max": 20.080542
+  },
+  "repeatedPassKeyMilliseconds": {
+    "count": 4940,
+    "median": 0.4865415,
+    "p95": 1.542334,
+    "p99": 1.94575,
+    "max": 2.429125
+  },
+  "perProcess": [
+    {
+      "trial": 1,
+      "startupMilliseconds": 1988.7055,
+      "firstPassKeyMilliseconds": {
+        "count": 247,
+        "median": 0.565958,
+        "p95": 1.90425,
+        "p99": 2.46,
+        "max": 20.046958
+      },
+      "repeatedPassKeyMilliseconds": {
+        "count": 988,
+        "median": 0.4866045,
+        "p95": 1.5585,
+        "p99": 1.9565,
+        "max": 2.429125
+      }
+    },
+    {
+      "trial": 2,
+      "startupMilliseconds": 1995.8625,
+      "firstPassKeyMilliseconds": {
+        "count": 247,
+        "median": 0.535334,
+        "p95": 1.818958,
+        "p99": 2.2485,
+        "max": 18.814541
+      },
+      "repeatedPassKeyMilliseconds": {
+        "count": 988,
+        "median": 0.4839795,
+        "p95": 1.549666,
+        "p99": 1.992167,
+        "max": 2.280541
+      }
+    },
+    {
+      "trial": 3,
+      "startupMilliseconds": 2006.22925,
+      "firstPassKeyMilliseconds": {
+        "count": 247,
+        "median": 0.555083,
+        "p95": 1.796625,
+        "p99": 2.207208,
+        "max": 17.196084
+      },
+      "repeatedPassKeyMilliseconds": {
+        "count": 988,
+        "median": 0.4994165,
+        "p95": 1.561792,
+        "p99": 1.94575,
+        "max": 2.271666
+      }
+    },
+    {
+      "trial": 4,
+      "startupMilliseconds": 2023.503375,
+      "firstPassKeyMilliseconds": {
+        "count": 247,
+        "median": 0.526708,
+        "p95": 1.767875,
+        "p99": 2.221708,
+        "max": 16.760875
+      },
+      "repeatedPassKeyMilliseconds": {
+        "count": 988,
+        "median": 0.481084,
+        "p95": 1.526208,
+        "p99": 1.929792,
+        "max": 2.242416
+      }
+    },
+    {
+      "trial": 5,
+      "startupMilliseconds": 1993.753541,
+      "firstPassKeyMilliseconds": {
+        "count": 247,
+        "median": 0.522209,
+        "p95": 1.802375,
+        "p99": 2.49525,
+        "max": 20.080542
+      },
+      "repeatedPassKeyMilliseconds": {
+        "count": 988,
+        "median": 0.4833125,
+        "p95": 1.530209,
+        "p99": 1.983708,
+        "max": 2.325
+      }
+    }
+  ],
+  "slowestKeys": [
+    {
+      "milliseconds": 20.080542,
+      "offset": 0,
+      "pass": 0,
+      "sample": "ordinary-hello"
+    },
+    {
+      "milliseconds": 20.046958,
+      "offset": 0,
+      "pass": 0,
+      "sample": "ordinary-hello"
+    },
+    {
+      "milliseconds": 18.814541,
+      "offset": 0,
+      "pass": 0,
+      "sample": "ordinary-hello"
+    },
+    {
+      "milliseconds": 17.196084,
+      "offset": 0,
+      "pass": 0,
+      "sample": "ordinary-hello"
+    },
+    {
+      "milliseconds": 16.760875,
+      "offset": 0,
+      "pass": 0,
+      "sample": "ordinary-hello"
+    },
+    {
+      "milliseconds": 2.701459,
+      "offset": 10,
+      "pass": 0,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.657958,
+      "offset": 2,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.514833,
+      "offset": 3,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.49525,
+      "offset": 3,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.46,
+      "offset": 3,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.429125,
+      "offset": 25,
+      "pass": 1,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.325,
+      "offset": 25,
+      "pass": 2,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.30325,
+      "offset": 3,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.280541,
+      "offset": 25,
+      "pass": 2,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.271666,
+      "offset": 25,
+      "pass": 3,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.265667,
+      "offset": 25,
+      "pass": 1,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.255375,
+      "offset": 25,
+      "pass": 2,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.249834,
+      "offset": 25,
+      "pass": 1,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.2485,
+      "offset": 2,
+      "pass": 0,
+      "sample": "ordinary-china"
+    },
+    {
+      "milliseconds": 2.2455,
+      "offset": 25,
+      "pass": 3,
+      "sample": "long-better"
+    }
+  ]
+}
