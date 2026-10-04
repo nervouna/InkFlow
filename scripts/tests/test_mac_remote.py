@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+from contextlib import redirect_stderr, redirect_stdout
 import importlib.util
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -158,6 +160,107 @@ class RemoteTests(unittest.TestCase):
         report = json.loads((self.root / "results/run.json").read_text())
         self.assertEqual(report["exitCode"], 1)
         self.assertFalse((self.runner / "run.lock").exists())
+
+    def run_client(self, status, transform=None, copy_status=0):
+        calls = []
+        transferred = {}
+        real_run = subprocess.run
+        remote_path = "/tmp/inkflow-remote.fixture123"
+
+        def transport(host, args, **kwargs):
+            calls.append(args)
+            if args[0] == "mktemp":
+                return subprocess.CompletedProcess(args, 0, stdout=remote_path + "\n")
+            if args[0] == "python3":
+                return subprocess.CompletedProcess(args, status)
+            self.assertEqual(args, ["rm", "-rf", remote_path])
+            return subprocess.CompletedProcess(args, 0)
+
+        def subprocess_or_copy(args, **kwargs):
+            if args[0] != "scp":
+                return real_run(args, **kwargs)
+            if "-r" not in args:
+                request_path = next(Path(arg) for arg in args if arg.endswith("/request.json"))
+                transferred["request"] = json.loads(request_path.read_text())
+                return subprocess.CompletedProcess(args, 0)
+            local = Path(args[-1])
+            transferred["local"] = local
+            if copy_status == 0:
+                (local / "00-test.log").write_text("copied output, possibly still growing remotely\n")
+                receipt = dict(transferred["request"], exitCode=status,
+                               startedUTC="2026-10-04T18:00:00+00:00",
+                               finishedUTC="2026-10-04T18:01:00+00:00")
+                if transform is not None:
+                    receipt = transform(receipt)
+                if receipt is not None:
+                    text = receipt if isinstance(receipt, str) else json.dumps(receipt)
+                    (local / "run.json").write_text(text)
+            return subprocess.CompletedProcess(args, copy_status)
+
+        args = remote.argparse.Namespace(action="test", units=["engine"], host="fixture",
+                                         remote_root="~/fixture-runner", revision="HEAD")
+        messages = io.StringIO()
+        with patch.object(remote, "ROOT", self.source), \
+                patch.object(remote, "ssh", side_effect=transport), \
+                patch.object(remote.subprocess, "run", side_effect=subprocess_or_copy), \
+                redirect_stdout(messages), redirect_stderr(messages):
+            result = remote.run(args)
+        return result, calls, messages.getvalue(), transferred["local"]
+
+    def test_client_disconnect_then_partial_copy_retains_live_evidence(self):
+        status, calls, messages, local = self.run_client(255, transform=lambda receipt: None)
+        self.assertEqual(status, 255)
+        self.assertTrue((local / "00-test.log").is_file())
+        self.assertFalse((local / "run.json").exists())
+        self.assertFalse(any(call[0] == "rm" for call in calls))
+        self.assertIn("retained remote files at /tmp/inkflow-remote.fixture123", messages)
+        self.assertIn("may be incomplete", messages)
+
+    def test_client_transport_failure_retains_even_with_a_receipt(self):
+        for status in [255, -15]:
+            with self.subTest(status=status):
+                result, calls, messages, _ = self.run_client(status)
+                self.assertEqual(result, status)
+                self.assertFalse(any(call[0] == "rm" for call in calls))
+                self.assertIn("SSH transport failed", messages)
+
+    def test_client_requires_a_complete_receipt_even_after_ssh_success(self):
+        for receipt in [None, "{", [], {}, {"exitCode": 0}]:
+            with self.subTest(receipt=receipt):
+                status, calls, messages, _ = self.run_client(0, transform=lambda _: receipt)
+                self.assertEqual(status, 1)
+                self.assertFalse(any(call[0] == "rm" for call in calls))
+                self.assertIn("retained remote files at /tmp/inkflow-remote.fixture123", messages)
+
+    def test_client_rejects_mismatched_or_unfinished_receipts(self):
+        changes = [
+            ("revision", "0" * 40), ("ref", "refs/inkflow-remote/another-run"),
+            ("action", "build"), ("units", ["controller"]), ("remote_root", "~/other"),
+            ("driverSHA256", "different-driver"), ("exitCode", 7), ("exitCode", False),
+            ("finishedUTC", None), ("finishedUTC", ""), ("startedUTC", "invalid"),
+            ("finishedUTC", "2026-10-04T17:00:00+00:00"),
+            ("finishedUTC", "2026-10-04T18:01:00"),
+        ]
+        for key, value in changes:
+            with self.subTest(key=key, value=value):
+                status, calls, messages, _ = self.run_client(0, transform=lambda receipt: dict(receipt, **{key: value}))
+                self.assertEqual(status, 1)
+                self.assertFalse(any(call[0] == "rm" for call in calls))
+                self.assertIn("retained remote files", messages)
+
+    def test_client_cleans_only_completed_matching_runs(self):
+        for exit_code in [0, 7]:
+            with self.subTest(exit_code=exit_code):
+                status, calls, _, local = self.run_client(exit_code)
+                self.assertEqual(status, exit_code)
+                self.assertEqual(calls[-1], ["rm", "-rf", "/tmp/inkflow-remote.fixture123"])
+                self.assertTrue((local / "run.json").is_file())
+
+    def test_client_copy_failure_retains_remote_evidence(self):
+        status, calls, messages, _ = self.run_client(0, copy_status=1)
+        self.assertEqual(status, 1)
+        self.assertFalse(any(call[0] == "rm" for call in calls))
+        self.assertIn("Evidence transfer failed; retained remote files", messages)
 
 
 class PerformanceTests(unittest.TestCase):

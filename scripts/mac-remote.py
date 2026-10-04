@@ -185,8 +185,27 @@ def run(args):
                                      remote + "/request.json"]).returncode
             copied = subprocess.run(["scp", "-q", "-r", "-o", "BatchMode=yes",
                                      f"{args.host}:{remote}/results/.", str(local)]).returncode == 0
+            if status == 255 or status < 0:
+                print(f"SSH transport failed ({status}); retained remote files at {remote}. "
+                      f"Any copied evidence in {local} may be incomplete.", file=sys.stderr)
+                return status
             if not copied:
                 print(f"Evidence transfer failed; retained remote files at {remote}", file=sys.stderr)
+                return status or 1
+            try:
+                receipt = json.loads((local / "run.json").read_text())
+                if (not isinstance(receipt, dict)
+                        or any(receipt.get(key) != value for key, value in request.items())
+                        or type(receipt.get("exitCode")) is not int
+                        or receipt["exitCode"] != status):
+                    raise ValueError("Completion receipt does not match the request and exit status")
+                started = datetime.fromisoformat(receipt["startedUTC"])
+                finished = datetime.fromisoformat(receipt["finishedUTC"])
+                if started.tzinfo is None or finished.tzinfo is None or finished < started:
+                    raise ValueError("Invalid completion timestamps")
+            except (OSError, ValueError, TypeError, KeyError) as error:
+                print(f"Missing or invalid completion receipt: {error}; "
+                      f"retained remote files at {remote}", file=sys.stderr)
                 return status or 1
             ssh(args.host, ["rm", "-rf", remote], check=True)
         except BaseException:

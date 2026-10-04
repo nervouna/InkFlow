@@ -27,8 +27,8 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 - The runner allows only build, baseline, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
-- Results are copied to `build/mac-remote/RUN_ID/` on Linux. The remote transfer directory is removed only after evidence is retrieved.
-- If SSH is interrupted, inspect the printed remote transfer directory and `REMOTE_ROOT/run.lock`. Check the recorded process and its children before removing a stale lock; do not assume a disconnected command has stopped. If only stdout disconnects, the worker continues saving logs and records `stdoutDisconnected` along with the command\'s eventual exit status.
+- Results are copied to `build/mac-remote/RUN_ID/` on Linux. Cleanup requires a successful copy and a complete `run.json` matching every request field and the worker exit status, with valid start/completion timestamps. Missing, malformed, or mismatched receipts leave remote evidence in place and return a nonzero status.
+- An SSH transport failure (status 255 or a locally terminated SSH process) always retains and prints the remote transfer directory, even if SCP succeeds or a receipt is present. Copied results may be partial while the worker continues. Inspect that directory and `REMOTE_ROOT/run.lock`; check the recorded process and its children before removing files or a stale lock. If only stdout disconnects, the worker continues saving logs and records `stdoutDisconnected` along with the command's eventual exit status.
 
 A dirty local checkout is allowed because only the explicitly resolved committed revision is transferred. Commit changes before expecting them in a remote result. A nonzero exit status means the action or its evidence transfer failed; partial reports are not a passing baseline.
 
@@ -72,6 +72,6 @@ python3 -B scripts/tests/test_mac_remote.py
 bash -n Core/scripts/capture-migration-baseline.sh
 ```
 
-Tests cover exact detached revisions, checkout ownership, preservation of dirty files, locking, command restrictions, failed-run evidence/status, and summary statistics. Mac execution verifies the Swift harness and the real SSH/build path.
+Tests cover exact detached revisions, checkout ownership, preservation of dirty files, locking, command restrictions, failed-run evidence/status, and summary statistics. Client transport tests cover disconnects followed by successful partial copying, invalid completion receipts, copy failures, and cleanup of matching completed runs. Mac execution verifies the Swift harness and the real SSH/build path.
 
 Actual typing, focus, and Settings remain user checks when the frontend changes. A remote baseline does not certify installed input behavior.
