@@ -71,6 +71,11 @@ fn boundary(work: impl FnOnce() -> Result<BTreeMap<String, Vec<u8>>>) -> *mut Ou
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ifd_catalog() -> Bytes {
+    Bytes::borrowed(crate::CATALOG_JSON)
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifd_generate(
     catalog: Bytes,
     inputs: *const RawInput,

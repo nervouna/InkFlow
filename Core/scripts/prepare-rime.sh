@@ -14,7 +14,7 @@ cleanup() {
   [[ -z "$staging" ]] || rm -rf "$staging"
 }
 trap cleanup EXIT
-for input_root in Core/Package.swift Core/Sources Core/Tools Core/scripts schemas Core/config Core/Data \
+for input_root in Core/Package.swift Core/Sources Core/Tools Core/scripts Core/Portable/dictionary schemas Core/config Core/Data \
   build/deps/rime-pinyin-simp-* build/deps/rime-easy-en-* build/dictionary-sources; do
   [[ -e "$input_root" ]] || continue
   find "$input_root" -type f -print

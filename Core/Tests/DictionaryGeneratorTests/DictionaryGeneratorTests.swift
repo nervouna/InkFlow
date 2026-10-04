@@ -40,8 +40,10 @@ struct DictionaryGeneratorTests {
         }
         try spellingGeneration()
         expect(IFDictionaryHash.gitBlob(Data("hello\n".utf8)) == "ce013625030ba8dba906f756967f9e9ca394464a", "Git blob includes byte-count header")
-        expect(try IFDictionaryGenerator.normalizedReading("  LÜ\u{a0}SE  ") == "lv se", "Pinyin whitespace, case, ü normalization")
-        expect(try IFDictionaryGenerator.normalizedReading("LU\u{308} SE") == "lv se", "Decomposed ü normalizes")
+        for reading in ["  LÜ\u{a0}SE  ", "LU\u{308} SE"] {
+            expect(text(try generate(["frost-8105": "绿\t\(reading)\t100\n"])).contains("绿\tlv se\t100\n"),
+                   "Pinyin whitespace, case and composed/decomposed ü normalize through Rust")
+        }
         let union = try generate([
             "frost-8105": "甲\tjia\t100\n绿\tlü\t0\n行\txing\t22\n",
             "frost-base": "甲\tJIA\t900\n行\thang\t33\n〇\tling\t0\n",
@@ -172,8 +174,17 @@ struct DictionaryGeneratorTests {
         expect(result.manifest.entryCount == IFDictionaryCatalog.initialEntryCount, "Initial pinned source coverage")
         expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename)) == result.dictionary,
                "Build CLI and shared runtime module generate identical bytes")
-        expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryManifest.filename)) == result.manifest.encoded(),
-               "Build CLI and shared runtime module generate identical metadata")
+        expect(try JSONDecoder().decode(IFDictionaryManifest.self,
+            from: Data(contentsOf: destination.appendingPathComponent(IFDictionaryManifest.filename))) == result.manifest,
+               "Build CLI and shared runtime module generate equivalent metadata")
+        let reference = try IFReferenceDictionaryGenerator.generate(inputs: inputs, corrections: corrections)
+        expect(reference.dictionary == result.dictionary, "Production Rust retains Swift dictionary bytes")
+        expect(reference.manifest == result.manifest, "Production Rust retains pinned Swift manifest values")
+        let referenceDirectory = destination.deletingLastPathComponent().appendingPathComponent("test-chinese-reference")
+        try FileManager.default.createDirectory(at: referenceDirectory, withIntermediateDirectories: true)
+        try reference.dictionary.write(to: referenceDirectory.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
+        try reference.manifest.encoded().write(to: referenceDirectory.appendingPathComponent(IFDictionaryManifest.filename))
+        try IFReferenceSpellingGenerator.write(dictionary: reference.dictionary, to: referenceDirectory)
         for (name, bytes) in try IFSpellingGenerator.generate(dictionary: result.dictionary) {
             expect(try Data(contentsOf: destination.appendingPathComponent(name)) == bytes, "Build CLI and runtime spelling bytes match: \(name)")
         }

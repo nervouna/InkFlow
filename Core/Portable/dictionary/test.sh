@@ -5,7 +5,7 @@ root=$PWD
 report=${1:-"$root/build/dictionary-parity/report"}
 mkdir -p "$report"
 report=$(cd "$report" && pwd)
-export CARGO_TARGET_DIR="$root/build/dictionary-parity/cargo"
+export CARGO_TARGET_DIR="$root/build/dictionary/cargo"
 fixtures="$root/Core/Portable/dictionary/fixtures"
 reference="$fixtures"
 comparison=()
@@ -14,7 +14,7 @@ if [[ $(uname -s) == Darwin ]]; then
   bash macOS/scripts/test-dictionary-generator.sh
   build/dictionary-generator-tests --export-reference "$fixtures/cases.json" "$report"
   reference="$report"
-  comparison=(--swift "$root/build/test-chinese")
+  comparison=(--swift "$root/build/test-chinese-reference")
 fi
 export INKFLOW_DICTIONARY_REFERENCE="$reference"
 cargo test --locked --release --manifest-path Core/Portable/dictionary/Cargo.toml -- --nocapture

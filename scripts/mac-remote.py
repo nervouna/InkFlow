@@ -22,6 +22,7 @@ TEST_UNITS = {
     "engine", "engine-basic", "engine-options", "engine-english", "engine-context",
     "engine-custom-phrases", "controller", "quality-baseline", "ai-learning", "voice-lexicon",
     "preparation", "dictionary-generator", "quality-metadata",
+    "dictionary-source", "dictionary-store", "dictionary-worker", "dictionary-activation", "deployment",
 }
 
 
