@@ -28,7 +28,7 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
 - Results are copied to `build/mac-remote/RUN_ID/` on Linux. The remote transfer directory is removed only after evidence is retrieved.
-- If SSH is interrupted, inspect the printed remote transfer directory and `REMOTE_ROOT/run.lock`. Check the recorded process and its children before removing a stale lock; do not assume a disconnected command has stopped.
+- If SSH is interrupted, inspect the printed remote transfer directory and `REMOTE_ROOT/run.lock`. Check the recorded process and its children before removing a stale lock; do not assume a disconnected command has stopped. If only stdout disconnects, the worker continues saving logs and records `stdoutDisconnected` along with the command\'s eventual exit status.
 
 A dirty local checkout is allowed because only the explicitly resolved committed revision is transferred. Commit changes before expecting them in a remote result. A nonzero exit status means the action or its evidence transfer failed; partial reports are not a passing baseline.
 

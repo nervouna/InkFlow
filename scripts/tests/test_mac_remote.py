@@ -118,6 +118,34 @@ class RemoteTests(unittest.TestCase):
         self.assertIn("failure evidence", (self.root / "results/00-test.log").read_text())
         self.assertFalse((self.runner / "run.lock").exists())
 
+    def test_disconnected_stdout_keeps_logging_until_command_finishes(self):
+        request = self.root / "request.json"
+        request.write_text(json.dumps(dict(remote_root=str(self.runner), ref=self.ref,
+                                           revision=self.revision, action="test", units=["engine"])))
+        real_output = remote.output
+        command = [sys.executable, "-c", "print('retained after disconnect'); raise SystemExit(8)"]
+        with patch.object(remote, "commands", return_value=[command]), \
+                patch.object(remote, "output", side_effect=lambda args, cwd=None:
+                             real_output(args, cwd) if args[0] == "git" else "fixture"), \
+                patch("builtins.print", side_effect=BrokenPipeError):
+            self.assertEqual(remote.worker(request), 8)
+        report = json.loads((self.root / "results/run.json").read_text())
+        self.assertEqual(report["exitCode"], 8)
+        self.assertTrue(report["stdoutDisconnected"])
+        self.assertIn("retained after disconnect", (self.root / "results/00-test.log").read_text())
+        self.assertFalse((self.runner / "run.lock").exists())
+
+    def test_error_status_survives_disconnected_stderr(self):
+        request = self.root / "request.json"
+        request.write_text(json.dumps(dict(remote_root=str(self.runner), ref=self.ref,
+                                           revision=self.revision, action="test", units=["engine"])))
+        with patch.object(remote, "prepare_checkout", side_effect=RuntimeError("fixture failure")), \
+                patch("builtins.print", side_effect=BrokenPipeError):
+            self.assertEqual(remote.worker(request), 1)
+        report = json.loads((self.root / "results/run.json").read_text())
+        self.assertEqual(report["exitCode"], 1)
+        self.assertEqual(report["error"], "fixture failure")
+
 
 class PerformanceTests(unittest.TestCase):
     def test_nearest_rank_and_median(self):

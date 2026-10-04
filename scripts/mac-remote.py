@@ -117,7 +117,11 @@ def worker(request_path):
                         for line in process.stdout:
                             log.write(line)
                             log.flush()
-                            print(line, end="", flush=True)
+                            if not metadata.get("stdoutDisconnected"):
+                                try:
+                                    print(line, end="", flush=True)
+                                except BrokenPipeError:
+                                    metadata["stdoutDisconnected"] = True
                         status = process.wait()
                 metadata.setdefault("steps", []).append({"command": cmd, "exitCode": status,
                                                          "elapsedSeconds": time.monotonic() - began})
@@ -125,9 +129,12 @@ def worker(request_path):
                     break
             clean_checkout(repo)
     except Exception as error:
-        metadata["error"] = str(error)
-        print(f"FAIL remote run: {error}", file=sys.stderr)
         status = 1
+        metadata["error"] = str(error)
+        try:
+            print(f"FAIL remote run: {error}", file=sys.stderr)
+        except BrokenPipeError:
+            pass
     finally:
         metadata["exitCode"] = status
         metadata["finishedUTC"] = datetime.now(timezone.utc).isoformat()
@@ -164,13 +171,15 @@ def run(args):
                      capture_output=True, text=True, check=True).stdout.strip()
         if not re.fullmatch(r"/tmp/inkflow-remote\.[A-Za-z0-9]+", remote):
             raise RuntimeError(f"Unexpected transfer directory: {remote!r}")
+        driver = scratch / "mac-remote.py"
+        driver.write_bytes(Path(__file__).read_bytes())
         request = dict(revision=revision, ref=ref, remote_root=args.remote_root,
                        action=args.action, units=args.units,
-                       driverSHA256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+                       driverSHA256=hashlib.sha256(driver.read_bytes()).hexdigest())
         (scratch / "request.json").write_text(json.dumps(request))
         try:
             subprocess.run(["scp", "-q", "-o", "BatchMode=yes", str(bundle),
-                            str(scratch / "request.json"), str(Path(__file__).resolve()),
+                            str(scratch / "request.json"), str(driver),
                             f"{args.host}:{remote}/"], check=True)
             status = ssh(args.host, ["python3", remote + "/mac-remote.py", "--worker",
                                      remote + "/request.json"]).returncode
