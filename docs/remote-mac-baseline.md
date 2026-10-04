@@ -53,7 +53,7 @@ All user state is synthetic and temporary. The recipe does not read installed le
 - `performance-1.json` through `performance-5.json`: startup, process peak RSS, and individual key-operation measurements.
 - `summary.json`: validated operation coverage, input/provenance identity, report/binary hashes, per-process and pooled distributions, and slow cases.
 
-Keep complete evidence directories under ignored `build/`. Commit a compact reviewed reference report when establishing the migration baseline, rather than committing build logs or user databases. Results generated before a later failing regression remain diagnostic evidence, not a completed baseline.
+Keep complete evidence directories under ignored `build/`. The [recorded macOS reference](../Core/Fixtures/MigrationBaseline/README.md) contains the compact report and evidence hashes; build logs and user databases are not committed. Results generated before a later failing regression remain diagnostic evidence, not a completed baseline.
 
 ### Measurement boundaries
 
