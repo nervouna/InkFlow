@@ -65,6 +65,7 @@ def main():
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--catalog', type=Path, required=True)
     parser.add_argument('--swift', type=Path)
+    parser.add_argument('--bridge', type=Path)
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
     catalog = json.loads(args.catalog.read_text())
@@ -88,6 +89,19 @@ def main():
         (args.report / 'corpus.json').write_text(json.dumps(expected, ensure_ascii=False, indent=2) + '\n')
         (args.report / 'rust-corpus.json').write_text(json.dumps(actual, ensure_ascii=False, indent=2) + '\n')
         print(f"PASS pinned corpus: {actual['manifest']['entryCount']} rows, dictionary and all 32 profiles match Swift")
+        if args.bridge:
+            native_dictionary, native_schemas = root / 'native-dictionary', root / 'native-spelling'
+            subprocess.run([str(args.bridge), 'generate', str(args.catalog), str(source), str(source / 'legacy.yaml'),
+                            str(ROOT / 'Core/config/chinese-overrides.tsv'), str(native_dictionary)], check=True)
+            subprocess.run([str(args.bridge), 'spelling', str(native_dictionary / 'pinyin_simp.dict.yaml'),
+                            str(native_schemas)], check=True)
+            native = snapshot(native_dictionary, native_schemas)
+            assert native == actual, 'Swift FFI and Rust CLI summaries differ'
+            assert (native_dictionary / 'pinyin_simp.dict.yaml').read_bytes() == (generated / 'pinyin_simp.dict.yaml').read_bytes()
+            for file in schemas.glob('*.schema.yaml'):
+                assert (native_schemas / file.name).read_bytes() == file.read_bytes(), file.name
+            (args.report / 'swift-ffi-corpus.json').write_text(json.dumps(native, ensure_ascii=False, indent=2) + '\n')
+            print('PASS Swift in-process Rust ABI: complete dictionary, manifest, and 32 spelling profiles')
     if args.swift:
         for name in ('catalog.json', 'reference.json', 'corpus.json'):
             equivalent(json.loads((args.report / name).read_text()), json.loads((FIXTURES / name).read_text()), name)

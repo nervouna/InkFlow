@@ -1,4 +1,5 @@
 //! Offline dictionary generation. Inputs and provenance are supplied by the caller.
+mod ffi;
 mod model;
 mod spelling;
 pub use model::*;
