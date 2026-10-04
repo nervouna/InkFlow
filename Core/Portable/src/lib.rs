@@ -14,6 +14,8 @@ pub enum Error {
     InvalidString,
     InvalidUtf8,
     InvalidOffsets,
+    StaleSnapshot,
+    InvalidCandidate,
     Poisoned,
     Native(i32),
 }
@@ -110,6 +112,7 @@ impl Runtime {
         check(unsafe { ffi::ifp_session_create(schema.as_ptr(), &mut id) })?;
         Ok(Session {
             id,
+            published: None,
             _runtime: self.owner.clone(),
         })
     }
@@ -122,6 +125,7 @@ pub struct Candidate {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
+    token: Arc<()>,
     pub preedit: String,
     pub caret_bytes: usize,
     pub selection_bytes: std::ops::Range<usize>,
@@ -133,12 +137,14 @@ pub struct Snapshot {
 
 pub struct Session {
     id: usize,
+    published: Option<(Arc<()>, usize)>,
     _runtime: Arc<RuntimeOwner>,
 }
 impl Session {
     /// Keys and modifiers use Rime/X11 keysyms and masks, not platform key codes.
     pub fn process_key(&mut self, key: i32, modifiers: i32) -> Result<bool> {
         let _lock = lock()?;
+        self.published = None;
         let mut handled = 0;
         check(unsafe { ffi::ifp_process_key(self.id, key, modifiers, &mut handled) })?;
         Ok(handled != 0)
@@ -146,11 +152,38 @@ impl Session {
 
     pub fn clear(&mut self) -> Result<()> {
         let _lock = lock()?;
+        self.published = None;
         check(unsafe { ffi::ifp_clear(self.id) })
+    }
+
+    /// Select a zero-based entry from the latest snapshot of this session.
+    /// Any key, clear, native selection attempt or page change invalidates that snapshot.
+    pub fn select_candidate(&mut self, snapshot: &Snapshot, index: usize) -> Result<()> {
+        let _lock = lock()?;
+        let Some((token, count)) = &self.published else {
+            return Err(Error::StaleSnapshot);
+        };
+        if !Arc::ptr_eq(token, &snapshot.token) {
+            return Err(Error::StaleSnapshot);
+        }
+        if index >= *count {
+            return Err(Error::InvalidCandidate);
+        }
+        self.published = None;
+        check(unsafe { ffi::ifp_select_candidate(self.id, index) })
+    }
+
+    pub fn change_page(&mut self, backward: bool) -> Result<bool> {
+        let _lock = lock()?;
+        self.published = None;
+        let mut changed = 0;
+        check(unsafe { ffi::ifp_change_page(self.id, i32::from(backward), &mut changed) })?;
+        Ok(changed != 0)
     }
 
     pub fn snapshot(&mut self) -> Result<Snapshot> {
         let _lock = lock()?;
+        self.published = None;
         let mut raw = ffi::Snapshot::default();
         check(unsafe { ffi::ifp_snapshot(self.id, &mut raw) })?;
         let preedit = unsafe { copy(raw.preedit) }?;
@@ -169,7 +202,10 @@ impl Session {
                 comment: unsafe { copy(candidate.comment) }?,
             });
         }
+        let token = Arc::new(());
+        self.published = Some((token.clone(), candidates.len()));
         Ok(Snapshot {
+            token,
             preedit,
             caret_bytes: raw.caret,
             selection_bytes: raw.selection_start..raw.selection_end,

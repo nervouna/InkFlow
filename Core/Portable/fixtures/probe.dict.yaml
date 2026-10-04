@@ -4,5 +4,10 @@ version: '1'
 sort: by_weight
 ...
 你	ni	1000
+尼	ni	900
+泥	ni	800
+拟	ni	700
+逆	ni	600
+腻	ni	500
 好	hao	1000
 你好	ni hao	1000

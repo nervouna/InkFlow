@@ -4,7 +4,7 @@
 
 InkFlow will share its offline input behavior across Linux, macOS, Android, iOS, and Windows through a Rust core. Keep librime, Lua, OpenCC, and the existing C++ native extensions. Each platform retains a native input-method frontend.
 
-The delivery order is Linux, macOS cutover, mobile, then Windows. Mobile implementation and device probes start after the macOS cutover; Windows work follows mobile. Android versus iOS order remains undecided. Their known constraints should inform the engine interface now, but desktop delivery does not depend on early mobile or Windows prototypes. This accepts the risk of later platform-specific changes.
+The delivery order is Linux/Fcitx5, macOS cutover, mobile, Windows, then the GNOME/IBus adapter. Mobile implementation and device probes start after the macOS cutover; Windows work follows mobile. Android versus iOS order remains undecided. Their known constraints should inform the engine interface now, but desktop delivery does not depend on early mobile or Windows prototypes. This accepts the risk of later platform-specific changes.
 
 The migration preserves existing macOS features and personal data. New platforms start with offline typing and portable backup/import; optional-feature parity follows separately. Cloud synchronization is out of scope.
 
@@ -59,7 +59,7 @@ Run the engine in the frontend process. Serialize access to librime and its shar
 
 | Platform | Proposed frontend |
 | --- | --- |
-| Linux | IBus for the current GNOME/Wayland environment; provisional pending confirmation |
+| Linux | Fcitx5 for Omarchy/Hyprland and Steam Deck Desktop Mode (KDE Plasma); GNOME/IBus deferred until after Windows |
 | macOS | Existing Swift/InputMethodKit frontend |
 | Android | Kotlin `InputMethodService` and native keyboard UI |
 | iOS | Swift keyboard extension and containing app |
@@ -94,7 +94,7 @@ These are design comparisons, not measured implementation experiments.
 | Share UI across platforms | Potential UI reuse | Does not remove native IME integration and adds framework constraints | Native UI first |
 | Generate all bindings immediately | Less handwritten glue | Another tool and abstraction before the interface is proven | Defer |
 | Port every optional feature initially | Earlier feature parity | Expands dependencies and delays offline input | Defer on new platforms; preserve macOS behavior |
-| Probe every platform before Linux | Earlier discovery of platform constraints | Delays the agreed desktop priority | Defer mobile until macOS cutover, Windows until last |
+| Probe every platform before Linux | Earlier discovery of platform constraints | Delays the agreed desktop priority | Defer mobile until macOS cutover, then Windows, then GNOME/IBus |
 | Skip old/new behavioral comparisons | Less temporary tooling | Harder to detect rewrite regressions | Retain during migration |
 | Add cloud sync | Automatic cross-device learning transfer | Requires conflict resolution, privacy, and network design | Exclude from this migration |
 
@@ -128,7 +128,9 @@ Completion means relevant regression cases pass, learning survives restart, supp
 
 ### 3. Linux daily-use frontend
 
-Implement the selected Linux adapter, provisionally IBus. Use desktop-native candidate/preedit APIs. Handle focus/reset, modifier events, surrounding-text capabilities, sensitive fields, and exact commit delivery.
+Implement the Fcitx5 adapter, targeting Omarchy/Hyprland first and Steam Deck Desktop Mode with a physical keyboard. Use desktop-native candidate/preedit APIs. Handle focus/reset, modifier events, surrounding-text capabilities, sensitive fields, and exact commit delivery.
+
+Steam Deck Gaming Mode and controller/on-screen keyboard integration are out of scope. Verify the Deck's actual SteamOS session and application compatibility, including Flatpak clients. Evaluate packaging without disabling SteamOS system protection and check persistence across OS updates. GNOME/IBus remains planned after Windows; the GNOME development host does not establish compatibility with either target desktop.
 
 Add minimum daily-use configuration, personal-data import, and packaging for the chosen Linux environment. A minimal frontend may start during phase 2 to expose integration issues early.
 
@@ -176,7 +178,6 @@ Build/test and installation remain separate operations. Remote automation must n
 
 ## Remaining choices
 
-- Confirm IBus/GNOME as the initial Linux target before committing the frontend implementation.
 - Choose Android versus iOS order after the macOS cutover.
 - Arrange mobile device/toolchain access and, later, Windows development/test access.
 
