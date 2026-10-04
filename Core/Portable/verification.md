@@ -1,5 +1,15 @@
 # Desktop runtime verification
 
+## Snapshot-safe selection and paging
+
+Revision `df0289b6a5063151d226b67d5bb1310be9f52fb6` passed the expanded runtime contract on Linux x86_64 and macOS arm64. It adds native current-page selection and forward/backward paging. Tests reject actions from another session, a destroyed session, an older snapshot, and snapshots invalidated by typing, cancellation, selection, or paging. Unhandled keys and unsuccessful page changes also invalidate tokens. Bounds use the published native count, even if callers change a snapshot's display vector. Selection produces a commit that can be consumed once.
+
+Linux runtime tests, Clippy with warnings denied, and formatting passed. The Mac `portable` action returned 0; its evidence is under `build/mac-remote/20261004T231221Z-b74289ed/`. Receipt SHA-256: `fcc8d5b292e6dc2226d20f600d1410c60583a3c7ee80e7145c60365d625d6d17`; `00-portable.log` SHA-256: `3be67ebaba5258a7bd9f8c480a93228d66a6174f23c10253689718c22ef767d9`.
+
+These tests use an expanded isolated probe dictionary. They do not establish production ranking, learning, frontend behavior, or completion of #35/#36. Nothing was installed or activated.
+
+## Initial desktop probe
+
 Both targets passed at revision `107b4910172d86b2cef7c6c9e189967e695f8209`, using identical native source pins and fixture hashes. Native libraries were built in Release mode; the Rust contract test used Cargo's debug test profile. These are functional results, not performance measurements or production dictionary comparisons.
 
 | Target | Toolchain | Result |
