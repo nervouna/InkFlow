@@ -30,6 +30,16 @@ build/dictionary-parity/cargo/release/inkflow-dictionary spelling \
 
 It refuses an existing output directory. Validation completes before creating output; a write failure removes only the new directory it created.
 
+## In-process preparation boundary
+
+`include/inkflow_dictionary.h` and its Clang module map expose an experimental C ABI from `libinkflow_dictionary.a`. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. Shipping callers have not switched to this ABI yet.
+
+Inputs are borrowed pointer/length buffers. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
+
+Every operation returns an owned opaque result. Successful generation supplies the dictionary and manifest; spelling supplies 32 named schema files; receipt validation supplies no files. Failure supplies error JSON and no files. Output pointers and names are length-delimited, not NUL-terminated, and remain valid until the caller frees the result. Result accessors require a live non-null handle. Independent calls share no mutable generator state.
+
+The test script compiles and links a C consumer on both desktops. On macOS it also builds a standalone Swift consumer, releases input storage before reading results, and compares the complete corpus and all spelling bytes through the ABI against the Rust CLI and original Swift implementation. `swift-ffi-corpus.json` retains that consumer's actual summary. This proves the preparation boundary, not shipping worker sandbox, packaging, or resource activation behavior.
+
 ## Reference and compatibility contract
 
 `fixtures/cases.json` supplies 43 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned fixture; the Mac check rejects drift from the live catalog.
