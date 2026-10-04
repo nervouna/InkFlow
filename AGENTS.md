@@ -22,6 +22,6 @@ Solo project. Keep changes small and direct; prefer deleting code over adding gu
 - `iconutil` fails inside the sandbox; run builds outside it from the first attempt.
 - Extra worktrees go under `.worktrees/<name>/`. Run commands from the intended worktree.
 - Installing or activating an input method requires explicit user approval.
-- Roadmap lives in GitHub Issues. Reference the issue in the PR (`Fixes #N`); GitHub moves the Project item. Don't update Project fields by hand.
+- Roadmap lives in GitHub Issues. Reference the issue in the PR; use `Fixes #N` only when the PR completes it, otherwise `Refs #N`. GitHub moves the Project item. Don't update Project fields by hand.
 - Release: use the `inkflow-release` skill. It runs the full suite once; don't add extra verification rounds.
 - Known failures: see [macOS/DEBUGGING.md](macOS/DEBUGGING.md).
