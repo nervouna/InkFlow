@@ -1,0 +1,56 @@
+# Rust dictionary generator comparison
+
+This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The shipping preparation scripts and dictionary update worker still use Swift.
+
+## Verify
+
+From the repository root:
+
+```sh
+bash Core/Portable/dictionary/test.sh
+python3 scripts/mac-remote.py dictionary
+```
+
+On Linux, the script tests Rust against the recorded Swift contract and pinned corpus. On macOS, it first runs the existing Swift dictionary-generator tests, exports a fresh contract, then compares Rust against those live results and the recorded fixtures. Both use the repository's Rust toolchain and this crate's `Cargo.lock`.
+
+Preparation may download the pinned public dictionary sources. Downloads go under ignored `build/dictionary-parity/inputs/`; byte counts and SHA-256 are checked before use, then Rust verifies the Git blob hash and SHA-256 again. Existing verified Mac source caches can be reused. There are no downloads from the library or CLI. All generated output and Cargo artifacts stay under `build/dictionary-parity/`. The remote runner returns the catalog, reference results, corpus summary, logs, and its usual exact-revision receipt.
+
+The CLI takes an explicit source catalog and creates a new output directory:
+
+```sh
+build/dictionary-parity/cargo/release/inkflow-dictionary generate \
+  Core/Portable/dictionary/fixtures/catalog.json \
+  build/dictionary-parity/inputs build/dictionary-parity/inputs/legacy.yaml \
+  Core/config/chinese-overrides.tsv build/dictionary-parity/new-dictionary
+
+build/dictionary-parity/cargo/release/inkflow-dictionary spelling \
+  build/dictionary-parity/new-dictionary/pinyin_simp.dict.yaml \
+  build/dictionary-parity/new-spelling
+```
+
+It refuses an existing output directory. Validation completes before creating output; a write failure removes only the new directory it created. Production preparation will still need to publish a complete staging tree through its existing replacement mechanism. The CLI does not activate dictionaries or touch user databases.
+
+## Reference and compatibility contract
+
+`fixtures/cases.json` supplies 44 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned comparison fixture, supplied explicitly to the CLI, and the Mac check rejects drift from the live catalog. Do not use it as an independent source-update configuration.
+
+`reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
+
+The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling and the existing exact reading correction, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
+
+Dictionary bytes and spelling-profile bytes must match exactly. Manifest fields must match after JSON decoding, except calibration multipliers allow relative/absolute error up to `1e-12` for platform math libraries. This tolerance does not apply to weights, hashes, counts, or content versions. JSON spacing and floating-point number spelling are not compatibility requirements.
+
+Two details are deliberately preserved:
+
+- Swift String keys use canonical equivalence, but generated output keeps the first spelling of a key. The Rust map stores a normalized lookup key separately from its emitted text.
+- The existing Swift parser splits on the LF Character. CRLF is one grapheme and is not that separator, so CRLF source dictionaries currently fail validation. The port keeps that behavior; changing it would be a separate parser fix.
+
+Generated schema headers retain the existing `IFSpellingGenerator` wording for byte compatibility. This port does not change the Pinyin algebra, English admission, ranking, or dictionary identities.
+
+## Scope and dependencies
+
+This establishes generator compatibility for the pinned corpus and recorded contracts. It does not establish native compiled-resource parity, engine performance, migrated session/learning behavior, or personal-data compatibility. The next integration must keep one production preparation path and account for the existing Swift update worker before replacing it.
+
+The Rust dependency versions and checksums are in `Cargo.lock`. Hashing uses RustCrypto SHA-1/SHA-256; SHA-1 is used only for the existing Git blob identity, alongside SHA-256 verification. Serde handles the explicit catalog/manifest format. Unicode normalization, segmentation, and general-category tables implement the Swift text contract.
+
+The dependency metadata lists MIT/Apache-2.0 alternatives for most crates, Apache-2.0 for `unicode-general-category`, MIT for `generic-array` and `zmij`, and an additional Unicode-3.0 requirement for the build-time `unicode-ident` crate. A distributed tool must include the applicable notices for its locked dependency graph. This tool is not packaged in the app, and the existing [dictionary distribution review](../licenses.md) still applies to the data.

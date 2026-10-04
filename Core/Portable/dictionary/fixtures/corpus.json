@@ -1,0 +1,233 @@
+{
+  "manifest": {
+    "calibrations": [
+      {
+        "buckets": [
+          {
+            "multiplier": 0.03846153846153846,
+            "pairCount": 0,
+            "syllables": 1,
+            "usedOverall": true
+          },
+          {
+            "multiplier": 0.01818772353749445,
+            "pairCount": 120402,
+            "syllables": 2,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 0.04000000000000001,
+            "pairCount": 153432,
+            "syllables": 3,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 0.040776002057063214,
+            "pairCount": 202482,
+            "syllables": 4,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 0.07999999999999999,
+            "pairCount": 88320,
+            "syllables": 5,
+            "usedOverall": false
+          }
+        ],
+        "overallMultiplier": 0.03846153846153846,
+        "pairCount": 564636,
+        "sourceGroup": "ice"
+      },
+      {
+        "buckets": [
+          {
+            "multiplier": 0.76,
+            "pairCount": 7477,
+            "syllables": 1,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 1.9836065573770492,
+            "pairCount": 33023,
+            "syllables": 2,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 2.079710144927536,
+            "pairCount": 7285,
+            "syllables": 3,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 1.9034924696697781,
+            "pairCount": 6568,
+            "syllables": 4,
+            "usedOverall": false
+          },
+          {
+            "multiplier": 1.7900128040973111,
+            "pairCount": 0,
+            "syllables": 5,
+            "usedOverall": true
+          }
+        ],
+        "overallMultiplier": 1.7900128040973111,
+        "pairCount": 54353,
+        "sourceGroup": "legacy"
+      }
+    ],
+    "contentSHA256": "3233c909aef0d25a7f8930bfb9c69b2915515402bcb35ecdd61f273b5bac47d5",
+    "contentVersion": "r2-0f6965ffc115ffb79fcf6f52cb5c79a4310c49e9981e325da904c15c31ff4ec4",
+    "correctionsSHA256": "9b03c8690edf4148d28b30cd6d921e7fcb2282045d288f1c922fd3b01995856b",
+    "dictionarySHA256": "d6327de9da8fd4b9644baaaf35acc09dd490e111da69a2afe3b6b10292aa12c6",
+    "entryCount": 969894,
+    "formatVersion": 1,
+    "recipeVersion": 2,
+    "sources": [
+      {
+        "blobSHA": "9cbfe2acf59bb3124993d4b8b3b271f8e246b72d",
+        "byteCount": 99367,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-8105",
+        "name": "白霜 · 字表",
+        "path": "cn_dicts/8105.dict.yaml",
+        "recordCount": 8529,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "5a6bb545d07140406208728aeed70706e84279daeee132f10b069cd6387a042a"
+      },
+      {
+        "blobSHA": "973beb1203cfd3340b4829d984f193feaf72e3cf",
+        "byteCount": 9937947,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-base",
+        "name": "白霜 · 基础",
+        "path": "cn_dicts/base.dict.yaml",
+        "recordCount": 365756,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "9067f23b4505e57f5e380b154e22fb2fbbf2111ab0611f8bc6e8b82efa90b891"
+      },
+      {
+        "blobSHA": "6b8a6c84c6c7b638f099b6d2a5a91f35662fb767",
+        "byteCount": 7711375,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-ext",
+        "name": "白霜 · 扩展",
+        "path": "cn_dicts/ext.dict.yaml",
+        "recordCount": 235580,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "44b78e4feb8a3b302298844061626aa4e2194901b8ed4ee6acec84261b6aa90d"
+      },
+      {
+        "blobSHA": "c9bf62a4de8b10efa6aec1dca56fe3e423bf240e",
+        "byteCount": 1665339,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-idiom",
+        "name": "白霜 · 成语与诗句",
+        "path": "cn_dicts_cell/idiom.dict.yaml",
+        "recordCount": 48714,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "341d777d4fd077ddb534e47f8ba27a8dd80d085fd0b847548a97a6666d644113"
+      },
+      {
+        "blobSHA": "af59fe3a2259ed91ae642aab09422599a0557017",
+        "byteCount": 16620279,
+        "commit": "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+        "id": "ice-base",
+        "name": "雾凇 · 基础",
+        "path": "cn_dicts/base.dict.yaml",
+        "recordCount": 543088,
+        "repository": "iDvel/rime-ice",
+        "sha256": "6c594bbd03425600aa36894b713f3d268bd2a11099833a312160249e0a3f0082"
+      },
+      {
+        "blobSHA": "0a3d5aa7e1bb1dc73f8d73448a1986031ae6819e",
+        "byteCount": 11923397,
+        "commit": "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+        "id": "ice-ext",
+        "name": "雾凇 · 扩展",
+        "path": "cn_dicts/ext.dict.yaml",
+        "recordCount": 339185,
+        "repository": "iDvel/rime-ice",
+        "sha256": "5435dd8b75d6eb688787a25b6e302867152ef401bec7b263136ab1e2a2ecf4ae"
+      },
+      {
+        "blobSHA": "0a9592d65d3bfd15116b3b48a45268a81b2716fa",
+        "byteCount": 1030,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-computer",
+        "name": "白霜 · 计算机",
+        "path": "cn_dicts_cell/computer.dict.yaml",
+        "recordCount": 35,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "a92fe61d48b53d1d20f1e66be4ca83ac2e8be0caa1fa3f383c5c15de6cb7d5ea"
+      },
+      {
+        "blobSHA": "caa7b822e2e994262ec660d3416ba174b151cc74",
+        "byteCount": 50277,
+        "commit": "19167adfe67fcba2f65c336117557639ff254ddb",
+        "id": "frost-exthot",
+        "name": "白霜 · 网络热词",
+        "path": "cn_dicts_cell/exthot.dict.yaml",
+        "recordCount": 2080,
+        "repository": "gaboolic/rime-frost",
+        "sha256": "d5f8bda70bb621f82ed85e4e8dbe8386c81effb856ff82ebb5c708d18ae993c1"
+      },
+      {
+        "blobSHA": "c61a17b7878a15e418569266b0e58f086789a4c4",
+        "byteCount": 309467,
+        "commit": "30d61877615dbee98c3b5b4322d50bdc90226816",
+        "id": "selected-computer",
+        "name": "搜狗 · 计算机词汇（Rime 转换）",
+        "path": "selected.jisuanjicihuidaquan.dict.yaml",
+        "recordCount": 10300,
+        "repository": "alswl/rime-selected",
+        "sha256": "804f55821591e112d10df1e78445f945e70f7204c2a9521d2a72c048003fc3e0"
+      },
+      {
+        "blobSHA": "6f2e996d2792416cb7f41bb49967a1dec7060c92",
+        "byteCount": 1266216,
+        "commit": "0c6861ef7420ee780270ca6d993d18d4101049d0",
+        "id": "legacy",
+        "name": "旧版拼音 · 兼容增量",
+        "path": "pinyin_simp.dict.yaml",
+        "recordCount": 65125,
+        "repository": "rime/rime-pinyin-simp",
+        "sha256": "e341598343a0f0f2035bb1aafc34a7f3bb7887deeecb3f60796262aaa2983e6b"
+      }
+    ]
+  },
+  "spellingSHA256": {
+    "inkflow_spelling_0.schema.yaml": "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+    "inkflow_spelling_1.schema.yaml": "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+    "inkflow_spelling_10.schema.yaml": "6f27ea365043230ab49ae23797aa59e6cc5398fa2b411ad35869e95780f382d5",
+    "inkflow_spelling_11.schema.yaml": "3a526d83ddf2c46facb253b585c40853392693fce8903b35cec45782083cf8f7",
+    "inkflow_spelling_12.schema.yaml": "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+    "inkflow_spelling_13.schema.yaml": "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+    "inkflow_spelling_14.schema.yaml": "eafba42cc6a537c55752502b5a41f18f56fccbb8dbca866b59829f12bb47c4d1",
+    "inkflow_spelling_15.schema.yaml": "c4ad76dc15f3a23883f01f17086d02999fd6ffcb817deea557076ce3f0c7961c",
+    "inkflow_spelling_16.schema.yaml": "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+    "inkflow_spelling_17.schema.yaml": "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+    "inkflow_spelling_18.schema.yaml": "c2cda62c679380106ff2ceda990fe902acad24a9e55662026923bbd2644eb126",
+    "inkflow_spelling_19.schema.yaml": "5d49c88718d7d86164963992a80c27b9ad50ea06aaea28154d05558cfcf32d21",
+    "inkflow_spelling_2.schema.yaml": "f8610f2f9cf11b8057d6e50d8b46716a3bb2fde0b9eab421f01b3d1cd3b835c1",
+    "inkflow_spelling_20.schema.yaml": "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+    "inkflow_spelling_21.schema.yaml": "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+    "inkflow_spelling_22.schema.yaml": "283ee077785859d7ad67b1550ab496ae7feb848a3e5600d7bfa04b90f0789630",
+    "inkflow_spelling_23.schema.yaml": "dd65265c1a1076a1aa73a83770d0938f621a793447496601efacdddbeed8abe6",
+    "inkflow_spelling_24.schema.yaml": "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+    "inkflow_spelling_25.schema.yaml": "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+    "inkflow_spelling_26.schema.yaml": "51ca9c81f5663b742ac8e4bae90695fc1eeaac10e7b6e35776729efd70fcd545",
+    "inkflow_spelling_27.schema.yaml": "2a5bcd3da67980844650ee2c419488912ce017c100d2991e973292cf5dea0050",
+    "inkflow_spelling_28.schema.yaml": "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+    "inkflow_spelling_29.schema.yaml": "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+    "inkflow_spelling_3.schema.yaml": "6b0bfa819549299ce7a964afa4749d9335e1b9704a4276142558cc37edc44d12",
+    "inkflow_spelling_30.schema.yaml": "1cd22fe70c15bd8c63593638ab0d3e67ddf7f96ece5716da7ba9084afd208744",
+    "inkflow_spelling_31.schema.yaml": "63429e3d48ee3b71b5b8e584b762dc562b678c6b374115f32ebc6d4e05b622e3",
+    "inkflow_spelling_4.schema.yaml": "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+    "inkflow_spelling_5.schema.yaml": "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+    "inkflow_spelling_6.schema.yaml": "b70d5fed5129ec8e2b20cf0acddee47cda7d8861966b2ae09ab7d0ce15cdfd6d",
+    "inkflow_spelling_7.schema.yaml": "9d7b1440ef40296fa0a3cad9ec3ef592fe2d6a6b55a7af9e1242dcef325f15f3",
+    "inkflow_spelling_8.schema.yaml": "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+    "inkflow_spelling_9.schema.yaml": "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef"
+  }
+}

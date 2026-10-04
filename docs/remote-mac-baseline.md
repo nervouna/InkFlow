@@ -11,6 +11,7 @@ python3 scripts/mac-remote.py build
 python3 scripts/mac-remote.py test engine controller
 python3 scripts/mac-remote.py baseline
 python3 scripts/mac-remote.py portable
+python3 scripts/mac-remote.py dictionary
 ```
 
 `--revision COMMIT` defaults to `HEAD`. Local uncommitted changes are never sent. The runner prints the resolved commit and evidence directory. Use `--host ALIAS` and `--remote-root PATH` to override the defaults, `tanaris` and `~/Develop/Projects/inkflow-remote`.
@@ -25,7 +26,7 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 
 - An unowned or dirty remote checkout is rejected. This includes untracked, non-ignored files. The runner does not reset, clean, or stash someone else's changes.
 - A directory lock prevents overlapping runner operations on the same checkout. Do not run builds manually in that checkout while the runner owns it.
-- The runner allows only build, baseline, the portable runtime probe, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
+- The runner allows only build, baseline, the portable runtime probe, the dictionary generator comparison, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
 - Results are copied to `build/mac-remote/RUN_ID/` on Linux. Cleanup requires a successful copy and a complete `run.json` matching every request field and the worker exit status, with valid start/completion timestamps. Missing, malformed, or mismatched receipts leave remote evidence in place and return a nonzero status.
@@ -38,6 +39,10 @@ A dirty local checkout is allowed because only the explicitly resolved committed
 `portable` runs `Core/Portable/test.sh`: build the source-pinned native dependencies and existing extensions, then run the minimal Rust host tests with isolated fixture data. It needs CMake 3.31 and Ninja in the Mac login shell's path in addition to the baseline prerequisites. See [the probe contract and build recipe](../Core/Portable/README.md).
 
 The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt. This action does not run the Swift baseline, prepare production dictionaries, or install an input method.
+
+## Dictionary generator comparison
+
+`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, and `corpus.json` with `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md). This action does not prepare native production caches or install an input method.
 
 ## Baseline recipe
 
