@@ -59,7 +59,7 @@ Run the engine in the frontend process. Serialize access to librime and its shar
 
 | Platform | Proposed frontend |
 | --- | --- |
-| Linux | IBus for the current GNOME/Wayland environment; provisional pending confirmation |
+| Linux | Fcitx5 for Omarchy/Hyprland and Steam Deck Desktop Mode (KDE Plasma); GNOME/IBus deferred |
 | macOS | Existing Swift/InputMethodKit frontend |
 | Android | Kotlin `InputMethodService` and native keyboard UI |
 | iOS | Swift keyboard extension and containing app |
@@ -128,7 +128,9 @@ Completion means relevant regression cases pass, learning survives restart, supp
 
 ### 3. Linux daily-use frontend
 
-Implement the selected Linux adapter, provisionally IBus. Use desktop-native candidate/preedit APIs. Handle focus/reset, modifier events, surrounding-text capabilities, sensitive fields, and exact commit delivery.
+Implement the Fcitx5 adapter, targeting Omarchy/Hyprland first and Steam Deck Desktop Mode with a physical keyboard. Use desktop-native candidate/preedit APIs. Handle focus/reset, modifier events, surrounding-text capabilities, sensitive fields, and exact commit delivery.
+
+Steam Deck Gaming Mode and controller/on-screen keyboard integration are out of scope. Verify the Deck's actual SteamOS session and application compatibility, including Flatpak clients. Evaluate packaging without disabling SteamOS system protection and check persistence across OS updates. GNOME/IBus is a later adapter; the GNOME development host does not establish compatibility with either target desktop.
 
 Add minimum daily-use configuration, personal-data import, and packaging for the chosen Linux environment. A minimal frontend may start during phase 2 to expose integration issues early.
 
@@ -176,7 +178,6 @@ Build/test and installation remain separate operations. Remote automation must n
 
 ## Remaining choices
 
-- Confirm IBus/GNOME as the initial Linux target before committing the frontend implementation.
 - Choose Android versus iOS order after the macOS cutover.
 - Arrange mobile device/toolchain access and, later, Windows development/test access.
 
