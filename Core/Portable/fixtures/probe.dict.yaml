@@ -1,0 +1,8 @@
+---
+name: probe
+version: '1'
+sort: by_weight
+...
+你	ni	1000
+好	hao	1000
+你好	ni hao	1000

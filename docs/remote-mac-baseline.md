@@ -1,20 +1,21 @@
 # Remote Mac builds and migration baseline
 
-This workflow supports [#33](https://github.com/nervouna/InkFlow/issues/33). It builds and tests committed revisions without installing, registering, enabling, or activating InkFlow.
+This workflow supports [#33](https://github.com/nervouna/InkFlow/issues/33) and the desktop runtime probe in [#34](https://github.com/nervouna/InkFlow/issues/34). It builds and tests committed revisions without installing, registering, enabling, or activating InkFlow.
 
 ## Run from Linux
 
-From the `portable-core` worktree:
+From the repository root in your active worktree:
 
 ```sh
 python3 scripts/mac-remote.py build
 python3 scripts/mac-remote.py test engine controller
 python3 scripts/mac-remote.py baseline
+python3 scripts/mac-remote.py portable
 ```
 
 `--revision COMMIT` defaults to `HEAD`. Local uncommitted changes are never sent. The runner prints the resolved commit and evidence directory. Use `--host ALIAS` and `--remote-root PATH` to override the defaults, `tanaris` and `~/Develop/Projects/inkflow-remote`.
 
-The Mac needs key-based SSH, Git, Python 3, the selected Xcode toolchain, Rust 1.98.1, and the existing build scripts' command-line dependencies. Commands run through a fresh Zsh login/interactive shell so the Mac's development environment is available. Shell initialization must not print banners to stdout. Rust is pinned by `rust-toolchain.toml`; install it with `rustup toolchain install 1.98.1 --profile minimal` if absent. Native dependencies retain the exact versions and archive checksums in `macOS/scripts/dependencies.sh`; this phase does not select a new engine release.
+The Mac needs key-based SSH, Git, Python 3, the selected Xcode toolchain, Rust 1.98.1, and the existing build scripts' command-line dependencies. Commands run through a fresh Zsh login/interactive shell so the Mac's development environment is available. Shell initialization must not print banners to stdout. Rust is pinned by `rust-toolchain.toml`; install it with `rustup toolchain install 1.98.1 --profile minimal` if absent. The Swift baseline uses the exact versions and archive checksums in `macOS/scripts/dependencies.sh`. The portable probe has a separate source lock for the same librime release, described below.
 
 The runner transfers a Git bundle, including unpublished commits, into a temporary directory on the Mac. Its own small driver is transferred separately and hashed in `run.json`. It creates an owned checkout at `REMOTE_ROOT/checkout`, fetches the bundle, and checks out the exact requested commit in detached-HEAD mode. It never uses or modifies `~/Develop/Projects/InkFlow`.
 
@@ -24,13 +25,19 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 
 - An unowned or dirty remote checkout is rejected. This includes untracked, non-ignored files. The runner does not reset, clean, or stash someone else's changes.
 - A directory lock prevents overlapping runner operations on the same checkout. Do not run builds manually in that checkout while the runner owns it.
-- The runner allows only build, baseline, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
+- The runner allows only build, baseline, the portable runtime probe, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
 - Results are copied to `build/mac-remote/RUN_ID/` on Linux. Cleanup requires a successful copy and a complete `run.json` matching every request field and the worker exit status, with valid start/completion timestamps. Missing, malformed, or mismatched receipts leave remote evidence in place and return a nonzero status.
 - An SSH transport failure (status 255 or a locally terminated SSH process) always retains and prints the remote transfer directory, even if SCP succeeds or a receipt is present. Copied results may be partial while the worker continues. Inspect that directory and `REMOTE_ROOT/run.lock`; check the recorded process and its children before removing files or a stale lock. If only stdout disconnects, the worker continues saving logs and records `stdoutDisconnected` along with the command's eventual exit status.
 
 A dirty local checkout is allowed because only the explicitly resolved committed revision is transferred. Commit changes before expecting them in a remote result. A nonzero exit status means the action or its evidence transfer failed; partial reports are not a passing baseline.
+
+## Portable runtime probe
+
+`portable` runs `Core/Portable/test.sh`: build the source-pinned native dependencies and existing extensions, then run the minimal Rust host tests with isolated fixture data. It needs CMake 3.31 and Ninja in the Mac login shell's path in addition to the baseline prerequisites. See [the probe contract and build recipe](../Core/Portable/README.md).
+
+The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt. This action does not run the Swift baseline, prepare production dictionaries, or install an input method.
 
 ## Baseline recipe
 
