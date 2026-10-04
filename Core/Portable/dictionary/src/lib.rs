@@ -32,6 +32,28 @@ fn whitespace_or_newline(c: char) -> bool {
     whitespace(c) || matches!(c as u32, 0x0a..=0x0d | 0x85 | 0x2028 | 0x2029)
 }
 
+// Swift splits on the LF Character, so the CRLF grapheme is not a separator.
+// Preserve that behavior during migration rather than silently accepting new input.
+fn lines(input: &str) -> impl Iterator<Item = &str> {
+    let mut position = 0;
+    std::iter::from_fn(move || {
+        if position > input.len() {
+            return None;
+        }
+        let start = position;
+        while let Some(offset) = input[position..].find('\n') {
+            let end = position + offset;
+            position = end + 1;
+            if end > 0 && input.as_bytes()[end - 1] == b'\r' {
+                continue;
+            }
+            return Some(&input[start..end]);
+        }
+        position = input.len() + 1;
+        Some(&input[start..])
+    })
+}
+
 pub fn normalized_reading(value: &str) -> Result<String> {
     let normalized = value
         .nfc()
@@ -97,7 +119,7 @@ fn read_rows(
     let mut header = false;
     let mut body = false;
     let mut count = 0;
-    for (offset, raw) in input.split('\n').enumerate() {
+    for (offset, raw) in lines(input).enumerate() {
         let line = raw.strip_suffix('\r').unwrap_or(raw);
         let error = || Error::new("source-format").at(source, Some(offset + 1));
         if line.len() > 8192 {
@@ -146,7 +168,7 @@ fn corrections(data: &[u8]) -> Result<Vec<(Key, Value)>> {
     let input = std::str::from_utf8(data).map_err(|_| Error::new("correction-format"))?;
     let mut seen = HashSet::new();
     let mut rows = Vec::new();
-    for (offset, raw) in input.split('\n').enumerate() {
+    for (offset, raw) in lines(input).enumerate() {
         let line = raw.strip_suffix('\r').unwrap_or(raw);
         let trimmed = line.trim_matches(whitespace);
         if trimmed.is_empty() || trimmed.starts_with('#') {

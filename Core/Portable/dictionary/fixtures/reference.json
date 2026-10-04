@@ -1,0 +1,4372 @@
+{
+  "bad-correction" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 1,
+      "source" : "corrections"
+    }
+  },
+  "bad-reading-symbol" : {
+    "error" : {
+      "code" : "invalid-reading",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "bad-tone" : {
+    "error" : {
+      "code" : "invalid-reading",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "bucket-99" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 99,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 10.000000000000002,
+          "pairCount" : 100,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "59dcb124137b948d78d85ccc6287136eb55e3ed50e33dcf5b08c0991c5df04c9",
+      "contentVersion" : "r2-bcbdddec8481e32239815ff0984c83c66e384ad0dbb2dc75ba89a703a2f5b44f",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "2198152fccb267d308449676c72c5f78900a622093ae555aa5a6301a86c33301",
+      "entryCount" : 102,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "ee58854cd61734d2378a865fd6a9537bb5729e6a",
+          "byteCount" : 1619,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 100,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "4d9670c767475edc33b534bbb38d562040b6af24037d8be727edabf13e064f34"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "beadf29182348e6743f8d1afefcf7e945e24045e",
+          "byteCount" : 1543,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 102,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "12608d88f262242f05f75925e5ebba5fed6729cb1e451909f7c79e6d1673c3cf"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "edc136a7dc4992c88ee5be057fac5660ed67df4728ba033fdb761b66ff31f010",
+      "inkflow_spelling_3.schema.yaml" : "953b9629cd05a76491c9c0af5eb509935ecc461a5bea3dfc2c19c44fcee965e3",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "056d7b8394ade0fc56e28f243bf61a8e55114149430e4ff84311f0551fd51639",
+      "inkflow_spelling_7.schema.yaml" : "011e96604775f25fa1fc65a879a8e20caa53bfa36498dc4c381176971bfade9a",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "8a75d68abaa0c3467ff7235785d9323b7881bba0d3dcf149f9070eee1a0f8f45",
+      "inkflow_spelling_11.schema.yaml" : "d20449c3c17ec668f78477d8e3fdeae3a8270bcc0f9a0c893eb482444975207c",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "eb4d958ea434abb9fe404b67343690bb06877bd60c7918f205207cfc87db8c8c",
+      "inkflow_spelling_15.schema.yaml" : "a867c9e1e5758c4aa3a56230013cbd4401d57c8ca507edffd67085ff1da46b63",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "00bbe4053286083c37085d6799f0e9864e981c88eb0fc4e606f08775295d8d86",
+      "inkflow_spelling_19.schema.yaml" : "944ec2fc78c9ac1ad200d46f8b8612d6d5694c5d5d228bdf013df18d49d4ce48",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "20d9e987ecf98fbb071eeeaf589e71149aa000eb1b9cc3d8ad03a8d8d1fa29bb",
+      "inkflow_spelling_23.schema.yaml" : "e460ec0245ba62841535289f070ff1e7fd42e2ae213b0a90636d5c9806c23caf",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "d20a50eba356a53c7a15f92ca4ac9ca6c82b1d0b65df9c9603aba83fc32bd359",
+      "inkflow_spelling_27.schema.yaml" : "7dd7da39c0041dd678d075dd72e656a07402d18dcdb35c38daeba8467a821362",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "8d794603b5915833f6fa0d25a0cec75f8f2abd3d985ccfea28ec439c97cb35c8",
+      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69"
+    }
+  },
+  "bucket-100" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 100,
+              "syllables" : 2,
+              "usedOverall" : false
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 10.000000000000002,
+          "pairCount" : 101,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "0eb5e65eee2b7a944f4d4ddd7791fd15700ddd1e06144456d5eb5d59a252b3a6",
+      "contentVersion" : "r2-28cc5db683767f5b0a9a1e1fed80ff7f773fe0fcf8f614b984f1eee0ad1d732b",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "de440c952027df9f89cdaa58986d9a6f54e448140dc87fb77c717489d8978b2d",
+      "entryCount" : 103,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "cd349c743cee83a5e0e17fdc235026bcce7682d8",
+          "byteCount" : 1635,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 101,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "227ad2e855bf592ddf38c1dd0d154cfa35fb1b9d2c7527ca3f471644fc533898"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c8699d05975e0bafcc0252f24844e1a5d837d2e2",
+          "byteCount" : 1558,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 103,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "d5f69ec20e7f654a6e5b28d9e681d328876018ab6435e768c07d1854cf51b85f"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "edc136a7dc4992c88ee5be057fac5660ed67df4728ba033fdb761b66ff31f010",
+      "inkflow_spelling_3.schema.yaml" : "953b9629cd05a76491c9c0af5eb509935ecc461a5bea3dfc2c19c44fcee965e3",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "056d7b8394ade0fc56e28f243bf61a8e55114149430e4ff84311f0551fd51639",
+      "inkflow_spelling_7.schema.yaml" : "011e96604775f25fa1fc65a879a8e20caa53bfa36498dc4c381176971bfade9a",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "8a75d68abaa0c3467ff7235785d9323b7881bba0d3dcf149f9070eee1a0f8f45",
+      "inkflow_spelling_11.schema.yaml" : "d20449c3c17ec668f78477d8e3fdeae3a8270bcc0f9a0c893eb482444975207c",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "eb4d958ea434abb9fe404b67343690bb06877bd60c7918f205207cfc87db8c8c",
+      "inkflow_spelling_15.schema.yaml" : "a867c9e1e5758c4aa3a56230013cbd4401d57c8ca507edffd67085ff1da46b63",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "00bbe4053286083c37085d6799f0e9864e981c88eb0fc4e606f08775295d8d86",
+      "inkflow_spelling_19.schema.yaml" : "944ec2fc78c9ac1ad200d46f8b8612d6d5694c5d5d228bdf013df18d49d4ce48",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "20d9e987ecf98fbb071eeeaf589e71149aa000eb1b9cc3d8ad03a8d8d1fa29bb",
+      "inkflow_spelling_23.schema.yaml" : "e460ec0245ba62841535289f070ff1e7fd42e2ae213b0a90636d5c9806c23caf",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "d20a50eba356a53c7a15f92ca4ac9ca6c82b1d0b65df9c9603aba83fc32bd359",
+      "inkflow_spelling_27.schema.yaml" : "7dd7da39c0041dd678d075dd72e656a07402d18dcdb35c38daeba8467a821362",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "8d794603b5915833f6fa0d25a0cec75f8f2abd3d985ccfea28ec439c97cb35c8",
+      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69"
+    }
+  },
+  "canonical-text" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "2bcd1444d9c8284484d3d978f0f4a730aab202aa20a9e889ffab178835ae02c0",
+      "contentVersion" : "r2-d8e23c2378374fb99ccfbe78601cdc285d4722f1d6528114fcbc3a0f3cea9db6",
+      "correctionsSHA256" : "e2705c2c99215ea464cb5680785a2ccbfb99ce4e8208d78da8b2198ba38e84e4",
+      "dictionarySHA256" : "eb3b1107b99ceee3e6a84ca49c456bf4fecf00ef964b74f80012785e0045e6b2",
+      "entryCount" : 3,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "0c3896ec946f1db16fda2baa81d0130048a01979",
+          "byteCount" : 58,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "440aaae775f991dda7dfd8316ca14c74aba18cbeec95150dbb76af3b39b271f2"
+        },
+        {
+          "blobSHA" : "b27c7ed0aa5eaddab2ba75e58fc60a3dc99a2194",
+          "byteCount" : 56,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "4eb958a34b8b247a183910a7ae4dcd698cbcee7007f4b59d55929c69c370fe40"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "a91f50a52f245b3489189dad36bd57226e7f0028b70adbb6237df59eeffa2525",
+      "inkflow_spelling_3.schema.yaml" : "0b0c7de28cf7f8943afc6a5ee999525799971df36ab510580599f02f2a19d98b",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "47e266ba2c7ea301db4fa7287a3d61785f023e4736c7ee543929dcf11fdd6633",
+      "inkflow_spelling_7.schema.yaml" : "c6fd613b9f8eeba3a54d4ae78d91d7be1cde33e29e89fc461b6612c69ee065d9",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "ebb5b45731ce7dd4d4e59600126a271a84d743cdf4acaa1e34001dd388ef834a",
+      "inkflow_spelling_11.schema.yaml" : "00a9b61ae3c90a879937fde373e007b85af131cdb595559dbc844d27c4499989",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "06b9d98a8fe19f567f0c839872e98283df2cb74f4e4a8a7afc1a137d680fec28",
+      "inkflow_spelling_15.schema.yaml" : "f4f378f097a94f72ca5b5f452fd4328cde2cfe2ee616e237bef8ebad7da77687",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "a4fea7343f5d3f729a9c62c8829fd1c348440f2aa1878925e3c6e6383da03425",
+      "inkflow_spelling_19.schema.yaml" : "a9fe33c0b199e2ed617f2d28876a24276040d6408b0d6b4d6140e4aa6977f82b",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "23949da3b0c23ed9a6de398f37489a8445a9f4016a2bd9c6547b824447703e2d",
+      "inkflow_spelling_23.schema.yaml" : "ae46dcecbbd9c10260aeffa740210fa7173d9466b6bb2a4b1bf9b1d65e2938a3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "f2f64afb0044f71e2af20862f6268dd0f1cb67ee157131c3726169c2881b8f21",
+      "inkflow_spelling_27.schema.yaml" : "3ef9085b5d1661c6714a72704d8188f8b62c7619ba22a8b6f2a8fe219e0bb71c",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "96bf666b0d1830539edce91bcf82fdb610a7f1e3fd40532a7fee9cc15eb7b059",
+      "inkflow_spelling_31.schema.yaml" : "1bf963f74b72dddc0d606ff1ab93b55811bca014766307194f95730f80bd02f2"
+    }
+  },
+  "control-text" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "cr-line-suffix" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "crlf" : {
+    "error" : {
+      "code" : "source-format",
+      "source" : "frost-8105"
+    }
+  },
+  "default" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "4774389b2833904b077ce9b5333324786df83f918ce5fabcd90e4ad96c5fa295",
+      "contentVersion" : "r2-45e9729beb5c25d9321726b991f7d9db33429bf5a27d112c9dbf30983fdb20dd",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "3bd8263a38de8369d2f792fe19cce33fbffa04902a4c943daad04c69f025943c",
+      "entryCount" : 1,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "duplicate-correction" : {
+    "error" : {
+      "code" : "correction-duplicate",
+      "line" : 2
+    }
+  },
+  "empty-body" : {
+    "error" : {
+      "code" : "source-format",
+      "source" : "frost-8105"
+    }
+  },
+  "empty-reading" : {
+    "error" : {
+      "code" : "invalid-reading",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "empty-weight" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "even-median" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 3.0000000000000004,
+              "pairCount" : 2,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 3.0000000000000004,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 3.0000000000000004,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 3.0000000000000004,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 3.0000000000000004,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 3.0000000000000004,
+          "pairCount" : 2,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.089999999999999983,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.089999999999999983,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.089999999999999983,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.089999999999999983,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.089999999999999983,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.089999999999999983,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "d343b1400477600b0042d158be94fac77f3e9080b081f97ef3939dcfdf887019",
+      "contentVersion" : "r2-7cc912017b09764a26fdccf21063589808dc264ba8eeca3a382eef0ce5294e3a",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "37bf332eada2320b1e3b5a5cd37bdd7321f6e37d1dbd556139b3fd1f5ddcee59",
+      "entryCount" : 3,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "16172bdc56f7a7d33ca765af6de1f229824ca745",
+          "byteCount" : 52,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "c9e6679cd5ec68e8af2423a3295eb30eb6783e5b9b7aa7f2374b5ec261aa670a"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "d57b2ebe816ed463ca0169933ba4a99dd248e39d",
+          "byteCount" : 70,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 3,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "194413513cd3496cb7e65820118a0c87c154eb841fedeba62f5f177d407c06e8"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "ec3e1ef71a5decc99c5740b2863ae164ba6ecbb70e626300524d9f7cefd43e23",
+      "inkflow_spelling_3.schema.yaml" : "045ad8a057d0053d6814eebd246f59e7c818f6f5747bc367eaceeb33efc5fa4d",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "2b9cd82f9a99f4e61359d8a198c8e907ee981526a89b265e64fe6a5f565f3fd3",
+      "inkflow_spelling_7.schema.yaml" : "cc71e74b60196997b114c8e4466b6735db495553412d5b5d48ee2856152defe3",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "43c9feb8a0212f29830f08ba6f597bcf4fdce6b3ce893c6958ba04bec7f62fc8",
+      "inkflow_spelling_11.schema.yaml" : "0d3c8d19c7b4f11ef4125dac854fdcfe3bf203effe7fd034c3cf0fbaacb77553",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "6a59df347e703413099af24f87be9c3730cbdb816f574dc5ff237c828e236acd",
+      "inkflow_spelling_15.schema.yaml" : "66fee3f35e6ca01f46ef7b6f0cce379fb1beb93a34cae3ad1bedab7198a2a40b",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "d4cc910dd324b778f57ca2b1ca075ad63a834bbe03f2832eeb39ecac5b8ecfe1",
+      "inkflow_spelling_19.schema.yaml" : "9fbf30e5a9e4bb2ccf3b6df36873ae6bad08ebef5cd16b1c2159eaf8848db692",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "dcbebecb28f64fe091125fe0bb58e47623fd58ffc1c685987492f7a2dd5efc98",
+      "inkflow_spelling_23.schema.yaml" : "b052aeb5134a1f3955b99d47ebbe621ce11ac6ac1278629dd142f487e8738fe8",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "e26425706f2c78e2e0c9a0629dd85de4abb4c27d98285924a93a8deb8cb43ad4",
+      "inkflow_spelling_27.schema.yaml" : "3f8db3a731c3389b5f81d606f9f5a29967dd3fdd8b9d2b3a875a88b443e0e12a",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "d0d7dbb67a3a0a3a6c729683473864b2c6dfcf67113fd5cb40eaeb0f2913a987",
+      "inkflow_spelling_31.schema.yaml" : "4ae2404bf2afb12e40c2dc098c7b1ac3738868f6a48b3b954b307bedce4be044"
+    }
+  },
+  "float-weight" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "format-text" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "grapheme-boundary" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "009688d13789faf9c7285ad262e2f132d5b369e3437a6cd85d6ca82b30ab858c",
+      "contentVersion" : "r2-95b7737a9f15dab2723a43cc099e5bbb9093ea5843670c2e79c7eef22362d0ac",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "571d2a73312e03b3eee8d06079c0e890115afa83d1f104a376d2b3fa5ba687f6",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "9dbe616ae5be28f15ae23847cd600553ced75602",
+          "byteCount" : 820,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "2aef0a1f30bcbecec5e8fdb70871b9029d0cd7ca81ec60ee5177d8d977e945d7"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "half-rounding" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.5,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.010000000000000005,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "c45061d14a0f3b5be86294d005c0045cf7b5598a8fad2faa0d7b414e770c74fd",
+      "contentVersion" : "r2-f92fe5d7337452d6fa0cdd3954c3d566f798f90f33aa0e0dcfda017295238511",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "663e63e33e73bc7bad89e8adc84152d8aaca94f89021e18ff95a1e3be47f88f1",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "1363f0ab1d228c234e2b4c864ef549c5b2230c78",
+          "byteCount" : 43,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "1b99f1307d948b4b72567d50d2dafeac4c7222b380a9d64e32800dbb749fb71a"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "88041a43ff2e552e78ded08a79b455b0be311601",
+          "byteCount" : 53,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "e8ce57cfec51bac0af916c929f01c9e523603e962b2762c43c57f7e862ce567d"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "60e0152cc478f085899044fb8613e7d9a8d4031e1308dbc318905ffd97088469",
+      "inkflow_spelling_3.schema.yaml" : "2ccc2d9ca228b8153dd3e1fc395791adb53b37802b3cb596fdb8d77eb25dc2a5",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "0f779c4a1b8cc857a5dfc0ee9c46ada5f93430efcfb81f5a67db144557ce7767",
+      "inkflow_spelling_7.schema.yaml" : "c249c8d70f13bb8e1f7a198b5634680e53c65f4bb6659cc1fc763439dc5529bc",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "19577df492d71193829ce7289370a16da69369888eaffb75526bebf7a12eae55",
+      "inkflow_spelling_11.schema.yaml" : "20e32a6d06a9faa40eb19ab32ddd4d2ff4be775fa30b4311ea0535c5280224df",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "e666d90f3e15ae9321f36c7507d214178bde726a7adf0c390f42f07bf4db8abc",
+      "inkflow_spelling_15.schema.yaml" : "482759b0b214094c8075f5321431d30a0449d2fd510029f22683d2c5ad5b3640",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "83bad1889996e71ba6b8faa495e7bc02c06256941d6c5ae6cba4fa5142447159",
+      "inkflow_spelling_19.schema.yaml" : "c3dbcd92297ef2dba07a8d72055bf1d57c6f21b58e630f9cb19457e702d48dec",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "76cc56616136ffcfd69708e4e55f30d26cf5b792886a259ff4c9c3290f640a7f",
+      "inkflow_spelling_23.schema.yaml" : "f71b67ad9774cd556de6f20b2d982d00d0b4412c86eaac618c1ac5c5d5c09d33",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "9666500f0c89a90b24af75404a3e4d882503370cd185706efd40772a665e46b5",
+      "inkflow_spelling_27.schema.yaml" : "d3ec3b9ef92b2d0f6728b598d3a687b5319102f131c006a597265d13171523d9",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "977743b897399c6ed8304d1fce38c4da4ec35e1ac4a08931b9afffc5a8ed2a2f",
+      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6"
+    }
+  },
+  "long-header" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 2,
+      "source" : "frost-8105"
+    }
+  },
+  "long-header-boundary" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "4774389b2833904b077ce9b5333324786df83f918ce5fabcd90e4ad96c5fa295",
+      "contentVersion" : "r2-45e9729beb5c25d9321726b991f7d9db33429bf5a27d112c9dbf30983fdb20dd",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "3bd8263a38de8369d2f792fe19cce33fbffa04902a4c943daad04c69f025943c",
+      "entryCount" : 1,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        },
+        {
+          "blobSHA" : "7b59d527790e124f03e6a544739b8945255c43d4",
+          "byteCount" : 8213,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "82c6bd24b66d85464921a0154271b485c7102adfc7a0866b0dce4ab1092d208c"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "long-syllable" : {
+    "error" : {
+      "code" : "invalid-reading",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "missing-header" : {
+    "error" : {
+      "code" : "source-format",
+      "source" : "frost-8105"
+    }
+  },
+  "missing-overlap" : {
+    "error" : {
+      "code" : "calibration-empty",
+      "source" : "ice"
+    }
+  },
+  "missing-reason" : {
+    "error" : {
+      "code" : "correction-format",
+      "line" : 1
+    }
+  },
+  "missing-weight" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-computer"
+    }
+  },
+  "negative" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "no-final-newline" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.010000000000000005,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.010000000000000005,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.010000000000000005,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "b3b8ba56aafb840560b79326203a6a7dfd9ab1361afc3cabef4cded024e74c9a",
+      "contentVersion" : "r2-8b084ed78b60a49ac31f7e45d508b1ec0ebd61c65f9102ed8f7552c1adb16595",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "0b266e46d0e148b3e75075aa29a4398ee01c98df114f32e0f0f7a19fd117d724",
+      "entryCount" : 1,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "84b38890ab62b51ced1958fc10bcdb5d814a6a1e",
+          "byteCount" : 42,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "f464030c684d9fa8b01641ef9e834ee0a87960f3b63d8a6cf7e81d57703f44cb"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "no-han" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "normalization" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "2c8568deb9e1381b6537e7bb2b51582c95e25e0457d695e0773e47da5da0e47a",
+      "contentVersion" : "r2-9dc39e72338da6d2337e4c84d97d7f9aa70c8463ab17103613b7fd52df71be48",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "32e3d28e2ec50ad7bf86e63a2a45103a8edc68996b016ab8d509ca1d1cabe149",
+      "entryCount" : 9,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "9ff9f2d3999158491afe6d21448a34a4ddbc0fad",
+          "byteCount" : 138,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 9,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "82981cdf344642e0be895997be900a183c9f559b2f858bf25b84d9b1f659b5f7"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "491c1fb5fe61475279de9686869b985b7bc84be8b61907f54a1265fd33656e2e",
+      "inkflow_spelling_3.schema.yaml" : "30c9d3621714d4895c4411b295a8fd242e058ac07aaa2a2d39b35bf00ae4e1c0",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "94e13a3d58744e7e4eb110fc0665094a49604df7b85e124af47634583fbc368f",
+      "inkflow_spelling_7.schema.yaml" : "b31bf8aab1dc134ef259026136f51e7ed983a1358ed44949796138fd6d9f903b",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "36dc00a7a7efb2c168040497d8196eef2a05c8f33b858899deba6a64afd9ba94",
+      "inkflow_spelling_11.schema.yaml" : "f3caf1b7223a5002350efdb399d4df59b0f8be64cc88f34bbad1154c12744383",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "a44419123aa8f5993ce4f142857f97232ce95cd4fee0a1e1221b1321d96a0ca4",
+      "inkflow_spelling_15.schema.yaml" : "804d2d10f8760ec398cb035dc0d1fee5719f7cbb7e53d57c189b6155a70d0865",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "63bffb2781aee0f7df1650b4cc178ed60c59e06d1e4ee466c5e72c6fbb51a13b",
+      "inkflow_spelling_19.schema.yaml" : "d95a8e51d9907cc8808c3ec8cefb0044ba165b3abe44bcaa684f410167874a67",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "8bfe3e091b9f46209995a8533c8a64fa558c2bccac0a86236a66a2969a40b90e",
+      "inkflow_spelling_23.schema.yaml" : "6928083e1a17607d77839267b98e61a1acd2449dbe78629ac76478d7c24b1d05",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "cb685a0d68c4912d3774f3bf62c303f7a2a9d5648d3f77703514ef16dd42e324",
+      "inkflow_spelling_27.schema.yaml" : "943f6a8fad9c031ca0ed55ec0760941d79c2f7120c1ea41916ae429cd4eb4a9e",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "94b6c1aa0056480b214eee2351ec266eefc22fb54533846be213b6427432757c",
+      "inkflow_spelling_31.schema.yaml" : "09b1bb6566d25c63752aa4032d46cd39405cdafcc3674bd4781bae48217234ad"
+    }
+  },
+  "overrides" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "39f1a1831782953de5e6be4f4cdc0e6212477f2b0d46306e2ea4316c9ea1bc10",
+      "contentVersion" : "r2-4d46024fbbbc851008beef09a93a96935402fee69794a7a1bbdf61109c4b1cf4",
+      "correctionsSHA256" : "1c61a7fb5b08ea31386d8a20da09b4ce569216d8481d9bc90aff6463b4a4fd37",
+      "dictionarySHA256" : "400405f12391bf62140832080c9abf0b7aee4322d5d708c46c3a6a6570471ed9",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "2f968eaeb1acd71d27315b24a15bd2df627afe6267c75b6724227e64ad806e38",
+      "inkflow_spelling_3.schema.yaml" : "6b72baa17daa118e5483b93770df4a78fa245714e8872da5a789871561c8ba46",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "db819b7e055c070385c3e3eecb453abeda17fb75d345f877a008c5a3e3c03d90",
+      "inkflow_spelling_7.schema.yaml" : "70dc9bf62ed2fee2854e6aecdaa8654420aa3dbb10737a6aef8e4a1efdff6780",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "cd848c7f24c98cfbd85b9804367d75dd170d4e0c553a7114a0b98a80dc59851a",
+      "inkflow_spelling_11.schema.yaml" : "cda7cce1bbc281255a74ad3a9f3666f4e2d3ea77af6edc1d9bbb65fb9e98edd6",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "fbb5a1f336f881c8742464b52279834ce1c2faf88a3f7dac84654cf2c219893c",
+      "inkflow_spelling_15.schema.yaml" : "1d6f80622d49f6fd1d76698f6ae3887ac6f100c04f4d515a2e1b10cdb1e88121",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "8008c4a87f8044940f980a86d972c3577e97b41113d285b2480049802cfb2177",
+      "inkflow_spelling_19.schema.yaml" : "f16718e26c97edad2c3d79b7200de84cca648d1c57da36f668e3de09dd419548",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "c33f261684130a637aef9c8cce72a98e91f084259b01ff78082b0cdf7c869b1f",
+      "inkflow_spelling_23.schema.yaml" : "500fd002d600180badde5ab27732ef748ace32e1854de819cdda34601993c016",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "40c91e1617a5fe595c85eb84d18211ac6eba1af000d590e35ff33dffb1bd77db",
+      "inkflow_spelling_27.schema.yaml" : "b33979cadf78c1f867a049bef9af7354e562ae92614b4e7709cd59dbabfeed27",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "efb11e8b03c2168b896986fc5b2284c3f3365f4be22ede3dfed6b09f7e1facdc",
+      "inkflow_spelling_31.schema.yaml" : "9f041f23922fc1aa5c52b5602844805a3f7a769d5131385173f74845b78f51b9"
+    }
+  },
+  "percent" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "saturation" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 2147483647.0000021,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 2147483647.0000021,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 2147483647.0000021,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 2147483647.0000021,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 2147483647.0000021,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 2147483647.0000021,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 21474836.469999973,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 21474836.469999973,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 21474836.469999973,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 21474836.469999973,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 21474836.469999973,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 21474836.469999973,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "95619cd12608096fcabe1c58a0d3925031b2bba4f65a5e8b86cc46e6e91af9a0",
+      "contentVersion" : "r2-ef18ba5f14b6bb636075541812166761b4fe0f09d1a97593ee34bbc32bbbbd7e",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "9a1cd7474374e61eb3cf21ba78685a66f0bdf6b319580102d2eb6c1c4ae48ed1",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "7d4eb820de6733dbd68a280d44b3c0b8258f96ac",
+          "byteCount" : 52,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "625ad705a28063e6a05adf088477d857bcd7c600091e58777a9c25fd8051f95c"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "5556a5feef33fb5d5ddbb0ac837eb0e7a2ee9892",
+          "byteCount" : 62,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "2e75d66052e5835d6bfa22c50c55fd972518d8f88e521cc4a5e3df3051ded979"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "60e0152cc478f085899044fb8613e7d9a8d4031e1308dbc318905ffd97088469",
+      "inkflow_spelling_3.schema.yaml" : "2ccc2d9ca228b8153dd3e1fc395791adb53b37802b3cb596fdb8d77eb25dc2a5",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "0f779c4a1b8cc857a5dfc0ee9c46ada5f93430efcfb81f5a67db144557ce7767",
+      "inkflow_spelling_7.schema.yaml" : "c249c8d70f13bb8e1f7a198b5634680e53c65f4bb6659cc1fc763439dc5529bc",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "19577df492d71193829ce7289370a16da69369888eaffb75526bebf7a12eae55",
+      "inkflow_spelling_11.schema.yaml" : "20e32a6d06a9faa40eb19ab32ddd4d2ff4be775fa30b4311ea0535c5280224df",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "e666d90f3e15ae9321f36c7507d214178bde726a7adf0c390f42f07bf4db8abc",
+      "inkflow_spelling_15.schema.yaml" : "482759b0b214094c8075f5321431d30a0449d2fd510029f22683d2c5ad5b3640",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "83bad1889996e71ba6b8faa495e7bc02c06256941d6c5ae6cba4fa5142447159",
+      "inkflow_spelling_19.schema.yaml" : "c3dbcd92297ef2dba07a8d72055bf1d57c6f21b58e630f9cb19457e702d48dec",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "76cc56616136ffcfd69708e4e55f30d26cf5b792886a259ff4c9c3290f640a7f",
+      "inkflow_spelling_23.schema.yaml" : "f71b67ad9774cd556de6f20b2d982d00d0b4412c86eaac618c1ac5c5d5c09d33",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "9666500f0c89a90b24af75404a3e4d882503370cd185706efd40772a665e46b5",
+      "inkflow_spelling_27.schema.yaml" : "d3ec3b9ef92b2d0f6728b598d3a687b5319102f131c006a597265d13171523d9",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "977743b897399c6ed8304d1fce38c4da4ec35e1ac4a08931b9afffc5a8ed2a2f",
+      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6"
+    }
+  },
+  "source-comment" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "4774389b2833904b077ce9b5333324786df83f918ce5fabcd90e4ad96c5fa295",
+      "contentVersion" : "r2-45e9729beb5c25d9321726b991f7d9db33429bf5a27d112c9dbf30983fdb20dd",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "3bd8263a38de8369d2f792fe19cce33fbffa04902a4c943daad04c69f025943c",
+      "entryCount" : 1,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "3c7bf4145e6ef3f3975a915e5a2fb1cb96b426ed",
+          "byteCount" : 66,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "ff9a8139245c72fb27d5113248f777819a4802baea9db896717dd1329ead6ab6"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "space-text" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "specialty" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 10.000000000000002,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.5,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "29685405e78a5eaa5f51eb76217ade8a4707aa990d8bf6b4ee7163369e49bb15",
+      "contentVersion" : "r2-d6858671017f77e9f44a23e959c0fa31d80ec36391530ddcdfd265cc79fef490",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "dad4bfafc40c30526b342c8977aa524221e2f22cead994a61b1d5595b1612930",
+      "entryCount" : 7,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "e8d2033fdaf988948845c076f79bc0d2dd234858",
+          "byteCount" : 62,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "1f5a2f3ce9da1058f0c9eaa6f5f4dc2e4ea5efa7f48322ea50823ec7785c2fff"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "6e4394a7944862b336e52e3aed5a90413e24650c",
+          "byteCount" : 90,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 3,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "a558d619c0624352b2c4a002ec7469b8d97b31058473b56b1863e360256a529c"
+        },
+        {
+          "blobSHA" : "1869c946cbf82a4c8fb21eb43bee93972e22c569",
+          "byteCount" : 91,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "4be1fc624dedfa535e661691eafa845c4efa868aa6531e93ee990fc6f6c57d7b"
+        },
+        {
+          "blobSHA" : "0fe0e1c792f5f126893562bea5657cb67221161a",
+          "byteCount" : 120,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 4,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "2d8ef440cfafa050872d67ff0f453ed430efacff9a1dc176dd1d8aa4eca69db2"
+        },
+        {
+          "blobSHA" : "a32eec54cbd9e448dd784f0b24100be93e41ef7d",
+          "byteCount" : 61,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "70db0ab9d14e767f3b304494faf557d0e8179aa100a8004461f2eb1444f2f953"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "4694be89641793c66ff9ab4e325788c8be22c75b96e9bf9b03df30db6a49b774",
+      "inkflow_spelling_3.schema.yaml" : "dccd6006ce7bd34783868cee6275ef3fa0aab6e8d407129254b4f007a8ffb5c4",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "bde9404e3978da917ae1c0f7c8a2ddf5f57d1ee6d4666260f0fe332cbc631cb5",
+      "inkflow_spelling_7.schema.yaml" : "26152ea7e5eda8f6c86c4c56e6a7d5ca8843c99c237f48ca32707818fc527d36",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "5161921dba22e25096f3a1f9e9b38eae2a0c9089a5c4936908d6ae7ce72a6c8c",
+      "inkflow_spelling_11.schema.yaml" : "309903797b8f94b723306c131e2244df61c40fa77b5ef21dcba1954d87b05387",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "4485f2732f0befbe85fd3ee2b18e3859347011edde7755e5a62de248d7145919",
+      "inkflow_spelling_15.schema.yaml" : "655352bcdbb7756d1b4888a7f0e103e61a551cdc838d08c330d91e9f6ca07726",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "7432030b98538f5e7ef2024123a60cae2c268c1873757f1af9a7fae978e276ba",
+      "inkflow_spelling_19.schema.yaml" : "98de7e2678b153ee6f953eb303e7a46a4820f087d9cd3a5b527b35a562708110",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "273c52589a6316f1289171b26b4cf4a29483b8f0b37e349b8b743450fd145267",
+      "inkflow_spelling_23.schema.yaml" : "ca7401be20299c10fbf7d8b3fa1c18049ba81e0c6cf04aa527abc0e778a58444",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "53c7fae1c4a112f8a9137da2fc5562b5c66bf13497975dd9fd6c44b65c8cbe3e",
+      "inkflow_spelling_27.schema.yaml" : "59d81bb9101799789041c9d4835345fe0ee915121c160b9d027ba12899a76e80",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "73c14745706c3ab573c32b1a36380d71f58a8c10df7bdcc775d0abda0e426bf3",
+      "inkflow_spelling_31.schema.yaml" : "f88ae13be1cc9f83af957ae1e2d5dd4373feee632031c73a8aebbf66aa1c0bd0"
+    }
+  },
+  "specialty-empty-weight" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "selected-computer"
+    }
+  },
+  "syllable-boundary" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "92866f162d56ddf223be5777d6d9dca6ee4dd9d3b173712411f8e88456303ae5",
+      "contentVersion" : "r2-d4e41f584402d3a7ab86339f7e5c66289ece25a626ec8642f946d0b7571061a8",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "ac3cafa068a9305344f39e52cb9bcad495f595ecaa6bebac8b44edd7f1f17e37",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "e0e8b4420e2ba563ae554f1fb1ca786fdc959b6d",
+          "byteCount" : 1203,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "c7e2547eba058adaac66c4ab6e0eaf9eac358bff4dbc8caad58c70e2ef4b27ab"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "25697482d769fe5144f14d8a3989aca46cba22bb8a9228094846639d8f8b6697",
+      "inkflow_spelling_3.schema.yaml" : "9836716b70f97ee53ddd8a19cfc7d9536bf6c798640ce2930cb966ca03a67aae",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "d514b3a2ba588c83a1163447136db69083a8c24aaaeac43fa83eeaf267eb3d4f",
+      "inkflow_spelling_7.schema.yaml" : "4a991b6ece80d3b352cea3800fb3cad52839f798506ed84b15a577a8e23e1d76",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "a4d2bf3861a201604763f844e770349d07cc37fb492d4f799eab5324c6fb7136",
+      "inkflow_spelling_11.schema.yaml" : "305688a49ded2623fac3578d85e067d7cfcd9dbae626586b9b1cb582fccc7341",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "c69457e231d033989c46b039e52d08e5fa18a21fddf26bfcc77942c17758a221",
+      "inkflow_spelling_15.schema.yaml" : "9103f7516f46357c50562166fee3733316efee0e36cd94d23212858d1b998681",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "5aa48a5a311c62ac446f594ba975c3b53fc4552545c9a8c39a7be0db3f1b7d63",
+      "inkflow_spelling_19.schema.yaml" : "e4dff5172e43dd4fecf568319f443e01d7582796eced20d888f4816e32e31dc9",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "e8e276edb05e938306f2699826b61939a4cc173087535c93624d3b7ed09f08d2",
+      "inkflow_spelling_23.schema.yaml" : "a5494766b7ac46b2bfcdb9899e07f3f165a237eb3a24d93e4bdd6a9f74a65c07",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "8b2ef87a5b71f406d1fa7b03deeb68abe37dc577a9047d43a9d3fbc79ad29aec",
+      "inkflow_spelling_27.schema.yaml" : "2854f0afe416b37eb257ec3d403d36a4ba7d57c3429ed82a91325a1f59b7a6a0",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "cc0fdef927513de910c4c67094c85392a781ce1497b3fdf835107736ffba09cf",
+      "inkflow_spelling_31.schema.yaml" : "86556f389c78f3f98194571f0763b72b46ba1ffd4be3d800ccef8604a339cb29"
+    }
+  },
+  "syllable-over-limit" : {
+    "error" : {
+      "code" : "invalid-reading",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "text-boundary" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "c6de47b61ab3dca136e02abca2c0c9a5dadb256c1e4c0e7aee0209ed567cd50a",
+      "contentVersion" : "r2-c0d2bbcc696f1b5dd51143e3f7f53114442b39f2e77ca94ff8d5ff2c0d1787dd",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "a49af1481cad7178fe64f3df58fe91bcc1d2ca2c3fe421e40418439e0a45e640",
+      "entryCount" : 2,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "75ba009b2077c939b6563cd5e09ed5273456833f",
+          "byteCount" : 820,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 2,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "edba47b382be43b5ccf3e082ab1b0fb7d4c6d08310b1b50ebe4bb55563037438"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "text-over-limit" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  },
+  "unicode-blank" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 1,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 1,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 1,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "4774389b2833904b077ce9b5333324786df83f918ce5fabcd90e4ad96c5fa295",
+      "contentVersion" : "r2-45e9729beb5c25d9321726b991f7d9db33429bf5a27d112c9dbf30983fdb20dd",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "3bd8263a38de8369d2f792fe19cce33fbffa04902a4c943daad04c69f025943c",
+      "entryCount" : 1,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "9b60f13b40a4c3b732f1e06f9904ec9a1bdcf691",
+          "byteCount" : 62,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "f2ecca6d3522bd304b80b4ee563900bea99f7b43e74e755ee5287ce0d0e12bcd"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e68959f1cc5340fdf8b6007e4c74d258aa3924deac94059ee64b07a81ff8717f",
+      "inkflow_spelling_3.schema.yaml" : "4f6bbb6a72700e1c27522ada21e7f877cdbc6e71b2f846be4cb9559ba524b2e9",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "a015bdc21a3cce995e971375de1c69ec6055b9d897bc14055d20f9329d9b6162",
+      "inkflow_spelling_7.schema.yaml" : "a930c9a0ce522c3b6545a94816444e6eab2c16760816c35f0a320b55f1009d6f",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "c5af9fa931267de509b0965e514a27a2bd24b93858e14dceb6a8c4f899574408",
+      "inkflow_spelling_11.schema.yaml" : "27595951f3b72f756565b6ccabb8f9fea7636970e350fbf11caccb21579a8029",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "30830cf47d4c0877643094231df3f9e913a6989e86d2a2097fec93a1a0c41936",
+      "inkflow_spelling_15.schema.yaml" : "981ee4e63f2b1756d71310484aebcd8b34e760168543a2889d11f2a6866e7d43",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "2e498237818c5a73cbc6057b448bf33d79d5b097f70b67077908d45752526a72",
+      "inkflow_spelling_19.schema.yaml" : "4b13d1a44f1749d2cbc3d76df6b3345fb1fcb380f3d2c43ea4b1a7587c9c4aaa",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "6f4f2a578fb1664959949b855dbd2df0e9e17947047cd660ecad1358732ebb52",
+      "inkflow_spelling_23.schema.yaml" : "1ef10824f473be19791448286c5b35fff09fa8ceeca314d3d8638450f2ab4ae3",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "66ac19a59418a8b64c8956092e862db45354a28eb599775085af29c690ff6b43",
+      "inkflow_spelling_27.schema.yaml" : "925a48fe5d10b523765153c63fd61962057577cbd73d8eb09cfa8bc0faf875de",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+    }
+  },
+  "union" : {
+    "manifest" : {
+      "calibrations" : [
+        {
+          "buckets" : [
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 10.000000000000002,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 10.000000000000002,
+          "pairCount" : 1,
+          "sourceGroup" : "ice"
+        },
+        {
+          "buckets" : [
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 1,
+              "syllables" : 1,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 2,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 3,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 4,
+              "usedOverall" : true
+            },
+            {
+              "multiplier" : 0.5,
+              "pairCount" : 0,
+              "syllables" : 5,
+              "usedOverall" : true
+            }
+          ],
+          "overallMultiplier" : 0.5,
+          "pairCount" : 1,
+          "sourceGroup" : "legacy"
+        }
+      ],
+      "contentSHA256" : "393d2c367fea6d95e0a54d73d5bcb281e345f00f110f6b5afbc1baa93fb5c202",
+      "contentVersion" : "r2-6bb689b7d0866ba6be8ad0cfa8b12d3999e7da120954ab0b061912ea653d96bb",
+      "correctionsSHA256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "dictionarySHA256" : "9adda4cd1403061a51a4f6c860aac5f90f078c4c131ba6f31cea9a4b233407b0",
+      "entryCount" : 9,
+      "formatVersion" : 1,
+      "recipeVersion" : 2,
+      "sources" : [
+        {
+          "blobSHA" : "27aeba854ee38d3c6ef14dabbce4a432e0e62efa",
+          "byteCount" : 67,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-8105",
+          "name" : "白霜 · 字表",
+          "path" : "cn_dicts/8105.dict.yaml",
+          "recordCount" : 3,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "9c9209d35925075c0752b51a00a366b6af972d1cf577bac5c79776365221cad1"
+        },
+        {
+          "blobSHA" : "b241786ce950d4d49b475e573296ee60dbb38805",
+          "byteCount" : 68,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-base",
+          "name" : "白霜 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 3,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "ca80a8692d0cfab75d4f8a2bea0ca5bacf89ca6d2f6b9d95838a908b3dbe5311"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-ext",
+          "name" : "白霜 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "9d63846e0f303ff4a50cf88b8624ebe7e2f9cac3",
+          "byteCount" : 78,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-idiom",
+          "name" : "白霜 · 成语与诗句",
+          "path" : "cn_dicts_cell/idiom.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "1e31ba8d8cd685162e4ac0e32fe14382e2b07679263d82d26ed8b1254d712c1a"
+        },
+        {
+          "blobSHA" : "49a6c9be64ae922a63f2d61ec7cd2ac100e9d106",
+          "byteCount" : 91,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-base",
+          "name" : "雾凇 · 基础",
+          "path" : "cn_dicts/base.dict.yaml",
+          "recordCount" : 4,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "56619145981eb58d73e6c8bcca99a96aeb074cdf08e0a5c67261855735126e79"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "fbb516b2786e4d5444383706d13c31c2e4d10c08",
+          "id" : "ice-ext",
+          "name" : "雾凇 · 扩展",
+          "path" : "cn_dicts/ext.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "iDvel/rime-ice",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-computer",
+          "name" : "白霜 · 计算机",
+          "path" : "cn_dicts_cell/computer.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "19167adfe67fcba2f65c336117557639ff254ddb",
+          "id" : "frost-exthot",
+          "name" : "白霜 · 网络热词",
+          "path" : "cn_dicts_cell/exthot.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "gaboolic/rime-frost",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "c3205066dc8f747b798a0ca9258199e75bc9a4f4",
+          "byteCount" : 45,
+          "commit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
+          "id" : "selected-computer",
+          "name" : "搜狗 · 计算机词汇（Rime 转换）",
+          "path" : "selected.jisuanjicihuidaquan.dict.yaml",
+          "recordCount" : 1,
+          "repository" : "alswl/rime-selected",
+          "sha256" : "899e4489b2616edd19be37ae1c190493441a2eb566ae6843ee545f4503e6786b"
+        },
+        {
+          "blobSHA" : "12866782b9475a41a3fdddcb27ec66ab75ed7744",
+          "byteCount" : 83,
+          "commit" : "0c6861ef7420ee780270ca6d993d18d4101049d0",
+          "id" : "legacy",
+          "name" : "旧版拼音 · 兼容增量",
+          "path" : "pinyin_simp.dict.yaml",
+          "recordCount" : 3,
+          "repository" : "rime/rime-pinyin-simp",
+          "sha256" : "2399f1fccb78394554a3cfa1588a97ece240dbd57ca90330c8474138f41f2cc7"
+        }
+      ]
+    },
+    "spellingSHA256" : {
+      "inkflow_spelling_0.schema.yaml" : "eb985f3da2e9640a2e5ba586fb8a1e7cedcadeb4725ce50b267114f3af3f99f7",
+      "inkflow_spelling_1.schema.yaml" : "36e1c9fc9c7d7f53d11656789193fdbecca6fd1efea45093815f990cd6b02f6a",
+      "inkflow_spelling_2.schema.yaml" : "e8467ff8f6d515453abd6e098a7fdfc6c8384e49525d66b301ac181abf5a0aa1",
+      "inkflow_spelling_3.schema.yaml" : "6652303e3afddca933ca81d6cf0c5178d06138e14639c2f47b74bf70ae9a1e5a",
+      "inkflow_spelling_4.schema.yaml" : "6ea45056b1cb1a1a0e953b6b54abaf3a16176649b247a74143b598a60b39c784",
+      "inkflow_spelling_5.schema.yaml" : "a4f594152f04ba33d6c5226458273c13b14caec9b97a80272c5b7f4ed09dd3af",
+      "inkflow_spelling_6.schema.yaml" : "08a1175db6e4551bb8531eae27cfbb51c0024c6734d5194e6ed01df9e9138a4b",
+      "inkflow_spelling_7.schema.yaml" : "af7c5f9ef47d26e2d182dd8f1e5c8b23eebc55b0f5db9e73983022240a949adb",
+      "inkflow_spelling_8.schema.yaml" : "3082148163842c0c9697bee00e6a48ff8302b59ecac19d4d1f22df9f4eeee015",
+      "inkflow_spelling_9.schema.yaml" : "f171ec24c1dfafdc0f7e5d6df6e03894838bb331dcafbc29a6ae387728f41cef",
+      "inkflow_spelling_10.schema.yaml" : "a20523a14dd90a7d01e2c9579e8cfe003ae80d36523a3d16798252189d3d60c0",
+      "inkflow_spelling_11.schema.yaml" : "7c7cb6343b3cb38bc98d148b2b58776aa5f17015f207d52cc83d3831db223e47",
+      "inkflow_spelling_12.schema.yaml" : "b936ff012e9c816938887d387d49329709f8d26e9b34736faffab6d70b4f9f22",
+      "inkflow_spelling_13.schema.yaml" : "0a4457f997e2f92ee4bc8023dd128496df2f9853d916553b78824a50f0526edf",
+      "inkflow_spelling_14.schema.yaml" : "1bcd1d03bebccc5ce207a43a877a729378aa9d8f4fc591695cd73dc2676ffce1",
+      "inkflow_spelling_15.schema.yaml" : "dabd8adb0482075608fecdd1fa789bdf2d72e258b31fb7c6b5c5acb585242cfb",
+      "inkflow_spelling_16.schema.yaml" : "b9c71ff96f67042859bd1fea216e7d1ace2ef92b0165ae128617d1fec91a0c80",
+      "inkflow_spelling_17.schema.yaml" : "b5f29a7df1ee0ddd5be5f7f149d4ff9fc5a39100b4c25ec0fc882b0953ef4c4b",
+      "inkflow_spelling_18.schema.yaml" : "bb4ebfb922dc28c751d5005b5d024285737d5fe01d9e14c420b33774a7a30d07",
+      "inkflow_spelling_19.schema.yaml" : "343f9188bd05e6e879fa5a57595cb49713b8730898cde4f6c1c3d4f59ae83c9b",
+      "inkflow_spelling_20.schema.yaml" : "caa5c3a4e3e6182bee3129a8bd3309fe267587c6628883234f25d7e415648e8c",
+      "inkflow_spelling_21.schema.yaml" : "1edb83db2bf04eee537241b2ece761ed6465cd96045c5392e4230790499a81e3",
+      "inkflow_spelling_22.schema.yaml" : "55159abce121622ec9b23ce8ae44cd3f5999c6df60d7cf519d518b626e89043c",
+      "inkflow_spelling_23.schema.yaml" : "158896ce1a0c7dca61d018755289bea379fb7ee08ea50e4e67d57089a850c60c",
+      "inkflow_spelling_24.schema.yaml" : "0490c12f0eae96a916ba59a046827134cc86b58aa95c55d5da5d6396196ea5b4",
+      "inkflow_spelling_25.schema.yaml" : "be89bd9e6fc0614397220fabce9b55c3b39e242589255f87260f7f088b3e1462",
+      "inkflow_spelling_26.schema.yaml" : "09ea27a9296caae5615a88245eb87ec2e37da162de4cee8aa15d8599c5687e01",
+      "inkflow_spelling_27.schema.yaml" : "852a84d3703257dd6e0b3ec61cf95a759ef36666e3a0b9b09c0389624cd10976",
+      "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
+      "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
+      "inkflow_spelling_30.schema.yaml" : "efff2776afc5d823862523fc19000b65b4df8571bfeb9e6583a16951edb1bebe",
+      "inkflow_spelling_31.schema.yaml" : "77100ab1c52a0f8a9a5648439d2b5c19b1dfd42ba4555313134dbbada265af22"
+    }
+  },
+  "weight-overflow" : {
+    "error" : {
+      "code" : "source-format",
+      "line" : 4,
+      "source" : "frost-8105"
+    }
+  }
+}
