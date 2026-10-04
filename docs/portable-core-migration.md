@@ -168,7 +168,7 @@ Track quality recording/export, dictionary downloads, AI, voice backends, and ad
 
 Use old/new behavioral comparisons for preedit and caret position, candidate order, commits, partial selection, paging, cancellation, configuration boundaries, and learning after restart. Preserve useful reference cases as permanent regression tests when the old implementation is removed.
 
-Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines.
+Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines. Use the [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) for the recorded macOS protocol.
 
 Run only relevant test units. Existing macOS commands remain `bash macOS/scripts/build.sh` and focused `bash macOS/scripts/test.sh ...` invocations. UI-only changes get a build and user inspection. Reserve the full suite for releases or explicit requests. Run Mac builds outside a sandbox.
 
@@ -179,6 +179,5 @@ Build/test and installation remain separate operations. Remote automation must n
 - Confirm IBus/GNOME as the initial Linux target before committing the frontend implementation.
 - Choose Android versus iOS order after the macOS cutover.
 - Arrange mobile device/toolchain access and, later, Windows development/test access.
-- Choose numeric performance/resource budgets from measured baselines.
 
 These choices do not block creating the desktop baseline or minimal shared engine.

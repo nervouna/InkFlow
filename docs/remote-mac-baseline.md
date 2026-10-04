@@ -4,7 +4,7 @@ This workflow supports [#33](https://github.com/nervouna/InkFlow/issues/33). It 
 
 ## Run from Linux
 
-From the `portable-core` worktree:
+From the repository root in your active worktree:
 
 ```sh
 python3 scripts/mac-remote.py build
