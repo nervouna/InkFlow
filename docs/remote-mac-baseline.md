@@ -37,7 +37,7 @@ A dirty local checkout is allowed because only the explicitly resolved committed
 `baseline` runs `Core/scripts/capture-migration-baseline.sh` in a clean checkout. It:
 
 1. Verifies pinned dependencies and standalone Core boundaries.
-2. Builds the quality harness, performance harness, cache tool, and ranking tests in release mode for `arm64-apple-macosx26.0`.
+2. Builds the quality harness, performance harness, and cache tool in release mode for `arm64-apple-macosx26.0`. Ranking regressions use debug mode because their existing support module imports the domain with `@testable`.
 3. Prepares one resource tree and compiled cache, reused by both observational harnesses.
 4. Runs the existing quality corpus and compares it with the checked-in expected results. Its normal five-selection training and restart recipe is unchanged.
 5. Runs five fresh performance processes with absent user directories. Each types the same corpus five times without committing or training. Pass zero and subsequent passes are reported separately.

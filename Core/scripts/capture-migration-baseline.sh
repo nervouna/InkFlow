@@ -13,9 +13,10 @@ output=$(cd "$1" && pwd)
 bash macOS/scripts/dependencies.sh
 bash Core/scripts/check-boundaries.sh --standalone
 source Core/scripts/swift-package.sh
-for product in quality-baseline performance-baseline packaged-cache-tool ranking-tests; do
+for product in quality-baseline performance-baseline packaged-cache-tool; do
   build_core_product "$product" "build/core-tests/$product" release
 done
+build_core_product ranking-tests build/core-tests/ranking-tests debug
 build/core-tests/ranking-tests
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-migration-baseline.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
