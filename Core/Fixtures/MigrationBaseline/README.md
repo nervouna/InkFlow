@@ -44,11 +44,11 @@ Startup includes prepared-cache validation and a ready context index, but exclud
 
 See [the remote workflow](../../../docs/remote-mac-baseline.md) for the complete protocol. Compare future implementations using the same work boundaries, options, corpus, resource identities, hardware, and build configuration. Recapture a Swift reference alongside the new core if the OS/toolchain or test conditions change substantially.
 
-## Proposed review limits
+## Approved review limits
 
-These limits are pending user approval for #33. They are migration regression-review thresholds for this headless protocol, not claims about installed typing latency or mobile requirements.
+The user approved these limits for #33. They are migration regression-review thresholds for this headless protocol, not claims about installed typing latency or mobile requirements.
 
-| Metric | Proposed limit |
+| Metric | Approved limit |
 | --- | ---: |
 | Median startup across five processes | 2,300 ms |
 | Maximum peak RSS after input across five processes | 344 MiB |
@@ -57,4 +57,4 @@ These limits are pending user approval for #33. They are migration regression-re
 | First-pass key p99 | 2.6 ms |
 | Maximum first-key latency across five processes | 25 ms |
 
-A breach calls for a focused repeat on the same machine and investigation of reproducible changes. Faster measurements do not compensate for behavioral drift or lost learning data. Keep raw maxima and slow-case identities even when percentile limits pass; investigate new stalls that the aggregate percentiles hide. No automated performance budget is enforced yet.
+A breach calls for a focused repeat on the same machine and investigation of reproducible changes. Faster measurements do not compensate for behavioral drift or lost learning data. Keep raw maxima and slow-case identities even when percentile limits pass; investigate new stalls that the aggregate percentiles hide. These limits are enforced through review; the capture script reports measurements without automatically failing on a threshold.

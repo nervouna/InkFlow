@@ -63,7 +63,7 @@ A key sample includes synchronous `IFEngine.input`, `takeCommit`, and `snapshot`
 
 Memory is Darwin `getrusage().ru_maxrss` in bytes, sampled after startup and after input. It is the process's peak resident set, not current resident memory, physical footprint, or the installed app's memory. Raw timing records are retained in memory and contribute to the final peak.
 
-Percentiles use nearest rank; median uses the midpoint average for even counts. Compare release builds on the same hardware, OS/toolchain, resource hashes, options, and workload. Investigate first-pass and repeated-pass distributions separately. No performance budget is enforced until the measured reference and proposed limits are approved.
+Percentiles use nearest rank; median uses the midpoint average for even counts. Compare release builds on the same hardware, OS/toolchain, resource hashes, options, and workload. Investigate first-pass and repeated-pass distributions separately. The [approved review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) apply to this protocol. A breach calls for a focused repeat and review; the capture script does not automatically fail on a threshold.
 
 ## Focused tooling checks
 
