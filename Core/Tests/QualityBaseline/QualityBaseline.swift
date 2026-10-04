@@ -170,11 +170,11 @@ func treeDigest(_ root: URL) throws -> String {
                           "librimeSHA256": try digest(root.appendingPathComponent("build/deps/dist/lib/librime.1.17.0.dylib")),
                           "luaPluginSHA256": try digest(root.appendingPathComponent("build/deps/dist/lib/rime-plugins/librime-lua.dylib")),
                           "system": ProcessInfo.processInfo.operatingSystemVersionString]
-        for path in ["Core/Sources", "schemas", "macOS/config", "macOS/Data"] {
+        for path in ["Core/Sources", "schemas", "Core/config", "Core/Data"] {
             provenance[path + "SHA256"] = try treeDigest(root.appendingPathComponent(path))
         }
         provenance["runnerSHA256"] = try digest(root.appendingPathComponent("Core/Tests/QualityBaseline/QualityBaseline.swift"))
-        for path in ["Core/Package.swift", "Core/scripts/swift-package.sh", "Core/scripts/test-quality-baseline.sh", "macOS/scripts/dependencies.sh", "macOS/scripts/prepare-rime.sh"] {
+        for path in ["Core/Package.swift", "Core/scripts/swift-package.sh", "Core/scripts/test-quality-baseline.sh", "macOS/scripts/dependencies.sh", "Core/scripts/prepare-rime.sh"] {
             provenance[path + "SHA256"] = try digest(root.appendingPathComponent(path))
         }
         let report = Report(formatVersion: 1, provenance: provenance, inputOptions: InputPreferences().recordedValues, corpus: corpus, results: results)

@@ -21,7 +21,7 @@ The existing code already separates much of the engine from the macOS frontend:
 - `schemas/`: Rime configuration, Lua modules, and OpenCC resources.
 - `Core/Tests/` and `Core/Fixtures/QualityBaseline/`: existing regression coverage and behavioral reference material.
 
-Shared Swift code still imports Apple-specific facilities, and build scripts assume macOS binaries and toolchains. Dictionary preparation assets also live under `macOS/`. A separate Swift package does not yet constitute a Linux port.
+Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) still uses the Swift generator through the Mac toolchain. A separate Swift package does not yet constitute a Linux port.
 
 Development started on branch `portable-core`, in `.worktrees/portable-core/`, from revision `8669c48`. Linux Rust tooling and SSH access to the Apple Silicon Mac through `ssh tanaris` were verified. No migrated engine or cross-platform performance result existed when this plan was agreed.
 

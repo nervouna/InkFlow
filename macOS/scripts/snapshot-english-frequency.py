@@ -18,7 +18,7 @@ SOURCE_SHA256 = "4f039026b2746fa9b0d4d7a248cdf866b64609dca2317708f04e9e68ac7d868
 DATA_SHA256 = "dffae8066b78dce0a6667cf5f58e567054f902674667090a7ac8a8a44628b05c"
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "build/deps/rime-easy-en-54a4a07289412efc54134092c0d945f895a71ed3/easy_en.dict.yaml"
-OUTPUT = ROOT / "macOS/Data/english-wordfreq.tsv"
+OUTPUT = ROOT / "Core/Data/english-wordfreq.tsv"
 
 
 def main() -> None:

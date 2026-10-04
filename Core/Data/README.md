@@ -30,10 +30,10 @@ This is a static common-word baseline, not a word-validity model or a current
 new-word list. The provider's data is approximately through 2021 and is no
 longer updated. It does not distinguish `US/us`, repair upstream display forms,
 or estimate frequency specifically for English words inserted into Chinese.
-The configurable gate and exact-word overrides live in `macOS/config`; broad
+The configurable gate and exact-word overrides live in `Core/config`; broad
 cleaning and new-word policy remain outside this snapshot.
 
 Sources: [wordfreq 3.1.1](https://pypi.org/project/wordfreq/3.1.1/),
 [upstream maintenance statement](https://github.com/rspeer/wordfreq/blob/master/SUNSET.md).
 Attribution, adaptation notice and CC BY-SA 4.0 terms are in
-[`macOS/Licenses/wordfreq.txt`](../Licenses/wordfreq.txt), also shipped in the app.
+[`macOS/Licenses/wordfreq.txt`](../../macOS/Licenses/wordfreq.txt), also shipped in the app.

@@ -19,7 +19,7 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-core-dictionaries.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 if [[ -z "$shared" ]]; then
   shared="$scratch/generated"
-  bash macOS/scripts/prepare-rime.sh "$shared"
+  bash Core/scripts/prepare-rime.sh "$shared"
 fi
 inkflow_test_timing_report core-dictionaries prepare "$stage_started"
 stage_started=$(inkflow_test_timing_now)

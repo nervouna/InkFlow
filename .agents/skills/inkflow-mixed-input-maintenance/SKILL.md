@@ -34,9 +34,9 @@ Paths in the reference and commands are relative to the repository root.
 
 | Responsibility | Source |
 | --- | --- |
-| Shared admission and dictionary generation | [prepare-rime.sh](../../../macOS/scripts/prepare-rime.sh) |
-| Configurable gate/scaling and exact-word corrections | [english.conf](../../../macOS/config/english.conf), [english-overrides.tsv](../../../macOS/config/english-overrides.tsv) |
-| Frequency provenance, limits, regeneration and hashes | [Data/README.md](../../../macOS/Data/README.md), [snapshot-english-frequency.py](../../../macOS/scripts/snapshot-english-frequency.py) |
+| Shared admission and dictionary generation | [prepare-rime.sh](../../../Core/scripts/prepare-rime.sh) |
+| Configurable gate/scaling and exact-word corrections | [english.conf](../../../Core/config/english.conf), [english-overrides.tsv](../../../Core/config/english-overrides.tsv) |
+| Frequency provenance, limits, regeneration and hashes | [Data/README.md](../../../Core/Data/README.md), [snapshot-english-frequency.py](../../../macOS/scripts/snapshot-english-frequency.py) |
 | Standalone lookup and canonical Rime learning | [inkflow_english.lua](../../../schemas/lua/inkflow_english.lua) |
 | Public mixed decoding and native personal spans | [inkflow_mixed.lua](../../../schemas/lua/inkflow_mixed.lua), [InkFlowRimeNative.cpp](../../../Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp) |
 | Exact-English reachability and bounded short conflicts | [inkflow_short_conflict.lua](../../../schemas/lua/inkflow_short_conflict.lua) |
@@ -50,7 +50,7 @@ Paths in the reference and commands are relative to the repository root.
 ## Verification and delivery
 
 - Run `bash macOS/scripts/test.sh quick` plus the units named below for the area you changed. Do not run the full suite by default.
-- For static admission or generation semantics, add or adjust fixtures in [test-prepare-rime.sh](../../../macOS/scripts/test-prepare-rime.sh) and candidate behavior in [EngineTests.swift](../../../macOS/Tests/EngineTests.swift). Check prefixes/backspaces, case/code aliases, exact/completion paths, later pages, selection/re-entry, and Chinese before/after English. A completed sentence alone misses unfinished-Pinyin regressions.
+- For static admission or generation semantics, add or adjust fixtures in [test-prepare-rime.sh](../../../Core/scripts/test-prepare-rime.sh) and candidate behavior in [EngineTests.swift](../../../macOS/Tests/EngineTests.swift). Check prefixes/backspaces, case/code aliases, exact/completion paths, later pages, selection/re-entry, and Chinese before/after English. A completed sentence alone misses unfinished-Pinyin regressions.
 - For canonical or mixed personal learning, use the isolated Rime contracts in [test-ai-learning.sh](../../../macOS/scripts/test-ai-learning.sh). Cover display-only and cancellation negatives, first/repeated selection, immediate undo, exact learned recall, excluded-public-word isolation, initial/internal/final mixed positions, restart, deduplication, paging/editing, case/symbol fidelity, bounded input, and `pinyin_simp.userdb` isolation.
 - For ranking changes, retain strict page identity and native-span fail-closed behavior. Cover neutral Chinese-first ordering, exact before completion, technical-context promotion only for exact standalone personal candidates, capped personal strength, stale/invalid metadata, selected prefixes, custom phrases, and every displayed-to-native selection path.
 - For voice learning, cover final-ASR-only observation, one exact ASCII token substitution, grace-period revalidation, immediate undo, timeout, secure/unreadable clients, adjusted ranges, client/session/selection drift, unrelated edits, ambiguous/malformed aliases, restart, exact token boundaries, AI polish on/off, and ordinary keyboard/Chinese behavior. The focused units normally include `voice-session`, `apple-voice`, `voice-lexicon`, `voice-controller`, `ai-learning`, `settings`, and `quality`.

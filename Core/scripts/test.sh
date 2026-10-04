@@ -35,7 +35,7 @@ trap 'rm -rf "$scratch"' EXIT
 stage_started=$(inkflow_test_timing_now)
 if [[ -z "$shared" ]]; then
   shared="$scratch/Rime"
-  bash macOS/scripts/prepare-rime.sh "$shared"
+  bash Core/scripts/prepare-rime.sh "$shared"
 fi
 inkflow_test_timing_report shared-core resources "$stage_started"
 stage_started=$(inkflow_test_timing_now)
