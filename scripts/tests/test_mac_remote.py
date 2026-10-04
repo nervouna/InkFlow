@@ -96,8 +96,11 @@ class RemoteTests(unittest.TestCase):
     def test_action_allowlist(self):
         self.assertEqual(remote.commands("test", ["engine"], self.root),
                          [["bash", "macOS/scripts/test.sh", "engine"]])
+        self.assertEqual(remote.commands("portable", [], self.root),
+                         [["bash", "Core/Portable/test.sh", str(self.root)]])
         for action, units in [("install", []), ("test", ["all"]), ("test", []),
-                              ("test", ["engine; touch bad"]), ("build", ["engine"])]:
+                              ("test", ["engine; touch bad"]), ("build", ["engine"]),
+                              ("portable", ["engine"])]:
             with self.assertRaises(ValueError):
                 remote.commands(action, units, self.root)
 

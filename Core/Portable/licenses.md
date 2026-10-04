@@ -1,0 +1,46 @@
+# Portable runtime distribution review
+
+This review covers the pinned source build and the existing resource set for #34. It records packaging requirements and unresolved rights questions; it is not legal clearance for an app store release. The probe is a development artifact with an InkFlow-authored three-entry dictionary, not a redistributable product package.
+
+## Native code
+
+Source revisions and archive hashes are in `native-sources.lock.json`. Paths below are relative to the extracted `build/portable/sources/` directory.
+
+| Component | License and source notice | Distribution requirement |
+| --- | --- | --- |
+| librime 1.17.0 | BSD-3-Clause, `rime/LICENSE` | Retain copyright, conditions, and disclaimer in source and binary distributions. |
+| librime-lua | BSD-3-Clause, `rime-lua/LICENSE` | Retain its separate notice, including when merged into librime. |
+| Lua 5.4.8 | MIT, `lua/lua5.4/lua.h` | Include the copyright and permission notice. |
+| Lua compatibility helpers | MIT notices in `rime-lua/src/lib/lauxlib-compat.c` and `lutf8lib-compat.c` | Preserve their notices when those helpers are included. |
+| Boost 1.89.0 | Boost Software License 1.0, `boost/LICENSE_1_0.txt` | Retain the license with source; include it in product notices for the bundled headers/library. |
+| glog | BSD-3-Clause, `glog/COPYING` | Include notice and disclaimer. |
+| LevelDB | BSD-3-Clause, `leveldb/LICENSE` | Include notice and disclaimer. Optional Snappy/crc32c are disabled. |
+| marisa | BSD-2-Clause **or** LGPL-2.1-or-later, `marisa/COPYING.md` | Use the BSD option and retain its notice. |
+| yaml-cpp | MIT, `yaml/LICENSE` | Include copyright and permission notice. |
+| OpenCC 1.1.9 and its standard conversion data | Apache-2.0, `opencc/LICENSE` | Include license and applicable notices; identify the C++17 build modification. |
+| Darts-clone | BSD notice, `rime/include/COPYING.darts-clone`; OpenCC also vendors Darts-clone | Retain the corresponding notice for the embedded implementation. |
+| UTF8-CPP | Boost Software License notice in `rime/include/utf8.h` and related headers | Preserve the notice with source. |
+| RapidJSON | MIT notices in `opencc/deps/rapidjson-1.1.0/rapidjson/` | Include notices for the headers compiled into OpenCC. |
+| TCLAP | MIT notice in `opencc/deps/tclap-1.2.5/tclap/CmdLine.h` | Required if shipping the OpenCC command-line tools built by this recipe. |
+
+The source archives also contain tests and optional dependencies that this recipe does not build. Do not treat every vendored directory as a shipped component. Conversely, static linkage does not remove attribution duties. A release package must collect the applicable notices from these exact pinned sources; the existing `macOS/Licenses/` directory alone is not a complete manifest for this new source-built runtime.
+
+Linux binaries also depend on the system C/C++ runtime. The prototype does not bundle glibc, libstdc++, or libgcc; a future portable/AppImage package must review the versions it actually includes and their runtime exceptions. macOS uses Apple's system libraries. The probe currently embeds checkout-local rpaths, so neither target's output is ready for end-user distribution.
+
+## Production dictionaries and other resources
+
+The existing [dependency inventory](../../macOS/DEPENDENCIES.md), [Chinese dictionary notice](../../macOS/Licenses/chinese-dictionaries-NOTICE.txt), and [repository NOTICE](../../NOTICE) still apply. Compiling a dictionary does not remove source license obligations.
+
+- rime-frost, rime-ice Chinese data, selected technical-English data, and emoji tables include GPL-3.0 material. Preserve exact upstream sources, modifications, license texts, and a usable corresponding-source delivery plan for generated resources.
+- rime-easy-en is LGPL-3.0, with the incorporated GPL text. Preserve its source and the filtering/weight-generation recipe. Review how users can modify and rebuild the shipped data rather than assuming the native library's permissive licenses cover it.
+- The wordfreq-derived snapshot is CC BY-SA 4.0. Retain attribution and source acknowledgements, identify modifications, and meet share-alike requirements for adapted data.
+- The compatibility Pinyin source is Apache-2.0. OpenCC conversion resources also retain their Apache notices.
+- The original redistribution authorization for Sogou-derived data is **unverified**. An MIT notice on a conversion repository does not establish rights to the underlying dictionary. Resolve authorization or omit/replace affected resources before claiming a cleared new distribution profile.
+
+## Channels
+
+For direct Linux packages and notarized macOS downloads, the reviewed native licenses permit redistribution subject to their notice requirements. Product distribution still needs a generated-resource/source bundle and resolution of the dictionary rights gap. This probe does not change the current macOS package or declare its existing data legally cleared.
+
+For a later iOS App Store keyboard, review GPL/LGPL resource obligations against then-current store terms, signing/installation restrictions, and DRM before selecting the resource profile. Do not assume that distributing data separately settles those questions. The Android store and Windows package reviews likewise belong to their delivery phases, including any copied runtime libraries. No mobile or Windows channel is validated by this desktop build.
+
+The small checked-in probe fixture avoids these production-data questions for feasibility testing. It must not become a silent replacement for the existing vocabulary or ranking policy.

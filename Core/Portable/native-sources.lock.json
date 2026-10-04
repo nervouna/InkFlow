@@ -1,0 +1,47 @@
+{
+  "rime": {
+    "url": "https://codeload.github.com/rime/librime/tar.gz/33e78140250125871856cdc5b42ddc6a5fcd3cd4",
+    "sha256": "d3f48c2c58f718402229031d8d95fde9cac07ababa8fecf7d18b91946f27fee6",
+    "revision": "33e78140250125871856cdc5b42ddc6a5fcd3cd4"
+  },
+  "glog": {
+    "url": "https://codeload.github.com/google/glog/tar.gz/7b134a5c82c0c0b5698bb6bf7a835b230c5638e4",
+    "sha256": "9c48c7c631be5af3502a19d06ebdb5c2f67d8d0bf216f896848089c1792e6193",
+    "revision": "7b134a5c82c0c0b5698bb6bf7a835b230c5638e4"
+  },
+  "leveldb": {
+    "url": "https://codeload.github.com/google/leveldb/tar.gz/99b3c03b3284f5886f9ef9a4ef703d57373e61be",
+    "sha256": "bc87b9bbc5674c91246a89813355e78401759761342cc049e1c3d56350a8a9d1",
+    "revision": "99b3c03b3284f5886f9ef9a4ef703d57373e61be"
+  },
+  "marisa": {
+    "url": "https://codeload.github.com/s-yata/marisa-trie/tar.gz/3e87d53b78e15f2f43783d5e376561a8c9722051",
+    "sha256": "c24516edc43be8049ef4e23e50a574d4670036fe3595c49c0f01d4d87ce58f57",
+    "revision": "3e87d53b78e15f2f43783d5e376561a8c9722051"
+  },
+  "opencc": {
+    "url": "https://codeload.github.com/BYVoid/OpenCC/tar.gz/556ed22496d650bd0b13b6c163be9814637970ae",
+    "sha256": "2792fc0944359c5d099bd79e08bfffce250bf3760aa0ec306e975cc58314482a",
+    "revision": "556ed22496d650bd0b13b6c163be9814637970ae"
+  },
+  "yaml": {
+    "url": "https://codeload.github.com/jbeder/yaml-cpp/tar.gz/2f86d13775d119edbb69af52e5f566fd65c6953b",
+    "sha256": "923b2298148581b14ef21d9ce29d83eca102ff671a547dfdbd227245a199bcd8",
+    "revision": "2f86d13775d119edbb69af52e5f566fd65c6953b"
+  },
+  "rime-lua": {
+    "url": "https://codeload.github.com/hchunhui/librime-lua/tar.gz/ec52e48ea18f11af37717a01c337f853215cf70b",
+    "sha256": "73247eb0b506934f8518459d303fe4a31f681a9c1623867b20889a985c4b6e8e",
+    "revision": "ec52e48ea18f11af37717a01c337f853215cf70b"
+  },
+  "lua": {
+    "url": "https://codeload.github.com/hchunhui/librime-lua/tar.gz/fa40fadd8af1e5b1fbd55703ccbd54476956d74c",
+    "sha256": "70f43164aaec58a22cb92774d61b19d206563cc62a08954832c2dfd416cf8fd8",
+    "revision": "fa40fadd8af1e5b1fbd55703ccbd54476956d74c"
+  },
+  "boost": {
+    "url": "https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.bz2",
+    "sha256": "85a33fa22621b4f314f8e85e1a5e2a9363d22e4f4992925d4bb3bc631b5a0c7a",
+    "revision": "1.89.0"
+  }
+}

@@ -45,6 +45,8 @@ def commands(action, units, report):
                 ["bash", "macOS/scripts/check-bundle.sh", "--fast"]]
     if action == "baseline":
         return [["bash", "Core/scripts/capture-migration-baseline.sh", str(report)]]
+    if action == "portable":
+        return [["bash", "Core/Portable/test.sh", str(report)]]
     raise ValueError(f"Unsupported action: {action}")
 
 
@@ -219,7 +221,7 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--worker":
         return worker(Path(sys.argv[2]))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["build", "test", "baseline"])
+    parser.add_argument("action", choices=["build", "test", "baseline", "portable"])
     parser.add_argument("units", nargs="*")
     parser.add_argument("--host", default="tanaris")
     parser.add_argument("--remote-root", default="~/Develop/Projects/inkflow-remote")
