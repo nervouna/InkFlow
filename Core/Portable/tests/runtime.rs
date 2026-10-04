@@ -56,6 +56,7 @@ fn desktop_runtime_contract() {
         runtime.session("bad\0schema"),
         Err(Error::InvalidString)
     ));
+    assert!(matches!(runtime.session("missing"), Err(Error::Native(-2))));
     let mut session = runtime.session("probe").unwrap();
     assert_eq!(
         runtime.deploy(&fixture.0.join("shared/probe.schema.yaml")),
@@ -91,7 +92,11 @@ fn desktop_runtime_contract() {
             for byte in b"ni" {
                 second.process_key(*byte as i32, 0).unwrap();
             }
-            assert_eq!(second.snapshot().unwrap().candidates[0].text, "你");
+            let snapshot = second.snapshot().unwrap();
+            assert_eq!(snapshot.candidates[0].text, "你");
+            assert_eq!(snapshot.preedit, "你");
+            assert_eq!(snapshot.caret_bytes, 3);
+            assert_eq!(snapshot.selection_bytes, 0..3);
             second.process_key(0x20, 0).unwrap();
             assert_eq!(second.take_commit().unwrap().as_deref(), Some("你"));
         }

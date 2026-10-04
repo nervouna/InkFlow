@@ -85,10 +85,17 @@ def main():
           f'-DBOOST_ROOT={PREFIX}', f'-DBoost_INCLUDE_DIR={PREFIX}/include',
           f'-DCMAKE_INSTALL_RPATH={PREFIX}/lib')
     cmake('bridge', source=HERE / 'native')
+    cache = (BUILD / 'cmake-bridge/CMakeCache.txt').read_text().splitlines()
+    compiler = next(line.split('=', 1)[1] for line in cache
+                    if line.startswith('CMAKE_CXX_COMPILER:FILEPATH='))
     (BUILD / 'native-build.json').write_text(json.dumps({
-        'platform': sys.platform, 'sources': lock,
+        'platform': sys.platform, 'machine': os.uname().machine, 'sources': lock,
         'cmake': subprocess.check_output(['cmake', '--version'], text=True).splitlines()[0],
+        'compiler': subprocess.check_output([compiler, '--version'], text=True).strip(),
+        'rust': subprocess.check_output(['rustc', '--version'], cwd=ROOT, text=True).strip(),
         'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
+        'fixtures': {str(file.relative_to(HERE)): hashlib.sha256(file.read_bytes()).hexdigest()
+                     for file in sorted((HERE / 'fixtures').rglob('*')) if file.is_file()},
     }, indent=2) + '\n')
 
 

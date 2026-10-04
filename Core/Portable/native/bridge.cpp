@@ -21,6 +21,10 @@ struct Context {
   Context() { RIME_STRUCT_INIT(RimeContext, value); }
   ~Context() { api()->free_context(&value); }
 };
+struct Config {
+  RimeConfig value{};
+  ~Config() { if (value.ptr) api()->config_close(&value); }
+};
 struct Commit {
   RimeCommit value{};
   Commit() { RIME_STRUCT_INIT(RimeCommit, value); }
@@ -31,7 +35,8 @@ const char* text(const char* value) { return value ? value : ""; }
 
 extern "C" int ifp_initialize(const char* shared, const char* user) {
   try {
-    RIME_STRUCT(RimeTraits, traits);
+    RimeTraits traits{};
+    RIME_STRUCT_INIT(RimeTraits, traits);
     traits.shared_data_dir = shared;
     traits.user_data_dir = user;
     traits.distribution_name = "InkFlow portable probe";
@@ -67,6 +72,10 @@ extern "C" int ifp_deploy(const char* schema_path) {
 extern "C" int ifp_session_create(const char* schema, uintptr_t* session) {
   RimeSessionId id = 0;
   try {
+    Config config;
+    if (!api()->schema_open(schema, &config.value)) return -2;
+    const char* configured_id = api()->config_get_cstring(&config.value, "schema/schema_id");
+    if (!configured_id || std::strcmp(configured_id, schema) != 0) return -2;
     id = api()->create_session();
     if (!id) return -1;
     if (!api()->select_schema(id, schema)) {
