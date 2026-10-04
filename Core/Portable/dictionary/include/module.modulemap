@@ -1,0 +1,4 @@
+module InkFlowDictionary {
+    header "inkflow_dictionary.h"
+    export *
+}
