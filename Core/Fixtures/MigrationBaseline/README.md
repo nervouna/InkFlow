@@ -16,6 +16,8 @@ All 21 behavioral observations match [the existing quality baseline](../QualityB
 
 Full logs, behavior observations, five raw performance reports, and the run receipt remain under `build/mac-remote/20261004T185457Z-bd0a20b1/` on the Linux development machine. The compact report includes raw report hashes, generated/compiled resource identities, native binary hashes, build-input fingerprints, and per-process distributions.
 
+The remote app build and fast bundle check also passed at revision `bb91518d668ce10e30934c78a787a4edfbfbefe5`, run `20261004T190518Z-895768f6`. The final runner passes 12 local tooling tests. Live SSH checks rejected a concurrent request and preserved an intentionally dirty checkout without switching its revision. The original Mac checkout remained clean on `main` at `8669c48`; no installation or activation was performed.
+
 Additional evidence hashes:
 
 | File | SHA-256 |
