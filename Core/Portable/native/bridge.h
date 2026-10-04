@@ -35,6 +35,8 @@ int ifp_session_create(const char* schema, uintptr_t* session);
 int ifp_session_destroy(uintptr_t session);
 int ifp_process_key(uintptr_t session, int key, int modifiers, int* handled);
 int ifp_clear(uintptr_t session);
+int ifp_select_candidate(uintptr_t session, size_t index);
+int ifp_change_page(uintptr_t session, int backward, int* changed);
 int ifp_snapshot(uintptr_t session, IFPSnapshot* snapshot);
 void ifp_snapshot_free(IFPSnapshot* snapshot);
 /* A successful empty read returns NULL. A non-NULL commit is consumed once. */

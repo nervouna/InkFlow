@@ -47,6 +47,8 @@ unsafe extern "C" {
         handled: *mut c_int,
     ) -> c_int;
     pub fn ifp_clear(session: usize) -> c_int;
+    pub fn ifp_select_candidate(session: usize, index: usize) -> c_int;
+    pub fn ifp_change_page(session: usize, backward: c_int, changed: *mut c_int) -> c_int;
     pub fn ifp_snapshot(session: usize, snapshot: *mut Snapshot) -> c_int;
     pub fn ifp_snapshot_free(snapshot: *mut Snapshot);
     pub fn ifp_take_commit(session: usize, commit: *mut *mut c_char) -> c_int;

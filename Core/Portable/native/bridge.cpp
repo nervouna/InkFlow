@@ -107,6 +107,19 @@ extern "C" int ifp_clear(uintptr_t session) {
     return 0;
   } catch (...) { return -3; }
 }
+extern "C" int ifp_select_candidate(uintptr_t session, size_t index) {
+  try {
+    if (!api()->find_session(session)) return -2;
+    return api()->select_candidate_on_current_page(session, index) ? 0 : -1;
+  } catch (...) { return -3; }
+}
+extern "C" int ifp_change_page(uintptr_t session, int backward, int* changed) {
+  try {
+    if (!api()->find_session(session)) return -2;
+    *changed = api()->change_page(session, backward != 0) ? 1 : 0;
+    return 0;
+  } catch (...) { return -3; }
+}
 extern "C" int ifp_snapshot(uintptr_t session, IFPSnapshot* result) {
   try {
     if (!api()->find_session(session)) return -2;

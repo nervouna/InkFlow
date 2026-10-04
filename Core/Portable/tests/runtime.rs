@@ -87,6 +87,109 @@ fn desktop_runtime_contract() {
     assert!(!session.process_key(0xff1b, 0).unwrap());
 
     let mut second = runtime.session("probe").unwrap();
+    for byte in b"ni" {
+        session.process_key(*byte as i32, 0).unwrap();
+        second.process_key(*byte as i32, 0).unwrap();
+    }
+    let first_page = session.snapshot().unwrap();
+    assert_eq!(first_page.candidates.len(), 5);
+    assert!(!first_page.last_page);
+    assert_eq!(
+        second.select_candidate(&first_page, 0),
+        Err(Error::StaleSnapshot)
+    );
+    let other = second.snapshot().unwrap();
+    assert_eq!(
+        session.select_candidate(&other, 0),
+        Err(Error::StaleSnapshot)
+    );
+    assert_eq!(
+        session.select_candidate(&first_page, usize::MAX),
+        Err(Error::InvalidCandidate)
+    );
+    assert!(session.change_page(false).unwrap());
+    assert_eq!(
+        session.select_candidate(&first_page, 0),
+        Err(Error::StaleSnapshot)
+    );
+    let last_page = session.snapshot().unwrap();
+    assert_eq!(last_page.page, 1);
+    assert!(last_page.last_page);
+    assert_eq!(last_page.candidates[0].text, "腻");
+    assert!(session.change_page(true).unwrap());
+    assert_eq!(
+        session.select_candidate(&last_page, 0),
+        Err(Error::StaleSnapshot)
+    );
+    let current = session.snapshot().unwrap();
+    let refreshed = session.snapshot().unwrap();
+    assert_eq!(
+        session.select_candidate(&current, 0),
+        Err(Error::StaleSnapshot)
+    );
+    session.select_candidate(&refreshed.clone(), 1).unwrap();
+    assert_eq!(session.take_commit().unwrap().as_deref(), Some("尼"));
+    assert_eq!(session.take_commit().unwrap(), None);
+    assert_eq!(
+        session.select_candidate(&refreshed, 1),
+        Err(Error::StaleSnapshot)
+    );
+    second.clear().unwrap();
+    assert_eq!(
+        second.select_candidate(&other, 0),
+        Err(Error::StaleSnapshot)
+    );
+    for byte in b"ni" {
+        session.process_key(*byte as i32, 0).unwrap();
+    }
+    let edited = session.snapshot().unwrap();
+    session.process_key('h' as i32, 0).unwrap();
+    assert_eq!(
+        session.select_candidate(&edited, 0),
+        Err(Error::StaleSnapshot)
+    );
+    session.clear().unwrap();
+    let empty = session.snapshot().unwrap();
+    assert_eq!(
+        session.select_candidate(&empty, 0),
+        Err(Error::InvalidCandidate)
+    );
+    assert!(!session.process_key(0xff1b, 0).unwrap());
+    assert_eq!(
+        session.select_candidate(&empty, 0),
+        Err(Error::StaleSnapshot)
+    );
+    let no_page = session.snapshot().unwrap();
+    assert!(!session.change_page(false).unwrap());
+    assert_eq!(
+        session.select_candidate(&no_page, 0),
+        Err(Error::StaleSnapshot)
+    );
+    let destroyed = {
+        let mut temporary = runtime.session("probe").unwrap();
+        for byte in b"ni" {
+            temporary.process_key(*byte as i32, 0).unwrap();
+        }
+        temporary.snapshot().unwrap()
+    };
+    let mut replacement = runtime.session("probe").unwrap();
+    for byte in b"ni" {
+        replacement.process_key(*byte as i32, 0).unwrap();
+    }
+    let mut displayed = replacement.snapshot().unwrap();
+    assert_eq!(
+        replacement.select_candidate(&destroyed, 0),
+        Err(Error::StaleSnapshot)
+    );
+    displayed
+        .candidates
+        .resize(20, displayed.candidates[0].clone());
+    assert_eq!(
+        replacement.select_candidate(&displayed, 19),
+        Err(Error::InvalidCandidate)
+    );
+    replacement.clear().unwrap();
+    drop(replacement);
     let thread = std::thread::spawn(move || {
         for _ in 0..25 {
             for byte in b"ni" {
@@ -126,6 +229,6 @@ fn desktop_runtime_contract() {
     drop(session);
     drop(runtime);
     println!(
-        "PASS lifetime, target deployment, Lua, UTF-8 ownership, commits, serialized sessions, restart"
+        "PASS lifetime, target deployment, Lua, UTF-8 ownership, commits, snapshot-safe selection, paging, serialized sessions, restart"
     );
 }
