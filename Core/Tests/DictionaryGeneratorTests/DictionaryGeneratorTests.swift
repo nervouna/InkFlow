@@ -33,6 +33,11 @@ struct DictionaryGeneratorTests {
     }
     static func text(_ result: IFDictionaryGeneration) -> String { String(decoding: result.dictionary, as: UTF8.self) }
     static func main() throws {
+        if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--export-reference" {
+            try exportReference(cases: URL(fileURLWithPath: CommandLine.arguments[2]),
+                                output: URL(fileURLWithPath: CommandLine.arguments[3]))
+            return
+        }
         try spellingGeneration()
         expect(IFDictionaryHash.gitBlob(Data("hello\n".utf8)) == "ce013625030ba8dba906f756967f9e9ca394464a", "Git blob includes byte-count header")
         expect(try IFDictionaryGenerator.normalizedReading("  LÜ\u{a0}SE  ") == "lv se", "Pinyin whitespace, case, ü normalization")
