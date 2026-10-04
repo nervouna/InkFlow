@@ -86,6 +86,7 @@ def main():
             equivalent(actual, expected)
         args.report.mkdir(parents=True, exist_ok=True)
         (args.report / 'corpus.json').write_text(json.dumps(expected, ensure_ascii=False, indent=2) + '\n')
+        (args.report / 'rust-corpus.json').write_text(json.dumps(actual, ensure_ascii=False, indent=2) + '\n')
         print(f"PASS pinned corpus: {actual['manifest']['entryCount']} rows, dictionary and all 32 profiles match Swift")
     if args.swift:
         for name in ('catalog.json', 'reference.json', 'corpus.json'):

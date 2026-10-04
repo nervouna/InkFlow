@@ -1,6 +1,6 @@
 # Rust dictionary generator comparison
 
-This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The shipping preparation scripts and dictionary update worker still use Swift.
+This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The shipping preparation scripts and dictionary update worker still use Swift. The [verification record](verification.md) identifies the tested revision and retained evidence.
 
 ## Verify
 
@@ -13,7 +13,7 @@ python3 scripts/mac-remote.py dictionary
 
 On Linux, the script tests Rust against the recorded Swift contract and pinned corpus. On macOS, it first runs the existing Swift dictionary-generator tests, exports a fresh contract, then compares Rust against those live results and the recorded fixtures. Both use the repository's Rust toolchain and this crate's `Cargo.lock`.
 
-Preparation may download the pinned public dictionary sources. Downloads go under ignored `build/dictionary-parity/inputs/`; byte counts and SHA-256 are checked before use, then Rust verifies the Git blob hash and SHA-256 again. Existing verified Mac source caches can be reused. There are no downloads from the library or CLI. All generated output and Cargo artifacts stay under `build/dictionary-parity/`. The remote runner returns the catalog, reference results, corpus summary, logs, and its usual exact-revision receipt.
+Preparation may download the pinned public dictionary sources. Downloads go under ignored `build/dictionary-parity/inputs/`; byte counts and SHA-256 are checked before use, then Rust verifies the Git blob hash and SHA-256 again. Existing verified Mac source caches can be reused. There are no downloads from the library or CLI. All generated output and Cargo artifacts stay under `build/dictionary-parity/`. The remote runner returns the catalog, reference results, Swift corpus summary (`corpus.json`), actual Rust corpus summary (`rust-corpus.json`), logs, and its usual exact-revision receipt.
 
 The CLI takes an explicit source catalog and creates a new output directory:
 

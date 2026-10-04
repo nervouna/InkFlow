@@ -42,7 +42,7 @@ The remote report contains `00-portable.log`, `native-build.json`, and the norma
 
 ## Dictionary generator comparison
 
-`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, and `corpus.json` with `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md). This action does not prepare native production caches or install an input method.
+`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md). This action does not prepare native production caches or install an input method.
 
 ## Baseline recipe
 
