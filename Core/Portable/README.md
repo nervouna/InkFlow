@@ -40,4 +40,4 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 Mobile and Windows are not enabled by this build. Lifecycle ownership avoids dependence on a permanent app process, but mobile memory limits, platform key adapters, static-link packaging, and device behavior remain unvalidated.
 
-The [desktop verification record](verification.md) identifies the tested revision, toolchains, and retained evidence. See [the distribution review](licenses.md) before packaging binaries or production dictionaries.
+The [desktop verification record](verification.md) identifies the tested revision, toolchains, and retained evidence. The separate [dictionary generator comparison](dictionary/README.md) ports Chinese source generation and spelling profiles without changing this runtime or the shipping preparation path. See [the distribution review](licenses.md) before packaging binaries or production dictionaries.

@@ -1,6 +1,7 @@
 .DS_Store
 /build/
 /Core/Portable/target/
+/Core/Portable/dictionary/target/
 /.worktrees/
 DerivedData/
 xcuserdata/

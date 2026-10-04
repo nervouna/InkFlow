@@ -38,6 +38,6 @@ The shell fixtures substitute small Chinese/spelling generators to isolate admis
 
 ## Migration boundary
 
-This extraction is the first step of [#35](https://github.com/nervouna/InkFlow/issues/35). It does not make the full generator runnable on Linux: `Core/scripts/build-dictionary-generator.sh` still builds the existing Swift implementation through the Mac toolchain. The Rust dictionary generator and target-native production resource preparation remain to be migrated and compared before the Rust host can claim production dictionary parity.
+The production path still uses `Core/scripts/build-dictionary-generator.sh` to build the Swift implementation through the Mac toolchain. An isolated [Rust generator comparison](../Core/Portable/dictionary/README.md) now checks the same Chinese dictionary and spelling profiles on Linux and macOS. It has not replaced the shipping generator or update worker. Target-native production resource preparation and the remaining offline behavior are still part of [#35](https://github.com/nervouna/InkFlow/issues/35).
 
 Historical baseline reports and corpus source descriptions retain their original paths as provenance. Current readers and build identity use `Core/Data/` and `Core/config/`. No ranking, learning, personal-data format, or installed input-method behavior changes in this step. The [distribution review](../Core/Portable/licenses.md) still applies to the resource set.

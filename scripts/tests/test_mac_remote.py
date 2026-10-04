@@ -100,9 +100,11 @@ class RemoteTests(unittest.TestCase):
                          [["bash", "macOS/scripts/test.sh", "preparation", "dictionary-generator", "quality-metadata"]])
         self.assertEqual(remote.commands("portable", [], self.root),
                          [["bash", "Core/Portable/test.sh", str(self.root)]])
+        self.assertEqual(remote.commands("dictionary", [], self.root),
+                         [["bash", "Core/Portable/dictionary/test.sh", str(self.root)]])
         for action, units in [("install", []), ("test", ["all"]), ("test", []),
                               ("test", ["engine; touch bad"]), ("build", ["engine"]),
-                              ("portable", ["engine"])]:
+                              ("portable", ["engine"]), ("dictionary", ["engine"])]:
             with self.assertRaises(ValueError):
                 remote.commands(action, units, self.root)
 
