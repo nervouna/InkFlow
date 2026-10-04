@@ -20,7 +20,7 @@ build_core_product ranking-tests build/core-tests/ranking-tests debug
 build/core-tests/ranking-tests
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-migration-baseline.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
-bash macOS/scripts/prepare-rime.sh "$scratch/Rime"
+bash Core/scripts/prepare-rime.sh "$scratch/Rime"
 build/core-tests/packaged-cache-tool "$scratch/Rime" "$scratch/compiler" --compile
 corpus="$PWD/Core/Fixtures/QualityBaseline/corpus.json"
 revision=$(git rev-parse HEAD)

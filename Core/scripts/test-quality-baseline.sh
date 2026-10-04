@@ -11,7 +11,7 @@ build_core_product quality-baseline build/core-tests/quality-baseline
 build_core_product packaged-cache-tool build/core-tests/packaged-cache-tool
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-quality-baseline.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
-bash macOS/scripts/prepare-rime.sh "$scratch/Rime"
+bash Core/scripts/prepare-rime.sh "$scratch/Rime"
 build/core-tests/packaged-cache-tool "$scratch/Rime" "$scratch/compile" --compile
 baseline="$PWD/Core/Fixtures/QualityBaseline/baseline.json"
 [[ "$mode" != capture ]] || baseline=-

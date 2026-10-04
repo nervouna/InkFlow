@@ -1,7 +1,7 @@
 # Technical vocabulary data
 
 The app enables technology, software and Internet vocabulary by default. Chinese
-source generation and update behavior are documented in [DICTIONARIES.md](../DICTIONARIES.md).
+source generation and update behavior are documented in [DICTIONARIES.md](../../macOS/DICTIONARIES.md).
 
 `english-technology.tsv` supplies 122 exact display spellings and lowercase ASCII
 lookup codes. It is an additional spelling source, separate from measured
@@ -23,7 +23,7 @@ remain available. Empty supplemental data is valid; a missing file is an error.
 
 All records still pass the shared exact-display admission gate. The 111 explicitly
 selected spellings with missing/below-4 observations use 4.0 policy replacements
-in `config/english-overrides.tsv`. These are not observed measurements. Eleven
+in `Core/config/english-overrides.tsv`. These are not observed measurements. Eleven
 existing observations at/above the gate retain their original values. An override
 still applies to every source code for the exact displayed spelling and may
 exclude it with zero. Case variants are independent. No generic threshold or
@@ -45,5 +45,5 @@ spellings across case, punctuation and spaces. They also verify prefix, backspac
 short-code and mixed/custom-phrase boundaries. Runtime/UI acceptance
 in actual typing clients remains separate from these isolated tests.
 
-See [technology-english-NOTICE.txt](../Licenses/technology-english-NOTICE.txt) for
+See [technology-english-NOTICE.txt](../../macOS/Licenses/technology-english-NOTICE.txt) for
 selection/alias attribution and the existing GPL/LGPL/wordfreq license notices.

@@ -257,7 +257,7 @@ package enum EngineRegression {
 
     @MainActor package static func domainVocabulary() throws {
         let engine = IFEngine()!
-        let chinese = try String(contentsOfFile: "macOS/config/chinese-overrides.tsv", encoding: .utf8)
+        let chinese = try String(contentsOfFile: "Core/config/chinese-overrides.tsv", encoding: .utf8)
         selectCandidate("命令行用户交互", input: "minglinghangyonghujiaohu", engine: engine)
         for line in chinese.split(separator: "\n") where !line.hasPrefix("#") {
             let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
@@ -268,7 +268,7 @@ package enum EngineRegression {
         selectCandidate("深度求索", input: "shenduqiusuo", engine: engine)
         selectCandidate("阿米诺斯", input: "aminuosi", engine: engine)
         selectCandidate("并发信息系统", input: "bingfaxinxixitong", engine: engine)
-        let english = try String(contentsOfFile: "macOS/Data/english-technology.tsv", encoding: .utf8)
+        let english = try String(contentsOfFile: "Core/Data/english-technology.tsv", encoding: .utf8)
         let rows = english.split(separator: "\n").filter { !$0.hasPrefix("#") }.map {
             $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
         }

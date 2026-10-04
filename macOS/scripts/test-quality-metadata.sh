@@ -276,6 +276,15 @@ before=$("$tool" "$identity_repo" --build-snapshot)
 [[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
 printf 'documentation only\n' >> "$identity_repo/README.md"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
+for resource in Core/Data/english-wordfreq.tsv Core/config/english.conf Core/scripts/prepare-rime.sh \
+  Core/scripts/build-dictionary-generator.sh; do
+  cp "$identity_repo/$resource" "$fixture/resource-before"
+  printf '\n# changed shared resource input\n' >> "$identity_repo/$resource"
+  snapshot=$("$tool" "$identity_repo" --build-snapshot)
+  [[ "$snapshot" != "$before" && "$snapshot" == "$(git -C "$identity_repo" rev-parse HEAD) dirty "* ]]
+  cp "$fixture/resource-before" "$identity_repo/$resource"
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
+done
 cp "$identity_repo/Package.resolved" "$fixture/Package.resolved"
 python3 - "$identity_repo/Package.resolved" <<'PY'
 import json

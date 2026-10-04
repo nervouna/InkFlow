@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 TEST_UNITS = {
     "engine", "engine-basic", "engine-options", "engine-english", "engine-context",
     "engine-custom-phrases", "controller", "quality-baseline", "ai-learning", "voice-lexicon",
+    "preparation", "dictionary-generator", "quality-metadata",
 }
 
 

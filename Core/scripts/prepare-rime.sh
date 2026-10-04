@@ -1,0 +1,153 @@
+#!/bin/bash
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+requested_destination=${1:?Usage: prepare-rime.sh DESTINATION}
+source Core/config/english.conf
+mkdir -p build/rime-cache
+manifest=$(mktemp "${TMPDIR:-/tmp}/inkflow-rime-inputs.XXXXXX")
+cache_build=""; delivery=""; previous=""; staging=""
+cleanup() {
+  rm -f "$manifest"
+  [[ -z "$cache_build" ]] || rm -rf "$cache_build"
+  [[ -z "$delivery" ]] || rm -rf "$delivery"
+  [[ -z "$previous" ]] || rm -rf "$previous"
+  [[ -z "$staging" ]] || rm -rf "$staging"
+}
+trap cleanup EXIT
+for input_root in Core/Package.swift Core/Sources Core/Tools Core/scripts schemas Core/config Core/Data \
+  build/deps/rime-pinyin-simp-* build/deps/rime-easy-en-* build/dictionary-sources; do
+  [[ -e "$input_root" ]] || continue
+  find "$input_root" -type f -print
+done | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done > "$manifest"
+[[ ! -f build/deps/emoji.txt ]] || shasum -a 256 build/deps/emoji.txt >> "$manifest"
+input_digest=$(shasum -a 256 "$manifest" | awk '{print $1}')
+cache="$PWD/build/rime-cache/$input_digest"
+if [[ ! -f "$cache/complete" || ! -d "$cache/content" ]]; then
+  cache_build=$(mktemp -d "$PWD/build/rime-cache/build.$input_digest.XXXXXX")
+  destination="$cache_build/content"
+  mkdir -p "$destination"
+  staging=$(mktemp -d "$destination/.english.XXXXXX")
+else
+  destination=""
+fi
+if [[ -n "$destination" ]]; then
+# Join observed frequencies and explicit overrides by exact displayed text. Never
+# estimate an unknown word or fall back to the upstream dictionary ordinal weight.
+LC_ALL=C awk -v min_zipf="$ENGLISH_MIN_ZIPF" -v weight_scale="$ENGLISH_WEIGHT_SCALE" \
+  -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
+function fail(message) {
+  print "prepare-rime.sh: " message > "/dev/stderr"
+  exit 1
+}
+function zipf(value) {
+  return value ~ /^[0-9]+([.][0-9]+)?$/ && value+0 >= 0 && value+0 <= 9
+}
+function emit(word, code, effective, pair) {
+  pair=word SUBSEP code
+  if (pair in emitted) return
+  if (word in overrides) effective=overrides[word]
+  else if (word in observed) effective=observed[word]
+  else return
+  if (effective <= 0 || effective < min_zipf) return
+  emitted[pair]=1
+  printf "%s\t%s\t%d\n", word,code,int(effective*weight_scale+0.5)
+}
+BEGIN {
+  FS=OFS="\t"
+  if (!zipf(min_zipf)) fail("ENGLISH_MIN_ZIPF must be between 0 and 9")
+  if (weight_scale !~ /^[0-9]+$/ || weight_scale+0 <= 0 || weight_scale+0 > 238609294)
+    fail("ENGLISH_WEIGHT_SCALE must be a positive integer <= 238609294")
+  if (weight_divisor !~ /^[0-9]+([.][0-9]+)?$/ || weight_divisor+0 <= 0)
+    fail("MIXED_ENGLISH_WEIGHT_DIVISOR must be positive")
+  print "# Generated from rime-easy-en (LGPL-3.0), curated rime-ice (GPL-3.0) and InkFlow technology entries."
+  print "# Reweighted with wordfreq (CC BY-SA 4.0) and explicit InkFlow admission policy."
+  print "# See bundled Licenses for source attribution and modification details."
+  print "---\nname: easy_en\nversion: '\''0.5-inkflow'\''\nsort: by_weight"
+  print "use_preset_vocabulary: false\n..."
+}
+FILENAME == ARGV[1] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  if (NF != 2 || $1 !~ /[^[:space:]]/ || !zipf($2) || $2+0 == 0)
+    fail("invalid english-wordfreq.tsv record at line " FNR)
+  if ($1 in observed) fail("duplicate english-wordfreq.tsv word at line " FNR ": " $1)
+  observed[$1]=$2+0
+  next
+}
+FILENAME == ARGV[2] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  if (NF != 3 || $1 !~ /[^[:space:]]/ || !zipf($2) || $3 !~ /[^[:space:]]/)
+    fail("invalid english-overrides.tsv record at line " FNR ": expected word, Zipf 0..9, and reason")
+  if ($1 in overrides) fail("duplicate english-overrides.tsv word at line " FNR ": " $1)
+  overrides[$1]=$2+0
+  next
+}
+FILENAME == ARGV[4] {
+  if ($0 ~ /^[[:space:]]*(#|$)/) next
+  if (NF != 3 || $1 !~ /[^[:space:]]/ || $1 ~ /[^ -~]/ || $1 ~ /^ | $/ ||
+      $2 !~ /^[a-z]+$/ || ($3 != "rime-ice-en-ext" && $3 != "inkflow-maintained"))
+    fail("invalid english-technology.tsv record at line " FNR ": expected display text, lowercase ASCII code, and source")
+  pair=$1 SUBSEP $2
+  if (pair in supplemental) fail("duplicate english-technology.tsv pair at line " FNR)
+  supplemental[pair]=1
+  emit($1,$2)
+  next
+}
+$0 == "..." { entries=1; next }
+entries && $0 !~ /^[[:space:]]*(#|$)/ && NF >= 2 {
+  emit($1,$2)
+}' Core/Data/english-wordfreq.tsv Core/config/english-overrides.tsv \
+  build/deps/rime-easy-en-*/easy_en.dict.yaml Core/Data/english-technology.tsv > "$staging/easy_en.dict.yaml"
+# Mixed composition adds only its existing structural restrictions and scaling.
+LC_ALL=C awk -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
+function emit(word, code, weight, pair) {
+  pair=word SUBSEP code
+  if (pair in emitted) return
+  emitted[pair]=1
+  printf "%s\t%s\t%d\n", word,code,int(weight/weight_divisor)
+}
+BEGIN {
+  FS=OFS="\t"
+  print "# Derived from the shared admitted English dictionary; see easy_en.dict.yaml for source attribution."
+  print "# See bundled Licenses; original pinyin_simp remains an independent translator/user dictionary."
+  print "---\nname: inkflow_mixed\nversion: '\''1.3'\''\nsort: by_weight"
+  print "use_preset_vocabulary: false\nimport_tables: [pinyin_simp]\n..."
+}
+$1 ~ /^[A-Za-z]+$/ && $2 ~ /^[A-Za-z]+$/ {
+  # Preserve the conservative lowercase path. Retain admitted uppercase source
+  # boundaries; the runtime filter validates the complete emitted ASCII run.
+  if ($1 == $2 && length($1) >= 4) emit($1,$2,$3)
+  if ($2 ~ /[A-Z]/) emit($1,$2,$3)
+  # Some admitted display forms (API, SwiftUI) have only lowercase/title-case
+  # source aliases. Their exact case is still source data, not synthesized text.
+  if ($1 ~ /[A-Z]/) emit($1,$1,$3)
+}' "$staging/easy_en.dict.yaml" > "$staging/inkflow_mixed.dict.yaml"
+mkdir -p "$destination/lua"
+cp schemas/*.yaml "$destination/"
+cp schemas/lua/*.lua "$destination/lua/"
+mkdir -p "$destination/opencc"
+cp schemas/opencc/* build/deps/emoji.txt "$destination/opencc/"
+bash Core/scripts/prepare-chinese.sh "$staging/chinese"
+cp "$staging/chinese/"* "$destination/"
+bash Core/scripts/prepare-spelling.sh "$destination"
+mv "$staging/easy_en.dict.yaml" "$staging/inkflow_mixed.dict.yaml" "$destination/"
+rm -rf "$staging"
+staging=""
+touch "$cache_build/complete"
+mv "$cache_build" "$cache"
+cache_build=""
+fi
+
+mkdir -p "$(dirname "$requested_destination")"
+delivery=$(mktemp -d "$(dirname "$requested_destination")/.inkflow-rime.XXXXXX")
+cp -pR "$cache/content/." "$delivery/"
+if [[ -e "$requested_destination" ]]; then
+  previous=$(mktemp -d "$(dirname "$requested_destination")/.inkflow-rime-previous.XXXXXX")
+  rmdir "$previous"
+  mv "$requested_destination" "$previous"
+fi
+if ! mv "$delivery" "$requested_destination"; then
+  [[ -z "$previous" || -e "$requested_destination" ]] || mv "$previous" "$requested_destination"
+  exit 1
+fi
+delivery=""
+if [[ -n "$previous" ]]; then rm -rf "$previous"; previous=""; fi

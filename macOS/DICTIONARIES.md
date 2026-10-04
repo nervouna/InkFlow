@@ -12,8 +12,8 @@ count and update actions; provenance and generation details live here.
 | Rime Ice | Base and extended Chinese vocabulary | [`iDvel/rime-ice`](https://github.com/iDvel/rime-ice) |
 | Sogou conversion | Computer vocabulary converted for Rime | [`alswl/rime-selected`](https://github.com/alswl/rime-selected) |
 | Legacy Pinyin | Compatibility additions retained from the former baseline | [`rime/rime-pinyin-simp`](https://github.com/rime/rime-pinyin-simp) |
-| InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`macOS/config/chinese-overrides.tsv`](config/chinese-overrides.tsv) |
-| Technical English | Admitted technology terms and abbreviations | [`macOS/Data/TECHNOLOGY.md`](Data/TECHNOLOGY.md) |
+| InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`Core/config/chinese-overrides.tsv`](../Core/config/chinese-overrides.tsv) |
+| Technical English | Admitted technology terms and abbreviations | [`Core/Data/TECHNOLOGY.md`](../Core/Data/TECHNOLOGY.md) |
 
 `DictionaryModels.swift` is the source of truth for exact files, pinned commits,
 digests and byte counts. License and redistribution notes remain under
@@ -44,7 +44,7 @@ weights on overlapping pairs are compared to Frost using
 and 5 or more. A bucket with fewer than 100 overlapping pairs uses that source's
 overall multiplier; a source without positive overlaps fails generation. New
 positive weights are rounded, bounded to `1...Int32.max`, and original zero
-weights remain zero. `macOS/config/chinese-overrides.tsv` applies explicit
+weights remain zero. `Core/config/chinese-overrides.tsv` applies explicit
 term/reading replacement weights last and requires a reason for every row.
 It also supplies a small curated technology and Internet supplement with explicit
 readings and conservative weights. Specialty pairs use their own numeric weight;
