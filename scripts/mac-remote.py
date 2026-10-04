@@ -106,8 +106,8 @@ def worker(request_path):
                 "sdk": ["xcrun", "--show-sdk-version"],
             }.items():
                 metadata[name] = output(args, repo)
-            status = 0
             for index, cmd in enumerate(work):
+                status = 1
                 began = time.monotonic()
                 with (report / f"{index:02d}-{request['action']}.log").open("w") as log:
                     log.write(shlex.join(cmd) + "\n")

@@ -106,7 +106,7 @@ Prepare a dedicated checkout on the Mac. Transfer exact revisions, prevent concu
 
 Pin a common Rust toolchain and native dependency versions. Run the relevant existing macOS tests and preserve behavioral transcripts. Measure startup, resident memory, and representative key-event latency using fixed resources and isolated user data. Agree on performance acceptance criteria after obtaining the baseline.
 
-Completion means Linux can request a reproducible, focused Mac build/test run without installing anything, and the existing engine has a usable behavioral reference. Passwordless sudo and a full CI service are unnecessary.
+Completion means Linux can request a reproducible, focused Mac build/test run without installing anything, and the existing engine has a usable behavioral reference. Passwordless sudo and a full CI service are unnecessary. Commands and measurement boundaries are documented in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
 
 ### 1. Desktop Rust/Rime feasibility
 

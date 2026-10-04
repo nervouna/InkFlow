@@ -146,6 +146,19 @@ class RemoteTests(unittest.TestCase):
         self.assertEqual(report["exitCode"], 1)
         self.assertEqual(report["error"], "fixture failure")
 
+    def test_interrupted_action_does_not_record_success(self):
+        request = self.root / "request.json"
+        request.write_text(json.dumps(dict(remote_root=str(self.runner), ref=self.ref,
+                                           revision=self.revision, action="test", units=["engine"])))
+        with patch.object(remote, "prepare_checkout", return_value=self.source), \
+                patch.object(remote, "output", return_value="fixture"), \
+                patch.object(remote.subprocess, "Popen", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                remote.worker(request)
+        report = json.loads((self.root / "results/run.json").read_text())
+        self.assertEqual(report["exitCode"], 1)
+        self.assertFalse((self.runner / "run.lock").exists())
+
 
 class PerformanceTests(unittest.TestCase):
     def test_nearest_rank_and_median(self):
