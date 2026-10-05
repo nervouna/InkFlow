@@ -7,3 +7,10 @@ build = "build.rs"
 
 [lib]
 path = "src/lib.rs"
+
+[dependencies]
+unicode-normalization = "=0.1.25"
+unicode-segmentation = "=1.13.3"
+
+[dev-dependencies]
+serde_json = "=1.0.151"

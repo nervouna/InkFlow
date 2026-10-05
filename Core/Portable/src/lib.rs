@@ -1,5 +1,6 @@
 //! Minimal synchronous desktop Rime host. No frontend or InkFlow ranking policy.
 mod ffi;
+pub mod ranking;
 
 use std::{
     ffi::{CStr, CString, c_char},
