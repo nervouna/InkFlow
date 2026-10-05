@@ -1,6 +1,6 @@
 # Desktop Rust/Rime probe
 
-Minimal Rust runtime over librime for [#34](https://github.com/nervouna/InkFlow/issues/34). The Swift engine still ships.
+Minimal Rust runtime over librime for [#34](https://github.com/nervouna/InkFlow/issues/34). The Swift session/ranking/learning engine still ships.
 
 ## Build and test
 
@@ -12,6 +12,9 @@ From the checkout root:
 bash Core/Portable/test.sh
 # Send a committed revision to the dedicated Mac checkout:
 python3 scripts/mac-remote.py portable
+# Compile and smoke-test full production resources in isolated directories:
+bash Core/Portable/prepare-resources.sh
+python3 scripts/mac-remote.py resources
 ```
 
 The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture.
@@ -30,7 +33,7 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 - One process-wide Rust mutex serializes **all** Rime calls, including initialization, deployment, reads, destruction, and finalization. Sessions can move between threads. No GUI event loop, Swift actor, or thread affinity is required. Another engine must not call librime outside this lock in the same process; old/new comparisons need separate processes.
 - There is at most one runtime. A second initialization returns `AlreadyRunning`. Sessions retain an `Arc` to the runtime, so dropping its public handle cannot finalize live sessions. The last session/runtime owner finalizes Rime. A poisoned lock fails subsequent normal operations; destructors still attempt cleanup without panicking.
-- Callers supply existing shared-resource and writable user directories. Initialization, source deployment, and session creation are setup work. Deployment is rejected while sessions exist. The wrapper does not prepare resources, download, access SQLite, or record telemetry from `process_key`.
+- Callers supply existing shared-resource and writable user directories. Initialization, source deployment, and session creation are setup work. `Runtime::with_cache` separates target-native cache files from personal data. `prepare` runs Rime's schema-list maintenance and checks its completion notification. Preparation and deployment are rejected while sessions exist. The wrapper does not prepare resources, download, access SQLite, or record telemetry from `process_key`.
 - All text and paths crossing this ABI are NUL-terminated UTF-8. Embedded NUL and non-UTF-8 paths are rejected. Snapshot caret/selection offsets count **bytes in the returned UTF-8 preedit**. Rust validates character boundaries; frontends must convert to UTF-16 or other platform units. Candidate text and comments are independent strings.
 - Keys are Rime/X11 keysyms with Rime modifier masks, not macOS virtual key codes or Linux hardware scan codes. `process_key` returns whether Rime handled the event. There is no surrounding-text or mobile editing API yet. `change_page` delegates paging to Rime. `select_candidate` accepts a zero-based current-page index and the latest snapshot from that session. It rejects snapshots from other sessions, superseded snapshots, and out-of-range indices before calling Rime. Keys, clears, native selection attempts, and page changes invalidate selection tokens even if Rime does not handle the operation. Cloned snapshots retain their token; changing public display fields cannot change the native candidate count used for validation.
 - Snapshots are copied into Rust-owned strings and vectors while the lock is held. They remain valid after another event, another snapshot, session destruction, and runtime teardown. Page and highlighted indices are zero-based native menu metadata; an empty menu has no selectable entry regardless of those fields.
@@ -38,4 +41,4 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 - Internal C callers must pass valid borrowed pointers and zero-initialized outputs. Status 0 is success, -1 native failure, -2 invalid session/schema, and -3 a caught C++ exception. A false/unhandled key is not an error. Native snapshots and commit buffers must be freed with their matching ABI functions, never Rust's allocator. Snapshot free clears the struct; it also accepts a zeroed snapshot.
 - Every throwing C++ entry point catches exceptions before returning to Rust. The ABI has no callbacks into Rust, so Rust unwinding cannot cross it. Invalid pointers remain programmer errors, and allocator aborts/native crashes are not recoverable status codes. A native exception can leave engine state partially changed; callers must stop using the runtime and restart it.
 
-See also the [dictionary generator comparison](dictionary/README.md) and, before packaging, [the distribution review](licenses.md).
+See also the [shared dictionary generator](dictionary/README.md), which supplies Chinese source generation and spelling profiles for build preparation and the Swift update worker, and, before packaging, [the distribution review](licenses.md).

@@ -27,7 +27,8 @@ typedef struct {
   int last_page;
   void* owner;
 } IFPSnapshot;
-int ifp_initialize(const char* shared, const char* user);
+int ifp_initialize(const char* shared, const char* user, const char* cache);
+int ifp_prepare(void);
 int ifp_finalize(void);
 /* Preparation is explicit and must run before interactive sessions. */
 int ifp_deploy(const char* schema_path);

@@ -2,6 +2,7 @@
 #include "InkFlowRimeNative.h"
 #include <rime_api.h>
 #include <rime/registry.h>
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
@@ -10,6 +11,12 @@
 
 namespace {
 RimeApi* api() { return rime_get_api(); }
+std::atomic<int> deployment_status{0};
+void deployment(void*, RimeSessionId, const char* type, const char* value) {
+  if (std::strcmp(type, "deploy")) return;
+  if (!std::strcmp(value, "success")) deployment_status.store(1);
+  if (!std::strcmp(value, "failure")) deployment_status.store(-1);
+}
 struct Snapshot {
   std::string preedit;
   std::vector<std::string> texts;
@@ -33,12 +40,14 @@ struct Commit {
 const char* text(const char* value) { return value ? value : ""; }
 }
 
-extern "C" int ifp_initialize(const char* shared, const char* user) {
+extern "C" int ifp_initialize(const char* shared, const char* user, const char* cache) {
   try {
     RimeTraits traits{};
     RIME_STRUCT_INIT(RimeTraits, traits);
     traits.shared_data_dir = shared;
     traits.user_data_dir = user;
+    traits.staging_dir = cache;
+    traits.prebuilt_data_dir = cache;
     traits.distribution_name = "InkFlow portable probe";
     traits.distribution_code_name = "inkflow-portable";
     traits.distribution_version = "0";
@@ -64,6 +73,18 @@ extern "C" int ifp_initialize(const char* shared, const char* user) {
 }
 extern "C" int ifp_finalize(void) {
   try { api()->finalize(); return 0; } catch (...) { return -3; }
+}
+extern "C" int ifp_prepare(void) {
+  try {
+    deployment_status.store(0);
+    api()->set_notification_handler(deployment, nullptr);
+    if (api()->start_maintenance(1)) api()->join_maintenance_thread();
+    api()->set_notification_handler(nullptr, nullptr);
+    return deployment_status.load() == 1 ? 0 : -1;
+  } catch (...) {
+    try { api()->set_notification_handler(nullptr, nullptr); } catch (...) {}
+    return -3;
+  }
 }
 extern "C" int ifp_deploy(const char* schema_path) {
   try { return api()->deploy_schema(schema_path) ? 0 : -1; }

@@ -129,12 +129,12 @@ package enum IFDictionaryHash {
 }
 
 package enum IFDictionaryCatalog {
-    package static let recipeVersion = 3
+    package static let recipeVersion = IFDictionaryGenerator.recipeVersion
     package static let dictionaryFilename = "pinyin_simp.dict.yaml"
     package static let contextIndexFilename = "pinyin_simp.context.bin"
     package static let legacyFilename = "legacy-pinyin-simp.dict.yaml"
     package static let correctionsFilename = "chinese-overrides.tsv"
-    package static let maximumSourceBytes = 128 * 1024 * 1024
+    package static let maximumSourceBytes = IFDictionaryGenerator.maximumSourceBytes
     package static let initialEntryCount = 965_919
     package static let sources = IFDictionaryGenerator.catalog()
 }

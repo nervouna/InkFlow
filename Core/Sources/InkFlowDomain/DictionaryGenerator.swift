@@ -42,6 +42,8 @@ private enum DictionaryNative {
 
 /// Calls the shared Rust generator in-process, outside interactive input handling.
 package enum IFDictionaryGenerator {
+    package static let recipeVersion = Int(ifd_recipe_version())
+    package static let maximumSourceBytes = ifd_maximum_source_bytes()
     package static func catalog() -> [IFDictionarySourceSpec] {
         // This immutable JSON is compiled into the same verified Rust library.
         try! JSONDecoder().decode([IFDictionarySourceSpec].self, from: DictionaryNative.copy(ifd_catalog()))
