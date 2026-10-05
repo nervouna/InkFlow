@@ -49,6 +49,8 @@ def commands(action, units, report):
         return [["bash", "Core/scripts/capture-migration-baseline.sh", str(report)]]
     if action == "portable":
         return [["bash", "Core/Portable/test.sh", str(report)]]
+    if action == "ranking-reference":
+        return [["bash", "Core/Portable/ranking-reference.sh", str(report)]]
     if action == "resources":
         return [["bash", "Core/Portable/prepare-resources.sh", str(report)]]
     if action == "dictionary":
@@ -227,7 +229,7 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--worker":
         return worker(Path(sys.argv[2]))
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=["build", "test", "baseline", "portable", "dictionary", "resources"])
+    parser.add_argument("action", choices=["build", "test", "baseline", "portable", "dictionary", "resources", "ranking-reference"])
     parser.add_argument("units", nargs="*")
     parser.add_argument("--host", default="tanaris")
     parser.add_argument("--remote-root", default="~/Develop/Projects/inkflow-remote")

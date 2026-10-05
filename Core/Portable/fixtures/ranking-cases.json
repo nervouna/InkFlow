@@ -1,0 +1,4292 @@
+[
+  {
+    "name": "long-crossing",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参"
+    ],
+    "context": "准备午",
+    "metadata": "0,3;0,3,n,1,0,n;0,3,n,1,0,n;0,3,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "frequency-and-stability",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参"
+    ],
+    "context": "午",
+    "metadata": "0,3;0,3,n,1,0,n;0,3,n,1,0,n;0,3,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "partial-slot",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参"
+    ],
+    "context": "午",
+    "metadata": "0,3;0,3,n,1,0,n;0,1,n,1,0,n;0,3,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "unequal-length",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "你好",
+      "你"
+    ],
+    "context": "迷",
+    "metadata": "0,2;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-日常",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "日常",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-正在使用 Swift ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "正在使用 Swift ",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-代码",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "代码",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-代码 ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "代码 ",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-Swift 日日日日日日日日日日日日日日日日",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "Swift 日日日日日日日日日日日日日日日日",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-Św",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "Św",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-👩‍💻版本",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "👩‍💻版本",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "context-準備午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "Codex CLI",
+      "才"
+    ],
+    "context": "準備午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,a,1,1,e;0,5,a,0,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-n-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-a-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-m-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-n-o-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,n;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-n-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-a-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-m-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-e-o-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,e;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-n-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-a-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-m-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-m-o-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,m;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-n-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,n,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-a-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,a,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-m-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,m,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-0-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,0,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-0-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-0-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,0,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-1-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-1-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,1,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-2-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-2-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,2,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-3-午",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "午",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "matrix-c-o-1-3-CLI ",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex",
+      "餐",
+      "我用Codex",
+      "!"
+    ],
+    "context": "CLI ",
+    "metadata": "0,5;0,5,n,1,0,n;0,5,o,1,3,c;0,5,n,1,0,n;0,5,m,1,2,m;0,5,o,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-268",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": null,
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-269",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-270",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-271",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "00,2;0,5,n,1,0,n;0,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-272",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "9,2;0,5,n,1,0,n;0,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-273",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;0,5,a,1,1,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-274",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;-1,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-275",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;+0,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-276",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;0,0,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-277",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;5,2,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-278",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;0,9,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-279",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;0,999999999999999999999999,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-280",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n;０,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "bad-metadata-281",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "Codex"
+    ],
+    "context": "Swift ",
+    "metadata": "0,2;0,5,n,1,0,n; 0,5,a,1,1,e",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-282",
+    "dictionary": "午餐\twu can\t100\r\n午参\twu can\t100\r\n午惨\twu can\t50\r\n准备午参\tzhun bei wu can\t1\r\n迷你\tmi ni\t70\r\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-283",
+    "dictionary": "午餐\twu can\t100\r\n午参\twu can\t100\r\n午惨\twu can\t50\r\n准备午参\tzhun bei wu can\t1\r\n迷你\tmi ni\t70\r\n\n午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-284",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n\n午餐\twu can\t200\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-285",
+    "dictionary": "午餐\t\t100\n午参\twu can\t+200\n午惨\twu can\t-0\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-286",
+    "dictionary": "午餐\twu can\t9223372036854775808\n午参\twu can\t-1\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-287",
+    "dictionary": "神龍\tshen long\t100\n神龍\tshen long\t200\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "dictionary-288",
+    "dictionary": "午餐️\twu can\t1000\n午参\twu can\t1\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "参",
+      "龍"
+    ],
+    "context": "午",
+    "metadata": "0,4;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "canonical-han",
+    "dictionary": "神龍\tshen long\t100\n",
+    "candidates": [
+      "龙",
+      "龍"
+    ],
+    "context": "神",
+    "metadata": "0,2;0,5,n,1,0,n;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "empty",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [],
+    "context": "午",
+    "metadata": null,
+    "offset": 0,
+    "inputLength": 8
+  }
+]
