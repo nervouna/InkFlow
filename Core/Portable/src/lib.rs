@@ -61,6 +61,7 @@ struct RuntimeOwner {
     // Keep traits' borrowed paths alive through native finalization.
     _shared: CString,
     _user: CString,
+    _cache: CString,
 }
 impl Drop for RuntimeOwner {
     fn drop(&mut self) {
@@ -79,18 +80,25 @@ impl Runtime {
     /// Paths must name prepared shared resources and an isolated writable user directory.
     /// Initialization and deployment belong off the interactive key-event path.
     pub fn new(shared: &Path, user: &Path) -> Result<Self> {
+        Self::with_cache(shared, user, &user.join("build"))
+    }
+
+    /// Use an explicit target-native cache, separate from writable personal data.
+    pub fn with_cache(shared: &Path, user: &Path, cache: &Path) -> Result<Self> {
+        let cache = path(cache)?;
         let shared = path(shared)?;
         let user = path(user)?;
         let mut active = lock()?;
         if *active {
             return Err(Error::AlreadyRunning);
         }
-        check(unsafe { ffi::ifp_initialize(shared.as_ptr(), user.as_ptr()) })?;
+        check(unsafe { ffi::ifp_initialize(shared.as_ptr(), user.as_ptr(), cache.as_ptr()) })?;
         *active = true;
         Ok(Self {
             owner: Arc::new(RuntimeOwner {
                 _shared: shared,
                 _user: user,
+                _cache: cache,
             }),
         })
     }
@@ -103,6 +111,16 @@ impl Runtime {
             return Err(Error::SessionsActive);
         }
         check(unsafe { ffi::ifp_deploy(schema.as_ptr()) })
+    }
+
+    /// Compile the configured schema list and its dependencies through Rime maintenance.
+    /// This is preparation work and is rejected while any sessions exist.
+    pub fn prepare(&mut self) -> Result<()> {
+        let _lock = lock()?;
+        if Arc::strong_count(&self.owner) != 1 {
+            return Err(Error::SessionsActive);
+        }
+        check(unsafe { ffi::ifp_prepare() })
     }
 
     pub fn session(&self, schema: &str) -> Result<Session> {

@@ -21,7 +21,7 @@ The existing code already separates much of the engine from the macOS frontend:
 - `schemas/`: Rime configuration, Lua modules, and OpenCC resources.
 - `Core/Tests/` and `Core/Fixtures/QualityBaseline/`: existing regression coverage and behavioral reference material.
 
-Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) still uses the Swift generator through the Mac toolchain.
+Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) uses the Rust generator on both desktops, and the Swift update worker calls it in-process.
 
 ## Architecture
 

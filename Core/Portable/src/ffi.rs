@@ -35,7 +35,12 @@ impl Drop for Snapshot {
 }
 
 unsafe extern "C" {
-    pub fn ifp_initialize(shared: *const c_char, user: *const c_char) -> c_int;
+    pub fn ifp_initialize(
+        shared: *const c_char,
+        user: *const c_char,
+        cache: *const c_char,
+    ) -> c_int;
+    pub fn ifp_prepare() -> c_int;
     pub fn ifp_finalize() -> c_int;
     pub fn ifp_deploy(schema: *const c_char) -> c_int;
     pub fn ifp_session_create(schema: *const c_char, session: *mut usize) -> c_int;

@@ -2,6 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p build/deps
+bash Core/scripts/resource-dependencies.sh
 fetch() {
   local name="$1" sha="$2" url="$3"
   if [[ ! -f "build/deps/$name" ]]; then
@@ -11,9 +12,6 @@ fetch() {
   echo "$sha  build/deps/$name" | shasum -a 256 -c -
 }
 fetch librime.tar.bz2 11d8dc663c6ec06d5ccb6111ba664a9e7b631b703ac6acd07cffbac664021850 https://github.com/rime/librime/releases/download/1.17.0/rime-33e7814-macOS-universal.tar.bz2
-fetch pinyin.tar.gz 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf https://codeload.github.com/rime/rime-pinyin-simp/tar.gz/0c6861ef7420ee780270ca6d993d18d4101049d0
-fetch english.tar.gz 59226ae1bb6da00d8808a0094439271225ac4f533d30cf9150ac482383895461 https://codeload.github.com/BlindingDark/rime-easy-en/tar.gz/54a4a07289412efc54134092c0d945f895a71ed3
-fetch emoji.txt 09e29b83ad367ea273e9ab438e572a7621649d93b36924ead28852762d2898b1 https://raw.githubusercontent.com/iDvel/rime-ice/fbb516b2786e4d5444383706d13c31c2e4d10c08/opencc/emoji.txt
 # The native translator links the existing runtime. Its C++ declarations and
 # template types must come from the same release, not host Homebrew headers.
 fetch librime-source.tar.gz d3f48c2c58f718402229031d8d95fde9cac07ababa8fecf7d18b91946f27fee6 https://codeload.github.com/rime/librime/tar.gz/33e78140250125871856cdc5b42ddc6a5fcd3cd4
@@ -22,8 +20,6 @@ fetch boost_1_89_0.tar.bz2 85a33fa22621b4f314f8e85e1a5e2a9363d22e4f4992925d4bb3b
 stamp=build/deps/.extracted.sha256
 fingerprint=$(printf '%s\n' \
   'librime 11d8dc663c6ec06d5ccb6111ba664a9e7b631b703ac6acd07cffbac664021850' \
-  'pinyin 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf' \
-  'english 59226ae1bb6da00d8808a0094439271225ac4f533d30cf9150ac482383895461' \
   'librime-source d3f48c2c58f718402229031d8d95fde9cac07ababa8fecf7d18b91946f27fee6' \
   'librime-native-deps dfe6047e87be271963d7466bd1a6e3d9e660c30e5e73e4bb94e8782c0a6ac8df' \
   'boost 85a33fa22621b4f314f8e85e1a5e2a9363d22e4f4992925d4bb3bc631b5a0c7a' | shasum -a 256 | awk '{print $1}')
@@ -40,8 +36,6 @@ if [[ "$outputs_valid" == true && -f "$stamp" && "$(cat "$stamp")" == "$fingerpr
   exit 0
 fi
 tar -xjf build/deps/librime.tar.bz2 -C build/deps
-tar -xzf build/deps/pinyin.tar.gz -C build/deps
-tar -xzf build/deps/english.tar.gz -C build/deps
 mkdir -p "$native/librime" "$native/deps" "$native/boost" "$native/generated/rime"
 tar -xzf build/deps/librime-source.tar.gz -C "$native/librime" --strip-components=1
 tar -xjf build/deps/librime-native-deps.tar.bz2 -C "$native/deps" include

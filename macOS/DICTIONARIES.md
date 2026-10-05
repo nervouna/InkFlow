@@ -14,10 +14,10 @@ count and update actions; provenance and generation details live here.
 | InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`Core/config/chinese-overrides.tsv`](../Core/config/chinese-overrides.tsv) |
 | Technical English | Admitted technology terms and abbreviations | [`Core/Data/TECHNOLOGY.md`](../Core/Data/TECHNOLOGY.md) |
 
-`DictionaryModels.swift` is the source of truth for source commits, file paths, byte
+`Core/config/chinese-sources.json` is the source of truth for source commits, file paths, byte
 sizes, Git blob IDs and SHA-256 values. `prepare-chinese.sh` downloads only these explicit
-text files into ignored `build/dictionary-sources`. It runs the same
-`IFDictionaryGenerator.generate` used by the dictionary preparation worker.
+text files into ignored `build/dictionary-sources`. The CLI and the worker's
+`IFDictionaryGenerator.generate` wrapper call the same Rust implementation.
 
 The baseline merge order is Frost `8105`, `base`, `ext`, `idiom`, then Ice `base`,
 `ext`, then the fixed legacy `pinyin_simp` source. Specialty sources then fill
@@ -167,7 +167,7 @@ running and reopening resumes its current progress.
 The pane has no source switches. It reports whether the combined dictionary is ready,
 its Chinese term/reading count and one context-sensitive action: check, update, retry
 or restore. Busy states expose no duplicate action. Internal content versions, source
-commits and immutable URLs remain in this document and `DictionaryModels.swift`, not
+commits and immutable URLs remain in this document and the shared source catalog, not
 in Settings. Recoverable failures state that current input remains available; engine
 failure instead offers restoration. Both retain selectable technical detail behind a
 collapsed disclosure.

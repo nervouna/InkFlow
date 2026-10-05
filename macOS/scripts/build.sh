@@ -38,6 +38,7 @@ cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.
 cp build/deps/dist/lib/rime-plugins/librime-lua.dylib "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
+python3 Core/scripts/dictionary-notices.py "$app/Contents/Resources/Licenses/Rust"
 build_swift_product InkFlow "$app/Contents/MacOS/InkFlow" debug
 sparkle_framework_source="$swiftpm_scratch/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 [[ -d "$sparkle_framework_source" && -s "$sparkle_framework_source/Versions/B/Sparkle" ]] || {

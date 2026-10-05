@@ -76,6 +76,16 @@ pub extern "C" fn ifd_catalog() -> Bytes {
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn ifd_recipe_version() -> u32 {
+    crate::RECIPE_VERSION
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ifd_maximum_source_bytes() -> usize {
+    crate::MAX_SOURCE_BYTES
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifd_generate(
     catalog: Bytes,
     inputs: *const RawInput,

@@ -37,6 +37,10 @@ for link in Autoupdate Headers Modules PrivateHeaders Resources Sparkle Updater.
 done
 [[ "$(readlink "$sparkle_framework/Versions/Current")" == B ]]
 [[ "$(readlink "$sparkle_framework/Sparkle")" == Versions/Current/Sparkle ]]
+[[ -s "$app/Contents/Resources/Licenses/Rust/dictionary-crates.txt" ]]
+[[ -s "$app/Contents/Resources/Licenses/Rust/COPYRIGHT-library.html" ]]
+[[ -s "$app/Contents/Resources/Licenses/Rust/licenses/MIT.txt" ]]
+[[ -s "$app/Contents/Resources/Licenses/Rust/licenses/Apache-2.0.txt" ]]
 [[ -s "$app/Contents/Resources/Licenses/sparkle.txt" ]]
 cmp macOS/Licenses/sparkle.txt "$app/Contents/Resources/Licenses/sparkle.txt"
 sparkle_dependency='@rpath/Sparkle.framework/Versions/B/Sparkle'

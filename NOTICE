@@ -12,7 +12,9 @@ requirements.
 Third-party license texts and attribution notices are in macOS/Licenses/;
 individual source files may contain additional notices. Source provenance
 and modifications are described in macOS/DEPENDENCIES.md and the associated
-data documentation.
+data documentation. Packaged builds also include the locked Rust dictionary
+crate notices and Rust standard-library notices under Resources/Licenses/Rust/;
+Core/scripts/dictionary-notices.py collects them from the verified build inputs.
 
 The dictionaries compiled into the app derive from GPL-3.0, LGPL-3.0,
 Apache-2.0 and CC BY-SA 4.0 data listed in
