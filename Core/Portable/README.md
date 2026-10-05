@@ -27,6 +27,10 @@ OpenCC 1.1.9 requests C++14, but the pinned marisa headers require C++17. The bu
 
 The test copies the tiny checked-in source fixture into a fresh temporary directory, compiles it using the target runtime, and removes the directory after runtime teardown. It checks Chinese composition, one-shot commits, a non-ASCII Lua filter, snapshot ownership, serialized sessions across threads, runtime/session lifetime, and restart.
 
+## Ranking comparison
+
+`src/ranking.rs` ports the existing Swift equivalent-span ranker, including strict metadata parsing, Han phrase context, personal-strength limits, custom-source priority, and native-order fallback. Its 291 synthetic cases compare against the unchanged Swift source. Mac runtime tests regenerate the reference before checking Rust; Linux tests use the recorded results. Dictionary indexing belongs in preparation, while ordering uses only memory. This module is not yet wired into session selection or key handling, so the runtime below still exposes native order.
+
 ## Interface contract
 
 `native/bridge.h` is the experimental internal C ABI between Rust and the native runtime. It uses Rime's public C API for lifecycle, deployment, input, context, and commits. C++ internals are confined to the existing extension and its registration check. The Rust library exposes safe `Runtime` and `Session` handles; a stable frontend-facing exported Rust C ABI is deferred until session policy is migrated.

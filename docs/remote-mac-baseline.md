@@ -13,6 +13,7 @@ python3 scripts/mac-remote.py baseline
 python3 scripts/mac-remote.py portable
 python3 scripts/mac-remote.py dictionary
 python3 scripts/mac-remote.py resources
+python3 scripts/mac-remote.py ranking-reference
 ```
 
 `--revision COMMIT` defaults to `HEAD`. Local uncommitted changes are never sent. The runner prints the resolved commit and evidence directory. Use `--host ALIAS` and `--remote-root PATH` to override the defaults, `tanaris` and `~/Develop/Projects/inkflow-remote`.
@@ -44,6 +45,10 @@ The remote report contains `00-portable.log`, `native-build.json`, and the norma
 ## Dictionary generator comparison
 
 `dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It also compiles C and Swift consumers of the in-process Rust dictionary ABI. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, the Swift ABI consumer's `swift-ffi-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md).
+
+## Ranking reference
+
+`ranking-reference` compiles the unchanged Swift ranker with a standalone fixture reader and returns `ranking-reference.json`. It does not initialize Rime or inspect user data. The `portable` action also regenerates this reference on the Mac, compares it with the recorded fixture, and runs the Rust ranking tests. These compare the pure ordering policy, not full engine behavior.
 
 ## Target-native production resources
 
