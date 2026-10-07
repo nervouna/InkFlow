@@ -1,12 +1,12 @@
 # Current mixed-input rules and correction-table contract
 
-This describes the implemented baseline, not an expansion plan. Recheck the linked sources in the [skill entrypoint](../SKILL.md) when changing a rule. The rules distinguish data inherited from upstream, native Rime behavior, and InkFlow policy.
+The implemented baseline. Recheck the sources linked from the [skill entrypoint](../SKILL.md) when changing a rule.
 
 ## Data, admission and weights
 
 1. **Explicit spelling sources, InkFlow frequency policy.** The complete pinned `rime-easy-en` dictionary remains an unmodified build input under `build/deps`. It supplies existing displayed words and code aliases. The bounded `Core/Data/english-technology.tsv` adds selected Rime Ice and explicitly InkFlow-maintained technical spellings/codes; see [its data contract](../../../../Core/Data/TECHNOLOGY.md). Equal text/code pairs collapse, while existing aliases remain. Original numeric weights are not used for admission or English ranking.
-2. **Static measured source.** `Core/Data/english-wordfreq.tsv` maps exact displayed text to observed Zipf from pinned wordfreq 3.1.1 `en/large`. Regeneration performs `preprocess_text(text, "en")` followed by direct frequency-key lookup, then stores `log10(probability) + 9` to two decimals. It does not use the multi-token estimators in `word_frequency`/`zipf_frequency`.
-3. **Missing is not zero.** An absent observation is omitted; there is no estimated value or fallback to the old upstream weight. The provider folds capitalization, so it cannot distinguish senses such as `US/us`. The snapshot is keyed by exact original display text so explicit corrections can distinguish spellings.
+2. **Static measured source.** `Core/Data/english-wordfreq.tsv` maps exact displayed text to observed Zipf; provenance and regeneration are in [its README](../../../../Core/Data/README.md).
+3. **Missing is not zero.** An absent observation is omitted; there is no estimated value or fallback to the old upstream weight. The snapshot is keyed by exact display text so explicit corrections can distinguish case variants the provider folds.
 4. **One admission gate.** `prepare-rime.sh` chooses the exact-word override when present, otherwise the observed snapshot value. With neither, the record is excluded. An effective value must be positive and at least `ENGLISH_MIN_ZIPF`. Zero always excludes, including when the threshold itself is zero.
 5. **Every candidate path uses the gate.** Generate filtered `easy_en.dict.yaml` first, then derive the mixed dictionary only from it. Exact queries, completions, existing code aliases, case variants and later pages cannot query the original unfiltered input as a fallback. Each distinct displayed spelling is evaluated separately.
 6. **Build-time configuration.** Values live in `Core/config/english.conf`, with no GUI or runtime setting:
@@ -17,8 +17,8 @@ This describes the implemented baseline, not an expansion plan. Recheck the link
    | `ENGLISH_WEIGHT_SCALE` | `250000` | Positive integer up to 238609294 |
    | `MIXED_ENGLISH_WEIGHT_DIVISOR` | `100` | Positive decimal divisor applied only after admission |
 
-7. **Weight mapping.** English weight is `floor(effective_Zipf * scale + 0.5)`; mixed weight is `floor(English_weight / divisor)`. This linear engineering mapping preserves frequency order subject to integer ties; it is not a probability-ratio mapping. The mixed divisor cannot change standalone English admission or weights. Scale/divisor changes can affect mixed sentence decoding; they do not replace the cross-language priority rule.
-8. **Failure behavior.** Configuration and data validation occurs in staging before replacing either generated dictionary. Malformed numbers/rows, duplicate exact words or a missing required snapshot fail generation. Previous generated dictionaries survive these validation failures; there is no full-dictionary fallback. Empty snapshot/override files or an empty admitted result are valid. This is validation staging, not a guarantee of an atomic two-file replacement against arbitrary filesystem failures.
+7. **Weight mapping.** English weight is `floor(effective_Zipf * scale + 0.5)`; mixed weight is `floor(English_weight / divisor)`. The linear mapping preserves frequency order within Rime's weight range. The mixed divisor cannot change standalone English admission or weights.
+8. **Failure behavior.** Validation runs in staging before replacing either generated dictionary. Malformed numbers/rows, duplicate exact words or a missing snapshot fail generation and keep the previous dictionaries; there is no full-dictionary fallback. Empty snapshot/override files or an empty admitted result are valid.
 
 ## Candidate behavior and ownership
 
@@ -44,7 +44,7 @@ This describes the implemented baseline, not an expansion plan. Recheck the link
 
 ## Override-table editing rules
 
-Edit `Core/config/english-overrides.tsv` for accepted individual corrections. The table includes 111 explicit technology admissions at 4.0 for selected spellings with missing/below-gate observations. These are product policy, not measured data; 11 selected spellings already at/above the gate keep their observations. The old `email = 0` workaround and four hard-coded variants are obsolete: the measured snapshot already admits those common spellings.
+Edit `Core/config/english-overrides.tsv` for accepted individual corrections. It already holds 111 technology admissions at 4.0; these are product policy, not measured data.
 
 1. **Record format:** exactly three columns separated by literal TAB characters: `displayed word`, `replacement Zipf`, `reason`. Blank lines and lines whose first non-whitespace character is `#` are ignored. Use no padding or extra tabs; fields are not trimmed or unquoted. The word and reason must each contain non-whitespace text.
 2. **Number syntax:** digits, optionally followed by a dot and more digits, within 0..9 inclusive. `4`, `4.0`, `0` are valid; `.5`, `4.`, negatives, scientific notation, `NaN` and infinity are invalid. A replacement is a Zipf value, not an engine weight. The generator accepts more than two decimals; snapshot precision does not constrain overrides.
@@ -55,14 +55,12 @@ Edit `Core/config/english-overrides.tsv` for accepted individual corrections. Th
 7. **Reason and evidence:** write a concrete reason for the accepted local correction, identifying the observed bad case or relevant evidence. Do not invent a measured frequency. Distinguish a product-policy adjustment from provider data. Choose the smallest value/change meeting the intended admission or English-ordering outcome; leave broad cleaning/case/new-word policies for a separately agreed iteration.
 8. **Regeneration boundary:** rebuild generated dictionaries after editing the source table/config. Do not patch `build/**`, installed resources, the upstream archive, or the measured snapshot to implement an ordinary correction. Editing the TSV alone does not update a running input method. Update the relevant regression expectations and this reference when semantics change.
 
-Illustrative rows only, **not default recommendations or active rules**. Separators below are literal tabs:
+Example (literal tabs):
 
 ```tsv
 plugin	4.0	Example policy: admit this existing spelling at the default gate
 WOMENS	0	Example policy: explicitly exclude this exact display spelling
 ```
-
-The first row has no effect on a differently cased spelling and would fail a threshold above 4.0. The second affects all existing aliases of `WOMENS`, not `women`. Neither row adds vocabulary. Do not copy either merely because it appears in this guide.
 
 ## Regression anchors and accepted limits
 
@@ -83,6 +81,4 @@ These anchors describe the current defaults and fixtures; future intentional dat
 | `can`, `you`, `she`, `he`, `man`, `bug` | Chinese stays first; exact English is second and commits exactly. `canpin`, `youxi`, `sheji`, and `hezuo` keep their Chinese first candidates |
 | `offline`, `plugin` | Default exclusion is an accepted baseline limit, not a runtime-gate defect |
 
-Frequency is a static common-word proxy, not word validity, a current vocabulary source, or a frequency model for English specifically inserted into Chinese. It cannot fix source forms such as `APP/App` or `Demo/DEMO`, infer lowercase variants, or synthesize missing public words. Exact user-confirmed records in `inkflow_shared_english.userdb` may bypass this public gate without becoming public completions. There is no English spelling correction, network lookup, or contextual model in this feature.
-
-For deliberate snapshot/provider maintenance, use `Core/Data/README.md` and its regeneration script: verify pinned source/data hashes and version, regenerate deterministically, review additions/removals and representative values, update output checksum/provenance and bundled license attribution. Python/wordfreq is needed only for that operation; ordinary builds read the committed TSV with AWK and runtime performs no frequency download. Do not regenerate the snapshot for an ordinary override edit.
+Frequency cannot fix upstream source forms such as `APP/App` or `Demo/DEMO`, infer lowercase variants, or add missing public words. Do not regenerate the snapshot for an ordinary override edit.
