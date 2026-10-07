@@ -21,9 +21,7 @@ The existing code already separates much of the engine from the macOS frontend:
 - `schemas/`: Rime configuration, Lua modules, and OpenCC resources.
 - `Core/Tests/` and `Core/Fixtures/QualityBaseline/`: existing regression coverage and behavioral reference material.
 
-Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) still uses the Swift generator through the Mac toolchain. A separate Swift package does not yet constitute a Linux port.
-
-Development started on branch `portable-core`, in `.worktrees/portable-core/`, from revision `8669c48`. Linux Rust tooling and SSH access to the Apple Silicon Mac through `ssh tanaris` were verified. No migrated engine or cross-platform performance result existed when this plan was agreed.
+Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) still uses the Swift generator through the Mac toolchain.
 
 ## Architecture
 
@@ -71,18 +69,16 @@ Use a small C ABI initially, with Swift and JNI adapters as needed. Add binding 
 
 ### Product and data boundaries
 
-- Offline typing must not depend on AI, telemetry, downloads, or a companion service.
-- Keep network, disk preparation, and SQLite work off the key-event path. Audit existing settings and learning paths rather than copying blocking work into Rust.
+The product rules in [AGENTS.md](../AGENTS.md) apply to every platform. In addition:
+
+- Audit existing settings and learning paths rather than copying blocking work into Rust.
 - Apply settings and dictionary changes at safe composition boundaries.
-- Keep quality recording observational; it must not alter ranking or input or record secrets.
-- AI remains default-off. Credentials and permissions belong to the platform integration.
+- Credentials and permissions belong to the platform integration.
 - Preserve supported learning data and custom phrases through explicit backup/import. Translate or reject unsupported preferences explicitly; macOS physical shortcut codes are not portable.
 - Tests use isolated data directories. Never run old and new engines against the same live user database concurrently.
 - Portable backups do not imply that live databases can be shared or synchronized safely.
 
 ## Design ablation
-
-These are design comparisons, not measured implementation experiments.
 
 | Alternative | Benefit | Cost or limitation | Decision |
 | --- | --- | --- | --- |
@@ -106,13 +102,13 @@ Prepare a dedicated checkout on the Mac. Transfer exact revisions, prevent concu
 
 Pin a common Rust toolchain and native dependency versions. Run the relevant existing macOS tests and preserve behavioral transcripts. Measure startup, resident memory, and representative key-event latency using fixed resources and isolated user data. Agree on performance acceptance criteria after obtaining the baseline.
 
-Completion means Linux can request a reproducible, focused Mac build/test run without installing anything, and the existing engine has a usable behavioral reference. Passwordless sudo and a full CI service are unnecessary. Commands and measurement boundaries are documented in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
+Completion means Linux can request a reproducible, focused Mac build/test run without installing anything, and the existing engine has a usable behavioral reference. Commands and measurement boundaries are documented in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
 
 ### 1. Desktop Rust/Rime feasibility
 
 Build the pinned engine and native extensions on Linux and macOS. Implement the minimum Rust host: initialize, create a session, process input, retrieve snapshots/commits, and destroy the session. Specify the initial ABI and serialized-access contract.
 
-Review dependencies and resource licensing against intended distribution channels. Design for constrained hosts without promising unmeasured mobile resource usage.
+Review dependencies and resource licensing against intended distribution channels.
 
 Completion means the same minimal implementation produces basic composition on both desktop systems. Resolve native linking, extension registration, and resource preparation problems before migrating broader policy.
 
@@ -134,7 +130,7 @@ Steam Deck Gaming Mode and controller/on-screen keyboard integration are out of 
 
 Add minimum daily-use configuration, personal-data import, and packaging for the chosen Linux environment. A minimal frontend may start during phase 2 to expose integration issues early.
 
-Completion means an installable Linux build supports the agreed offline behavior with focused automated coverage. The user checks typing and focus in their browser, editor, and terminal, including switching applications mid-composition and sensitive fields.
+Completion means an installable Linux build supports the agreed offline behavior with focused automated coverage.
 
 ### 4. macOS cutover
 
@@ -143,8 +139,6 @@ Connect the existing Swift frontend to the shared engine. Preserve settings, can
 Compare old and new implementations on the same MacBook. Verify real application linkage and data compatibility. Keep a known-good installation available, and install development builds only when explicitly requested.
 
 Completion means macOS and Linux use the same offline core, with no unexplained behavioral or performance regressions. Remove superseded Swift engine code after callers and tests migrate; do not keep two production implementations indefinitely.
-
-The user checks installed typing, focus, and Settings behavior. Remote test results do not substitute for these desktop checks.
 
 ### 5. Mobile feasibility and delivery
 
@@ -172,13 +166,9 @@ Use old/new behavioral comparisons for preedit and caret position, candidate ord
 
 Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines. Use the [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) for the recorded macOS protocol.
 
-Run only relevant test units. Existing macOS commands remain `bash macOS/scripts/build.sh` and focused `bash macOS/scripts/test.sh ...` invocations. UI-only changes get a build and user inspection. Reserve the full suite for releases or explicit requests. Run Mac builds outside a sandbox.
-
-Build/test and installation remain separate operations. Remote automation must not replace or activate the user's installed IME implicitly. Keep another keyboard input source enabled for development testing.
+Build, test and installation follow [AGENTS.md](../AGENTS.md). Keep another keyboard input source enabled for development testing.
 
 ## Remaining choices
 
 - Choose Android versus iOS order after the macOS cutover.
 - Arrange mobile device/toolchain access and, later, Windows development/test access.
-
-These choices do not block creating the desktop baseline or minimal shared engine.
