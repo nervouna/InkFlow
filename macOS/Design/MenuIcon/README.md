@@ -10,6 +10,6 @@ build/generate-menu-icon macOS/Design/MenuIcon
 cp macOS/Design/MenuIcon/MenuIconTemplate.tiff macOS/Resources/
 ```
 
-The TIFF is checked in so routine builds do not depend on the installed font version. The `Template` suffix follows AppKit template-image naming. Both normal and alternate input-mode menu entries reference it. Actual input-menu tinting is owned by macOS and requires installed UI acceptance.
+The TIFF is checked in so routine builds do not depend on the installed font version. The `Template` suffix follows AppKit template-image naming. Both input-mode menu entries reference it.
 
-The bundle and mode also declare `TISIconIsTemplate`. This preserves template handling in the cursor input switcher, where the filename suffix alone was insufficient. The accepted appearance retains the Ink badge and reverses its colors when selected; it does not reproduce Apple's background-free built-in glyphs. See `macOS/DEBUGGING.md` for the observed behavior and refresh limitations.
+The bundle and mode also declare `TISIconIsTemplate`. This preserves template handling in the cursor input switcher, where the filename suffix alone was insufficient. See `macOS/DEBUGGING.md` for the switcher's behavior.
