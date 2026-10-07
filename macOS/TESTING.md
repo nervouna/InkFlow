@@ -31,10 +31,6 @@ bash Core/scripts/test.sh             # standalone Core package, no app build
 
 GUI harnesses (`test-settings-ui.sh`, `test-installer-window.sh`, AI native/live scripts) are manual diagnostics only; live AI scripts cost money and need explicit approval.
 
-## Manual checks
-
-Real typing, candidate selection, focus/App switching, Settings interaction and installation are checked by hand. After a change that affects them, list what to try in one or two lines.
-
 ## Python query checks
 
 `test-quality-query.sh` uses `python3` from `PATH` (override with `INKFLOW_PYTHON`) and only the standard library.

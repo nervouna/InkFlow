@@ -6,21 +6,14 @@ The application, settings interface, registration tool, and test scenarios are w
 
 - `../Core/Package.swift` builds the shared `InkFlowDomain` and `InkFlowRime` sources used by the root package. Dictionary source validation, generation, storage, preparation and activation policy live in Core; macOS owns worker process/sandbox execution, bundle/path discovery, command-line framing, logging adapters and UI.
 - `../Core/Sources/InkFlowRime/Engine.swift` owns librime sessions and converts C data to `EngineSnapshot` values; `Sources/EngineEvent.swift` adapts macOS events to semantic engine input. Shared schema changes and session calls stay on the main actor.
-- `Context.swift` requests bounded UTF-16 context through public `IMKTextInput`, validating ranges, surrogate adjustments, foreign marks and secure input; it keeps no document or client cache.
-- `IFContextRanker` loads phrase frequencies from the bundled `pinyin_simp.dict.yaml` once and reorders eligible Han candidates within their original slots; this is nearby phrase matching, not sentence semantics.
-- The engine owns the displayed-to-native candidate permutation and synchronizes librime's highlight through its public C API; `snapshot()` has no mutation side effects.
-- `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel. Standalone left Shift toggles Chinese/English; mode, punctuation, script and voice bindings use the cached `KeyboardShortcuts` model, and plain Tab stays fixed for AI acceptance. `@objc(InkFlowInputController)` preserves the runtime name in `Info.plist`.
-- `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (embedded via `main.swift` and `IFUpdaterAccess`) owns updater preferences after the one-time legacy migration, with automatic checks and download off by default.
-- `../Core/Sources/InkFlowDomain/CustomPhrase.swift` defines the validated custom phrase value; `Sources/CustomPhrases.swift` provides the editor. Invalid stored data is preserved and surfaced in Personalization.
-- `NativeCandidates.m` is the only Objective-C application source: the private font setter and minimum-width adaptation. See `DEBUGGING.md` for native panel compatibility limits.
-- `Tools/RegisterInputSource.swift` registers and verifies the input source; build and test scripts never install, register or select the application.
-- `scripts/prepare-rime.sh` copies pinned dictionaries and Lua modules and generates the supplemental mixed dictionary for every build and engine-test entry point. See `DEPENDENCIES.md` for weighting and lookup boundaries.
+- `Context.swift` reads bounded surrounding text through public `IMKTextInput`; `IFContextRanker` reorders Han candidates within their slots from bundled phrase frequencies.
+- `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel.
+- `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (`IFUpdaterAccess`) owns updater preferences.
+- `NativeCandidates.m` is the only Objective-C source: private candidate-panel adaptations (see `DEBUGGING.md`).
+- `Tools/RegisterInputSource.swift` registers and verifies the input source; build and test scripts never install, register or select it.
+- `scripts/prepare-rime.sh` delegates to the [shared dictionary preparation](../docs/shared-dictionary-preparation.md); see [DEPENDENCIES.md](DEPENDENCIES.md) for pins.
 
 ## Workflows
-
-### Install a released version
-
-Download the latest DMG from [Releases](https://github.com/nervouna/InkFlow/releases/latest), open `InkFlow Installer.app`, choose Install and Enable.
 
 ### Build and try the development version
 

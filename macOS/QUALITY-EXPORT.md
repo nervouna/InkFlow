@@ -6,9 +6,9 @@ Manual quality exports let you analyze the records retained on several computers
 
 In InkFlow Settings, open 「备份与恢复」 and choose 「导出质量数据」 under 「输入质量记录」. Choose a JSON file location. The result reports the saved path, composition and learning-event counts, and the earliest/latest retained record time in UTC. An empty database exports an explicit empty range and zero counts.
 
-The file includes input codes/text, candidates, selections, obtainable preceding text, app/client identifiers, operations/timing, content-free learning-effectiveness events, build/version metadata, statistical fingerprints, and record timestamps. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Candidate/selected text can still contain a phrase you actually used. Transfer the file yourself; InkFlow does not upload or synchronize it.
+The file includes input codes/text, candidates, selections, obtainable preceding text, app/client identifiers, operations/timing, content-free learning-effectiveness events, build/version metadata, statistical fingerprints, and record timestamps. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
 
-Only records still present in the local quality database are included: text records retain the existing 28-day policy; learning-effectiveness events retain 90 days, capped at 4,096. Export does not change collection, retention or the records. The current in-progress input and records still waiting for the writer are outside the committed snapshot. Keep or delete exports yourself; local automatic cleanup does not delete exported copies.
+Only records still present in the local quality database are included: text records retain the existing 28-day policy; learning-effectiveness events retain 90 days, capped at 4,096. In-progress input and unwritten records are not included. Local cleanup does not delete exported copies.
 
 A command-line alternative uses the same file contract (Python standard library only):
 
@@ -72,10 +72,8 @@ Record timestamps use the writer's UTC millisecond form (`YYYY-MM-DDTHH:MM:SS.ss
 
 Deduplication keys are `(source_id, table, original_id)`. Learning-effectiveness events additionally use `run_id` and `occurred_at`, because their integer IDs may be reused after retention cleanup. Identical repeated files and overlapping exports count each record once. Records from different devices remain separate even if their original IDs match. Different JSON key order/whitespace does not change equality. A recording run's cumulative counters/status come from its latest snapshot and are never summed repeatedly. Conflicting immutable records with the same identity reject the whole command instead of choosing silently.
 
-Each file is limited to 256 MiB. Unknown format/schema versions, broken JSON, duplicate keys/IDs, missing required fields, invalid types/timestamps, broken parent/page links and conflicting overlapping records fail with a diagnostic and exit status 2. Analysis produces no summary on failure and never repairs the input files. Empty compatible files are valid and report zero coverage and unavailable rates.
+Each file is limited to 256 MiB. Unknown format/schema versions, broken JSON, duplicate keys/IDs, missing required fields, invalid types/timestamps, broken parent/page links and conflicting overlapping records fail with a diagnostic and exit status 2. Empty compatible files are valid and report zero coverage and unavailable rates.
 
-## Verification and manual acceptance
+## Tests
 
-The scoped query tests exercise the native Settings exporter through a standalone fixture, Python export roundtrips, existing metric definitions, local read-only behavior, actual engine-written export/metric parity, reused learning-event IDs after retention cleanup, two sources with colliding fixture IDs, repeated files, overlapping snapshots and mutable run counters, empty inputs and rejected corruption. These are synthetic test records, not evidence from two physical devices.
-
-Manual acceptance: export retained data on computer A and transfer the actual JSON file to computer B. On B, run `summary` and `trend` with A's file plus B's local records, compare both `by_source` results with separate analyses, and repeat an input file/overlapping export to confirm unchanged counts. Check the Settings save/cancel/result flow and normal typing while exporting. Record the two-device results before closing Issue #31; automated fixtures do not mark this acceptance complete.
+`test.sh quality-capture-query` covers the Settings exporter, roundtrips, deduplication across sources and overlapping files, and rejected corruption.

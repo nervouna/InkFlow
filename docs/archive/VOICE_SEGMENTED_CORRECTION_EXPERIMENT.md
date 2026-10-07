@@ -156,4 +156,4 @@ acceptance is implied. The user then requested recording results, deleting
 experiment artifacts, and handing off formal development to a new conversation.
 The temporary sources, apps, audio, raw result files, caches and isolated userdb
 were removed. Maintained conclusions and pending work are in
-`VOICE_INPUT_HANDOFF.md`; historical reproduction paths below/above are archival.
+`macOS/VOICE_INPUT.md`; historical reproduction paths below/above are archival.

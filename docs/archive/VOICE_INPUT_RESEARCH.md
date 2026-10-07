@@ -2,7 +2,7 @@
 
 > Archived 2026-09-12: temporary experiment sources and generated artifacts were
 > removed at the user's request. Commands and paths are historical evidence.
-> See `VOICE_INPUT_HANDOFF.md` for current decisions and development scope.
+> See `macOS/VOICE_INPUT.md` for current decisions and development scope.
 
 ## Environment and method
 
