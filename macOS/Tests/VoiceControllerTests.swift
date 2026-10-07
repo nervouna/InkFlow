@@ -78,7 +78,8 @@ private final class VoiceHarness {
     }
     func start() async {
         key()
-        try? await Task.sleep(for: .milliseconds(20))
+        // Poll instead of a fixed wait so a loaded machine doesn't fail the start.
+        for _ in 0..<100 where fake.starts == 0 { try? await Task.sleep(for: .milliseconds(20)) }
         check(controller.voice.isActive && fake.starts == 1)
     }
 }
