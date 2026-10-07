@@ -10,18 +10,17 @@ extension VoiceCorrectionObservation {
         guard valid(insertionRange), insertionRange.length == insertedFinal.utf16.count,
               !insertedFinal.isEmpty, insertedFinal.utf16.count <= textLimit,
               rawFinal.utf16.count <= textLimit, validateTarget() else { return nil }
-        guard let identifier = client.uniqueClientIdentifierString(), !identifier.isEmpty,
-              validateTarget() else { return nil }
+        guard let identifier = client.uniqueClientIdentifierString(), !identifier.isEmpty else { return nil }
         let selection = client.selectedRange()
-        guard validateTarget(), valid(selection), selection.length == 0,
+        guard valid(selection), selection.length == 0,
               selection.location == NSMaxRange(insertionRange) else { return nil }
-        guard client.uniqueClientIdentifierString() == identifier, validateTarget() else { return nil }
+        guard validateTarget() else { return nil }
         let length = client.length()
-        guard validateTarget(), length != NSNotFound, length >= NSMaxRange(insertionRange) else { return nil }
-        guard client.uniqueClientIdentifierString() == identifier, validateTarget() else { return nil }
+        guard length != NSNotFound, length >= NSMaxRange(insertionRange) else { return nil }
         var actual = insertionRange
+        guard validateTarget() else { return nil }
         guard let readback = client.string(from: insertionRange, actualRange: &actual),
-              validateTarget(), actual == insertionRange, readback == insertedFinal,
+              actual == insertionRange, readback == insertedFinal,
               client.uniqueClientIdentifierString() == identifier,
               validateTarget() else { return nil }
         return capture(operationID: operationID, identity: ObjectIdentifier(client as AnyObject),
@@ -39,19 +38,21 @@ extension VoiceCorrectionObservation {
                       now: ContinuousClock.Instant = .now,
                       validateTarget: () -> Bool = { true }) -> ReadEvidence? {
         guard !secure, now < expiry, hasAttributedEdit, validateTarget(),
-              matchesTarget(client: client, sessionRevision: sessionRevision), validateTarget() else { return nil }
+              matchesTarget(client: client, sessionRevision: sessionRevision) else { return nil }
         let mark = client.markedRange()
-        guard validateTarget(), !Self.valid(mark) || mark.length == 0 else { return nil }
+        guard !Self.valid(mark) || mark.length == 0 else { return nil }
         let selection = client.selectedRange()
-        guard validateTarget(), Self.valid(selection), selection.length == 0 else { return nil }
+        guard Self.valid(selection), selection.length == 0 else { return nil }
+        guard validateTarget() else { return nil }
         let length = client.length()
-        guard validateTarget(), let range = readingRange(mark: mark, selection: selection,
+        guard let range = readingRange(mark: mark, selection: selection,
                     currentLength: length, secure: secure, now: now) else { return nil }
         var actual = range
-        guard let current = client.string(from: range, actualRange: &actual), validateTarget(),
+        guard validateTarget() else { return nil }
+        guard let current = client.string(from: range, actualRange: &actual),
               actual == range, current.utf16.count == range.length else { return nil }
         let identifier = client.uniqueClientIdentifierString()
-        guard validateTarget(), matchesTarget(identity: ObjectIdentifier(client as AnyObject),
+        guard matchesTarget(identity: ObjectIdentifier(client as AnyObject),
                   identifier: identifier, sessionRevision: sessionRevision), validateTarget() else { return nil }
         return ReadEvidence(target: .init(identity: ObjectIdentifier(client as AnyObject), identifier: identifier,
                 sessionRevision: sessionRevision, secure: secure), mark: mark, selection: selection,
@@ -62,9 +63,8 @@ extension VoiceCorrectionObservation {
                       validateTarget: () -> Bool) -> (selection: NSRange, target: TargetEvidence)? {
         guard !secure, validateTarget() else { return nil }
         let selection = client.selectedRange()
-        guard validateTarget() else { return nil }
         let identifier = client.uniqueClientIdentifierString()
-        guard validateTarget(), matchesTarget(identity: ObjectIdentifier(client as AnyObject),
+        guard matchesTarget(identity: ObjectIdentifier(client as AnyObject),
             identifier: identifier, sessionRevision: sessionRevision), validateTarget() else { return nil }
         return (selection, .init(identity: ObjectIdentifier(client as AnyObject), identifier: identifier,
                                 sessionRevision: sessionRevision, secure: secure))
