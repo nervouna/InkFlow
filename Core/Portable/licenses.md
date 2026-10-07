@@ -1,6 +1,6 @@
 # Portable runtime distribution review
 
-This review covers the pinned source build and the existing resource set for #34. It records packaging requirements and unresolved rights questions; it is not legal clearance for an app store release. The probe is a development artifact with an InkFlow-authored three-entry dictionary, not a redistributable product package.
+Packaging requirements and open rights questions for the pinned source build and the existing resource set (#34). Not legal clearance.
 
 ## Native code
 
@@ -23,9 +23,9 @@ Source revisions and archive hashes are in `native-sources.lock.json`. Paths bel
 | RapidJSON | MIT notices in `opencc/deps/rapidjson-1.1.0/rapidjson/` | Include notices for the headers compiled into OpenCC. |
 | TCLAP | MIT notice in `opencc/deps/tclap-1.2.5/tclap/CmdLine.h` | Required if shipping the OpenCC command-line tools built by this recipe. |
 
-The source archives also contain tests and optional dependencies that this recipe does not build. Do not treat every vendored directory as a shipped component. Conversely, static linkage does not remove attribution duties. A release package must collect the applicable notices from these exact pinned sources; the existing `macOS/Licenses/` directory alone is not a complete manifest for this new source-built runtime.
+Only built components count; static linkage still requires attribution. A release package must collect notices from these pinned sources — `macOS/Licenses/` alone does not cover this runtime.
 
-Linux binaries also depend on the system C/C++ runtime. The prototype does not bundle glibc, libstdc++, or libgcc; a future portable/AppImage package must review the versions it actually includes and their runtime exceptions. macOS uses Apple's system libraries. The probe currently embeds checkout-local rpaths, so neither target's output is ready for end-user distribution.
+Linux builds use the system C/C++ runtime; an AppImage-style package that bundles it must review those libraries. The probe embeds checkout-local rpaths and is not distributable as is.
 
 ## Production dictionaries and other resources
 
@@ -39,8 +39,6 @@ The existing [dependency inventory](../../macOS/DEPENDENCIES.md), [Chinese dicti
 
 ## Channels
 
-For direct Linux packages and notarized macOS downloads, the reviewed native licenses permit redistribution subject to their notice requirements. Product distribution still needs a generated-resource/source bundle and resolution of the dictionary rights gap. This probe does not change the current macOS package or declare its existing data legally cleared.
+Direct Linux packages and notarized macOS downloads: the native licenses permit redistribution with notices. Product distribution still needs a generated-resource/source bundle and resolution of the Sogou gap.
 
-For a later iOS App Store keyboard, review GPL/LGPL resource obligations against then-current store terms, signing/installation restrictions, and DRM before selecting the resource profile. Do not assume that distributing data separately settles those questions. The Android store and Windows package reviews likewise belong to their delivery phases, including any copied runtime libraries. No mobile or Windows channel is validated by this desktop build.
-
-The small checked-in probe fixture avoids these production-data questions for feasibility testing. It must not become a silent replacement for the existing vocabulary or ranking policy.
+An iOS App Store keyboard needs a GPL/LGPL review against store terms before choosing its resource profile. Android and Windows reviews belong to their delivery phases.
