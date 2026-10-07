@@ -5,7 +5,19 @@ import InkFlowCoreTestSupport
 import InkFlowRankingTestSupport
 
 package enum EngineRegression {
-    @MainActor package static func inputSettings(user: String) throws {
+    // Event modifiers: Shift = 1, Command = 2, Control = 4, Option = 8.
+    // macOS uses native metadata; standalone Core uses the equivalent Rime key.
+    package typealias Event = @MainActor (IFEngine, Int32, UInt16, String, Int32) -> Bool
+
+    @MainActor package static func rimeEvent(_ engine: IFEngine, _ key: Int32, _ code: UInt16,
+                                            _ text: String, _ modifiers: Int32) -> Bool {
+        engine.input(key, modifiers: modifiers & 1)
+    }
+
+    @MainActor package static func inputSettings(
+        user: String, event: Event = rimeEvent,
+        updatePreferences: ((InputPreferences) -> InputPreferences)? = nil
+    ) throws {
         func configure(_ engine: IFEngine, _ preferences: InputPreferences) {
             engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: preferences)
             check(engine.configurationError == nil)
@@ -116,7 +128,7 @@ package enum EngineRegression {
         engine.clear(); configure(engine, defaults)
         type(engine, "nihao")
         let composing = engine.snapshot()
-        check(!engine.input(-1) && !engine.requestedASCIIMode,
+        check(!event(engine, -1, 49, " ", 5) && !engine.requestedASCIIMode,
               "The replaced Control-Shift-Space shortcut must pass through")
         engine.asciiMode = true
         check(engine.requestedASCIIMode && !engine.asciiMode && engine.snapshot() == composing && engine.takeCommit().isEmpty)
@@ -136,7 +148,7 @@ package enum EngineRegression {
             var passthrough = ""
             for character in protected {
                 let text = String(character)
-                check(!engine.input(Int32((text).utf16.first!), modifiers: 0), "ASCII mode must pass through \(text)")
+                check(!event(engine, Int32(text.utf16.first!), 0, text, 0), "ASCII mode must pass through \(text)")
                 passthrough += text
                 check(engine.snapshot().candidates.isEmpty && engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty,
                       "ASCII passthrough must not create candidates or converted punctuation")
@@ -172,12 +184,14 @@ package enum EngineRegression {
         check(engine.inputPreferences == exact)
 
         var preferences = InputPreferences().setting(.abbreviation, to: false).setting(.typoTolerance, to: false)
+        preferences = updatePreferences?(preferences) ?? preferences
         engine.clear(); configure(engine, preferences)
         type(engine, "shi")
         let groupedBefore = engine.snapshot(), groupedRevision = engine.qualityRevision.id
         let groupedOriginal = preferences
         preferences = preferences.setting(.fuzzyZ, to: true).setting(.fuzzyC, to: true).setting(.fuzzyS, to: true)
         preferences = preferences.setting(.bracketPaging, to: false).setting(.minusEqualPaging, to: true)
+        preferences = updatePreferences?(preferences) ?? preferences
         let groupedUpdated = preferences
         configure(engine, groupedUpdated)
         retained.clear(); configure(retained, groupedUpdated)
@@ -197,6 +211,7 @@ package enum EngineRegression {
         engine.clear()
         for enabled in [true, false] {
             preferences = preferences.setting(.fuzzyZ, to: enabled).setting(.fuzzyC, to: enabled).setting(.fuzzyS, to: enabled)
+            preferences = updatePreferences?(preferences) ?? preferences
             configure(engine, preferences)
             for (spelling, word) in [("zongguo", "中国"), ("canpin", "产品"), ("sanghai", "上海")] {
                 check(contains(engine, spelling, word) == enabled, "Unified fuzzy setting: \(spelling) = \(enabled)")
@@ -205,6 +220,7 @@ package enum EngineRegression {
         }
         for brackets in [true, false] {
             preferences = preferences.setting(.bracketPaging, to: brackets).setting(.minusEqualPaging, to: !brackets)
+            preferences = updatePreferences?(preferences) ?? preferences
             configure(engine, preferences)
             let previous: Int32 = brackets ? 91 : 45
             let next: Int32 = brackets ? 93 : 61
@@ -218,6 +234,7 @@ package enum EngineRegression {
         }
         type(engine, "shi")
         preferences = preferences.setting(.fuzzyZ, to: true).setting(.fuzzyC, to: true).setting(.fuzzyS, to: true); preferences = preferences.setting(.bracketPaging, to: true).setting(.minusEqualPaging, to: false)
+        preferences = updatePreferences?(preferences) ?? preferences
         configure(engine, preferences)
         engine.clear(); type(engine, "zongguo")
         check(engine.inputPreferences == preferences &&
@@ -382,7 +399,7 @@ package enum EngineRegression {
         }
     }
 
-    @MainActor package static func mixedEnglishCandidates() {
+    @MainActor package static func mixedEnglishCandidates(event: Event = rimeEvent) {
         let engine = IFEngine()!
         for (input, expected) in [
             ("niruguoxiangyaozhefenoffer", "你如果想要这份offer"),
@@ -403,8 +420,8 @@ package enum EngineRegression {
             selectCandidate(expected, input: input, engine: engine)
         }
         type(engine, "woyong")
-        for (_, letter) in [(UInt16(0), "A"), (UInt16(35), "P"), (UInt16(34), "I")] {
-            check(engine.input(Int32((letter).utf16.first!), modifiers: 1))
+        for (code, letter) in [(UInt16(0), "A"), (UInt16(35), "P"), (UInt16(34), "I")] {
+            check(event(engine, Int32(letter.utf16.first!), code, letter, 1))
         }
         type(engine, "keyihuifuwo")
         check(engine.snapshot().candidates.contains("我用API可以回复我"),
@@ -644,7 +661,7 @@ package enum EngineRegression {
         }
     }
 
-    @MainActor package static func spellingCorrection() {
+    @MainActor package static func spellingCorrection(event: Event = rimeEvent) {
         let cases = [("hzidao", "知道"), ("nnihao", "你好"), ("hcuqu", "出去"),
                      ("hsuru", "输入"), ("ppinyin", "拼音"), ("nnihhao", "你好"),
                      ("zhognguo", "中国"), ("beijign", "背景"), ("nihoa", "你好"),
@@ -696,18 +713,18 @@ package enum EngineRegression {
         }
         let engine = IFEngine()!
         type(engine, "nnihao")
-        check(engine.input(0xff08, modifiers: 0))
+        check(event(engine, 0xff08, 51, "", 0))
         check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nniha")
         type(engine, "o")
         check(engine.snapshot().candidates.first == "你好")
-        check(engine.input(0xff50, modifiers: 0)) // Home, then remove the extra initial.
+        check(event(engine, 0xff50, 115, "", 0)) // Home, then remove the extra initial.
         check(engine.snapshot().cursor == 0)
-        check(engine.input(0xffff, modifiers: 0))
+        check(event(engine, 0xffff, 117, "", 0))
         check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nihao")
         check(engine.snapshot().candidates.first == "你好")
-        check(engine.input(0xff57, modifiers: 0))
+        check(event(engine, 0xff57, 119, "", 0))
         check(engine.snapshot().cursor == engine.snapshot().preedit.utf16.count)
-        check(engine.input(0xff1b, modifiers: 0))
+        check(event(engine, 0xff1b, 53, "", 0))
         check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         type(engine, "hzidao")
         engine.select(0)
@@ -718,13 +735,19 @@ package enum EngineRegression {
         print("PASS spelling correction: 12 typo phrases, normal spelling/boundaries, editable preedit, selection, cancel, ASCII passthrough")
     }
 
-    @MainActor package static func customPhrases(user: String) throws {
+    @MainActor package static func customPhrases(
+        user: String, storedPhrases: (() -> [CustomPhrase])? = nil,
+        savePhrase: ((CustomPhrase) throws -> CustomPhrase)? = nil
+    ) throws {
         var phrases = try ["地址甲", "地址乙", "地址丙", "地址丁", "地址戊", "地址己", "地址庚", "地址辛", "地址壬", "地址癸", "地址十一", "地址十二"].map {
-            try CustomPhrase.validated(code: "dz", text: $0)
+            let phrase = try CustomPhrase.validated(code: "dz", text: $0)
+            return try savePhrase?(phrase) ?? phrase
         }
         for (code, text) in [("nihao", "您好朋友"), ("nihao", "你好"), ("bq", "#标签"), ("zw", "# no comment")] {
-            phrases.append(try CustomPhrase.validated(code: code, text: text))
+            let phrase = try CustomPhrase.validated(code: code, text: text)
+            phrases.append(try savePhrase?(phrase) ?? phrase)
         }
+        phrases = storedPhrases?() ?? phrases
         let a = IFEngine()!, b = IFEngine()!
         a.setConfiguration(candidateCount: 3, customPhrases: phrases)
         b.setConfiguration(candidateCount: 3, customPhrases: phrases)
@@ -766,8 +789,10 @@ package enum EngineRegression {
         type(a, "dz"); check(a.snapshot().candidates.count == 9)
         a.key(57); check(a.takeCommit() == "地址壬")
         type(a, "dz"); let old = a.snapshot()
-        let changed = try CustomPhrase.validated(id: phrases[0].id, code: "dz", text: "更新地址")
+        let replacement = try CustomPhrase.validated(id: phrases[0].id, code: "dz", text: "更新地址")
+        let changed = try savePhrase?(replacement) ?? replacement
         phrases[0] = changed
+        phrases = storedPhrases?() ?? phrases
         a.setConfiguration(candidateCount: 5, customPhrases: phrases)
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.snapshot() == old && a.takeCommit().isEmpty && a.candidateCount == 9)
@@ -813,7 +838,7 @@ package enum EngineRegression {
         print("PASS custom phrase engine: exact match, priority/coexistence, Unicode/hash text, dedup, native pagination/digits/click, coalesced idle reload, pending commits, ASCII, existing/fresh sessions, removal after selection, write failure/retry, TSV cleanup")
     }
 
-    @MainActor package static func runCases() throws {
+    @MainActor package static func runCases(event: Event = rimeEvent) throws {
         let a = IFEngine()!, b = IFEngine()!
         type(a, "nihao"); check(a.snapshot().candidates.contains("你好"))
         check(b.snapshot().preedit.isEmpty)
@@ -822,26 +847,26 @@ package enum EngineRegression {
         a.key(0xff1b); check(a.snapshot().preedit.isEmpty)
         type(a, "ni"); a.key(0xff08); check(a.snapshot().preedit == "n")
         a.clear(); type(a, "ni")
-        check(a.input(0xff08, modifiers: 0)); check(a.snapshot().preedit == "n")
-        check(a.input(0xff1b, modifiers: 0)); check(a.snapshot().preedit.isEmpty)
+        check(event(a, 0xff08, 51, "\u{8}", 0)); check(a.snapshot().preedit == "n")
+        check(event(a, 0xff1b, 53, "\u{1b}", 0)); check(a.snapshot().preedit.isEmpty)
         a.clear(); type(a, "shi"); let first = a.snapshot().candidates
         check(first.count == 5)
-        a.input(0xff56, modifiers: 0); check(a.snapshot().page == 1)
+        _ = event(a, 0xff56, 121, "", 0); check(a.snapshot().page == 1)
         var second = a.snapshot().candidates; check(second.count == 5 && second != first)
-        a.input(0xff55, modifiers: 0); check(a.snapshot().page == 0 && a.snapshot().candidates == first)
-        a.input(Int32(("2").utf16.first!), modifiers: 0); check(a.takeCommit() == first[1])
-        type(a, "shi"); a.input(0xff56, modifiers: 0)
+        _ = event(a, 0xff55, 116, "", 0); check(a.snapshot().page == 0 && a.snapshot().candidates == first)
+        _ = event(a, 50, 19, "2", 0); check(a.takeCommit() == first[1])
+        type(a, "shi"); _ = event(a, 0xff56, 121, "", 0)
         second = a.snapshot().candidates; check(second.count == 5)
-        a.input(Int32(("5").utf16.first!), modifiers: 0); check(a.takeCommit() == second[4])
+        _ = event(a, 53, 23, "5", 0); check(a.takeCommit() == second[4])
         type(a, "nihao"); a.key(32); check(a.takeCommit() == "你好")
         a.asciiMode = true; check(!a.key(97))
         a.asciiMode = false; type(a, "nihao"); a.commit(); check(a.takeCommit() == "你好")
-        check(!a.input(-1))
+        check(!event(a, -1, 0, "a", 2))
         a.clear(); type(a, "shi"); let before = a.snapshot()
         a.setCandidateCount(9); check(a.snapshot() == before && a.takeCommit().isEmpty)
         a.clear(); type(a, "shi"); check(a.snapshot().candidates.count == 9)
-        a.input(0xff56, modifiers: 0); let nine = a.snapshot().candidates; check(nine.count == 9)
-        a.input(Int32(("9").utf16.first!), modifiers: 0); check(a.takeCommit() == nine[8])
+        _ = event(a, 0xff56, 121, "", 0); let nine = a.snapshot().candidates; check(nine.count == 9)
+        _ = event(a, 57, 25, "9", 0); check(a.takeCommit() == nine[8])
         do {
             let fresh = IFEngine()!; type(fresh, "shi"); check(fresh.snapshot().candidates.count == 5)
             fresh.clear(); fresh.setCandidateCount(9); type(fresh, "shi")
@@ -854,7 +879,7 @@ package enum EngineRegression {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 100) == 4)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
-        punctuation()
+        punctuation(event: event)
         emojiCandidates()
     }
 
@@ -1135,7 +1160,7 @@ package enum EngineRegression {
         print("PASS English candidates: common words, case, prefix completion, paging/digit/space selection, edit/cancel, Chinese priority, ASCII passthrough")
     }
 
-    @MainActor package static func punctuation() {
+    @MainActor package static func punctuation(event: Event = rimeEvent) {
         let cases: [(String, String, UInt16, Bool)] = [
             ("{", "「", 33, true), ("}", "」", 30, true), ("[", "【", 33, false), ("]", "】", 30, false),
             ("<", "《", 43, true), (">", "》", 47, true), ("\\", "、", 42, false), ("|", "｜", 42, true),
@@ -1143,39 +1168,39 @@ package enum EngineRegression {
             ("_", "——", 27, true), (",", "，", 43, false), (".", "。", 47, false), (";", "；", 41, false),
             (":", "：", 41, true), ("!", "！", 18, true), ("?", "？", 44, true), ("(", "（", 25, true), (")", "）", 29, true)
         ]
-        for (input, expected, _, shifted) in cases {
+        for (input, expected, code, shifted) in cases {
             let engine = IFEngine()!
             let key = Int32(input.utf16.first!), modifiers: Int32 = shifted ? 1 : 0
-            check(engine.input(key, modifiers: modifiers)); check(engine.takeCommit() == expected)
+            check(event(engine, key, code, input, modifiers)); check(engine.takeCommit() == expected)
             check(engine.snapshot().preedit.isEmpty)
-            engine.asciiMode = true; check(!engine.input(key, modifiers: modifiers)); check(engine.takeCommit().isEmpty)
+            engine.asciiMode = true; check(!event(engine, key, code, input, modifiers)); check(engine.takeCommit().isEmpty)
         }
         for (input, expected) in [("\"\"\"\"", "“”“”"), ("''''", "‘’‘’"), ("\"'\"'", "“‘”’")] {
             let engine = IFEngine()!
             for (quote, output) in zip(input, expected) {
-                check(engine.input(Int32((String(quote)).utf16.first!), modifiers: quote == "\"" ? 1 : 0))
+                check(event(engine, Int32(String(quote).utf16.first!), 39, String(quote), quote == "\"" ? 1 : 0))
                 check(engine.takeCommit() == String(output)); check(engine.snapshot().preedit.isEmpty)
             }
             engine.asciiMode = true
-            check(!engine.input(Int32(("\"").utf16.first!), modifiers: 1))
-            check(!engine.input(Int32(("'").utf16.first!), modifiers: 0)); check(engine.takeCommit().isEmpty)
+            check(!event(engine, 34, 39, "\"", 1))
+            check(!event(engine, 39, 39, "'", 0)); check(engine.takeCommit().isEmpty)
         }
         let engine = IFEngine()!
         type(engine, "xi'an "); check(engine.takeCommit() == "西安")
-        check(engine.input(Int32(("\"").utf16.first!), modifiers: 1)); check(engine.takeCommit() == "“")
+        check(event(engine, 34, 39, "\"", 1)); check(engine.takeCommit() == "“")
         type(engine, "xi'an "); check(engine.takeCommit() == "西安")
-        check(engine.input(Int32(("\"").utf16.first!), modifiers: 1)); check(engine.takeCommit() == "”")
+        check(event(engine, 34, 39, "\"", 1)); check(engine.takeCommit() == "”")
         type(engine, "shi"); let first = engine.snapshot().candidates
-        check(engine.input(Int32(("]").utf16.first!), modifiers: 0)); check(engine.snapshot().page == 1)
+        check(event(engine, 93, 30, "]", 0)); check(engine.snapshot().page == 1)
         check(engine.takeCommit().isEmpty)
-        check(engine.input(Int32(("[").utf16.first!), modifiers: 0)); check(engine.snapshot().candidates == first)
+        check(event(engine, 91, 33, "[", 0)); check(engine.snapshot().candidates == first)
         check(engine.takeCommit().isEmpty); engine.clear()
-        check(engine.input(Int32(("[").utf16.first!), modifiers: 0)); check(engine.takeCommit() == "【")
+        check(event(engine, 91, 33, "[", 0)); check(engine.takeCommit() == "【")
         for text in ["@", "#", "%", "&", "*", "-", "=", "+", "/"] {
-            check(!engine.input(Int32((text).utf16.first!), modifiers: 0)); check(engine.takeCommit().isEmpty)
+            check(!event(engine, Int32(text.utf16.first!), 0, text, 0)); check(engine.takeCommit().isEmpty)
         }
-        for _ in 0..<3 {
-            check(!engine.input(-1))
+        for modifier: Int32 in [2, 4, 8] {
+            check(!event(engine, -1, 22, "^", modifier | 1))
             check(engine.takeCommit().isEmpty)
         }
         for input in ["3.14", "10:30"] {
