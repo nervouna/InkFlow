@@ -1,6 +1,6 @@
 # Shared dictionary preparation
 
-Dictionary source data and build-time policy live under `Core/`. The preparation recipe has one implementation; the commands under `macOS/scripts/` delegate to it.
+Dictionary source data and build-time policy live under `Core/`. The recipe has one implementation; the `macOS/scripts/` entry points delegate to it.
 
 | Input or step | Owner |
 | --- | --- |
@@ -13,7 +13,7 @@ Dictionary source data and build-time policy live under `Core/`. The preparation
 | Spelling profile generation | `Core/scripts/prepare-spelling.sh` |
 | Schemas, Lua, and OpenCC text resources | `schemas/` |
 
-The move preserves source bytes, admission rules, dictionary identities, and output filenames. Existing macOS entry points remain available so app builds, workers, and developer commands keep using the same recipe. The optional wordfreq snapshot regeneration tool remains under `macOS/scripts/`; it writes to `Core/Data/` and is never invoked by an ordinary build.
+The optional wordfreq snapshot tool stays under `macOS/scripts/` and writes to `Core/Data/`.
 
 ## Commands
 
@@ -23,21 +23,17 @@ On the Mac, after preparing the pinned dependencies:
 bash Core/scripts/prepare-rime.sh build/shared-rime
 ```
 
-The result contains source dictionaries and configuration. Native compiled tables and prisms must still be prepared with the runtime for each target. Do not copy a macOS compiled cache to Linux.
+The result contains source dictionaries and configuration. Compiled tables and prisms must be prepared by each target's runtime; never copy a macOS compiled cache to Linux.
 
-The source preparation cache hashes the shared package, generator sources/tools/scripts, data, configuration, schemas, and downloaded inputs. macOS frontend source changes do not invalidate this cache. Delivery preserves file times and replaces the destination only after generation succeeds. Invalid input must leave the previous destination intact.
-
-The admission/resource-assembly fixtures run on Linux and macOS:
+The preparation cache hashes the shared package, generator sources/tools/scripts, data, configuration, schemas, and downloaded inputs; macOS frontend changes don't invalidate it. The destination is replaced only after generation succeeds.
 
 ```sh
 bash Core/scripts/test-prepare-rime.sh
 python3 scripts/mac-remote.py test preparation dictionary-generator quality-baseline quality-metadata
 ```
 
-The shell fixtures substitute small Chinese/spelling generators to isolate admission and delivery. They also verify that the old macOS wrapper produces identical resources, cache delivery preserves timestamps, and shared generator changes invalidate the cache. The Mac tests separately exercise the real Chinese/spelling generator, the retained behavioral baseline, and build provenance for shared resource inputs.
+The shell fixtures use small stand-in generators to isolate admission and delivery; the Mac units exercise the real generators.
 
 ## Migration boundary
 
-The production path still uses `Core/scripts/build-dictionary-generator.sh` to build the Swift implementation through the Mac toolchain. An isolated [Rust generator comparison](../Core/Portable/dictionary/README.md) now checks the same Chinese dictionary and spelling profiles on Linux and macOS. It has not replaced the shipping generator or update worker. Target-native production resource preparation and the remaining offline behavior are still part of [#35](https://github.com/nervouna/InkFlow/issues/35).
-
-Historical baseline reports and corpus source descriptions retain their original paths as provenance. Current readers and build identity use `Core/Data/` and `Core/config/`. No ranking, learning, personal-data format, or installed input-method behavior changes in this step. The [distribution review](../Core/Portable/licenses.md) still applies to the resource set.
+Production still builds the Swift generator through the Mac toolchain (`Core/scripts/build-dictionary-generator.sh`). The [Rust generator comparison](../Core/Portable/dictionary/README.md) matches it on Linux and macOS but has not replaced it; target-native preparation is part of [#35](https://github.com/nervouna/InkFlow/issues/35).

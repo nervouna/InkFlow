@@ -15,12 +15,8 @@ count and update actions; provenance and generation details live here.
 | InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`Core/config/chinese-overrides.tsv`](../Core/config/chinese-overrides.tsv) |
 | Technical English | Admitted technology terms and abbreviations | [`Core/Data/TECHNOLOGY.md`](../Core/Data/TECHNOLOGY.md) |
 
-`DictionaryModels.swift` is the source of truth for exact files, pinned commits,
-digests and byte counts. License and redistribution notes remain under
-`macOS/Licenses/`.
-
-`DictionaryModels.swift` pins the initial source commits, file paths, byte sizes,
-Git blob IDs and SHA-256 values. `prepare-chinese.sh` downloads only these explicit
+`DictionaryModels.swift` is the source of truth for source commits, file paths, byte
+sizes, Git blob IDs and SHA-256 values. `prepare-chinese.sh` downloads only these explicit
 text files into ignored `build/dictionary-sources`. It runs the same
 `IFDictionaryGenerator.generate` used by the dictionary preparation worker.
 
@@ -77,21 +73,17 @@ the same flat `pinyin_simp.dict.yaml`. `pinyin_simp.userdb` keeps its existing n
 and location. English admission, emoji data, schemas and Lua remain application
 resources with separate release rules.
 
-Run `bash macOS/scripts/test-dictionary-generator.sh` after dependency setup for
-normalization, union, calibration, rejection and deterministic build/runtime
-parity. `bash macOS/scripts/test.sh` also runs deployment and engine regressions,
-including default first candidates for `xiehouyu` and `suranqijing`, poems,
-incremental Chinese, mixed English, context, custom phrases and emoji. These
-isolated probes do not replace real-client typing acceptance.
+Tests: `bash macOS/scripts/test.sh dictionary-generator` for normalization, union,
+calibration and rejection; the `deployment` and `engine-*` units cover default first
+candidates such as `xiehouyu` → 歇后语 and `suranqijing` → 肃然起敬. With clean
+learning, the pinned Frost weights deliberately rank `beijing` as 背景 and
+`shanghai` as 伤害.
 
-Licenses and source notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt`,
-`rime-frost.txt`, `rime-ice.txt`, `rime-selected.txt`, and `pinyin-simp.txt` and ship
-in the app bundle. The rime-selected repository declares MIT, but original Sogou
-third-party redistribution permission was not verified. The notice preserves
-this evidence limit; repository licensing does not establish upstream clearance.
-The selected computer source's 10,300 term/reading pairs exactly match Sogou
-dictionary 15117. Four individually verified terms from Sogou 133021 and ten
-from Sogou hotwords 4 are curated locally; no full hotword conversion is claimed.
+License notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt` and the
+per-source files. The rime-selected source's 10,300 pairs match Sogou dictionary
+15117; its upstream redistribution permission is unverified (see
+[the distribution review](../Core/Portable/licenses.md)). Fourteen individually
+verified Sogou terms are curated locally.
 
 THUOCL is an optional coverage audit, never a pronunciation or weight source.
 For the pinned corpus below, all 8,519 distinct listed words are present. To
@@ -155,27 +147,17 @@ so changed correction policy can regenerate offline. A flat-only artifact whose
 correction policy changed must fall back to the current bundled dictionary.
 Proven same-content source receipts are stored separately, bound to that active
 content version; merely checking or downloading never suppresses a future retry.
-Recipe 2's expanded source set rejects recipe-1 downloaded manifests through
-normal recovery and enables the new bundled complete dictionary. Known historical
-journal identities remain readable, so this is not classified as malformed state.
-An observation bound to the old content version is already ignored; `observed.json`
-is retained. Chinese learning keeps its existing database throughout the upgrade.
-Existing bounded housekeeping removes unreferenced compiled artifacts from known
-recipe generations, including recipe 1 after a successful bundled upgrade. It
-retains current, previous and pending artifacts and ignores unknown or malformed
-directory names and symlinks; learning, custom phrases and observations are outside
-its removal scope. Later housekeeping passes reclaim any remaining excess artifacts.
+Manifests from an older recipe fall back to the bundled dictionary through normal
+recovery. Bounded housekeeping removes unreferenced compiled artifacts, keeping
+current, previous and pending ones and ignoring unknown names and symlinks.
 
 Diagnostic errors carry a Chinese stage summary and bounded technical fields and
 can be logged through an injected sink. The journal, manifest and observations
 never contain error payloads. Settings error presentation and its close/reopen
 lifetime are owned by the UI coordinator, independently from background work.
 
-After building the app, run `bash macOS/scripts/test-dictionary-updates.sh` for
-fake-network failures, transaction boundaries, fingerprint/cache integrity,
-subprocess isolation and full generated-dictionary helper preparation. The helper
-is included in build, bundle dependency checks and inner-before-outer signing;
-these checks do not install the input method or imply real-client acceptance.
+After `build.sh`, the `dictionary-*` units cover fake-network failures, transaction
+boundaries, cache integrity, subprocess isolation and helper preparation.
 
 ## Live activation and Settings
 
@@ -202,50 +184,19 @@ their options, then confirms the journal. Failure restores the last working
 engine; failure of that rollback explicitly leaves the engine unavailable.
 Retry remains available even after a displayed diagnostic has been dismissed.
 
-Closing the actual Settings window clears displayed errors, including when
-another pane is selected. Reopening never replays an earlier error or a failure
-that completed while closed. Switching panes or bringing an already visible
-window forward preserves the current error. Starting the next operation clears
-the old error. Sanitized diagnostics remain in the unified log independently;
-see [DEBUGGING.md](DEBUGGING.md#dictionary-activation-waits-or-falls-back)
-for the `log show` filter. No error is restored from logs or saved in preferences,
-manifests or the recovery journal.
+A displayed error clears when the Settings window closes or the next operation
+starts; it is never persisted. Sanitized diagnostics go to the unified log (see
+[DEBUGGING.md](DEBUGGING.md#logs-and-incident-archives)).
 
 Startup discards interrupted pending work, validates the last confirmed cache,
 and rebuilds incompatible caches using current application resources. Recovery
 tries the previous version and finally the bundled dictionary. Learning keeps
 the existing `pinyin_simp.userdb` identity and location across these switches.
 
-## Manual acceptance
+## Manual checks
 
-The isolated automated suites verify the native engine, worker, controller and
-Settings window; they do not establish acceptance in actual text clients. After
-an explicitly authorized installation, use the following checks in a text
-editor and another client such as ChatGPT or WeChat:
+After an authorized install, try `xiehouyu`/`suranqijing`, a mixed phrase and an emoji code in two clients, then 设置 → 词库 → 检查更新 while a composition stays open in one client: activation should wait until it ends.
 
-1. Select InkFlow. Enter `xiehouyu` and `suranqijing`; confirm first candidates
-   歇后语 and 肃然起敬 and commit each. Edit/backspace an unfinished composition.
-2. Enter mixed Chinese/English, a saved custom phrase and an emoji-bearing code;
-   verify candidate selection and committed text in both clients.
-3. Select and commit an alternate Chinese candidate repeatedly, restart the
-   input method, and verify the learned preference remains. With clean learning,
-   the pinned Frost weights rank `beijing`/`beijign` as 背景 and `shanghai` as 伤害.
-   北京 and 上海 remain selectable; these source-frequency outcomes are deliberate.
-4. In Settings → 词库, confirm the ready state and entry count. Check updates, then
-   choose 更新词库 only if offered. Leave a composition active in
-   either client while preparing; confirm input continues and activation waits
-   until both clients have finished. Confirm the success state after activation.
-5. Close/reopen Settings during an operation and confirm progress continues. On
-   a check failure, confirm current input remains available, inspect/copy the
-   expanded details, bring the window forward and switch panes, then close/reopen
-   it. The error should clear only at window closure or the next operation, and
-   retry should remain possible.
+## Resource cost
 
-Broad coverage includes poems and carries a real resource cost. One measured
-prepared version occupied about 137 MiB, including 30 MiB shared resources,
-61 MiB compiled cache and 46 MiB retained raw data. An isolated context-index
-initialization sample for the pinned union took 3.53 seconds with a process
-peak RSS near 181 MiB; this is neither steady input-method memory nor an engine
-startup benchmark. Old and new indexes can coexist during background preparation.
-Costs vary with corpus and machine; the store keeps bounded current/previous
-versions and cleans unreferenced artifacts.
+One prepared version occupied about 137 MiB (30 MiB shared resources, 61 MiB compiled cache, 46 MiB retained raw data). Building the context index took about 3.5 s at ~181 MiB peak RSS; old and new indexes coexist during background preparation.
