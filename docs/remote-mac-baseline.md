@@ -1,6 +1,6 @@
 # Remote Mac builds and migration baseline
 
-This workflow supports [#33](https://github.com/nervouna/InkFlow/issues/33) and the desktop runtime probe in [#34](https://github.com/nervouna/InkFlow/issues/34). It builds and tests committed revisions without installing, registering, enabling, or activating InkFlow.
+Builds and tests committed revisions on the Mac from Linux ([#33](https://github.com/nervouna/InkFlow/issues/33), [#34](https://github.com/nervouna/InkFlow/issues/34)). It has no install action.
 
 ## Run from Linux
 
@@ -26,23 +26,23 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 
 - An unowned or dirty remote checkout is rejected. This includes untracked, non-ignored files. The runner does not reset, clean, or stash someone else's changes.
 - A directory lock prevents overlapping runner operations on the same checkout. Do not run builds manually in that checkout while the runner owns it.
-- The runner allows only build, baseline, the portable runtime probe, the dictionary generator comparison, and a small set of focused test units. It has no install or arbitrary-command action and rejects `test all`.
+- The runner allows only build, baseline, the portable runtime probe, the dictionary generator comparison, and a small set of focused test units. It rejects `test all` and arbitrary commands.
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
 - Results are copied to `build/mac-remote/RUN_ID/` on Linux. Cleanup requires a successful copy and a complete `run.json` matching every request field and the worker exit status, with valid start/completion timestamps. Missing, malformed, or mismatched receipts leave remote evidence in place and return a nonzero status.
 - An SSH transport failure (status 255 or a locally terminated SSH process) always retains and prints the remote transfer directory, even if SCP succeeds or a receipt is present. Copied results may be partial while the worker continues. Inspect that directory and `REMOTE_ROOT/run.lock`; check the recorded process and its children before removing files or a stale lock. If only stdout disconnects, the worker continues saving logs and records `stdoutDisconnected` along with the command's eventual exit status.
 
-A dirty local checkout is allowed because only the explicitly resolved committed revision is transferred. Commit changes before expecting them in a remote result. A nonzero exit status means the action or its evidence transfer failed; partial reports are not a passing baseline.
+A nonzero exit status means the action or its evidence transfer failed.
 
 ## Portable runtime probe
 
 `portable` runs `Core/Portable/test.sh`: build the source-pinned native dependencies and existing extensions, then run the minimal Rust host tests with isolated fixture data. It needs CMake 3.31 and Ninja in the Mac login shell's path in addition to the baseline prerequisites. See [the probe contract and build recipe](../Core/Portable/README.md).
 
-The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt. This action does not run the Swift baseline, prepare production dictionaries, or install an input method.
+The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt.
 
 ## Dictionary generator comparison
 
-`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md). This action does not prepare native production caches or install an input method.
+`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md).
 
 ## Baseline recipe
 
@@ -65,7 +65,7 @@ All user state is synthetic and temporary. The recipe does not read installed le
 - `performance-1.json` through `performance-5.json`: startup, process peak RSS, and individual key-operation measurements.
 - `summary.json`: validated operation coverage, input/provenance identity, report/binary hashes, per-process and pooled distributions, and slow cases.
 
-Keep complete evidence directories under ignored `build/`. The [recorded macOS reference](../Core/Fixtures/MigrationBaseline/README.md) contains the compact report and evidence hashes; build logs and user databases are not committed. Results generated before a later failing regression remain diagnostic evidence, not a completed baseline.
+Keep complete evidence directories under ignored `build/`. The [recorded macOS reference](../Core/Fixtures/MigrationBaseline/README.md) contains the compact report and evidence hashes; build logs and user databases are not committed.
 
 ### Measurement boundaries
 
@@ -75,7 +75,7 @@ A key sample includes synchronous `IFEngine.input`, `takeCommit`, and `snapshot`
 
 Memory is Darwin `getrusage().ru_maxrss` in bytes, sampled after startup and after input. It is the process's peak resident set, not current resident memory, physical footprint, or the installed app's memory. Raw timing records are retained in memory and contribute to the final peak.
 
-Percentiles use nearest rank; median uses the midpoint average for even counts. Compare release builds on the same hardware, OS/toolchain, resource hashes, options, and workload. Investigate first-pass and repeated-pass distributions separately. The [approved review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) apply to this protocol. A breach calls for a focused repeat and review; the capture script does not automatically fail on a threshold.
+Percentiles use nearest rank; median uses the midpoint average for even counts. Compare release builds on the same hardware, OS/toolchain, resource hashes, options, and workload. Investigate first-pass and repeated-pass distributions separately. The [approved review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) apply to this protocol.
 
 ## Focused tooling checks
 
@@ -84,6 +84,4 @@ python3 -B scripts/tests/test_mac_remote.py
 bash -n Core/scripts/capture-migration-baseline.sh
 ```
 
-Tests cover exact detached revisions, checkout ownership, preservation of dirty files, locking, command restrictions, failed-run evidence/status, and summary statistics. Client transport tests cover disconnects followed by successful partial copying, invalid completion receipts, copy failures, and cleanup of matching completed runs. Mac execution verifies the Swift harness and the real SSH/build path.
-
-Actual typing, focus, and Settings remain user checks when the frontend changes. A remote baseline does not certify installed input behavior.
+Tests cover exact detached revisions, checkout ownership, preservation of dirty files, locking, command restrictions, failed-run evidence/status, and summary statistics. Client transport tests cover disconnects followed by successful partial copying, invalid completion receipts, copy failures, and cleanup of matching completed runs.

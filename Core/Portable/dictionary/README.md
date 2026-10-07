@@ -1,6 +1,6 @@
 # Rust dictionary generator comparison
 
-This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The shipping preparation scripts and dictionary update worker still use Swift. The [verification record](verification.md) identifies the tested revision and retained evidence.
+This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The shipping preparation scripts and dictionary update worker still use Swift.
 
 ## Verify
 
@@ -28,11 +28,11 @@ build/dictionary-parity/cargo/release/inkflow-dictionary spelling \
   build/dictionary-parity/new-spelling
 ```
 
-It refuses an existing output directory. Validation completes before creating output; a write failure removes only the new directory it created. Production preparation will still need to publish a complete staging tree through its existing replacement mechanism. The CLI does not activate dictionaries or touch user databases.
+It refuses an existing output directory. Validation completes before creating output; a write failure removes only the new directory it created.
 
 ## Reference and compatibility contract
 
-`fixtures/cases.json` supplies 44 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned comparison fixture, supplied explicitly to the CLI, and the Mac check rejects drift from the live catalog. Do not use it as an independent source-update configuration.
+`fixtures/cases.json` supplies 44 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned fixture; the Mac check rejects drift from the live catalog.
 
 `reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
 
@@ -49,8 +49,8 @@ Generated schema headers retain the existing `IFSpellingGenerator` wording for b
 
 ## Scope and dependencies
 
-This establishes generator compatibility for the pinned corpus and recorded contracts. It does not establish native compiled-resource parity, engine performance, migrated session/learning behavior, or personal-data compatibility. The next integration must keep one production preparation path and account for the existing Swift update worker before replacing it.
+Replacing the Swift generator must keep one production preparation path, including the update worker.
 
 The Rust dependency versions and checksums are in `Cargo.lock`. Hashing uses RustCrypto SHA-1/SHA-256; SHA-1 is used only for the existing Git blob identity, alongside SHA-256 verification. Serde handles the explicit catalog/manifest format. Unicode normalization, segmentation, and general-category tables implement the Swift text contract.
 
-The dependency metadata lists MIT/Apache-2.0 alternatives for most crates, Apache-2.0 for `unicode-general-category`, MIT for `generic-array` and `zmij`, and an additional Unicode-3.0 requirement for the build-time `unicode-ident` crate. A distributed tool must include the applicable notices for its locked dependency graph. This tool is not packaged in the app, and the existing [dictionary distribution review](../licenses.md) still applies to the data.
+The dependency metadata lists MIT/Apache-2.0 alternatives for most crates, Apache-2.0 for `unicode-general-category`, MIT for `generic-array` and `zmij`, and an additional Unicode-3.0 requirement for the build-time `unicode-ident` crate. The tool is not packaged in the app.
