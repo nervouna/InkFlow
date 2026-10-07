@@ -1,54 +1,34 @@
-# 语音输入现状
+# Voice input status
 
-语音输入已随 InkFlow 0.4.0 进入主线。本文只记录当前产品契约；实验过程和当时的
-性能数据归档在 `docs/archive/VOICE_*.md`。
+Voice input shipped in InkFlow 0.4.0. This document records only the current product contract; the original experiments and performance data are archived in `docs/archive/VOICE_*.md`.
 
-## 使用方式
+## Usage
 
-- 按住右 Shift 约 250 毫秒开始听写，松开结束。
-- 双击右 Shift 开始或结束连续听写，Esc 取消。
-- 单次短按、右 Shift 配合其它按键不启动语音；左 Shift 继续切换中英文。
-- 仅在 InkFlow 当前输入会话内处理按键，不使用全局监听。
+- Hold Right Shift for about 250 ms to start dictation; release to stop.
+- Double-tap Right Shift to start or stop continuous dictation; Esc cancels.
+- A single short tap or Right Shift combined with other keys does not start voice; Left Shift keeps toggling Chinese/English.
+- Keys are handled only within the current InkFlow input session; there is no global listener.
 
-## 当前实现
+## Current behavior
 
-- Apple `SpeechTranscriber` 在本机完成 `zh_CN` 识别。资源准备和麦克风授权不在
-  按键热路径执行；没有保存音频或完整转写日志。
-- 识别中的文字使用当前客户端的 marked text，完成后只提交一次。输入框、应用、
-  输入法状态或安全输入发生变化时取消本次会话，迟到结果不得写入新目标。
-- 非空选区不阻止语音启动。实时预览由当前焦点目标按默认替换范围接收，因此宿主报告的
-  其它界面选区不会重定向写入；同字段选区会被连续预览和最终文本替换一次。当前公开
-  InputMethodKit 客户端没有提供同一代理内的界面身份，InkFlow 因而不读取或暂存选中文字。
-  已知非空选区收到预览后，取消、失败或空结果不会执行第二次客户端写入，而是把当前
-  marked text 留给宿主处理，以免删除未知原文或把其它界面内容写进焦点输入框。InkFlow
-  不保留应用或界面特例，也不持久保存目标状态。InkFlow 不以客户端有限的 `markedRange`
-  推断其它输入事务的所有权，也不会因此全局阻塞普通输入、左 Shift 切换或下一次语音启动；
-  宿主清空预输入后即使短暂保留零长度 mark，这些入口仍可继续工作。成功结果仍按默认范围
-  提交一次；目标、安全输入状态或生命周期不再匹配时，同样不向旧、新目标回写。
-- 词库快照从既有 Rime 学习数据和自定义短语生成，只读、有界且在空闲时准备。
-  它只能重排 Apple 已提供的同音备选，不会创建新的语音候选或成为第二份词库。
-- 语音润色与拼音智能建议共用 AI 服务配置，但开关独立且默认关闭。Apple 的最终
-  片段只用于本地拼接和实时原文预览，不作为润色边界。识别完成后，完整的最终转写
-  只发送一次润色请求；请求为空、无效、失败或超时时，整次输入回退到完整最终原文。
-- 识别和润色严格串行，没有分片、停顿启发式、重试或部分润色插入。诊断只记录固定
-  阶段、序号、耗时和失败分类，不记录音频或转写内容。
-- 离线拼音不依赖语音资源、麦克风权限或 AI 服务。
+- Apple `SpeechTranscriber` performs on-device `zh_CN` recognition. Resource preparation and microphone authorization never run on the key-event path; no audio or full transcript logs are stored.
+- In-flight text uses the current client's marked text and is committed exactly once on completion. The session is cancelled when the input box, app, input-method state or secure-input state changes; late results must never be written to a new target.
+- A non-empty selection does not block voice. Live preview goes to the currently focused target with its default replacement range, so selections reported on other UI surfaces are not redirected; a selection in the same field receives continuous preview and is replaced once by the final text. The public InputMethodKit client offers no in-agent UI identity, so InkFlow neither reads nor stores selected text. When a non-empty selection has already received preview, cancel, failure or an empty result performs no second client write and leaves the current marked text for the host, avoiding deletion of unknown original text or writing other surfaces' content into the focused box. InkFlow keeps no app- or surface-specific exceptions and persists no target state. It does not infer ownership of other input transactions from the client's limited `markedRange`, and does not globally block normal typing, Left Shift toggling or the next voice session because of it; these entry points keep working even if the host briefly retains a zero-length mark. Successful results still commit once to the default range; when the target, secure-input state or lifecycle no longer matches, nothing is written to the old or new target.
+- The lexicon snapshot is generated from existing Rime learning data and custom phrases: read-only, bounded and prepared at idle. It can only rerank homophone candidates Apple already provided; it never creates new voice candidates or becomes a second lexicon.
+- Voice polish shares the AI service configuration with Pinyin suggestions but has an independent switch, default off. Apple's final segments are used only for local stitching and live preview of the original text, not as the polish boundary. After recognition completes, the full final transcript is polished exactly once; an empty, invalid, failed or timed-out request falls back to the full final original text.
+- Recognition and polish are strictly serial: no chunking, pause heuristics, retries or partial polish insertion. Diagnostics record only fixed phases, sequence numbers, durations and failure categories — never audio or transcript content.
+- Offline Pinyin typing does not depend on voice resources, microphone permission or AI services.
 
-## 验证边界
+## Verification boundary
 
-自动测试覆盖识别范围、音频回调线程、会话取消、焦点所有权、选区取消零写入、宿主清空预输入后的输入恢复、
-跨界面路由切换、UTF-16 marked text、词库重排、润色回退和精确一次提交。合成音频、假客户端及原生测试宿主不能证明
-实体键盘或第三方应用体验。
+Automated tests cover recognition scope, audio callback threading, session cancellation, focus ownership, zero-write on selection cancellation, typing recovery after the host clears marked text, cross-surface routing switches, UTF-16 marked text, lexicon reranking, polish fallback and exactly-once commit. Synthetic audio, fake clients and native test hosts cannot prove the physical-keyboard or third-party-app experience.
 
-改变快捷键、marked text、目标所有权或最终提交逻辑后，仍需人工检查：
+After changing shortcuts, marked text, target ownership or final commit logic, manually verify:
 
-1. 原生编辑器和浏览器中的按住、双击、停止与 Esc。
-2. 在原生编辑器和浏览器中选中文字，确认连续预览、成功时替换一次；Esc 后确认 InkFlow
-   不执行第二次写入，并记录宿主如何处理保留的 marked text；随后普通输入、左 Shift 切换和
-   再次启动语音都应立即可用，包括宿主短暂保留零长度 marked range 的情况。
-3. 主界面保留选区后聚焦其它输入框，确认预览和提交只进入焦点目标。
-4. 同应用切换输入框、切换应用和切换输入法时不误写。
-5. 多个 Apple 最终片段在识别完成前不触发润色；润色关闭、成功、失败和超时均只
-   提交一次，失败保留完整最终原文。
+1. Hold, double-tap, stop and Esc in native editors and browsers.
+2. Select text in a native editor and a browser; confirm continuous preview and a single replacement on success. After Esc, confirm InkFlow performs no second write and note how the host handles the retained marked text; normal typing, Left Shift toggling and restarting voice must all work immediately, including when the host briefly retains a zero-length marked range.
+3. Keep a selection in one surface and focus another input box; confirm preview and commit go only to the focused target.
+4. Switch input boxes, apps and input methods within one app without misdirected writes.
+5. Multiple Apple final segments before recognition completes never trigger polish; polish off, success, failure and timeout each commit exactly once, and failure keeps the full final original text.
 
-研究报告只作为历史证据，不应再用于判断当前分支、提交、安装或发布状态。
+Research reports are historical evidence only; do not use them to judge the current branch, commits, installation or release state.

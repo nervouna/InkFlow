@@ -272,19 +272,4 @@ evidence. The AI sample expiry policy does not change ordinary quality retention
 
 ## Manual exchange
 
-See [quality export and joint-analysis contract](../../../../macOS/QUALITY-EXPORT.md).
-`export --output PATH` serializes all retained v3 records to format v1 and creates
-an adjacent stable source-UUID marker if needed. Existing records gain source
-identity at export time without a database backfill. Full applied configuration
-and legacy page configuration copies are omitted; fingerprints, page revision
-links, build metadata and timestamps remain. Thus `inspect` on exchanged data
-returns `{}` for applied configuration rather than the original settings.
-
-Every analysis command accepts repeatable `--input PATH`, `--exports-only` and
-`--source ID`. All input validation/union completes before producing results.
-Source namespaces preserve original record identity across overlapping exports;
-mutable run counters use the latest snapshot, while conflicting immutable rows
-fail the whole query. Pooled and per-source results reuse the existing metric
-functions. Source provenance and ranges are explicit, and invalid/unknown metric
-cohorts retain the original unavailable/excluded behavior. Joint dates use the
-analysis host timezone; original UTC times remain unchanged.
+Exporting and cross-device joint analysis (export file format v1, the repeatable `--input`, `--exports-only` and `--source` flags, source identity and validation rules) are specified in [quality export and joint-analysis contract](../../../../macOS/QUALITY-EXPORT.md).
