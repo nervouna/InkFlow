@@ -1,49 +1,23 @@
 # Technical vocabulary data
 
-The app enables technology, software and Internet vocabulary by default. Chinese
-source generation and update behavior are documented in [DICTIONARIES.md](../../macOS/DICTIONARIES.md).
+`english-technology.tsv` supplies 122 exact display spellings with lowercase ASCII
+lookup codes: 104 selections from Rime Ice `en_ext` at
+`569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57`
+([upstream file](https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/en_dicts/en_ext.dict.yaml),
+SHA-256 `d0c11afd09443a8a13ddc79c630ae22c6b9a0403031bf0adaa2c301a127f20ea`) and 18
+InkFlow-maintained spellings. `english-technology-provenance.tsv` records the source
+lines/codes for review; it is not generator input.
 
-`english-technology.tsv` supplies 122 exact display spellings and lowercase ASCII
-lookup codes. It is an additional spelling source, separate from measured
-`english-wordfreq.tsv`. It contains 104 selections from Rime Ice `en_ext` at
-`569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57` and 18 explicitly maintained InkFlow
-spellings. [Upstream file](https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/en_dicts/en_ext.dict.yaml)
-SHA-256: `d0c11afd09443a8a13ddc79c630ae22c6b9a0403031bf0adaa2c301a127f20ea`, 52,217 bytes.
-`english-technology-provenance.tsv` records the exact source lines/codes and
-existing measured observations for review. It is provenance, not generator input.
+Each row has three tab-separated columns: display text (printable ASCII, no outer
+whitespace), lowercase ASCII-letter code, and `rime-ice-en-ext` or
+`inkflow-maintained`. Examples: `SwiftUI / swiftui`, `eBPF / ebpf`,
+`Type-C / typec`, `C++ / cpp`. Duplicate or malformed rows fail generation; pairs
+equal to an easy-en entry collapse. An empty file is valid; a missing one is an error.
 
-Each active source record has three literal-tab-separated columns: display text,
-lowercase ASCII-letter code, and `rime-ice-en-ext` or `inkflow-maintained`. Display
-text is printable ASCII with no outer whitespace. Spaces and punctuation remain
-in the output; the code must be explicitly usable by the existing translator.
-Examples: `SwiftUI / swiftui`, `eBPF / ebpf`, `Type-C / typec`, `C++ / cpp`.
-Duplicate source pairs and malformed rows fail generation before replacing either
-generated dictionary. Equal pairs shared with easy-en collapse; its other aliases
-remain available. Empty supplemental data is valid; a missing file is an error.
+Rows pass the same admission gate as easy-en. The 111 selections without a
+sufficient measured frequency are admitted by 4.0 policy rows in
+`Core/config/english-overrides.tsv`. Gate and mixed-dictionary rules are in
+[the mixed-input rules](../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md).
 
-All records still pass the shared exact-display admission gate. The 111 explicitly
-selected spellings with missing/below-4 observations use 4.0 policy replacements
-in `Core/config/english-overrides.tsv`. These are not observed measurements. Eleven
-existing observations at/above the gate retain their original values. An override
-still applies to every source code for the exact displayed spelling and may
-exclude it with zero. Case variants are independent. No generic threshold or
-runtime translator changed.
-
-The mixed dictionary retains its existing extra conditions: display text is
-ASCII letters, at least four characters, and exactly equals the source code.
-Cased lowercase-code aliases and punctuated/spaced forms therefore remain
-standalone candidates; existing literal aliases can still qualify. Thus `ebpf`
-selects canonical `eBPF`, while `typec` selects `Type-C` without admitting the
-hyphenated form to automatic mixed composition. There is no new English-learning
-dictionary or automatic English sentence splitting.
-
-The supplemental spellings and policy ship with application updates. The Chinese
-check/download action does not update this file. Review changes against the
-provenance, then run the existing prepare-rime fixtures and native engine tests,
-which validate every source row structurally and select representative display
-spellings across case, punctuation and spaces. They also verify prefix, backspace,
-short-code and mixed/custom-phrase boundaries. Runtime/UI acceptance
-in actual typing clients remains separate from these isolated tests.
-
-See [technology-english-NOTICE.txt](../../macOS/Licenses/technology-english-NOTICE.txt) for
-selection/alias attribution and the existing GPL/LGPL/wordfreq license notices.
+The file ships with app updates, not Chinese dictionary updates. Attribution is in
+[technology-english-NOTICE.txt](../../macOS/Licenses/technology-english-NOTICE.txt).
