@@ -2,6 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 python=${INKFLOW_PYTHON:-python3}
+if [[ ! -f build/quality-evidence/engine-controller.sqlite3 ]]; then
+  bash macOS/scripts/test-quality-capture.sh
+fi
 mkdir -p build
 swiftc -module-cache-path "$PWD/build/quality-export-module-cache" -swift-version 6 -warnings-as-errors macOS/Sources/QualityExport.swift macOS/Tests/QualityExportFixture.swift -lsqlite3 -o build/quality-export-fixture
 export INKFLOW_QUALITY_EXPORT_FIXTURE="$PWD/build/quality-export-fixture"

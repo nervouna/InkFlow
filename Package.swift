@@ -263,7 +263,7 @@ let package = Package(
         ),
         .target(
             name: "InkFlowTestSupport",
-            dependencies: ["InkFlowCore"],
+            dependencies: ["InkFlowCore", "InkFlowCoreTestSupport"],
             path: "macOS/Tests",
             exclude: testSwiftSources.filter { $0 != "TestSupport.swift" } + testAuxiliarySources,
             sources: ["TestSupport.swift"],

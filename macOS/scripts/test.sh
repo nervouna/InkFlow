@@ -56,6 +56,24 @@ filter_engine_stderr() {
 
 engine_built=false
 run_unit() {
+  local product=''
+  case "$1" in
+    ai-credentials) product=ai-credential-tests ;;
+    ai-runtime) product=ai-runtime-tests ;;
+    ai-transport) product=ai-suggestion-tests ;;
+    apple-voice) product=apple-voice-tests ;;
+    diagnostic-archive) product=diagnostic-archive-tests ;;
+    local-diagnostics) product=local-diagnostics-tests ;;
+    quality-identity) product=quality-identity-tests ;;
+    startup-diagnostics) product=startup-diagnostics-tests ;;
+    voice-lexicon) product=voice-lexicon-tests ;;
+    voice-session) product=voice-session-tests ;;
+  esac
+  if [[ -n "$product" ]]; then
+    build_swift_test "$product" "build/$product"
+    "build/$product"
+    return
+  fi
   case "$1" in
     quality-baseline) bash Core/scripts/test-quality-baseline.sh ;;
     shared-core)
@@ -65,8 +83,7 @@ run_unit() {
       fi ;;
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
-      bash macOS/scripts/test-quality-query.sh --require-engine ;;
-    ai-transport) bash macOS/scripts/test-ai-suggestions.sh ;;
+      bash macOS/scripts/test-quality-query.sh ;;
     preparation) bash macOS/scripts/test-prepare-rime.sh ;;
     deployment)
       build_swift_test deployment-tests build/deployment-tests

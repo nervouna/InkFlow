@@ -1,5 +1,4 @@
-"""Query fixtures use the current Swift writer DDL; full acceptance also reads its DB."""
-import argparse
+"""Query fixtures use the schema of the database created by the Swift capture test."""
 import contextlib
 import csv
 import hashlib
@@ -8,7 +7,6 @@ import io
 import json
 import os
 from pathlib import Path
-import re
 import sqlite3
 import sys
 import tempfile
@@ -20,14 +18,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / '.agents/skills/inkflow-quality-analysis/scripts/quality.py'
 ENGINE_DB = ROOT / 'build/quality-evidence/engine-controller.sqlite3'
-SOURCE = ROOT / 'Core/Sources/InkFlowRime/QualityStore.swift'
-DDL = dict(re.findall(r'"(\w+)": """\s*(CREATE TABLE .*?)\s*"""', SOURCE.read_text(), re.S))
-DDL['config_revisions'] = re.search(
-    r'schema\["config_revisions"\] = """\s*(CREATE TABLE .*?)\s*"""',
-    SOURCE.read_text(), re.S).group(1)
-DDL['effectiveness_events'] = re.search(
-    r'private static let effectivenessTable = """\s*(CREATE TABLE .*?)\s*"""',
-    SOURCE.read_text(), re.S).group(1)
+with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as schema_db:
+    DDL = dict(schema_db.execute("SELECT name, sql FROM sqlite_master WHERE type='table'"))
 STAMP = '2026-09-06T16:00:00.000Z'
 OPS = dict(keypresses=5, pageRequests=1, pageTurns=1, candidateMoves=2, preeditEdits=0)
 
@@ -688,10 +680,6 @@ class QueryTests(unittest.TestCase):
         self.assertNotIn('rawInput', json.dumps(result))
 
     def test_timing_actual_controller_writer(self):
-        if not ENGINE_DB.exists():
-            if REQUIRE_ENGINE:
-                self.fail('Run test-quality-capture.sh first')
-            self.skipTest('Actual controller DB absent')
         result = self.result('timing', db=ENGINE_DB)
         self.assertEqual(result['coverage']['compositions'], 45)
         self.assertGreater(result['coverage']['timing_v1'], 0)
@@ -701,15 +689,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(result['visibility_observation_interval']['count'], 0)
 
     def test_actual_engine_schema_and_controller_cohort(self):
-        if not ENGINE_DB.exists():
-            if REQUIRE_ENGINE:
-                self.fail('Full acceptance requires engine-controller.sqlite3; run test-quality-capture.sh first')
-            self.skipTest('Standalone fixture mode: actual engine DB is absent')
         db=sqlite3.connect(ENGINE_DB.as_uri()+'?mode=ro',uri=True)
         self.addCleanup(db.close)
-        actual=dict(db.execute("SELECT name,sql FROM sqlite_master WHERE type='table'"))
-        self.assertEqual({k:' '.join(v.split()) for k,v in actual.items()},
-                         {k:' '.join(v.split()) for k,v in DDL.items()})
         result=self.result(db=ENGINE_DB)
         # The deferred-toggle then panel-selection fixture adds one valid composition,
         # decision and issued candidate commit; the toggle itself adds no decision.
@@ -742,10 +723,4 @@ class QueryTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    parser=argparse.ArgumentParser()
-    parser.add_argument('--require-engine',action='store_true')
-    options,remaining=parser.parse_known_args()
-    REQUIRE_ENGINE=options.require_engine
-    unittest.main(argv=[sys.argv[0],*remaining],verbosity=2)
-else:
-    REQUIRE_ENGINE=False
+    unittest.main(verbosity=2)

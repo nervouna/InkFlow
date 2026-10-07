@@ -1,17 +1,10 @@
+@_exported import InkFlowCoreTestSupport
 @testable import InkFlowRime
 import AppKit
 import InputMethodKit
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 #endif
-
-@MainActor
-package func check(_ condition: @autoclosure () -> Bool, _ message: String = "", file: StaticString = #filePath, line: UInt = #line) {
-    guard condition() else {
-        print("FAIL \(file):\(line) \(message)")
-        exit(1)
-    }
-}
 
 @MainActor
 package func keyEvent(_ code: UInt16, _ text: String, _ flags: NSEvent.ModifierFlags = [],
@@ -26,11 +19,6 @@ package func modifierEvent(_ code: UInt16, _ flags: NSEvent.ModifierFlags = []) 
     NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags, timestamp: 0,
                     windowNumber: 0, context: nil, characters: "", charactersIgnoringModifiers: "",
                     isARepeat: false, keyCode: code)!
-}
-
-@MainActor
-package func type(_ engine: IFEngine, _ text: String) {
-    for code in text.utf16 { engine.key(Int32(code)) }
 }
 
 @MainActor
