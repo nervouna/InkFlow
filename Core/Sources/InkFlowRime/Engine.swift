@@ -150,7 +150,7 @@ package final class IFEngine {
     package static func start(shared: String, user: String, qualityStore: QualityStore? = nil) throws {
         if ready { return }
         let configuration = IFEngineConfiguration(shared: URL(fileURLWithPath: shared), cache: nil,
-            user: user, ranker: try IFContextRanker(dictionary: (shared as NSString).appendingPathComponent("pinyin_simp.dict.yaml")))
+            user: user, ranker: try IFContextRanker(index: (shared as NSString).appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)))
         do { try start(configuration); productionQualityStore = qualityStore }
         catch let error as IFDictionaryUpdateError where error.code == "missing-runtime-resource" {
             // Preserve the established standalone API's missing-resource error contract.

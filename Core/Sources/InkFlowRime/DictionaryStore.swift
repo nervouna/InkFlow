@@ -47,7 +47,14 @@ package enum IFDictionaryFiles {
               try url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else { throw IFDictionaryUpdateError(.verify, "nonregular-file") }
         let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
         var hash = SHA256()
-        while let data = try file.read(upToCount: 1_048_576), !data.isEmpty { hash.update(data: data) }
+        // One reused buffer: FileHandle chunks are autoreleased and would all stay resident until the caller's pool drains.
+        var buffer = [UInt8](repeating: 0, count: 1_048_576)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { read(file.fileDescriptor, $0.baseAddress, $0.count) }
+            guard count != 0 else { break }
+            guard count > 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            buffer.withUnsafeBytes { hash.update(bufferPointer: UnsafeRawBufferPointer(rebasing: $0.prefix(count))) }
+        }
         let digest = hash.finalize().map { String(format: "%02x", $0) }.joined()
         didHashFile(url)
         return digest
@@ -404,6 +411,7 @@ package struct IFDictionaryStore: Sendable {
     private func validatePrepared(at directory: URL, version: IFDictionaryVersion) throws -> IFDictionaryManifest {
         let receipt = try IFDictionaryFiles.decode(IFDictionaryPreparedReceipt.self, at: IFDictionaryFiles.child(IFDictionaryPreparedReceipt.filename, in: directory))
         let required = ["shared/\(IFDictionaryManifest.filename)", "shared/\(IFDictionaryCatalog.dictionaryFilename)",
+                        "shared/\(IFDictionaryCatalog.contextIndexFilename)",
                         "cache/inkflow_pinyin.schema.yaml", "cache/pinyin_simp.table.bin", "cache/pinyin_simp.prism.bin",
                         "cache/easy_en.table.bin", "cache/inkflow_mixed.table.bin"] +
                        InputPreferences.compiledSpellingFiles.map { "cache/\($0)" }

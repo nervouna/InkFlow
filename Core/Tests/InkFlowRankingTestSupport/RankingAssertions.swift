@@ -5,10 +5,12 @@ private func check(_ condition: @autoclosure () -> Bool, _ message: String = "")
 
 @MainActor
 package func verifyRankingRules(in directory: URL) throws {
-        let url = directory.appendingPathComponent("ranking-fixture.yaml")
+        let url = directory.appendingPathComponent("ranking-fixture.bin")
         defer { try? FileManager.default.removeItem(at: url) }
-        try "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n".write(to: url, atomically: true, encoding: .utf8)
-        let ranker = try IFContextRanker(dictionary: url.path)
+        // A repeated phrase keeps its highest frequency, so 餐 still outranks 惨 after 午.
+        let dictionary = "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n午餐\twu can\t30\n"
+        try IFContextRanker.buildIndex(dictionary: Data(dictionary.utf8)).write(to: url)
+        let ranker = try IFContextRanker(index: url.path)
         func row(_ coverage: Range<Int> = 0..<3,
                  _ candidateClass: IFCandidateRankingMetadata.CandidateClass = .nonASCII,
                  exact: Bool = true, personal: Int = 0,

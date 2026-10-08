@@ -71,7 +71,7 @@ private func peakResidentBytes() throws -> Int {
         guard let cache = try IFPackagedCache.descriptor(resources: shared).cache else {
             throw Failure(description: "Prepared cache missing")
         }
-        let ranker = try IFContextRanker(dictionary: shared.appendingPathComponent("pinyin_simp.dict.yaml").path)
+        let ranker = try IFContextRanker(index: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         try IFEngine.start(IFEngineConfiguration(shared: shared, cache: cache, user: user, ranker: ranker))
         defer { IFEngine.stop() }
         guard let engine = IFEngine() else { throw Failure(description: "Session creation failed") }
