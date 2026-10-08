@@ -43,6 +43,10 @@ static ENGINE: Mutex<bool> = Mutex::new(false);
 fn lock() -> Result<MutexGuard<'static, bool>> {
     ENGINE.lock().map_err(|_| Error::Poisoned)
 }
+/// Whether a runtime is initialized in this process (personal-data work must wait).
+pub(crate) fn engine_active() -> bool {
+    ENGINE.lock().map(|active| *active).unwrap_or(true)
+}
 fn check(code: i32) -> Result<()> {
     if code == 0 {
         Ok(())

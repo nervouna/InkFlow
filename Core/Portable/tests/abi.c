@@ -49,6 +49,49 @@ static void observe(void* user_data, const IFRMutation* mutation) {
   }
 }
 
+static const char* backup_json =
+    "{\"format\":1,\"rime\":\"1.17.0\",\"settings\":{\"integers\":{\"candidateCount\":7,\"fontSize\":18,"
+    "\"input.abbreviation\":1,\"input.typoTolerance\":1,\"input.fuzzyZ\":0,\"input.fuzzyC\":0,"
+    "\"input.fuzzyS\":0,\"input.emoji\":1,\"input.bracketPaging\":1,\"input.minusEqualPaging\":1,"
+    "\"input.englishPunctuation\":0,\"input.cornerQuotes\":1,\"input.middleDot\":1,"
+    "\"input.fullwidthPipe\":1,\"input.ideographicComma\":1,\"input.traditional\":1},"
+    "\"phrases\":[{\"id\":\"p1\",\"code\":\"dz\",\"text\":\"地址\"}]},"
+    "\"dictionaries\":{\"pinyin_simp\":null,\"inkflow_shared_english\":null,\"inkflow_voice_alias\":null}}";
+
+static IFRBackup* parsed_backup(void) {
+  IFRBackup* backup = NULL;
+  expect(ifr_backup_parse((const uint8_t*)backup_json, strlen(backup_json), &backup), IFR_OK, "backup parse");
+  assert(backup && ifr_backup_candidate_count(backup) == 7);
+  assert(ifr_backup_input_options(backup) == (ifr_input_options_default() | IFR_OPTION_TRADITIONAL));
+  assert(ifr_backup_phrase_count(backup) == 1);
+  IFRPhrase phrase = {NULL, NULL, NULL};
+  assert(ifr_backup_phrase(backup, 0, &phrase) == 1 && strcmp(phrase.code, "dz") == 0 &&
+         strcmp(phrase.text, "地址") == 0 && strcmp(phrase.id, "p1") == 0);
+  assert(ifr_backup_phrase(backup, 1, &phrase) == 0);
+  assert(ifr_backup_unsupported_count(backup) == 1 &&
+         strcmp(ifr_backup_unsupported(backup, 0), "settings.integers.fontSize") == 0);
+  assert(ifr_backup_unsupported(backup, 1) == NULL);
+  return backup;
+}
+
+static void backup_checks(const char* scratch) {
+  IFRBackup* backup = NULL;
+  expect(ifr_backup_parse(NULL, 1, &backup), IFR_INVALID_ARGUMENT, "null bytes");
+  expect(ifr_backup_parse((const uint8_t*)"{}", 2, &backup), IFR_INCOMPATIBLE, "empty document");
+  const char* unknown = "{\"format\":1,\"rime\":\"1.17.0\",\"settings\":{},\"dictionaries\":{},\"x\":1}";
+  expect(ifr_backup_parse((const uint8_t*)unknown, strlen(unknown), &backup), IFR_UNKNOWN_FIELDS, "unknown field");
+  backup = parsed_backup();
+  /* No engine is live: importing absent dictionaries into a fresh directory succeeds. */
+  const char* user = path(7, scratch, "import-user");
+  expect(ifr_backup_import(backup, user), IFR_OK, "import");
+  expect(ifr_personal_recover(user), IFR_OK, "recover");
+  expect(ifr_backup_import(backup, "bad\xff"), IFR_INVALID_ARGUMENT, "bad user");
+  ifr_backup_free(backup);
+  ifr_backup_free(NULL);
+  assert(ifr_backup_candidate_count(NULL) == 5 && ifr_backup_phrase_count(NULL) == 0);
+  puts("PASS C ABI: backup parsing, disclosure, import and recovery on an isolated directory");
+}
+
 static void fixture_checks(const char* fixture, const char* scratch) {
   IFREngine* engine = NULL;
   IFREngineConfig config = {path(0, fixture, "shared"), path(1, scratch, "fixture-user"), NULL, NULL};
@@ -197,6 +240,10 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(observed.count == before);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
+  /* Personal-data import waits for every engine reference, including live sessions. */
+  IFRBackup* backup = parsed_backup();
+  expect(ifr_backup_import(backup, user), IFR_ENGINE_ACTIVE, "import while live");
+
   /* The session keeps the engine alive after the caller drops its reference. */
   ifr_engine_destroy(engine);
   type_text(session, "nihao");
@@ -204,7 +251,10 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(strcmp(ifr_snapshot_candidate_text(shown, 0), "你好") == 0);
   ifr_snapshot_free(shown);
   expect(ifr_engine_create(&duplicate, &second), IFR_ALREADY_RUNNING, "still running");
+  expect(ifr_backup_import(backup, user), IFR_ENGINE_ACTIVE, "import with a live session");
   ifr_session_destroy(session);
+  expect(ifr_backup_import(backup, user), IFR_OK, "import after teardown");
+  ifr_backup_free(backup);
   engine = production(resources, user);
   ifr_engine_destroy(engine);
   puts("PASS C ABI: engine/session lifetime, keys, snapshots, selection, paging, commits, configuration");
@@ -216,6 +266,7 @@ int main(int argc, char** argv) {
     return 2;
   }
   fixture_checks(argv[1], argv[2]);
+  backup_checks(argv[2]);
   if (argc > 3) {
     resource_checks(argv[3], argv[2]);
   } else {

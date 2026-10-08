@@ -117,11 +117,11 @@ impl Backup {
         }) {
             return Err(PersonalError::UnknownFields);
         }
-        let rime = object["rime"].as_str().ok_or(PersonalError::Incompatible)?;
-        if object["format"] != json!(1) || rime != RIME_VERSION {
+        let rime = document["rime"].as_str().ok_or(PersonalError::Incompatible)?;
+        if document["format"] != json!(1) || rime != RIME_VERSION {
             return Err(PersonalError::Incompatible);
         }
-        let snapshots = object["dictionaries"]
+        let snapshots = document["dictionaries"]
             .as_object()
             .ok_or(PersonalError::Incompatible)?;
         if !complete(&mut keys(snapshots)) {
@@ -139,7 +139,7 @@ impl Backup {
             };
             dictionaries.insert(name.clone(), snapshot);
         }
-        let settings = object["settings"]
+        let settings = document["settings"]
             .as_object()
             .ok_or(PersonalError::Settings)?;
         if settings.keys().any(|key| {
@@ -150,7 +150,7 @@ impl Backup {
         }) {
             return Err(PersonalError::UnknownFields);
         }
-        let integers = settings["integers"]
+        let integers = settings.get("integers").unwrap_or(&Value::Null)
             .as_object()
             .ok_or(PersonalError::Settings)?;
         let integer = |key: &str| {
@@ -463,6 +463,21 @@ mod tests {
         format!(
             "# Rime user dictionary\n#@/db_name\t{name}\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n#@/tick\t99\nni hao \t你好\tc=7 d=0.123456789 t=42\n"
         )
+    }
+
+    #[test]
+    fn missing_fields_are_incompatible_not_panics() {
+        for document in [
+            "{}",
+            r#"{"format":1}"#,
+            r#"{"format":1,"rime":"1.17.0","settings":{},"dictionaries":{}}"#,
+            r#"{"format":1,"rime":"1.17.0","settings":{"phrases":[]},"dictionaries":{"pinyin_simp":null,"inkflow_shared_english":null,"inkflow_voice_alias":null}}"#,
+        ] {
+            assert!(matches!(
+                Backup::from_json(document.as_bytes()),
+                Err(PersonalError::Incompatible | PersonalError::Settings)
+            ));
+        }
     }
 
     #[test]

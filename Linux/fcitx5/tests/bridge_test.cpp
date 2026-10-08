@@ -57,6 +57,10 @@ int main() {
   assert(preceding_text("中文abc", 6, 16) == "");
   assert(preceding_text("\xff\xfe", 1, 16) == "");
   assert(preceding_text("a\xe4\xb8", 2, 16) == "");
-  std::puts("PASS fcitx5 bridge helpers: XDG paths, preedit layout, key states, preceding text");
+  std::string code, text;
+  assert(parse_phrase("dz=地址", code, text) && code == "dz" && text == "地址");
+  assert(parse_phrase("a=b=c", code, text) && code == "a" && text == "b=c");
+  assert(!parse_phrase("nothing", code, text) && !parse_phrase("=x", code, text) && !parse_phrase("x=", code, text));
+  std::puts("PASS fcitx5 bridge helpers: XDG paths, preedit layout, key states, preceding text, phrases");
   return 0;
 }
