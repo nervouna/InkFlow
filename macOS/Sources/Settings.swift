@@ -127,6 +127,8 @@ final class IFSettings: ObservableObject {
     @Published private(set) var qualityControlMessage: String?
 
     var qualityRecordingPaused: Bool { integer(for: "qualityRecordingPaused", allowed: [0, 1], fallback: 0) != 0 }
+    /// Off by default: ranking, timing and learning events only. Text is an explicit opt-in.
+    var qualityTextCapture: Bool { integer(for: "qualityTextCapture", allowed: [0, 1], fallback: 0) != 0 }
     var qualityRecordingStatus: String {
         guard qualityStore != nil else { return "未启动" }
         if qualityStore?.statistics().disabled == true { return "本次记录不可用" }
@@ -144,6 +146,19 @@ final class IFSettings: ObservableObject {
         do {
             try await qualityStore.setPaused(paused)
             qualityControlMessage = paused ? "已暂停记录。正在输入的内容不会补记。" : "已恢复记录，从下一段新输入开始。"
+        } catch { qualityControlMessage = "记录设置已保存，但本次操作未完成。请重新启动墨流后检查。" }
+    }
+
+    func setQualityTextCapture(_ enabled: Bool) async {
+        guard !qualityCommandPending, let qualityStore else { return }
+        qualityCommandPending = true
+        qualityControlMessage = nil
+        objectWillChange.send()
+        defaults.set(enabled ? 1 : 0, forKey: "qualityTextCapture")
+        defer { qualityCommandPending = false }
+        do {
+            try await qualityStore.setTextCapture(enabled)
+            qualityControlMessage = enabled ? "已开启文本记录，从下一段新输入开始保存输入内容。" : "已关闭文本记录，并删除了已保存的输入文本。"
         } catch { qualityControlMessage = "记录设置已保存，但本次操作未完成。请重新启动墨流后检查。" }
     }
 

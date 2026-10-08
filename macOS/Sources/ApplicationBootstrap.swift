@@ -18,7 +18,8 @@ package enum InkFlowApplicationBootstrap {
             let bundle = Bundle.main
             let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
             let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version,
-                paused: IFSettings.sharedSettings.qualityRecordingPaused)
+                paused: IFSettings.sharedSettings.qualityRecordingPaused,
+                textCapture: IFSettings.sharedSettings.qualityTextCapture)
             IFSettings.sharedSettings.qualityStore = qualityStore
             IFEngine.configureQualityRecording(qualityStore)
             let dictionaries = IFDictionaryCoordinator(backendFactory: {

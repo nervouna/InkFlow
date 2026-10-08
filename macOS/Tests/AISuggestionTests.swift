@@ -69,6 +69,20 @@ struct AISuggestionTests {
             expect(!error.localizedDescription.contains("changed-key"), "Errors must not expose keys")
         }
         keys.failWrites = false
+        let secure = settings.configuration
+        do {
+            try settings.save(baseURL: "http://compatible.example/v1", apiKey: "leaked-key", model: "m")
+            fatalError("Clear-text remote endpoints must be rejected at save time")
+        } catch {
+            let storedKey = try keys.read()
+            expect(error as? AIEndpointError == .insecure && settings.configuration == secure && storedKey == "fixture-key",
+                   "Insecure endpoint keeps the previous configuration and key")
+            expect(error.localizedDescription.contains("https://") && !error.localizedDescription.contains("leaked-key"), "Rejection explains the https rule")
+        }
+        for loopback in ["http://localhost:11434/v1", "http://127.0.0.1:11434", "HTTP://[::1]:11434/v1"] {
+            try settings.save(baseURL: loopback, apiKey: "fixture-key", model: "qwen3:4b")
+            expect(settings.configuration.baseURL == loopback, "Loopback Ollama endpoints stay allowed over http")
+        }
         for incomplete in [AISuggestionConfiguration(baseURL: "", apiKey: "a", model: "m"),
                            AISuggestionConfiguration(baseURL: "b", apiKey: "", model: "m"),
                            AISuggestionConfiguration(baseURL: "b", apiKey: "a", model: " ")] {
@@ -113,7 +127,7 @@ struct AISuggestionTests {
         }
         for (base, model) in [("https://compatible.example/v1", "qwen3.5:4b-mlx"),
                               ("http://localhost:8080/v1", "qwen3.5:4b-mlx"),
-                              ("http://localhost.example:11434/v1", "qwen3.5:4b-mlx"),
+                              ("https://localhost.example:11434/v1", "qwen3.5:4b-mlx"),
                               ("http://localhost:11434/v1", "gpt-oss:20b"),
                               ("http://localhost:11434/v1", "qwen3-coder:30b")] {
             let configuration = AISuggestionConfiguration(baseURL: base, apiKey: "fixture-key", model: model)
@@ -122,7 +136,8 @@ struct AISuggestionTests {
             expect(json["reasoning_effort"] == nil,
                    "Unidentified servers and other model families retain their request contract")
         }
-        for invalid in ["bad URL", "file:///tmp/fixture", "https://user:secret@compatible.example", "https://compatible.example?key=secret", "https://compatible.example/#secret"] {
+        for invalid in ["bad URL", "file:///tmp/fixture", "https://user:secret@compatible.example", "https://compatible.example?key=secret", "https://compatible.example/#secret",
+                        "http://compatible.example/v1", "http://localhost.example:11434/v1", "http://192.168.1.20:11434/v1"] {
             do {
                 _ = try AIChatCompletionsClient.makeRequest(input: fixture, configuration: .init(baseURL: invalid, apiKey: "fixture-key", model: "m"))
                 fatalError("Invalid endpoint must fail at request time")

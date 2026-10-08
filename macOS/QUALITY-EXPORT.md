@@ -6,9 +6,19 @@ Manual quality exports let you analyze the records retained on several computers
 
 In InkFlow Settings, open 「备份与恢复」 and choose 「导出质量数据」 under 「输入质量记录」. Choose a JSON file location. The result reports the saved path, composition and learning-event counts, and the earliest/latest retained record time in UTC. An empty database exports an explicit empty range and zero counts.
 
-The file includes input codes/text, candidates, selections, obtainable preceding text, app/client identifiers, operations/timing, content-free learning-effectiveness events, build/version metadata, statistical fingerprints, and record timestamps. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
+The file includes candidate ranks and indices, selections by index, text kinds, app/client identifiers, operations/timing, content-free learning-effectiveness events, build/version metadata, statistical fingerprints, and record timestamps. Input codes/text, candidate text, committed text and preceding text are present only in records saved while 「同时保存输入文本」 was on; by default those strings are empty or null and each page carries `textCaptured: false`. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
 
-Only records still present in the local quality database are included: text records retain the existing 28-day policy; learning-effectiveness events retain 90 days, capped at 4,096. In-progress input and unwritten records are not included. Local cleanup does not delete exported copies.
+Only records still present in the local quality database are included: composition records retain 28 days; learning-effectiveness events retain 90 days, capped at 4,096. Turning text recording off removes every stored record that still carries text. In-progress input and unwritten records are not included. Local cleanup does not delete exported copies.
+
+## Storage protection
+
+`quality.sqlite3` is a plain SQLite file under `~/Library/Application Support/InkFlow/` with a `0700` directory, `0600` file mode and `secure_delete` on. It is not encrypted, by decision:
+
+- macOS Data Protection classes (`FileProtectionType`) only take effect on Apple silicon and protect data while the Mac is locked or off. FileVault already covers the home directory in that state, and the strictest class would make the background writer fail while the screen is locked, which disables recording for the session.
+- Application-level encryption (SQLCipher or encrypted columns keyed from the Keychain) would guard against other processes of the same user, but an input method cannot prompt for Keychain access at startup, re-signed developer builds would silently lose the key, and the export, the analysis script and `sqlite3` inspection would all need a decryption path.
+- The default record no longer contains text. What remains (ranks, indices, timings, bundle identifiers, applied-setting fingerprints) is low sensitivity, and the text mode is an explicit, reversible opt-in bounded to 28 days.
+
+Revisit this if the text mode becomes the default again or the database gains other personal content.
 
 A command-line alternative uses the same file contract (Python standard library only):
 
