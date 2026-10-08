@@ -1,0 +1,43 @@
+name: macOS
+
+# Docs-only changes must not spend macOS minutes.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quick:
+    # Only the quick group. `test.sh all` stays a manual release step.
+    name: test.sh quick
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      # dependencies.sh verifies every archive by SHA-256, so a stale cache only
+      # costs a re-download. rime-cache is keyed by prepare-rime.sh's own input digest.
+      - name: Cache librime, dictionaries and prepared Rime data
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/deps
+            build/dictionary-sources
+            build/rime-cache
+          key: macos-inputs-${{ hashFiles('macOS/scripts/dependencies.sh', 'Core/**', 'schemas/**') }}
+          restore-keys: macos-inputs-
+      - name: Run the quick units
+        run: |
+          set -o pipefail
+          bash macOS/scripts/test.sh quick 2>&1 | tee build/test-quick.log
+      - name: Name the failed unit
+        if: failure()
+        run: grep -E '^FAIL ' build/test-quick.log | sed 's/^/::error title=test.sh quick::/' || true

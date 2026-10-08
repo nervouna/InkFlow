@@ -20,6 +20,8 @@ bash Core/scripts/test.sh             # standalone Core package, no app build
 
 `dictionary-worker`, `dictionary-activation`, `personal-data` and `termination` need a current `build.sh` app. The runner stops at the first failing unit; fix it and rerun that unit.
 
+GitHub Actions runs `test.sh quick` on a `macos-26` runner for every pull request and push to `main` (docs-only changes skip it). The ubuntu jobs run the shared-core boundary check, the portable `cargo test` and the remote-runner tests.
+
 ## What the units cover
 
 - `engine-*`: editing, candidate indexes, exact-once commit, English admission/ranking, context reranking, input options, custom phrases.

@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  boundaries:
+    name: Shared-core boundaries
+    runs-on: ubuntu-24.04
+    container: swift:6.2-noble
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install python3
+        run: command -v python3 || (apt-get update && apt-get install -y --no-install-recommends python3)
+      - name: Check shared-core boundaries
+        run: bash Core/scripts/check-boundaries.sh --standalone
+      # `swift build` of the root package needs macOS: InkFlowDomain imports CryptoKit,
+      # the app targets import AppKit/InputMethodKit, Sparkle ships as an xcframework and
+      # librime is a macOS dylib, so no root target compiles on Linux. This step only
+      # evaluates the root manifest; the macOS workflow compiles the root products that
+      # `test.sh quick` needs.
+      - name: Evaluate the root manifest
+        run: swift package dump-package > /dev/null
+
+  portable:
+    name: Portable runtime (cargo test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      # Same CMake/Ninja releases as the Mac runner (Core/Portable/README.md).
+      - name: Install CMake and Ninja
+        run: pipx install cmake==3.31.6 && pipx install ninja==1.11.1.4
+      - name: Cache the native runtime build
+        uses: actions/cache@v4
+        with:
+          path: build/portable
+          key: portable-${{ runner.os }}-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: portable-${{ runner.os }}-
+      # rustup picks the pinned toolchain from rust-toolchain.toml.
+      - name: Build the native runtime and run cargo test
+        run: bash Core/Portable/test.sh
+
+  scripts:
+    name: Remote runner tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Test scripts/mac-remote.py
+        run: python3 -B scripts/tests/test_mac_remote.py
