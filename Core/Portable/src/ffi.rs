@@ -77,4 +77,10 @@ unsafe extern "C" {
         count: usize,
         outcome: *mut c_int,
     ) -> c_int;
+    pub fn ifp_personal_data_snapshot(
+        root: *const c_char,
+        name: *const c_char,
+        file: *const c_char,
+        restore: c_int,
+    ) -> c_int;
 }

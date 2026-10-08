@@ -272,3 +272,7 @@ extern "C" int ifp_apply_schema_patch(uintptr_t session, const char* schema, con
     return 0;
   } catch (...) { return -3; }
 }
+extern "C" int ifp_personal_data_snapshot(const char* root, const char* name, const char* file, int restore) {
+  // IFPersonalDataSnapshot catches every exception and finalizes its own Rime instance.
+  return IFPersonalDataSnapshot(root, name, file, restore) == 0 ? 0 : -1;
+}

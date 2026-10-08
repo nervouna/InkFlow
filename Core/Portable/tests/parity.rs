@@ -907,3 +907,277 @@ fn swift_engine_regressions() {
         "PASS Swift engine regressions on the Rust engine: basic cases, context ranking, custom phrases, input settings, ASCII boundaries, stale selection, observer"
     );
 }
+
+/// Expectations from Core/Sources/InkFlowRime/EnginePersonalLearning.swift and
+/// macOS/Tests/PersonalDataTests.swift: management at the idle boundary, portable
+/// backup/import on isolated user directories, and rollback on a rejected snapshot.
+#[test]
+fn swift_personal_learning_and_data() {
+    use inkflow_rime::engine::{LearningError, LearningSource};
+    use inkflow_rime::personal::{self, Backup, DICTIONARIES, PersonalError};
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP personal data parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let root = scratch("personal-data");
+    let source = root.join("source");
+    let trained = engine(&resources, &source);
+    let session = configured(&trained);
+    assert_eq!(
+        trained.personal_learning_entries().unwrap(),
+        vec![],
+        "a fresh user directory has no learning"
+    );
+    for _ in 0..5 {
+        type_keys(&session, "email");
+        let page = session.snapshot().unwrap();
+        let index = page
+            .texts()
+            .iter()
+            .position(|c| *c == "email")
+            .expect("email candidate");
+        session.select(&page, index).unwrap();
+        assert_eq!(session.take_commit().unwrap(), "email");
+    }
+    type_keys(&session, "emai");
+    assert_eq!(
+        trained.personal_learning_entries(),
+        Err(LearningError::Busy),
+        "composition blocks management"
+    );
+    session.clear().unwrap();
+    assert_eq!(
+        trained.personal_learning_entries(),
+        Err(LearningError::Busy),
+        "the native undo window blocks management"
+    );
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    let entries = trained.personal_learning_entries().unwrap();
+    let email = entries
+        .iter()
+        .find(|e| e.source == LearningSource::English && e.code == "email" && e.text == "email")
+        .expect("learned email");
+    // Rime batches user-dictionary writes per transaction; the newest commit can still be
+    // pending until the next transaction or teardown, exactly as with the Swift engine.
+    assert!(matches!(email.commits, 4 | 5), "{entries:?}");
+    let commits = email.commits;
+    let undo = trained.delete_personal_learning(email).unwrap();
+    assert_eq!(
+        trained.delete_personal_learning(email),
+        Err(LearningError::Conflict),
+        "a stale entry cannot be deleted twice"
+    );
+    assert!(
+        trained
+            .personal_learning_entries()
+            .unwrap()
+            .iter()
+            .all(|e| e.code != "email"),
+        "deleted learning disappears"
+    );
+    trained.undo_personal_learning(&undo).unwrap();
+    assert_eq!(
+        trained.undo_personal_learning(&undo),
+        Err(LearningError::Conflict)
+    );
+    let restored = trained.personal_learning_entries().unwrap();
+    // Native restore revives the tombstoned count with one confirmation, as on macOS.
+    assert!(
+        restored
+            .iter()
+            .any(|e| e.code == "email" && e.commits >= commits),
+        "undo restores the entry: {restored:?}"
+    );
+    type_keys(&session, "nihao");
+    session.key(32, 0).unwrap();
+    assert_eq!(session.take_commit().unwrap(), "你好");
+    assert_eq!(
+        trained.delete_personal_learning(&restored[0]),
+        Err(LearningError::Conflict),
+        "a commit invalidates captured entries"
+    );
+    assert_eq!(
+        trained.personal_learning_entries(),
+        Err(LearningError::Busy),
+        "a new commit reopens the undo window"
+    );
+    std::thread::sleep(std::time::Duration::from_secs(4));
+    assert!(trained.personal_learning_entries().is_ok());
+    drop(session);
+    drop(trained);
+
+    // Export the trained directory and import it into a fresh one.
+    fs::remove_dir_all(source.join("inkflow_voice_alias.userdb")).unwrap();
+    let dictionaries = personal::export(&source).unwrap();
+    assert!(
+        dictionaries["pinyin_simp"].is_some() && dictionaries["inkflow_shared_english"].is_some()
+    );
+    assert_eq!(
+        dictionaries["inkflow_voice_alias"], None,
+        "an absent dictionary exports as absent"
+    );
+    let backup = Backup {
+        rime: personal::RIME_VERSION.into(),
+        candidate_count: 7,
+        input: InputPreferences::default(),
+        phrases: vec![inkflow_rime::phrases::CustomPhrase::validated("p", "dz", "地址").unwrap()],
+        dictionaries,
+        unsupported: vec![],
+    };
+    let document = backup.to_json().unwrap();
+    let parsed = Backup::from_json(&document).unwrap();
+    assert!(
+        parsed.candidate_count == 7
+            && parsed.phrases == backup.phrases
+            && parsed.dictionaries == backup.dictionaries
+    );
+    let target = root.join("target");
+    fs::create_dir_all(&target).unwrap();
+    personal::import(&target, &parsed.dictionaries).unwrap();
+    assert!(
+        target.join("pinyin_simp.userdb").is_dir()
+            && !target.join("inkflow_voice_alias.userdb").exists()
+    );
+    {
+        let engine = engine(&resources, &target);
+        let session = configured(&engine);
+        session
+            .set_configuration(parsed.candidate_count, &parsed.phrases, Some(&parsed.input))
+            .unwrap();
+        let imported = engine.personal_learning_entries().unwrap();
+        assert!(
+            imported.iter().any(|e| e.source == LearningSource::English
+                && e.code == "email"
+                && e.commits >= commits),
+            "English learning survives import: {imported:?}"
+        );
+        type_keys(&session, "dz");
+        assert_eq!(
+            texts(&session)[0],
+            "地址",
+            "imported phrases apply through settings"
+        );
+        session.clear().unwrap();
+        assert_eq!(
+            personal::export(&target).unwrap_err().to_string(),
+            PersonalError::EngineActive.to_string(),
+            "personal data never runs beside a live engine"
+        );
+    }
+    assert_eq!(
+        personal::export(&target).unwrap()["inkflow_shared_english"],
+        parsed.dictionaries["inkflow_shared_english"],
+        "import preserves the snapshot rows"
+    );
+
+    // A macOS-format document with synthetic rows restores into existing data, and a rejected
+    // snapshot leaves the originals in place.
+    let synthetic = |name: &str, row: &str| {
+        format!(
+            "# Rime user dictionary\n#@/db_name\t{name}\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n#@/user_id\tsynthetic-source\n#@/tick\t99\n{row}\tc=7 d=0.123456789 t=42\nce shi \t测试\tc=-3 d=0.0000123 t=17\n"
+        )
+    };
+    let mut macos: serde_json::Map<String, Value> = serde_json::from_slice(&document).unwrap();
+    macos["dictionaries"] = json!({
+        "pinyin_simp": synthetic("pinyin_simp", "ni hao \t你好"),
+        "inkflow_shared_english": synthetic("inkflow_shared_english", "backupword \tBackupWord"),
+        "inkflow_voice_alias": synthetic("inkflow_voice_alias", "beifen \t备份别名"),
+    });
+    macos["settings"]["shortcuts"]["inputMode"] =
+        json!({"keyCode": 60, "modifierBits": 131072, "keyLabel": "右 Shift"});
+    let restored = Backup::from_json(&serde_json::to_vec(&macos).unwrap()).unwrap();
+    assert_eq!(
+        restored.unsupported,
+        [
+            "settings.integers.fontSize",
+            "settings.integers.thunderMode",
+            "settings.integers.vertical",
+            "settings.shortcuts"
+        ]
+    );
+    personal::import(&target, &restored.dictionaries).unwrap();
+    {
+        let engine = engine(&resources, &target);
+        let _session = configured(&engine);
+        let learned = engine.personal_learning_entries().unwrap();
+        assert!(
+            learned.iter().any(|e| e.source == LearningSource::English
+                && e.text == "BackupWord"
+                && e.commits == 7),
+            "English learning survives destination identity: {learned:?}"
+        );
+        assert!(
+            learned.iter().any(|e| e.source == LearningSource::Voice
+                && e.text == "备份别名"
+                && e.commits == 7),
+            "voice learning survives destination identity"
+        );
+        assert!(
+            learned.iter().all(|e| e.code != "email"),
+            "import replaces the previous dictionaries"
+        );
+    }
+    let before = personal::export(&target).unwrap();
+    let mut broken = restored.dictionaries.clone();
+    broken.insert(
+        "pinyin_simp".into(),
+        Some(synthetic("pinyin_simp", "ni hao \t你好") + "x \tx\tc=NaN d=1 t=1\n"),
+    );
+    assert!(matches!(
+        personal::import(&target, &broken),
+        Err(PersonalError::NativeSnapshot)
+    ));
+    assert_eq!(
+        personal::export(&target).unwrap(),
+        before,
+        "a rejected import leaves every dictionary unchanged"
+    );
+    for suffix in [
+        "malformed\n",
+        "x \tx\tc=1 d=inf t=1\n",
+        "x \tx\tc=1 d=1 t=-1\n",
+        "ni hao \t你好\tc=1 d=1 t=1\n",
+        "#unknown\n",
+    ] {
+        let mut broken = restored.dictionaries.clone();
+        broken.insert(
+            "pinyin_simp".into(),
+            Some(synthetic("pinyin_simp", "ni hao \t你好") + suffix),
+        );
+        assert!(
+            matches!(
+                personal::import(&target, &broken),
+                Err(PersonalError::NativeSnapshot)
+            ),
+            "{suffix:?}"
+        );
+    }
+    let mut absent = restored.dictionaries.clone();
+    for name in DICTIONARIES {
+        absent.insert(name.into(), None);
+    }
+    personal::import(&target, &absent).unwrap();
+    assert!(
+        DICTIONARIES
+            .iter()
+            .all(|name| !target.join(format!("{name}.userdb")).exists()),
+        "absence in the backup removes the local dictionaries"
+    );
+    assert_eq!(personal::export(&target).unwrap(), absent);
+    fs::create_dir_all(target.join("PersonalData/transaction/old/pinyin_simp.userdb")).unwrap();
+    fs::write(target.join("PersonalData/transaction/journal.json"), r#"{"phase":"applying","originals":{"pinyin_simp":true,"inkflow_shared_english":false,"inkflow_voice_alias":false}}"#).unwrap();
+    assert!(matches!(
+        personal::import(&target, &absent),
+        Err(PersonalError::RecoveryRequired)
+    ));
+    personal::recover(&target).unwrap();
+    assert!(
+        target.join("pinyin_simp.userdb").is_dir()
+            && !target.join("PersonalData/transaction").exists(),
+        "recovery restores the original"
+    );
+    fs::remove_dir_all(&root).unwrap();
+    println!(
+        "PASS personal learning and data: idle-boundary management, delete/undo/conflict, export/import on isolated directories, macOS document import with disclosure, rejected snapshots roll back"
+    );
+}
