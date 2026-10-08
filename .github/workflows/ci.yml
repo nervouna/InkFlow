@@ -50,6 +50,22 @@ jobs:
       - name: Build the native runtime and run cargo test
         run: bash Core/Portable/test.sh
 
+  dictionary:
+    name: Portable dictionary (cargo test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache the dictionary crate build
+        uses: actions/cache@v5
+        with:
+          path: build/dictionary-parity/cargo
+          key: dictionary-${{ runner.os }}-${{ hashFiles('Core/Portable/dictionary/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: dictionary-${{ runner.os }}-
+      # Without a Swift toolchain the script compares against the committed fixtures.
+      - name: Test and verify the dictionary generator port
+        run: bash Core/Portable/dictionary/test.sh
+
   scripts:
     name: Remote runner tests
     runs-on: ubuntu-24.04

@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub fn spelling(dictionary: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
     let mut syllables = BTreeSet::new();
-    read_rows(dictionary, "generated-spelling", None, |key, _| {
+    read_rows(dictionary, "generated-spelling", |key, _| {
         syllables.extend(key.reading.split(' ').map(str::to_owned));
     })?;
     let mut schemas = BTreeMap::new();

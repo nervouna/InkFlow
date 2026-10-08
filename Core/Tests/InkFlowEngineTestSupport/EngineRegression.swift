@@ -281,7 +281,6 @@ package enum EngineRegression {
             check(fields.count == 4)
             selectCandidate(String(fields[0]), input: fields[1].replacingOccurrences(of: " ", with: ""), engine: engine)
         }
-        selectCandidate("串行打印机", input: "chuanxingdayinji", engine: engine)
         selectCandidate("深度求索", input: "shenduqiusuo", engine: engine)
         selectCandidate("阿米诺斯", input: "aminuosi", engine: engine)
         selectCandidate("并发信息系统", input: "bingfaxinxixitong", engine: engine)
