@@ -37,7 +37,7 @@ Logs contain only fixed labels, random correlation IDs, status and timing — ne
 
 ## Slow cold start vs app-switch delay
 
-The bundled `RimePrebuilt` engine starts before the IMK server is created; the context-ranking index (`pinyin_simp.context.bin`, generated with the dictionary and mapped read-only) and downloaded-dictionary recovery load in the background and switch in only when all sessions are idle. Until then, candidate order is Rime's. Activation spans in the same run/PID are client callbacks, not a new process. `RimePrebuilt/inkflow-cache.json` binds bundled resources; an invalid packaged cache reports the engine unavailable rather than running synchronous maintenance. Tests: `test.sh startup-diagnostics dictionary-activation`; `test-serving-startup.sh --native` for a real candidate panel.
+The bundled `RimePrebuilt` engine starts before the IMK server is created; the context-ranking index (`pinyin_simp.context.bin`, generated with the dictionary and read whole into memory) and downloaded-dictionary recovery load in the background and switch in only when all sessions are idle. Until then, candidate order is Rime's. Activation spans in the same run/PID are client callbacks, not a new process. `RimePrebuilt/inkflow-cache.json` binds bundled resources; an invalid packaged cache reports the engine unavailable rather than running synchronous maintenance. Tests: `test.sh startup-diagnostics dictionary-activation`; `test-serving-startup.sh --native` for a real candidate panel.
 
 ## Uppercase English drops itself and following Pinyin in mixed input
 

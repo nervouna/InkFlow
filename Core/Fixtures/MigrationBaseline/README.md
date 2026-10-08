@@ -4,7 +4,7 @@
 
 ## Capture and validation
 
-- Source revision: `75e5c70e85164bfd9fd67e3e0f9dc1829dcd48f0` (#53: mapped context-ranking index, bounded resource hashing).
+- Source revision: `REVISION` (#53: prepared context-ranking index, bounded resource hashing).
 - Host: Apple M5 Pro, 24 GiB RAM, macOS 27.0, Xcode 27.0, Swift 6.4, SDK 27.0, no Rust toolchain.
 - Measurement build: release, `arm64-apple-macosx26.0`.
 - Command: `bash Core/scripts/capture-migration-baseline.sh OUTPUT` run locally on the worktree.
@@ -42,7 +42,7 @@ Same host, same protocol, same session. "Before" is `b128128` with the previous 
 | First-pass key p95 / p99, ms | 1.125 / 1.393 | 1.107 / 1.473 |
 | Repeated-pass key median / p95, ms | 0.293 / 1.005 | 0.312 / 1.058 |
 
-Where the memory went: the old ranker alone peaked at 181 MiB and took about 960 ms to build its Swift dictionary. The remaining 123 MiB peak was `IFPackagedCache.descriptor` hashing bundled resources through autoreleased `FileHandle` chunks that stayed resident until the pool drained. The mapped index (`pinyin_simp.context.bin`, 18 MB on disk) adds about 1 MiB of resident pages after input.
+Where the memory went: the old ranker alone peaked at 181 MiB and took about 960 ms to build its Swift dictionary. The remaining 123 MiB peak was `IFPackagedCache.descriptor` hashing bundled resources through autoreleased `FileHandle` chunks that stayed resident until the pool drained. The prepared index (`pinyin_simp.context.bin`, 18 MB) is read whole into memory when the ranker loads, so lookups never fault pages in from disk on the key-event path.
 
 ## Approved review limits
 
