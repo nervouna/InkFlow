@@ -37,6 +37,7 @@ jobs:
       - name: Run the quick units
         run: |
           set -o pipefail
+          mkdir -p build
           bash macOS/scripts/test.sh quick 2>&1 | tee build/test-quick.log
       - name: Name the failed unit
         if: failure()
