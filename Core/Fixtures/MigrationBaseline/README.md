@@ -4,13 +4,11 @@
 
 ## Capture and validation
 
-- Source revision: `774bb557b57512ef0d74ce73cc3bf8a604bec75e`.
-- Run ID: `20261004T185457Z-bd0a20b1`.
-- Host: Apple M1 Pro, 32 GiB RAM, macOS 27.0.1, Xcode 27.0, Swift 6.4, SDK 27.0, Rust 1.98.1.
+- Source revision: `75e5c70e85164bfd9fd67e3e0f9dc1829dcd48f0` (#53: mapped context-ranking index, bounded resource hashing).
+- Host: Apple M5 Pro, 24 GiB RAM, macOS 27.0, Xcode 27.0, Swift 6.4, SDK 27.0, no Rust toolchain.
 - Measurement build: release, `arm64-apple-macosx26.0`.
-- Command: `python3 scripts/mac-remote.py baseline --revision 774bb557b57512ef0d74ce73cc3bf8a604bec75e`.
-- Outcome: exit 0. Standalone boundaries, packaged-cache probe, ranking assertions, quality-baseline comparison, performance capture, and all seven selected regression units passed.
-- Regression units: `voice-lexicon`, `ai-learning`, `engine-basic`, `engine-options`, `engine-english`, `engine-context`, `engine-custom-phrases`.
+- Command: `bash Core/scripts/capture-migration-baseline.sh OUTPUT` run locally on the worktree.
+- Outcome: standalone boundaries, packaged-cache probe, ranking assertions, quality-baseline comparison and performance capture passed. The regression units ran separately on the same revision: `preparation`, `dictionary-generator`, `dictionary-store`, `dictionary-worker`, `dictionary-activation`, `engine-*`, `ai-learning`, `voice-lexicon`, plus `check-bundle.sh`.
 
 All 21 behavioral observations match [the existing quality baseline](../QualityBaseline/baseline.json). Nineteen samples complete the five-selection learning recipe. `technical-api` and `technical-swiftui` remain unreachable, as in that baseline. First-choice matches: 15/21 initial, 17/21 after learning.
 
@@ -22,14 +20,29 @@ Five fresh processes each type 247 keys over the 21-sample corpus, then repeat t
 
 | Measurement | Median | p95 | p99 | Maximum |
 | --- | ---: | ---: | ---: | ---: |
-| Headless startup, ms (5 processes) | 1,995.86 | 2,023.50 | 2,023.50 | 2,023.50 |
-| First-pass key operation, ms | 0.538 | 1.809 | 2.238 | 20.081 |
-| Repeated-pass key operation, ms | 0.487 | 1.542 | 1.946 | 2.429 |
-| Peak RSS after input, MiB (5 processes) | 311.84 | 311.97 | 311.97 | 311.97 |
+| Headless startup, ms (5 processes) | 237.91 | 248.33 | 248.33 | 248.33 |
+| First-pass key operation, ms | 0.321 | 1.107 | 1.473 | 7.786 |
+| Repeated-pass key operation, ms | 0.312 | 1.058 | 1.324 | 1.917 |
+| Peak RSS after input, MiB (5 processes) | 40.63 | 42.56 | 42.56 | 42.56 |
 
-The five slowest samples are the first key of the first composition in each process, ranging from 16.76 to 20.08 ms. Aggregate p99 does not describe that first-key cost. With five processes, startup/memory p95/p99 equal the maximum.
+The five slowest samples are the first key of the first composition in each process, ranging from 7.01 to 7.79 ms. Aggregate p99 does not describe that first-key cost. With five processes, startup/memory p95/p99 equal the maximum.
 
 Measurement boundaries are defined in [the remote workflow](../../../docs/remote-mac-baseline.md#measurement-boundaries). Recapture a Swift reference alongside the new core if the OS or toolchain changes substantially.
+
+### Before and after #53
+
+Same host, same protocol, same session. "Before" is `b128128` with the previous `IFContextRanker` that parsed the whole dictionary at startup; "after" is this capture. The earlier phase-0 numbers (startup 1,995.86 ms, peak RSS 311.84 MiB, first key 16.76–20.08 ms) were taken on an M1 Pro and are not directly comparable to either column.
+
+| Measurement | Before (`b128128`) | After (`75e5c70`) |
+| --- | ---: | ---: |
+| Headless startup median, ms | 1,225.01 | 237.91 |
+| Peak RSS after startup, max MiB | 289.95 | 21.81 |
+| Peak RSS after input, max MiB | 310.70 | 42.56 |
+| First key of each process, ms | 8.68–10.15 | 7.01–7.79 |
+| First-pass key p95 / p99, ms | 1.125 / 1.393 | 1.107 / 1.473 |
+| Repeated-pass key median / p95, ms | 0.293 / 1.005 | 0.312 / 1.058 |
+
+Where the memory went: the old ranker alone peaked at 181 MiB and took about 960 ms to build its Swift dictionary. The remaining 123 MiB peak was `IFPackagedCache.descriptor` hashing bundled resources through autoreleased `FileHandle` chunks that stayed resident until the pool drained. The mapped index (`pinyin_simp.context.bin`, 18 MB on disk) adds about 1 MiB of resident pages after input.
 
 ## Approved review limits
 

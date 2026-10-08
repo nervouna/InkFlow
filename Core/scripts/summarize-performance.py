@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 import platform
+import shutil
 import statistics
 import subprocess
 import sys
@@ -54,7 +55,7 @@ def summarize(directory):
         "cpu": subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip(),
         "memoryBytes": int(subprocess.check_output(["sysctl", "-n", "hw.memsize"], text=True)),
         "swift": subprocess.check_output(["xcrun", "swift", "--version"], text=True).strip(),
-        "rust": subprocess.check_output(["rustc", "--version"], text=True).strip(),
+        "rust": subprocess.check_output(["rustc", "--version"], text=True).strip() if shutil.which("rustc") else None,
         "fingerprints": {path: hashlib.sha256((root / path).read_bytes()).hexdigest()
                          for path in fingerprint_paths},
         "rawReportSHA256": {path.name: hashlib.sha256(path.read_bytes()).hexdigest()

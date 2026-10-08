@@ -644,7 +644,7 @@ package enum EngineRegression {
         try files.createDirectory(at: directory.appendingPathComponent("opencc"), withIntermediateDirectories: true)
         try files.createDirectory(at: directory.appendingPathComponent("lua"), withIntermediateDirectories: true)
         defer { try? files.removeItem(at: directory) }
-        for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
+        for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml", "pinyin_simp.context.bin",
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
                      "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                      "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
