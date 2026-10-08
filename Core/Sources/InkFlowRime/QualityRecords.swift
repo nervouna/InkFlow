@@ -289,9 +289,28 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
             page.candidates[index].text = ""
             page.candidates[index].comment = nil
         }
+        page.configurationRevisionID = QualityConfigRevision.redactedID(page.configurationRevisionID)
+        page.configuration = page.configuration.redactingText()
         page.textCaptured = false
         return page
     }
+}
+
+extension QualityAppliedConfiguration {
+    /// Custom phrases keep their stable IDs, so the phrase set still shapes the ranking fingerprint, but no code or text.
+    package func redactingText() -> Self {
+        var configuration = self
+        for index in configuration.customPhrases.indices {
+            configuration.customPhrases[index].code = ""
+            configuration.customPhrases[index].text = ""
+        }
+        return configuration
+    }
+}
+
+extension QualityConfigRevision {
+    /// A redacted configuration is a different stored revision; the ID must not collide with its text-mode twin.
+    package static func redactedID(_ id: String) -> String { id.hasSuffix("/text-free") ? id : id + "/text-free" }
 }
 
 package enum QualityPresentation: String, Codable, Sendable {
@@ -635,6 +654,10 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
     package func redactingText() -> Self {
         var envelope = self
         for index in envelope.commits.indices { envelope.commits[index].text = "" }
+        for index in envelope.revisions.indices {
+            envelope.revisions[index].id = QualityConfigRevision.redactedID(envelope.revisions[index].id)
+            envelope.revisions[index].configuration = envelope.revisions[index].configuration.redactingText()
+        }
         for index in envelope.decisions.indices {
             envelope.decisions[index].selectedText = nil
             envelope.decisions[index].snapshot = envelope.decisions[index].snapshot.redactingText()

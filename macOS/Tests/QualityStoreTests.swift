@@ -384,9 +384,16 @@ private extension QualityStoreTests {
         let url = try makeURL("text-free")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
-        expect(store.submit(fixture("text-free")) == .accepted, "default mode accepts envelopes")
+        var phrased = fixture("text-free")
+        let phrases = QualityAppliedConfiguration(candidateCount: 5, customPhrases: [QualityPhrase(id: "phrase-1", code: "mima", text: "我的密码")])
+        phrased.revisions[0].configuration = phrases
+        phrased.decisions[0].snapshot.configuration = phrases
+        expect(store.submit(phrased) == .accepted, "default mode accepts envelopes")
         await store.flush()
         let reader = try Reader(url)
+        expect(try reader.scalar("SELECT json_extract(applied_config_json,'$.customPhrases[0].id') || json_extract(applied_config_json,'$.customPhrases[0].code') || json_extract(applied_config_json,'$.customPhrases[0].text') FROM config_revisions") == "phrase-1",
+               "custom phrases keep their IDs but lose code and text")
+        expect(try reader.scalar("SELECT id FROM config_revisions") == phrased.revisions[0].id + "/text-free", "redacted configurations are their own revision")
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1", "ranking evidence is written without text")
         expect(try reader.scalar("SELECT selected_text IS NULL FROM candidate_decisions") == "1", "no selected text by default")
         expect(try reader.scalar("SELECT text FROM commits") == "", "commit text is empty by default")
@@ -409,13 +416,14 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1" && reader.scalar("SELECT count(*) FROM commits") == "1" &&
                reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "text-free records and learning events stay")
         await store.close()
-        for secret in ["nihao", "你好😀", "测试"] {
+        for secret in ["nihao", "你好😀", "测试", "mima", "我的密码"] {
             expect(try Data(contentsOf: url).range(of: Data(secret.utf8)) == nil, "no \(secret) remains in the database file")
         }
         // Upgrade: a database written with text reopens in the text-free default and loses its text at startup maintenance.
         let legacyURL = try makeURL("legacy-text")
         let legacy = QualityStore(maintenanceNow: { maintenanceDate }, url: legacyURL, engineVersion: "test", buildMetadata: metadata, textCapture: true)
-        expect(legacy.submit(fixture("legacy")) == .accepted, "legacy text envelope accepted")
+        phrased.composition.id = "legacy"
+        expect(legacy.submit(phrased) == .accepted, "legacy text envelope accepted")
         expect(legacy.submit(QualityEffectivenessEvent(source: .voiceAlias, event: .hit)) == .accepted, "legacy event accepted")
         await legacy.close()
         let upgraded = QualityStore(maintenanceNow: { maintenanceDate }, url: legacyURL, engineVersion: "test", buildMetadata: metadata)
@@ -424,7 +432,10 @@ private extension QualityStoreTests {
         expect(try legacyReader.scalar("SELECT count(*) FROM compositions") == "0" && legacyReader.scalar("SELECT count(*) FROM effectiveness_events") == "1",
                "pre-text-free text records are removed on upgrade; learning events stay")
         await upgraded.close()
-        expect(try Data(contentsOf: legacyURL).range(of: Data("nihao".utf8)) == nil, "upgrade purge erases text bytes")
+        expect(try legacyReader.scalar("SELECT count(*) FROM config_revisions") == "0", "unreferenced text-mode revisions go with their records")
+        for secret in ["nihao", "mima", "我的密码"] {
+            expect(try Data(contentsOf: legacyURL).range(of: Data(secret.utf8)) == nil, "upgrade purge erases \(secret)")
+        }
     }
 
     static func effectivenessEvents() async throws {
