@@ -23,7 +23,7 @@ struct DictionaryGeneratorTests {
             inputs.append(IFDictionaryInput(receipt: receipt, data: data))
             catalog.append(IFDictionarySourceSpec(id: spec.id, group: spec.group, name: spec.name, repository: spec.repository,
                 branch: spec.branch, path: spec.path, pinnedCommit: receipt.commit, pinnedBlobSHA: receipt.blobSHA,
-                pinnedSHA256: receipt.sha256, pinnedByteCount: receipt.byteCount, defaultWeight: spec.defaultWeight))
+                pinnedSHA256: receipt.sha256, pinnedByteCount: receipt.byteCount))
         }
         return (inputs, catalog)
     }
@@ -58,18 +58,15 @@ struct DictionaryGeneratorTests {
         let specialty = try generate([
             "frost-computer": "甲\tjia\t9000\n新增\txin zeng\t9000\n专业词\tzhuan ye ci\t3",
             "frost-exthot": "专业词\tzhuan ye ci\t9000\n网络新词\twang luo xin ci\t2\n",
-            "selected-computer": "新增\txin zeng\n旧词\tjiu ci\n二列词\ter lie ci\n串行打印机\tchuan hang da yin ji\n",
             "ice-base": "甲\tjia\t10\n新增\txin zeng\t2\n",
             "legacy": "甲\tjia\t200\n旧词\tjiu ci\t4\n"
         ])
         for row in ["甲\tjia\t100\n", "新增\txin zeng\t20\n", "旧词\tjiu ci\t2\n", "专业词\tzhuan ye ci\t3\n",
-                    "网络新词\twang luo xin ci\t2\n", "二列词\ter lie ci\t1\n", "串行打印机\tchuan xing da yin ji\t1\n"] {
-            expect(text(specialty).contains(row), "Specialty fill-only/source weight/correction: \(row)")
+                    "网络新词\twang luo xin ci\t2\n"] {
+            expect(text(specialty).contains(row), "Specialty fill-only/source weight: \(row)")
         }
-        expect(!text(specialty).contains("串行打印机\tchuan hang"), "Do not retain known wrong reading")
         expect(specialty.manifest.calibrations.map(\.pairCount) == [1, 1], "Specialty overlaps cannot affect calibration")
         reject("source-format") { _ = try generate(["frost-computer": "专业词\tzhuan ye ci\n"]) }
-        reject("source-format") { _ = try generate(["selected-computer": "专业词\tzhuan ye ci\t\n"]) }
         expect(!output.contains("import_tables"), "Ignore remote imports")
         let roundtrip = try JSONDecoder().decode(IFDictionaryManifest.self, from: union.manifest.encoded())
         expect(roundtrip == union.manifest, "Stable Codable metadata")

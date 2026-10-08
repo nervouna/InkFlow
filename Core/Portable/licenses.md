@@ -31,14 +31,14 @@ Linux builds use the system C/C++ runtime; an AppImage-style package that bundle
 
 The existing [dependency inventory](../../macOS/DEPENDENCIES.md), [Chinese dictionary notice](../../macOS/Licenses/chinese-dictionaries-NOTICE.txt), and [repository NOTICE](../../NOTICE) still apply. Compiling a dictionary does not remove source license obligations.
 
-- rime-frost, rime-ice Chinese data, selected technical-English data, and emoji tables include GPL-3.0 material. Preserve exact upstream sources, modifications, license texts, and a usable corresponding-source delivery plan for generated resources.
-- rime-easy-en is LGPL-3.0, with the incorporated GPL text. Preserve its source and the filtering/weight-generation recipe. Review how users can modify and rebuild the shipped data rather than assuming the native library's permissive licenses cover it.
-- The wordfreq-derived snapshot is CC BY-SA 4.0. Retain attribution and source acknowledgements, identify modifications, and meet share-alike requirements for adapted data.
+- rime-frost, rime-ice Chinese data, selected technical-English data, and emoji tables include GPL-3.0 material. The exact upstream inputs, modifications, license texts and recipe ship with every release as the dictionary source bundle (`macOS/scripts/dictionary-source-bundle.sh`, checked by `test.sh source-bundle`); the About page and README link to it.
+- rime-easy-en is LGPL-3.0, with the incorporated GPL text. The unmodified archive and the filtering/weight-generation recipe are in the same bundle, with rebuild instructions, so users can modify and rebuild the shipped English data.
+- The wordfreq-derived snapshot is CC BY-SA 4.0. Attribution, modifications and the adapted snapshot itself are in the bundle and `macOS/Licenses/wordfreq.txt`.
 - The compatibility Pinyin source is Apache-2.0. OpenCC conversion resources also retain their Apache notices.
-- The original redistribution authorization for Sogou-derived data is **unverified**. An MIT notice on a conversion repository does not establish rights to the underlying dictionary. Resolve authorization or omit/replace affected resources before claiming a cleared new distribution profile.
+- No Sogou-derived catalog source remains since dictionary recipe 3; the former rime-selected conversion was removed rather than cleared. Fourteen curated terms in `Core/config/chinese-overrides.tsv` were first noticed in Sogou hotword lists but carry InkFlow text, readings and weights; the Chinese dictionary notice records that this is a project judgment, not a verified authorization.
 
 ## Channels
 
-Direct Linux packages and notarized macOS downloads: the native licenses permit redistribution with notices. Product distribution still needs a generated-resource/source bundle and resolution of the Sogou gap.
+Direct Linux packages and notarized macOS downloads: the native licenses permit redistribution with notices, and the release attaches the dictionary source bundle. A portable build still has to collect the native-runtime notices above.
 
 An iOS App Store keyboard needs a GPL/LGPL review against store terms before choosing its resource profile. Android and Windows reviews belong to their delivery phases.

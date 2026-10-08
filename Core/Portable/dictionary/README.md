@@ -32,11 +32,11 @@ It refuses an existing output directory. Validation completes before creating ou
 
 ## Reference and compatibility contract
 
-`fixtures/cases.json` supplies 44 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned fixture; the Mac check rejects drift from the live catalog.
+`fixtures/cases.json` supplies 43 inputs to both implementations. The Swift test executable exports `catalog.json` and `reference.json`; Rust does not maintain another hand-written source catalog. The authoritative production catalog remains `IFDictionaryCatalog` in Swift. The copied catalog is a pinned fixture; the Mac check rejects drift from the live catalog.
 
 `reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
 
-The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling and the existing exact reading correction, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
+The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
 
 Dictionary bytes and spelling-profile bytes must match exactly. Manifest fields must match after JSON decoding, except calibration multipliers allow relative/absolute error up to `1e-12` for platform math libraries. This tolerance does not apply to weights, hashes, counts, or content versions. JSON spacing and floating-point number spelling are not compatibility requirements.
 

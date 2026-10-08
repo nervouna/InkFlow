@@ -83,7 +83,7 @@ cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTempl
 bash macOS/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
 bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
-for license in boost.txt easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt rime-selected.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
+for license in boost.txt easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
 inkflow_test_timing_report bundle deep-resources "$stage_started"

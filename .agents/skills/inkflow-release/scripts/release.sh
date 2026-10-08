@@ -1,6 +1,6 @@
 #!/bin/bash
 # After release-verification.sh and package.sh prepare: notarize, package, verify,
-# generate the appcast, tag, upload and publish. Existing outputs are reused after
+# generate the appcast and the dictionary source bundle, tag, upload and publish. Existing outputs are reused after
 # receipt and artifact validation, so rerunning after a failure resumes the release.
 #
 #   release.sh           full release (tag + push + publish)
@@ -83,10 +83,12 @@ xcrun stapler validate "$extract/InkFlow.app"
 hdiutil detach "$mount_point" >/dev/null
 trap 'rm -rf "$extract"' EXIT
 
-# 4. Appcast and checksum.
+# 4. Appcast, dictionary corresponding-source bundle and checksums.
 bash "$scripts/release-appcast.sh" generate "$previous_tag"
-printf '%s  %s\n' "$(sha256 "$dmg")" "$(basename "$dmg")" > "$checksum"
-assets=("$dmg" "$checksum" "$update_zip" "$appcast")
+source_bundle="$release_dir/InkFlow-$version-$build-dictionary-source.tar.gz"
+[[ -f "$source_bundle" ]] || bash macOS/scripts/dictionary-source-bundle.sh "$source_bundle" "$build"
+printf '%s  %s\n' "$(sha256 "$dmg")" "$(basename "$dmg")" "$(sha256 "$source_bundle")" "$(basename "$source_bundle")" > "$checksum"
+assets=("$dmg" "$checksum" "$update_zip" "$appcast" "$source_bundle")
 
 # 5. Tag and push (full release only). Drafts are created without a tag.
 if ! $draft; then
