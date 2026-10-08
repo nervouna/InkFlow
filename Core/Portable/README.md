@@ -17,6 +17,8 @@ bash Core/Portable/prepare-resources.sh
 python3 scripts/mac-remote.py resources
 # Compare the Rust engine with the recorded Swift behavior on those resources:
 bash Core/Portable/parity.sh [build/portable/resources.XXXXXX]
+# Capture key latency and memory with the recorded macOS headless protocol:
+bash Core/Portable/performance.sh build/portable/resources.XXXXXX [OUTPUT_DIRECTORY]
 ```
 
 The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture.
@@ -42,6 +44,22 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 - `swift_personal_learning_and_data` covers learning management at the idle boundary, export/import between isolated user directories, a macOS-format document with disclosed unsupported preferences, and rejected snapshots rolling back.
 
 Quality recording stays outside the engine. `Engine::set_observer` installs a callback that receives every completed mutation with the displayed snapshots before and after, delivered after the policy lock is released; it cannot change input or hold a key event. The engine itself performs no telemetry, network, SQLite or disk work from a key event other than the phrase-file reload at a shared idle.
+
+## Performance
+
+`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 21-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
+
+Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on freshly prepared production resources, at faee8df. The Swift column ran `performance-baseline` in release from this checkout; the recorded M5 Pro baseline is not comparable to either.
+
+| Measurement | Swift engine | Rust engine | Approved limit |
+| --- | ---: | ---: | ---: |
+| Headless startup median, ms | 304.61 | 150.58 | 2,300 |
+| Peak RSS after input max, MiB | 58.95 | 51.69 | 344 |
+| First-pass key median / p95 / p99, ms | 0.609 / 1.952 / 2.543 | 0.585 / 1.856 / 2.309 | p99 2.6 |
+| Repeated-pass key median / p95 / p99, ms | 0.582 / 1.879 / 2.289 | 0.547 / 1.759 / 2.153 | p95 1.8, p99 2.3 |
+| First key of each process, ms | 13.35–15.33 | 14.19–20.24 | 25 |
+
+Key latency is the same Rime work in both engines; the Rust engine's lower startup and RSS come from mapping no Swift runtime and reading only the prepared index. The one 20 ms first key was the first process after a rebuild (cold file cache); the other four match Swift. Recapture both columns on the same machine after toolchain or OS changes.
 
 ## Personal learning and portable personal data
 
