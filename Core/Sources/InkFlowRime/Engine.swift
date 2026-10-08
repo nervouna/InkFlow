@@ -43,6 +43,7 @@ package final class IFEngine {
     package static var idleHandler: (@MainActor () -> Void)?
     private var sessionGeneration: UInt64 = 0
     private var sessionRestored = false
+    private var sessionLost = false
     private var deliveryDepth = 0
     private var savedASCII = false
 
@@ -317,7 +318,7 @@ package final class IFEngine {
     }
 
     private func restoreSession(afterCreate: () throws -> Void = {}) throws {
-        sessionRestored = false
+        sessionRestored = false; sessionLost = false
         session = Self.api.pointee.create_session()
         sessionGeneration = Self.generation
         guard session != 0 else { throw IFDictionaryUpdateError(.apply, "session-create") }
@@ -327,7 +328,9 @@ package final class IFEngine {
         }
         if let qualityRecorder {
             Self.qualityRecorders.removeAll { $0.value == nil }
-            Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
+            if !Self.qualityRecorders.contains(where: { $0.value === qualityRecorder }) {
+                Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
+            }
         }
         candidateCount = 5; inputPreferences = nil; configurationError = nil
         candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
@@ -353,8 +356,16 @@ package final class IFEngine {
         Self.signalIdle()
     }
 
+    /// A session that could not be recreated during a phrase reload is retried on its next use.
+    private func recoverSession() {
+        guard sessionLost, Self.ready, !Self.personalDataSuspended else { return }
+        sessionLost = false
+        do { try restoreSession() } catch { detachSession(); sessionLost = true }
+    }
+
     @discardableResult
     package func key(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false) -> Bool {
+        recoverSession()
         guard available else { return false }
         defer { Self.signalIdle() }
         // Apply existing idle configuration before capturing the values this key actually uses.
@@ -434,6 +445,7 @@ package final class IFEngine {
     }
 
     private func applyConfigurationIfIdle() {
+        recoverSession()
         guard available else { return }
         if Self.loadedPhraseTSV != Self.phraseFileTSV {
             // Rime shares one loaded custom_phrase table among every session that holds it, so
@@ -472,8 +484,10 @@ package final class IFEngine {
         for engine in engines {
             engine.session = api.create_session()
             guard engine.session != 0, api.select_schema(engine.session, "inkflow_pinyin") != 0 else {
-                if engine.session != 0 { _ = api.destroy_session(engine.session); engine.session = 0 }
-                engine.reportConfigurationError("无法重新载入输入方案，请重启墨流后重试。")
+                // Siblings already loaded the current file; this session retries alone on its next use.
+                if engine.session != 0 { _ = api.destroy_session(engine.session) }
+                engine.detachSession(); engine.sessionLost = true
+                engine.reportConfigurationError("无法重新载入输入方案，请重试或重启墨流。")
                 continue
             }
             engine.candidateCount = 5; engine.inputPreferences = nil
