@@ -1,6 +1,6 @@
 # Shared Rust dictionary generator
 
-This crate ports the Chinese dictionary generator and all 32 spelling profiles for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The preparation scripts run its CLI; the Swift dictionary update worker calls the same library through its C ABI.
+This crate ports the Chinese dictionary generator, all 32 spelling profiles and the context-ranking index for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The preparation scripts run its CLI; the Swift dictionary update worker calls the same library through its C ABI.
 
 ## Verify
 
@@ -35,7 +35,7 @@ It refuses an existing output directory. Validation completes before creating ou
 
 Inputs are borrowed pointer/length buffers. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
 
-Every operation returns an owned opaque result. Successful generation supplies the dictionary and manifest; spelling supplies 32 named schema files; receipt validation supplies no files. Failure supplies error JSON and no files. Output pointers and names are length-delimited, not NUL-terminated, and remain valid until the caller frees the result. Result accessors require a live non-null handle. Independent calls share no mutable generator state.
+Every operation returns an owned opaque result. Successful generation supplies the dictionary and manifest; spelling supplies 32 named schema files plus `pinyin_simp.context.bin`; receipt validation supplies no files. Failure supplies error JSON and no files. Output pointers and names are length-delimited, not NUL-terminated, and remain valid until the caller frees the result. Result accessors require a live non-null handle. Independent calls share no mutable generator state.
 
 The test script compiles and links a C consumer on both desktops. On macOS it also builds a standalone Swift consumer, releases input storage before reading results, and compares the complete corpus and all spelling bytes through the ABI against the Rust CLI and original Swift implementation. `swift-ffi-corpus.json` retains that consumer's actual summary. This proves the preparation boundary, not shipping worker sandbox, packaging, or resource activation behavior.
 
@@ -43,11 +43,11 @@ The test script compiles and links a C consumer on both desktops. On macOS it al
 
 `Core/config/chinese-sources.json` is the authoritative production catalog. Rust embeds it; `IFDictionaryCatalog` reads it through the ABI without filesystem access. Rust also owns the recipe version and maximum source size. `fixtures/cases.json` supplies 43 inputs to both implementations. The test-only Swift reference exports `catalog.json` and `reference.json`; the copied catalog is a pinned fixture, and checks reject drift from the production catalog.
 
-`reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
+`reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles and the context index for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
 
 The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
 
-Dictionary bytes and spelling-profile bytes must match exactly. Manifest fields must match after JSON decoding, except calibration multipliers allow relative/absolute error up to `1e-12` for platform math libraries. This tolerance does not apply to weights, hashes, counts, or content versions. JSON spacing and floating-point number spelling are not compatibility requirements.
+Dictionary, spelling-profile and context-index bytes must match exactly. Manifest fields must match after JSON decoding, except calibration multipliers allow relative/absolute error up to `1e-12` for platform math libraries. This tolerance does not apply to weights, hashes, counts, or content versions. JSON spacing and floating-point number spelling are not compatibility requirements.
 
 Two details are deliberately preserved:
 

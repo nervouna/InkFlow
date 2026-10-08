@@ -132,7 +132,7 @@ struct DictionaryGeneratorTests {
     static func spellingGeneration() throws {
         let data = Data("---\nname: pinyin_simp\n...\n来俩\tlai lia\t1\n女略\tnu lue\t2\n居\tju\t3\n赞\tzan\t4\n包\tbao\t5\n".utf8)
         let schemas = try IFSpellingGenerator.generate(dictionary: data)
-        expect(schemas.count == 32, "Every preference profile has its own native prism schema")
+        expect(schemas.count == 33, "Every preference profile has its own native prism schema, plus the context index")
         expect(try IFSpellingGenerator.generate(dictionary: data) == schemas, "Deterministic spelling generation")
         let reordered = Data("---\nname: pinyin_simp\n...\n# source-only change\n包\tbao\t99\n赞\tzan\t4\n居\tju\t3\n女略\tnu lue\t2\n来俩\tlai lia\t1\n".utf8)
         expect(try IFSpellingGenerator.generate(dictionary: reordered) == schemas, "Order, weights and comments do not change spelling")
@@ -185,6 +185,8 @@ struct DictionaryGeneratorTests {
         try reference.dictionary.write(to: referenceDirectory.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
         try reference.manifest.encoded().write(to: referenceDirectory.appendingPathComponent(IFDictionaryManifest.filename))
         try IFReferenceSpellingGenerator.write(dictionary: reference.dictionary, to: referenceDirectory)
+        try IFContextRanker.buildIndex(dictionary: reference.dictionary)
+            .write(to: referenceDirectory.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
         for (name, bytes) in try IFSpellingGenerator.generate(dictionary: result.dictionary) {
             expect(try Data(contentsOf: destination.appendingPathComponent(name)) == bytes, "Build CLI and runtime spelling bytes match: \(name)")
         }

@@ -1,7 +1,9 @@
 //! Offline dictionary generation. Inputs and provenance are supplied by the caller.
+mod context;
 mod ffi;
 mod model;
 mod spelling;
+pub use context::{CONTEXT_INDEX_FILENAME, context_index};
 pub use model::*;
 pub use spelling::spelling;
 

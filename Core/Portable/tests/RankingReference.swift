@@ -9,11 +9,11 @@ struct RankingReference {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        let file = directory.appendingPathComponent("dictionary.yaml")
+        let file = directory.appendingPathComponent("pinyin_simp.context.bin")
         var results: [String: Any] = [:]
         for item in cases {
-            try (item["dictionary"] as! String).write(to: file, atomically: true, encoding: .utf8)
-            let ranker = try IFContextRanker(dictionary: file.path)
+            try IFContextRanker.buildIndex(dictionary: Data((item["dictionary"] as! String).utf8)).write(to: file)
+            let ranker = try IFContextRanker(index: file.path)
             let candidates = item["candidates"] as! [String]
             let metadata = (item["metadata"] as? String).flatMap {
                 IFContextRanker.parseMetadata($0, offset: item["offset"] as! Int,

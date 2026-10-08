@@ -54,10 +54,10 @@ build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; d
   record "Chinese dictionary source $id" "$(license_for "$repository")" "$url" "upstream/dictionary-sources/$id.yaml"
 done
 # Pinned archives and files that dependencies.sh downloads and verifies.
-deps=$(sed -nE 's/^fetch ([^ ]+) ([0-9a-f]{64}) (https:[^ ]+)$/\1 \2 \3/p' macOS/scripts/dependencies.sh)
+deps=$(sed -nE 's/^fetch ([^ ]+) ([0-9a-f]{64}) (https:[^ ]+)$/\1 \2 \3/p' Core/scripts/resource-dependencies.sh)
 for file in pinyin.tar.gz english.tar.gz emoji.txt; do
   url=$(printf '%s\n' "$deps" | awk -v f="$file" '$1 == f {print $3}')
-  [[ -n "$url" ]] || { echo "dependencies.sh no longer fetches $file." >&2; exit 1; }
+  [[ -n "$url" ]] || { echo "resource-dependencies.sh no longer fetches $file." >&2; exit 1; }
   cp "build/deps/$file" "$root/upstream/deps/$file"
   case "$file" in
     pinyin.tar.gz) record 'Legacy compatibility dictionary (rime/rime-pinyin-simp repository archive)' 'Apache-2.0 (LICENSES/pinyin-simp.txt)' "$url" "upstream/deps/$file" ;;
@@ -77,7 +77,7 @@ for opencc in STPhrases.txt STCharacters.txt; do
 done
 record 'InkFlow Chinese corrections and curated additions' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/config/chinese-overrides.tsv
 record 'InkFlow English admission policy' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/config/english-overrides.tsv
-record 'InkFlow dictionary generator and pinned source catalog' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/Sources/InkFlowDomain/DictionaryModels.swift
+record 'InkFlow pinned source catalog' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/config/chinese-sources.json
 
 cat > "$root/README.md" <<README
 # InkFlow $version dictionary corresponding source
@@ -96,10 +96,10 @@ does not change those obligations.
 - \`upstream/dictionary-sources/\`: the pinned Rime Frost, Rime Ice and compatibility
   dictionary files the Chinese generator reads, byte-identical to the verified downloads.
 - \`upstream/deps/\`: the pinned rime-pinyin-simp and rime-easy-en repository archives and
-  the Rime Ice emoji table, as fetched by \`inkflow/macOS/scripts/dependencies.sh\`.
-- \`inkflow/\`: the generation recipe at the commit above: the Swift generator and source
-  catalog (\`Core/Sources/InkFlowDomain\`), corrections and admission policy
-  (\`Core/config\`), the wordfreq snapshot and technical-English selection (\`Core/Data\`),
+  the Rime Ice emoji table, as fetched by \`inkflow/Core/scripts/resource-dependencies.sh\`.
+- \`inkflow/\`: the generation recipe at the commit above: the Rust generator
+  (\`Core/Portable/dictionary\`), its Swift wrapper (\`Core/Sources/InkFlowDomain\`), the source
+  catalog, corrections and admission policy (\`Core/config\`), the wordfreq snapshot and technical-English selection (\`Core/Data\`),
   schemas and OpenCC data (\`schemas\`), preparation scripts and documentation.
 - \`LICENSES/\`: license texts and per-source notices, identical to the app's bundled
   \`Resources/Licenses\`.
@@ -112,7 +112,7 @@ Modifications are described in \`LICENSES/chinese-dictionaries-NOTICE.txt\`,
 
 ## Rebuilding the shipped dictionaries
 
-On a Mac with the Swift toolchain, from \`inkflow/\`:
+On a Mac with the Swift and pinned Rust toolchains, from \`inkflow/\`:
 
 \`\`\`sh
 mkdir -p build/deps build/dictionary-sources

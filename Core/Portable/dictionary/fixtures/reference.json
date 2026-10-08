@@ -239,7 +239,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "8d794603b5915833f6fa0d25a0cec75f8f2abd3d985ccfea28ec439c97cb35c8",
-      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69"
+      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69",
+      "pinyin_simp.context.bin" : "1180e709baba4c9b81043ab681cc14c048e031454781c19eb904c27d012e6a81"
     }
   },
   "bucket-100" : {
@@ -461,7 +462,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "8d794603b5915833f6fa0d25a0cec75f8f2abd3d985ccfea28ec439c97cb35c8",
-      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69"
+      "inkflow_spelling_31.schema.yaml" : "261df9c4bd17e9b2bf97f9b998939eccd90d198bf0d7acf94b749701a9f13d69",
+      "pinyin_simp.context.bin" : "1180e709baba4c9b81043ab681cc14c048e031454781c19eb904c27d012e6a81"
     }
   },
   "canonical-text" : {
@@ -683,7 +685,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "96bf666b0d1830539edce91bcf82fdb610a7f1e3fd40532a7fee9cc15eb7b059",
-      "inkflow_spelling_31.schema.yaml" : "1bf963f74b72dddc0d606ff1ab93b55811bca014766307194f95730f80bd02f2"
+      "inkflow_spelling_31.schema.yaml" : "1bf963f74b72dddc0d606ff1ab93b55811bca014766307194f95730f80bd02f2",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "control-text" : {
@@ -925,7 +928,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "duplicate-correction" : {
@@ -1173,7 +1177,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "d0d7dbb67a3a0a3a6c729683473864b2c6dfcf67113fd5cb40eaeb0f2913a987",
-      "inkflow_spelling_31.schema.yaml" : "4ae2404bf2afb12e40c2dc098c7b1ac3738868f6a48b3b954b307bedce4be044"
+      "inkflow_spelling_31.schema.yaml" : "4ae2404bf2afb12e40c2dc098c7b1ac3738868f6a48b3b954b307bedce4be044",
+      "pinyin_simp.context.bin" : "98b2de510d629305ea66655737913036aed901aecc8dba9b626c23c0c6fbd994"
     }
   },
   "float-weight" : {
@@ -1409,7 +1414,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "half-rounding" : {
@@ -1631,7 +1637,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "977743b897399c6ed8304d1fce38c4da4ec35e1ac4a08931b9afffc5a8ed2a2f",
-      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6"
+      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "long-header" : {
@@ -1860,7 +1867,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "long-syllable" : {
@@ -2121,7 +2129,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "no-han" : {
@@ -2350,7 +2359,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "94b6c1aa0056480b214eee2351ec266eefc22fb54533846be213b6427432757c",
-      "inkflow_spelling_31.schema.yaml" : "09b1bb6566d25c63752aa4032d46cd39405cdafcc3674bd4781bae48217234ad"
+      "inkflow_spelling_31.schema.yaml" : "09b1bb6566d25c63752aa4032d46cd39405cdafcc3674bd4781bae48217234ad",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "overrides" : {
@@ -2572,7 +2582,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "efb11e8b03c2168b896986fc5b2284c3f3365f4be22ede3dfed6b09f7e1facdc",
-      "inkflow_spelling_31.schema.yaml" : "9f041f23922fc1aa5c52b5602844805a3f7a769d5131385173f74845b78f51b9"
+      "inkflow_spelling_31.schema.yaml" : "9f041f23922fc1aa5c52b5602844805a3f7a769d5131385173f74845b78f51b9",
+      "pinyin_simp.context.bin" : "ea782068c991d2cfa834d96dac58356098046e2b7054402f8ee246537d3393d9"
     }
   },
   "percent" : {
@@ -2801,7 +2812,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "977743b897399c6ed8304d1fce38c4da4ec35e1ac4a08931b9afffc5a8ed2a2f",
-      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6"
+      "inkflow_spelling_31.schema.yaml" : "00bc08eb30533178517665c496c3174fc86f15a4817d1a34b675de3a8d7926b6",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "source-comment" : {
@@ -3023,7 +3035,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "space-text" : {
@@ -3252,7 +3265,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "8187520b64b9514577a6ac97d0c891a1324f5140f66d0f91d4244c431eb3b6f7",
-      "inkflow_spelling_31.schema.yaml" : "220221bebbe6f47ddfa263bd0e74fcfc2b4f772247846a3f376b4a452292327b"
+      "inkflow_spelling_31.schema.yaml" : "220221bebbe6f47ddfa263bd0e74fcfc2b4f772247846a3f376b4a452292327b",
+      "pinyin_simp.context.bin" : "f7d3c6b146a5bf18d682814e824bcfb599a0843df2c9954bef52621df62d55f6"
     }
   },
   "syllable-boundary" : {
@@ -3474,7 +3488,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "cc0fdef927513de910c4c67094c85392a781ce1497b3fdf835107736ffba09cf",
-      "inkflow_spelling_31.schema.yaml" : "86556f389c78f3f98194571f0763b72b46ba1ffd4be3d800ccef8604a339cb29"
+      "inkflow_spelling_31.schema.yaml" : "86556f389c78f3f98194571f0763b72b46ba1ffd4be3d800ccef8604a339cb29",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "syllable-over-limit" : {
@@ -3703,7 +3718,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "text-over-limit" : {
@@ -3932,7 +3948,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "47217f43c944341b88b15f58ba29e8fc1f17d4b4d2367dba8b0eac0d8d0f3226",
-      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b"
+      "inkflow_spelling_31.schema.yaml" : "4980f12dc1d69db31f0e9b2654eb82c9021521af99b7b33580a1b5e3c0959c7b",
+      "pinyin_simp.context.bin" : "27afb7471b72ef2bee89a4932cacf53f2192606065e1ee3c9a4ce3b5c16079d1"
     }
   },
   "union" : {
@@ -4154,7 +4171,8 @@
       "inkflow_spelling_28.schema.yaml" : "55060136d333ea1fed27c3c678e09b21e3d965ce19ceef44205fffd81fd21495",
       "inkflow_spelling_29.schema.yaml" : "e76a05006ef24dd3df435bd5f29bac0ed2a78b9dbadee1be17d21224ca3b9fc4",
       "inkflow_spelling_30.schema.yaml" : "efff2776afc5d823862523fc19000b65b4df8571bfeb9e6583a16951edb1bebe",
-      "inkflow_spelling_31.schema.yaml" : "77100ab1c52a0f8a9a5648439d2b5c19b1dfd42ba4555313134dbbada265af22"
+      "inkflow_spelling_31.schema.yaml" : "77100ab1c52a0f8a9a5648439d2b5c19b1dfd42ba4555313134dbbada265af22",
+      "pinyin_simp.context.bin" : "9c7b3b2248508de0ecdcd7a0ce99bf6c68f0deb69cbea3a430ae1c0b0d8c2fba"
     }
   },
   "weight-overflow" : {

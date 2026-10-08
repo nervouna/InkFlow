@@ -308,7 +308,7 @@ mod tests {
                     let result = ifd_spelling(Bytes::borrowed(&source));
                     drop(source);
                     assert_eq!(ifd_result_error(result).len, 0);
-                    assert_eq!(ifd_result_count(result), 32);
+                    assert_eq!(ifd_result_count(result), 33);
                     for (index, (name, data)) in expected.iter().enumerate() {
                         assert_eq!(
                             ifd_result_name(result, index).read(1024).unwrap(),

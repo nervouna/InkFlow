@@ -105,5 +105,5 @@ fn cli_checks_inputs_before_publishing_and_refuses_replacement() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(fs::read_dir(root.join("spelling")).unwrap().count(), 32);
+    assert_eq!(fs::read_dir(root.join("spelling")).unwrap().count(), 33);
 }
