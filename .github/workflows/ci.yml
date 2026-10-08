@@ -22,15 +22,14 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install python3
         run: command -v python3 || (apt-get update && apt-get install -y --no-install-recommends python3)
-      - name: Check shared-core boundaries
-        run: bash Core/scripts/check-boundaries.sh --standalone
+      # The full check also dumps the root manifest and asserts root/core parity; the
+      # dump evaluates declarations only, so Sparkle is never resolved here.
       # `swift build` of the root package needs macOS: InkFlowDomain imports CryptoKit,
       # the app targets import AppKit/InputMethodKit, Sparkle ships as an xcframework and
-      # librime is a macOS dylib, so no root target compiles on Linux. This step only
-      # evaluates the root manifest; the macOS workflow compiles the root products that
-      # `test.sh quick` needs.
-      - name: Evaluate the root manifest
-        run: swift package dump-package > /dev/null
+      # librime is a macOS dylib, so no root target compiles on Linux. The macOS
+      # workflow compiles the root products that `test.sh quick` needs.
+      - name: Check shared-core boundaries and root/core parity
+        run: bash Core/scripts/check-boundaries.sh
 
   portable:
     name: Portable runtime (cargo test)
