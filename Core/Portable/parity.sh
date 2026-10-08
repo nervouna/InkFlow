@@ -13,3 +13,4 @@ fi
 resources=$(cd "$resources" && pwd)
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
 INKFLOW_PORTABLE_RESOURCES="$resources" cargo test --locked --manifest-path Core/Portable/Cargo.toml --test parity -- --nocapture
+bash Core/Portable/abi.sh "$resources"

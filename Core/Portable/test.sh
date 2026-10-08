@@ -14,6 +14,7 @@ print('PASS fresh Swift ranking reference matches recorded cases')
 PY
 fi
 cargo test --locked --manifest-path Core/Portable/Cargo.toml -- --nocapture
+bash Core/Portable/abi.sh
 if [[ $# -eq 1 ]]; then
   cp build/portable/native-build.json "$1/native-build.json"
   if [[ $(uname -s) == Darwin ]]; then cp build/portable/ranking-reference.json "$1/ranking-reference.json"; fi
