@@ -134,7 +134,7 @@ func treeDigest(_ root: URL) throws -> String {
         guard let cache = try IFPackagedCache.descriptor(resources: shared).cache else {
             throw BaselineError("Packaged cache is missing")
         }
-        let ranker = try IFContextRanker(dictionary: shared.appendingPathComponent("pinyin_simp.dict.yaml").path)
+        let ranker = try IFContextRanker(index: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         for sample in corpus.samples {
             let user = scratch.appendingPathComponent(sample.id)
             try require(!FileManager.default.fileExists(atPath: user.path), "User state must start absent: \(sample.id)")

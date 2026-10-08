@@ -134,7 +134,7 @@ package struct DictionaryActivationRegression: Sendable {
 
     @MainActor func config(_ shared: URL, cache: URL?, user: URL) throws -> IFEngineConfiguration {
         .init(shared: shared, cache: cache, user: user.path,
-              ranker: try IFContextRanker(dictionary: shared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path))
+              ranker: try IFContextRanker(index: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path))
     }
 
     @MainActor func nativeLifecycle(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
@@ -437,7 +437,7 @@ package struct DictionaryActivationRegression: Sendable {
     }
 
     @MainActor func shutdownStages(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
-        let preparedRanker = try IFContextRanker(dictionary: template.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+        let preparedRanker = try IFContextRanker(index: template.sharedData.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         for stage in ["check", "download", "prepare", "pre-activation", "waiting-for-idle"] {
             let base = try backend(root.appendingPathComponent("shutdown-" + stage), runtime: runtime)
             let entered = TestBox(false), cancelled = TestBox(false), producerStopped = TestBox(false)
@@ -480,7 +480,7 @@ package struct DictionaryActivationRegression: Sendable {
             }
             let service = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: base.user, services: services),
                 rankerLoader: { path in
-                    if stage == "pre-activation", path != runtime.resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path {
+                    if stage == "pre-activation", path != runtime.resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path {
                         entered.value = true
                         let deadline = Date(timeIntervalSinceNow: 8)
                         while !Task.isCancelled, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }

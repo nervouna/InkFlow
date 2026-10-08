@@ -82,6 +82,9 @@ package struct DictionaryPreparationRegression: Sendable {
         for (name, data) in expectedSchemas {
             check(try Data(contentsOf: expandedShared.appendingPathComponent(name)) == data, "Download regenerates spelling schema: \(name)")
         }
+        let expectedIndex = try IFContextRanker.buildIndex(dictionary: expandedDictionary)
+        check(try Data(contentsOf: expandedShared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)) == expectedIndex,
+              "Download regenerates the context index")
         check(try Data(contentsOf: runtime.resources.appendingPathComponent("inkflow_spelling_2.schema.yaml")) != expectedSchemas["inkflow_spelling_2.schema.yaml"],
               "Downloaded guard differs from the bundled dictionary inventory")
         let reuse = root.appendingPathComponent("spelling-rebuild")
@@ -96,6 +99,8 @@ package struct DictionaryPreparationRegression: Sendable {
             check(try Data(contentsOf: rebuiltCandidate.appendingPathComponent("shared/" + name)) == data,
                   "Dictionary-only rebuild regenerates spelling schema: \(name)")
         }
+        check(try Data(contentsOf: rebuiltCandidate.appendingPathComponent("shared/" + IFDictionaryCatalog.contextIndexFilename)) == expectedIndex,
+              "Dictionary-only rebuild regenerates the context index")
         try store.removeCandidate(expandedCandidate)
         try store.removeCandidate(rebuiltCandidate)
         let malformed = try store.candidate()

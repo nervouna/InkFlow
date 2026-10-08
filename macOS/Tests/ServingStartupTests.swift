@@ -131,13 +131,13 @@ private final class StartupRankerTracker: @unchecked Sendable {
             }
             let rankerGate = StartupGate(timeout: 60)
             let rankerTracker = StartupRankerTracker()
-            let bundledDictionary = runtime.resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path
+            let bundledIndex = runtime.resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path
             let coordinator = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: user, services: services),
                 rankerLoader: { path in
                     rankerTracker.start()
                     defer { rankerTracker.finish() }
-                    if (mode == "success" || mode.hasPrefix("shutdown")), path == bundledDictionary { try rankerGate.wait() }
-                    return try IFContextRanker(dictionary: path)
+                    if (mode == "success" || mode.hasPrefix("shutdown")), path == bundledIndex { try rankerGate.wait() }
+                    return try IFContextRanker(index: path)
                 })
             var switches = 0
             coordinator.activationFault = { step, rollback in
@@ -279,7 +279,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
         catch { denied = true }
         check(denied, "Shipped cache rejects an actual write")
         let user = root.appendingPathComponent("readonly-user")
-        let ranker = try IFContextRanker(dictionary: resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+        let ranker = try IFContextRanker(index: resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         let configuration = IFEngineConfiguration(shared: resources, cache: descriptor.cache, user: user.path, ranker: ranker)
         let phrase = CustomPhrase(id: UUID(), code: "zz", text: "只读短语")
         for reopen in 0...1 {
@@ -384,7 +384,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
         }, rankerLoader: { path in
             firstTracker.start(); defer { firstTracker.finish() }
             if firstTracker.startedCount == 1 { throw IFDictionaryUpdateError(.prepare, "test-ranker-failure-first") }
-            return try IFContextRanker(dictionary: path)
+            return try IFContextRanker(index: path)
         })
         failureFirst.bootstrapForServing(runtime: runtime, user: firstUser)
         try await until("Ranker fails before recovery completes") { firstTracker.completedCount == 1 && factoryGate.held }
@@ -406,7 +406,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
                 try failureGate.wait()
                 throw IFDictionaryUpdateError(.prepare, "test-ranker-failure-last")
             }
-            return try IFContextRanker(dictionary: path)
+            return try IFContextRanker(index: path)
         })
         failureLast.bootstrapForServing(runtime: runtime, user: lastUser)
         try await until("Recovery succeeds before delayed ranker failure") { !failureLast.isBusy && failureGate.held }

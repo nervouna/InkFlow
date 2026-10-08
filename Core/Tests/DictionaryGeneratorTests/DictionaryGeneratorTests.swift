@@ -180,6 +180,8 @@ struct DictionaryGeneratorTests {
         for (name, bytes) in try IFSpellingGenerator.generate(dictionary: result.dictionary) {
             expect(try Data(contentsOf: destination.appendingPathComponent(name)) == bytes, "Build CLI and runtime spelling bytes match: \(name)")
         }
+        expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
+               == IFContextRanker.buildIndex(dictionary: result.dictionary), "Build CLI and runtime context index bytes match")
         expect(text(result).contains("歇后语\txie hou yu\t72\n"), "Preserve Frost 歇后语 weight")
         expect(text(result).contains("肃然起敬\tsu ran qi jing\t337\n"), "Preserve Frost 肃然起敬 weight")
         print("PASS pinned corpus: \(result.manifest.entryCount) records, CLI/runtime byte parity, required term weights")

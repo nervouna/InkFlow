@@ -128,7 +128,7 @@ package final class IFDictionaryCoordinator {
     package init(backend: IFDictionaryBackend? = nil, backendFactory: (@Sendable () throws -> IFDictionaryBackend)? = nil,
          now: @escaping @Sendable () -> Date = Date.init,
          logger: @escaping IFDictionaryDiagnosticLogger = { _ in },
-         rankerLoader: @escaping @Sendable (String) throws -> IFContextRanker = IFContextRanker.init(dictionary:)) {
+         rankerLoader: @escaping @Sendable (String) throws -> IFContextRanker = IFContextRanker.init(index:)) {
         self.backend = backend; self.backendFactory = backendFactory; self.now = now; self.logger = logger
         self.rankerLoader = rankerLoader
     }
@@ -589,7 +589,7 @@ package final class IFDictionaryCoordinator {
             do {
                 let ranker = try await Self.prepareOffMain {
                     try IFStartupDiagnostics.shared.measure(.indexes, source: .bundled) {
-                        try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+                        try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
                     }
                 }
                 guard !isShuttingDown else { rankerTask = nil; return }
@@ -708,7 +708,7 @@ package final class IFDictionaryCoordinator {
                                                  loader: @Sendable (String) throws -> IFContextRanker) throws -> IFPreparedActivation {
         try Task.checkCancellation()
         let ranker = try IFStartupDiagnostics.shared.measure(.indexes, source: descriptor.version == nil ? .bundled : .downloaded) {
-            try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path)
+            try loader(descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         }
         try Task.checkCancellation()
         return prepareConfiguration(descriptor, user: user, ranker: ranker)

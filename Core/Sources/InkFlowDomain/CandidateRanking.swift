@@ -24,25 +24,109 @@ package struct IFCandidateRankingMetadata: Equatable, Sendable {
 }
 
 /// Exact dictionary phrases plus bounded, content-free Rime evidence, not a language model.
+///
+/// Phrases live in a sorted, fixed-width index built once at dictionary preparation and
+/// mapped read-only at startup, so no key-event or startup path parses the dictionary.
 package struct IFContextRanker: Sendable {
     package static let contextLimit = 16
-    private let frequencies: [String: Int]
+    private static let magic = Array("IFCX".utf8)
+    private static let version: UInt32 = 1
+    private static let phraseLimit = 8
+    private static let headerSize = 12 + (phraseLimit - 1) * 4
+    private let index: Data
     private let longestPhrase: Int
+    /// One sorted, fixed-width table per phrase length, so a lookup knows its table from its key.
+    private let tables: [(offset: Int, count: Int)]
 
-    package init(dictionary: String) throws {
-        let text = try String(contentsOfFile: dictionary, encoding: .utf8)
+    package init(index path: String) throws {
+        let data = try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
+        guard data.count >= Self.headerSize, Array(data.prefix(4)) == Self.magic else {
+            throw IFDictionaryError("context-index", "Expected an InkFlow context index")
+        }
+        func field(_ position: Int) -> Int {
+            Int(data.withUnsafeBytes { UInt32(littleEndian: $0.loadUnaligned(fromByteOffset: 4 * position, as: UInt32.self)) })
+        }
+        var tables: [(offset: Int, count: Int)] = []
+        var offset = Self.headerSize
+        for length in 2...Self.phraseLimit {
+            tables.append((offset, field(length + 1)))
+            offset += tables.last!.count * Self.recordSize(length: length)
+        }
+        guard field(1) == Int(Self.version), field(2) <= Self.phraseLimit, offset == data.count else {
+            throw IFDictionaryError("context-index", "Unsupported or truncated context index")
+        }
+        index = data
+        longestPhrase = field(2)
+        self.tables = tables
+    }
+
+    /// Builds the index the preparation worker and build scripts ship beside the dictionary.
+    package static func buildIndex(dictionary: Data) throws -> Data {
+        guard let text = String(data: dictionary, encoding: .utf8) else {
+            throw IFDictionaryError("context-index", "Expected a UTF-8 dictionary")
+        }
         var frequencies: [String: Int] = [:]
         var longest = 0
         for line in text.split(separator: "\n") {
             let fields = line.split(separator: "\t")
             guard fields.count >= 3, let frequency = Int(fields[2]), frequency >= 0 else { continue }
             let phrase = String(fields[0])
-            guard (2...8).contains(phrase.count), phrase.allSatisfy(Self.isHan) else { continue }
+            guard (2...phraseLimit).contains(phrase.count), phrase.allSatisfy(Self.isHan) else { continue }
             frequencies[phrase] = max(frequencies[phrase] ?? 0, frequency)
             longest = max(longest, phrase.count)
         }
-        self.frequencies = frequencies
-        longestPhrase = longest
+        var tables = Array(repeating: [(key: [UInt8], frequency: UInt64)](), count: phraseLimit - 1)
+        for (phrase, frequency) in frequencies {
+            let key = encode(phrase)
+            tables[key.count / 3 - 2].append((key, UInt64(frequency)))
+        }
+        var data = Data()
+        data.append(contentsOf: magic)
+        for value in [version, UInt32(longest)] + tables.map({ UInt32($0.count) }) {
+            withUnsafeBytes(of: value.littleEndian) { data.append(contentsOf: $0) }
+        }
+        for table in tables {
+            for record in table.sorted(by: { $0.key.lexicographicallyPrecedes($1.key) }) {
+                data.append(contentsOf: record.key)
+                withUnsafeBytes(of: record.frequency.littleEndian) { data.append(contentsOf: $0) }
+            }
+        }
+        return data
+    }
+
+    private static func recordSize(length: Int) -> Int { length * 3 + 8 }
+
+    /// Three bytes per scalar in canonical form, so byte order is the table order.
+    private static func encode(_ text: String) -> [UInt8] {
+        var bytes: [UInt8] = []
+        for scalar in text.precomposedStringWithCanonicalMapping.unicodeScalars {
+            bytes.append(contentsOf: [UInt8(truncatingIfNeeded: scalar.value >> 16),
+                                      UInt8(truncatingIfNeeded: scalar.value >> 8), UInt8(truncatingIfNeeded: scalar.value)])
+        }
+        return bytes
+    }
+
+    private func frequency(of key: [UInt8]) -> Int? {
+        let length = key.count / 3
+        guard (2...Self.phraseLimit).contains(length) else { return nil }
+        let table = tables[length - 2], recordSize = Self.recordSize(length: length)
+        return key.withUnsafeBytes { wanted in
+            index.withUnsafeBytes { raw -> Int? in
+                var low = 0, high = table.count
+                while low < high {
+                    let mid = (low + high) / 2
+                    let offset = table.offset + mid * recordSize
+                    let order = memcmp(raw.baseAddress! + offset, wanted.baseAddress!, key.count)
+                    if order < 0 { low = mid + 1 }
+                    else if order > 0 { high = mid }
+                    else {
+                        return Int(truncatingIfNeeded: UInt64(littleEndian:
+                            raw.loadUnaligned(fromByteOffset: offset + key.count, as: UInt64.self)))
+                    }
+                }
+                return nil
+            }
+        }
     }
 
     package func order(_ candidates: [String], precedingText: String,
@@ -58,11 +142,13 @@ package struct IFContextRanker: Sendable {
 
         let prefix = Array(precedingText.suffix(max(0, longestPhrase - 1))
             .reversed().prefix(while: Self.isHan).reversed())
+        let prefixKey = Self.encode(String(prefix))
         let scores = candidates.enumerated().map { index, candidate -> (length: Int, frequency: Int) in
             guard eligible.contains(index), !prefix.isEmpty, candidate.count == candidates[0].count,
                   candidate.allSatisfy(Self.isHan) else { return (0, 0) }
-            for count in stride(from: prefix.count, through: 1, by: -1) {
-                if let frequency = frequencies[String(prefix.suffix(count)) + candidate] {
+            let candidateKey = Self.encode(candidate)
+            for count in stride(from: prefix.count, through: 1, by: -1) where count + candidate.count <= Self.phraseLimit {
+                if let frequency = frequency(of: prefixKey.suffix(count * 3) + candidateKey) {
                     return (count, frequency)
                 }
             }

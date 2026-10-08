@@ -61,6 +61,7 @@ private enum DictionaryStoreRegression {
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: false)
         try dictionary.write(to: shared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
         try manifest.encoded().write(to: shared.appendingPathComponent(IFDictionaryManifest.filename))
+        try IFContextRanker.buildIndex(dictionary: dictionary).write(to: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
         for name in ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles {
             try Data("compiled fixture".utf8).write(to: cache.appendingPathComponent(name))
         }

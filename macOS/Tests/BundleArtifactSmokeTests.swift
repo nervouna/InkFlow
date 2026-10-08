@@ -28,7 +28,7 @@ struct BundleArtifactSmokeTests {
 
         let descriptor = try IFPackagedCache.descriptor(resources: resources)
         let ranker = try IFContextRanker(
-            dictionary: resources.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename).path
+            index: resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path
         )
         let configuration = IFEngineConfiguration(
             shared: resources,
