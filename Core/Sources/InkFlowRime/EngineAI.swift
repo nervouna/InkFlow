@@ -10,14 +10,7 @@ extension IFEngine {
         guard ready, allSessionsIdle else { return false }
         let temporary = liveSessions.isEmpty ? IFEngine() : nil
         guard let engine = liveSessions.first(where: \.available), allSessionsIdle else { return false }
-        let api = Self.api.pointee
-        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
-        api.set_property(engine.session, "inkflow_clear_english_learning", "clear")
-        api.set_property(engine.session, "inkflow_clear_english_learning", "")
-        var result = [CChar](repeating: 0, count: 16)
-        let read = api.get_property(engine.session, "inkflow_clear_english_learning_result", &result, result.count)
-        api.set_property(engine.session, "inkflow_clear_english_learning_result", "")
-        let cleared = read != 0 && Self.string(result) == "ok"
+        let cleared = engine.call("clear_english_learning")?.status == "ok"
         if cleared { invalidatePersonalLearning() }
         withExtendedLifetime(temporary) {}
         return cleared
@@ -31,15 +24,7 @@ extension IFEngine {
               (2...64).contains(correction.canonicalText.utf8.count),
               correction.canonicalText.utf8.allSatisfy({ (65...90).contains($0) || (97...122).contains($0) }),
               canonical.utf8.allSatisfy({ (97...122).contains($0) }) else { return false }
-        let api = Self.api.pointee
-        let payload = correction.sourceCode + "\t" + canonical + "\t" + correction.canonicalText
-        api.set_property(session, "inkflow_voice_learning_result", "")
-        payload.withCString { api.set_property(session, "inkflow_voice_learning", $0) }
-        api.set_property(session, "inkflow_voice_learning", "")
-        var result = [CChar](repeating: 0, count: 16)
-        let read = api.get_property(session, "inkflow_voice_learning_result", &result, result.count)
-        api.set_property(session, "inkflow_voice_learning_result", "")
-        let learned = read != 0 && Self.string(result) == "ok"
+        let learned = call("voice_learning", [correction.sourceCode, canonical, correction.canonicalText])?.status == "ok"
         if learned { Self.voiceLexicon.markDirty(); Self.signalIdle() }
         return learned
     }
@@ -48,19 +33,10 @@ extension IFEngine {
         guard available, Self.allSessionsIdle else {
             return .unknown(generation: generation, revision: revision)
         }
-        let api = Self.api.pointee
-        api.set_property(session, "inkflow_voice_aliases_result", "")
-        api.set_property(session, "inkflow_voice_aliases", "read")
-        defer {
-            api.set_property(session, "inkflow_voice_aliases", "")
-            api.set_property(session, "inkflow_voice_aliases_result", "")
-        }
-        var buffer = [CChar](repeating: 0, count: VoiceAliasSnapshot.byteLimit + 1)
-        guard api.get_property(session, "inkflow_voice_aliases_result", &buffer, buffer.count) != 0 else {
+        guard let reply = call("voice_aliases", capacity: VoiceAliasSnapshot.byteLimit + 64) else {
             return .unknown(generation: generation, revision: revision)
         }
-        let payload = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-        return VoiceAliasSnapshot(payload: payload, generation: generation, revision: revision)
+        return VoiceAliasSnapshot(status: reply.status, rows: reply.body, generation: generation, revision: revision)
     }
 
     /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
@@ -95,16 +71,7 @@ extension IFEngine {
         guard available, text.hasPrefix(input.selectedPrefix),
               let code = (pronunciation ?? aiPronunciation(input: input, text: text)).resolve(input: input.rawInput, text: text,
                   preferences: preferences ?? inputPreferences ?? requestedInput) else { return false }
-        let api = Self.api.pointee
-        let payload = code + "\t" + text
-        api.set_property(session, "inkflow_ai_learning_result", "")
-        payload.withCString { api.set_property(session, "inkflow_ai_learning", $0) }
-        // Properties are transport only: retain no adopted text in the live context.
-        api.set_property(session, "inkflow_ai_learning", "")
-        var result = [CChar](repeating: 0, count: 16)
-        let read = api.get_property(session, "inkflow_ai_learning_result", &result, result.count)
-        api.set_property(session, "inkflow_ai_learning_result", "")
-        let learned = read != 0 && String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) == "ok"
+        let learned = call("ai_learning", [code, text])?.status == "ok"
         if learned { Self.voiceLexicon.markDirty(); Self.signalIdle() }
         return learned
     }
@@ -119,18 +86,8 @@ extension IFEngine {
     /// absolute reverse-table path follows active dictionary activation and rollback.
     package func aiPronunciation(input: AIInputIdentity, text: String) -> AIPronunciation {
         guard available else { return AIPronunciation(phrases: [:], characters: [:]) }
-        let api = Self.api.pointee
-        Self.compiledDirectory.appendingPathComponent("pinyin_simp.reverse.bin").path.withCString {
-            api.set_property(session, "inkflow_ai_reverse_path", $0)
-        }
-        api.set_property(session, "inkflow_ai_readings_result", "")
-        (input.rawInput + "\t" + text).withCString { api.set_property(session, "inkflow_ai_readings", $0) }
-        var result = [CChar](repeating: 0, count: 128 * 1024)
-        let read = api.get_property(session, "inkflow_ai_readings_result", &result, result.count)
-        for name in ["inkflow_ai_readings", "inkflow_ai_readings_result", "inkflow_ai_reverse_path"] {
-            api.set_property(session, name, "")
-        }
-        let readings = read != 0 ? String(decoding: result.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) : ""
-        return AIPronunciation(text: text, nativeReadings: readings)
+        let reverse = Self.compiledDirectory.appendingPathComponent("pinyin_simp.reverse.bin").path
+        let reply = call("ai_readings", [reverse, input.rawInput, text], capacity: 128 * 1024)
+        return AIPronunciation(text: text, nativeReadings: reply.flatMap { $0.status == "ok" ? $0.body : nil } ?? "")
     }
 }

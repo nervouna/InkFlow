@@ -222,19 +222,16 @@ package struct DictionaryActivationRegression: Sendable {
         engine.asciiMode = true
         let permissions = try FileManager.default.attributesOfItem(atPath: user.path)[.posixPermissions]!
         defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user.path); IFEngine.stop() }
-        // Exercise the actual fallible custom-phrase write AFTER native session creation/schema selection.
-        expectFailure("session-settings") {
-            try IFEngine.replace(with: configuration, restoring: configuration, fault: { step, rollback in
-                if !rollback && step == .session(0) {
-                    try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: user.path)
-                }
-                if rollback && step == .start {
-                    try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user.path)
-                }
-            }, confirm: {})
-        }
+        // Session restoration reads custom_phrase.txt but never writes it: an unwritable
+        // user directory after native session creation cannot fail activation.
+        try IFEngine.replace(with: configuration, restoring: configuration, fault: { step, rollback in
+            if !rollback && step == .session(0) {
+                try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: user.path)
+            }
+        }, confirm: {})
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user.path)
         check(engine.available && engine.asciiMode && engine.candidateCount == 7,
-              "Transient settings-write failure preserves captured ASCII mode through partial cleanup and rollback")
+              "Restoration applies settings and captured ASCII mode without writing to the user directory")
         // A real allocated session also needs safe cleanup before schema selection has completed.
         expectFailure("session-create") {
             try IFEngine.replace(with: configuration, restoring: configuration, fault: { step, rollback in

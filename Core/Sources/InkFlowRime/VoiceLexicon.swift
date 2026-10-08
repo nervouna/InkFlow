@@ -36,11 +36,11 @@ package struct VoiceLexiconSnapshot: Sendable, Equatable {
         self.entries = accepted
     }
 
-    package init(payload: String, generation: UInt64, revision: UInt64) {
-        guard payload.utf8.count <= Self.byteLimit, payload.hasPrefix("ok\n") else {
+    package init(status: String, rows: String, generation: UInt64, revision: UInt64) {
+        guard status == "ok", rows.utf8.count <= Self.byteLimit else {
             self = .unknown(generation: generation, revision: revision); return
         }
-        let entries = payload.dropFirst(3).split(separator: "\n").prefix(Self.entryLimit).compactMap { line -> Entry? in
+        let entries = rows.split(separator: "\n").prefix(Self.entryLimit).compactMap { line -> Entry? in
             let columns = line.split(separator: "\t", omittingEmptySubsequences: false)
             guard columns.count == 3, let commits = Int(columns[2]) else { return nil }
             return Entry(text: String(columns[0]), code: String(columns[1]), commits: commits)
@@ -125,19 +125,10 @@ extension IFEngine {
         guard available, Self.allSessionsIdle, Self.voiceLexicon.canRead else {
             return .unknown(generation: generation, revision: revision)
         }
-        let api = Self.api.pointee
-        api.set_property(session, "inkflow_voice_lexicon_result", "")
-        api.set_property(session, "inkflow_voice_lexicon", "read")
-        defer {
-            api.set_property(session, "inkflow_voice_lexicon", "")
-            api.set_property(session, "inkflow_voice_lexicon_result", "")
-        }
-        var buffer = [CChar](repeating: 0, count: VoiceLexiconSnapshot.byteLimit + 1)
-        guard api.get_property(session, "inkflow_voice_lexicon_result", &buffer, buffer.count) != 0 else {
+        guard let reply = call("voice_lexicon", capacity: VoiceLexiconSnapshot.byteLimit + 64) else {
             return .unknown(generation: generation, revision: revision)
         }
-        let payload = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
-        return VoiceLexiconSnapshot(payload: payload, generation: generation, revision: revision)
+        return VoiceLexiconSnapshot(status: reply.status, rows: reply.body, generation: generation, revision: revision)
     }
 }
 

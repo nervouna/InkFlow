@@ -10,7 +10,7 @@ extension IFEngine {
         package let commits: Int
         package let revision: UInt64
         package var id: String { source.rawValue + "\t" + code + "\t" + text }
-        fileprivate var payload: String { id + "\t" + String(commits) }
+        fileprivate var fields: [String] { [source.rawValue, code, text, String(commits)] }
     }
 
     package struct PersonalLearningUndo: Sendable {
@@ -25,9 +25,9 @@ extension IFEngine {
     /// No filesystem enumeration and no secondary store: the active Rime memories
     /// own both namespaces. This lifecycle API must never run in a key callback.
     package static func personalLearningEntries() throws -> [PersonalLearningEntry] {
-        let result = try personalLearningRequest("list")
-        guard result.hasPrefix("ok\n"), result.hasSuffix("\n") else { throw PersonalLearningError.unavailable }
-        let lines = result.dropFirst(3).split(separator: "\n", omittingEmptySubsequences: false).dropLast()
+        let reply = try personalLearningRequest(["list"])
+        guard reply.status == "ok", reply.body.isEmpty || reply.body.hasSuffix("\n") else { throw PersonalLearningError.unavailable }
+        let lines = reply.body.split(separator: "\n", omittingEmptySubsequences: false).dropLast()
         guard lines.count <= 8192 else { throw PersonalLearningError.tooLarge }
         var ids = Set<String>()
         return try lines.map { line in
@@ -46,36 +46,33 @@ extension IFEngine {
     package static func deletePersonalLearning(_ entry: PersonalLearningEntry) throws -> PersonalLearningUndo {
         guard entry.revision == voiceLexicon.learningRevision else { throw PersonalLearningError.conflict }
         guard (1..<Int(Int32.max)).contains(entry.commits) else { throw PersonalLearningError.tooLarge }
-        try personalLearningMutation("delete\t" + entry.payload)
+        try personalLearningMutation(["delete"] + entry.fields)
         return PersonalLearningUndo(entry: entry, revision: voiceLexicon.learningRevision)
     }
 
     package static func undoPersonalLearning(_ undo: PersonalLearningUndo) throws {
         guard undo.revision == voiceLexicon.learningRevision else { throw PersonalLearningError.conflict }
-        try personalLearningMutation("restore\t" + undo.entry.payload)
+        try personalLearningMutation(["restore"] + undo.entry.fields)
     }
 
-    private static func personalLearningMutation(_ payload: String) throws {
-        let result = try personalLearningRequest(payload)
-        guard result == "ok" else {
+    private static func personalLearningMutation(_ fields: [String]) throws {
+        let status = try personalLearningRequest(fields).status
+        guard status == "ok" else {
             // A failed native write may have applied part of the operation. Do not
             // retain a stale UI snapshot or allow an older undo after any attempt.
             invalidatePersonalLearning()
-            throw result == "conflict" ? PersonalLearningError.conflict : .unavailable
+            throw status == "conflict" ? PersonalLearningError.conflict : .unavailable
         }
         invalidatePersonalLearning()
     }
 
     package static func invalidatePersonalLearning() {
-        for engine in liveSessions where engine.available {
-            api.pointee.set_property(engine.session, "inkflow_learning_invalidate", "1")
-            api.pointee.set_property(engine.session, "inkflow_learning_invalidate", "")
-        }
+        for engine in liveSessions where engine.available { _ = engine.call("learning_invalidate") }
         voiceLexicon.invalidateLearningSnapshot()
         signalIdle()
     }
 
-    private static func personalLearningRequest(_ payload: String) throws -> String {
+    private static func personalLearningRequest(_ fields: [String]) throws -> IFRimeChannel.Reply {
         guard ready else { throw PersonalLearningError.unavailable }
         guard allSessionsIdle, voiceLexicon.canRead else { throw PersonalLearningError.busy }
         let temporary = liveSessions.isEmpty ? IFEngine() : nil
@@ -83,16 +80,9 @@ extension IFEngine {
         guard let engine = liveSessions.first(where: \.available), allSessionsIdle, voiceLexicon.canRead else {
             throw PersonalLearningError.busy
         }
-        let api = Self.api.pointee
-        api.set_property(engine.session, "inkflow_learning_manage_result", "")
-        payload.withCString { api.set_property(engine.session, "inkflow_learning_manage", $0) }
-        defer {
-            api.set_property(engine.session, "inkflow_learning_manage", "")
-            api.set_property(engine.session, "inkflow_learning_manage_result", "")
+        guard let reply = engine.call("learning_manage", fields, capacity: 3 * 1024 * 1024) else {
+            throw PersonalLearningError.unavailable
         }
-        var buffer = [CChar](repeating: 0, count: 3 * 1024 * 1024)
-        guard api.get_property(engine.session, "inkflow_learning_manage_result", &buffer, buffer.count) != 0,
-              let end = buffer.firstIndex(of: 0), end < buffer.count - 1 else { throw PersonalLearningError.unavailable }
-        return String(decoding: buffer[..<end].map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return reply
     }
 }

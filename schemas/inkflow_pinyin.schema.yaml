@@ -33,9 +33,11 @@ traditional:
 inkflow_short_conflict:
   inputs: [can, you, she, he, man, bug]
   lookahead: 256
+# Rime's native custom_phrase.txt in the user directory; the app rewrites it when
+# phrases are saved and reloads every idle session.
 custom_phrase:
   dictionary: ""
-  user_dict: inkflow_custom_phrases_empty
+  user_dict: custom_phrase
   db_class: stabledb
   enable_completion: false
   enable_sentence: false

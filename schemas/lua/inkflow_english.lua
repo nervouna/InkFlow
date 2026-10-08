@@ -1,4 +1,5 @@
 -- Use Rime's compiled English dictionary, but rank across completion lengths.
+local channel = require("inkflow_channel")
 local M = {}
 
 local function update(memory, code, text, commits)
@@ -15,12 +16,12 @@ end
 
 local function with_voice(env, operation)
   local memory
-  local called, result = pcall(function()
+  local called, status, body = pcall(function()
     memory = Memory(env.engine, env.engine.schema, "voice_learning")
     return operation(memory)
   end)
   if memory then memory:disconnect() end
-  return called, result
+  return called, status, body
 end
 
 local function voice_aliases(memory)
@@ -40,7 +41,7 @@ local function voice_aliases(memory)
     end
   end
   table.sort(rows)
-  return "ok\n" .. table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
+  return "ok", table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
 end
 
 local clear_limit = 4096
@@ -122,13 +123,14 @@ local function manage_learning(env, payload)
     return update(memory, code, text, action == "delete" and -1 or 1) and "ok" or "failed"
   end
   if payload ~= "list" and source == "english" then return operate(env.memory, source) or "failed" end
-  local called, result = with_voice(env, function(voice)
+  local called, status, body = with_voice(env, function(voice)
     if payload ~= "list" then return operate(voice, source) end
     local shared, aliases = operate(env.memory, "english"), operate(voice, "voice")
     if not shared or not aliases then return "failed" end
-    return "ok\n" .. shared .. aliases
+    return "ok", shared .. aliases
   end)
-  return called and result or "failed"
+  if not called then return "failed" end
+  return status or "failed", body
 end
 
 local function clear_learning(env)
@@ -173,54 +175,37 @@ function M.init(env)
     end
     return false
   end)
-  env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
-    if name == "inkflow_learning_invalidate" then
+  env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
+    learning_invalidate = function()
       env.input, env.entries, env.learnable = nil, nil, {}
-      return
-    end
-    if name == "inkflow_learning_manage" then
-      local payload = context:get_property(name)
-      if payload == "" then return end
-      local called, result = pcall(manage_learning, env, payload)
-      context:set_property("inkflow_learning_manage_result", called and result or "failed")
-      return
-    end
-    if name == "inkflow_clear_english_learning" then
-      if context:get_property(name) == "" then return end
+      return "ok"
+    end,
+    learning_manage = function(fields) return manage_learning(env, table.concat(fields, "\t")) end,
+    clear_english_learning = function()
       local cleared = clear_learning(env)
       if cleared then env.input, env.entries, env.learnable = nil, nil, {} end
-      context:set_property("inkflow_clear_english_learning_result", cleared and "ok" or "failed")
-      return
-    end
-    if name == "inkflow_voice_aliases" then
-      if context:get_property(name) == "" then return end
-      local ok, result = with_voice(env, voice_aliases)
-      context:set_property("inkflow_voice_aliases_result", ok and result or "unknown")
-      return
-    end
-    if name ~= "inkflow_voice_learning" then return end
-    local payload = context:get_property(name)
-    if payload == "" then return end
-    local source, canonical, text = payload:match("^([a-z]+)\t([a-z]+)\t([A-Za-z]+)$")
-    if not source or not canonical or #source > 64 or #canonical > 64 or #text > 64 then
-      context:set_property("inkflow_voice_learning_result", "failed")
-      return
-    end
-    if not update(env.memory, canonical, text, 1) then
-      context:set_property("inkflow_voice_learning_result", "failed")
-      return
-    end
-    local voiceCalled, voiceUpdated = with_voice(env, function(memory)
-      return update(memory, source, text, 1)
-    end)
-    if not voiceCalled or not voiceUpdated then
-      -- Best-effort compensation avoids strengthening only the shared record.
-      update(env.memory, canonical, text, -1)
-      context:set_property("inkflow_voice_learning_result", "failed")
-      return
-    end
-    context:set_property("inkflow_voice_learning_result", "ok")
-  end)
+      return cleared and "ok" or "failed"
+    end,
+    voice_aliases = function()
+      local called, status, body = with_voice(env, voice_aliases)
+      if not called then return "unknown" end
+      return status, body
+    end,
+    voice_learning = function(fields)
+      local source, canonical, text = table.concat(fields, "\t"):match("^([a-z]+)\t([a-z]+)\t([A-Za-z]+)$")
+      if not source or not canonical or #source > 64 or #canonical > 64 or #text > 64 then return "failed" end
+      if not update(env.memory, canonical, text, 1) then return "failed" end
+      local voiceCalled, voiceUpdated = with_voice(env, function(memory)
+        return update(memory, source, text, 1)
+      end)
+      if not voiceCalled or not voiceUpdated then
+        -- Best-effort compensation avoids strengthening only the shared record.
+        update(env.memory, canonical, text, -1)
+        return "failed"
+      end
+      return "ok"
+    end,
+  }))
 end
 
 function M.fini(env)

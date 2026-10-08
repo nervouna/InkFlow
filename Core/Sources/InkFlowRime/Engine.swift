@@ -123,12 +123,18 @@ package final class IFEngine {
     package var session: RimeSessionId = 0
     package private(set) var candidateCount = 5
     private var requestedCount = 5
-    private var requestedPhrases: [CustomPhrase] = []
-    private var appliedPhrases: [CustomPhrase] = []
     package var requestedInput = InputPreferences()
     package private(set) var inputPreferences: InputPreferences?
     private var bufferedCommit = ""
-    private var temporaryDictionary: URL?
+    /// Custom phrases are Rime's native custom_phrase.txt in the user directory. The file is
+    /// written only when settings change; every live session reloads it at the next shared idle.
+    /// Requested phrases outlive engine restarts, like each session's requested count.
+    private static var requestedPhrases: [CustomPhrase] = []
+    private static var requestedPhraseTSV = phraseTSV([])
+    private static var phraseFileTSV = ""
+    private static var phraseFileError: String?
+    private static var loadedPhraseTSV = ""
+    private static var loadedPhrases: [CustomPhrase] = []
     package private(set) var configurationError: String?
     private var precedingText = ""
     private var orderedContent = EngineSnapshot()
@@ -173,7 +179,8 @@ package final class IFEngine {
         for name in ["default.yaml", "inkflow_pinyin.schema.yaml", "pinyin_simp.dict.yaml",
                      "easy_en.schema.yaml", "easy_en.dict.yaml", "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                      "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua", "opencc/inkflow_emoji.json", "opencc/emoji.txt",
+                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua", "lua/inkflow_channel.lua",
+                     "opencc/inkflow_emoji.json", "opencc/emoji.txt",
                      "opencc/inkflow_s2t.json", "opencc/STPhrases.txt", "opencc/STCharacters.txt"] +
                     (0..<32).map({ InputPreferences.spellingProfile($0) + ".schema.yaml" }) {
             guard FileManager.default.isReadableFile(atPath: configuration.shared.appendingPathComponent(name).path) else {
@@ -243,6 +250,12 @@ package final class IFEngine {
         activeConfiguration = configuration.identity
         contextRanker = configuration.ranker
         do {
+            // No session exists yet: whatever the file holds now is what they all load.
+            phraseFileTSV = (try? String(contentsOf: phraseFile, encoding: .utf8)) ?? phraseTSV([])
+            phraseFileError = nil
+            if let error = syncPhraseFile() { throw IFDictionaryUpdateError(.apply, "custom-phrases", detail: error) }
+            loadedPhraseTSV = phraseFileTSV
+            loadedPhrases = requestedPhrases
             for (index, engine) in liveSessions.enumerated() {
                 try fault(.session(index))
                 try engine.restoreSession(afterCreate: { try fault(.sessionCreated(index)) })
@@ -316,7 +329,7 @@ package final class IFEngine {
             Self.qualityRecorders.removeAll { $0.value == nil }
             Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
         }
-        candidateCount = 5; appliedPhrases = []; inputPreferences = nil; configurationError = nil
+        candidateCount = 5; inputPreferences = nil; configurationError = nil
         candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
         applyConfigurationIfIdle()
         if let configurationError { throw IFDictionaryUpdateError(.apply, "session-settings", detail: configurationError) }
@@ -366,7 +379,7 @@ package final class IFEngine {
     }
 
     package func setCandidateCount(_ count: Int) {
-        setConfiguration(candidateCount: count, customPhrases: requestedPhrases, inputPreferences: requestedInput)
+        setConfiguration(candidateCount: count, customPhrases: Self.requestedPhrases, inputPreferences: requestedInput)
     }
 
     package func setPrecedingText(_ text: String) {
@@ -380,60 +393,96 @@ package final class IFEngine {
     package func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase], inputPreferences: InputPreferences? = nil) {
         do { try CustomPhrase.validate(customPhrases) }
         catch { reportConfigurationError(error.localizedDescription); return }
+        if customPhrases != Self.requestedPhrases {
+            Self.requestedPhrases = customPhrases
+            Self.requestedPhraseTSV = Self.phraseTSV(customPhrases)
+            Self.phraseFileError = nil
+        }
+        // The settings path writes the file; key events only ever reload it. The controller
+        // pushes the same settings on every refresh, so a failed write is retried only when
+        // the phrases change or the engine restarts, and the whole configuration waits.
+        if Self.ready, let error = Self.syncPhraseFile() { reportConfigurationError(error); return }
         requestedCount = (3...9).contains(candidateCount) ? candidateCount : 5
-        requestedPhrases = customPhrases
         if let inputPreferences { requestedInput = inputPreferences }
+        configurationError = nil
         applyConfigurationIfIdle()
+    }
+
+    private static var phraseFile: URL { URL(fileURLWithPath: userDirectory).appendingPathComponent("custom_phrase.txt") }
+
+    /// Rime's custom_phrase.txt: text, code, weight. Earlier phrases outrank later ones.
+    private static func phraseTSV(_ phrases: [CustomPhrase]) -> String {
+        // librime's TSV reader otherwise treats phrases beginning with '#' as comments.
+        "# no comment\n" + phrases.enumerated().map { index, phrase in
+            "\(phrase.text)\t\(phrase.code)\t\(phrases.count - index)\n"
+        }.joined()
+    }
+
+    /// Returns the failure message; the file keeps its previous content on failure.
+    private static func syncPhraseFile() -> String? {
+        guard requestedPhraseTSV != phraseFileTSV else { return nil }
+        if let phraseFileError { return phraseFileError }
+        do {
+            try Data(requestedPhraseTSV.utf8).write(to: phraseFile, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: phraseFile.path)
+        } catch {
+            phraseFileError = "无法保存自定义短语，请检查墨流数据目录的可用空间和写入权限。"
+            return phraseFileError
+        }
+        phraseFileTSV = requestedPhraseTSV
+        return nil
     }
 
     private func applyConfigurationIfIdle() {
         guard available else { return }
-        // Retain a failed cleanup for retry instead of silently leaving phrase text on disk.
-        guard removeTemporaryDictionary() else { return }
-        guard candidateCount != requestedCount || appliedPhrases != requestedPhrases || inputPreferences != requestedInput else {
-            configurationError = nil
+        if Self.loadedPhraseTSV != Self.phraseFileTSV {
+            // Rime shares one loaded custom_phrase table among every session that holds it, so
+            // the phrases change for all sessions at once. A composing session keeps its
+            // snapshot and retries on its next idle key; its count still applies below.
+            if snapshot().preedit.isEmpty, Self.allSessionsIdle { Self.reloadSessions(including: self); return }
+        } else if Self.requestedPhraseTSV == Self.loadedPhraseTSV {
+            Self.loadedPhrases = Self.requestedPhrases
+        }
+        guard candidateCount != requestedCount || inputPreferences != requestedInput else {
             if snapshot().preedit.isEmpty { applyRuntimeOptions() }
             return
         }
         guard snapshot().preedit.isEmpty else { return }
-        // StableDb caches loaded data by name. A fresh name lets old composing sessions retain
-        // their snapshot while this idle session synchronously loads the new phrases.
-        let name = "inkflow_phrases_" + UUID().uuidString
-        let file = URL(fileURLWithPath: Self.userDirectory).appendingPathComponent(name + ".txt")
-        // librime's TSV parser otherwise treats phrases beginning with '#' as comments.
-        let tsv = "# no comment\n" + requestedPhrases.enumerated().map { index, phrase in
-            "\(phrase.text)\t\(phrase.code)\t\(requestedPhrases.count - index)\n"
-        }.joined()
-        temporaryDictionary = file
-        defer { _ = removeTemporaryDictionary() }
-        guard FileManager.default.createFile(atPath: file.path, contents: Data(tsv.utf8),
-                                              attributes: [.posixPermissions: 0o600]) else {
-            reportConfigurationError("无法载入自定义短语，请检查墨流数据目录的可用空间和写入权限。")
-            return
-        }
         do {
-            try recreateSchema(dictionary: name)
+            try recreateSchema()
             configurationError = nil
         }
         catch { reportConfigurationError(error.localizedDescription) }
     }
 
-    private func removeTemporaryDictionary() -> Bool {
-        guard let temporaryDictionary else { return true }
-        do {
-            try FileManager.default.removeItem(at: temporaryDictionary)
-            self.temporaryDictionary = nil
-            return true
-        } catch let error as CocoaError where error.code == .fileNoSuchFile {
-            self.temporaryDictionary = nil
-            return true
-        } catch {
-            reportConfigurationError("临时短语文件清理失败，请检查墨流数据目录的写入权限。")
-            return false
+    /// The one deploy after a phrase change: release every session's dictionary handles first,
+    /// so the next session reads the current file instead of the cached table, then recreate
+    /// each session and reapply its own settings. All sessions are idle, so nothing is lost.
+    private static func reloadSessions(including caller: IFEngine) {
+        let api = Self.api.pointee
+        // A session registers after its first configuration, so include the caller explicitly.
+        var engines = liveSessions.filter(\.available)
+        if !engines.contains(where: { $0 === caller }) { engines.append(caller) }
+        for engine in engines {
+            _ = api.destroy_session(engine.session)
+            engine.session = 0
+        }
+        loadedPhraseTSV = phraseFileTSV
+        loadedPhrases = requestedPhrases
+        for engine in engines {
+            engine.session = api.create_session()
+            guard engine.session != 0, api.select_schema(engine.session, "inkflow_pinyin") != 0 else {
+                if engine.session != 0 { _ = api.destroy_session(engine.session); engine.session = 0 }
+                engine.reportConfigurationError("无法重新载入输入方案，请重启墨流后重试。")
+                continue
+            }
+            engine.candidateCount = 5; engine.inputPreferences = nil
+            engine.candidateOrder = []; engine.candidateRankingMetadata = nil; engine.orderedContent = EngineSnapshot()
+            engine.applyConfigurationIfIdle()
         }
     }
 
-    private func recreateSchema(dictionary: String) throws {
+    private func recreateSchema() throws {
         // Replace whole nodes and restore them synchronously. Existing sessions retain their
         // component configuration, while this idle session loads one coherent snapshot.
         let api = Self.api.pointee
@@ -455,13 +504,6 @@ package final class IFEngine {
           dictionary: pinyin_simp
           prism: \(requestedInput.spellingProfile)
           preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']
-        custom_phrase:
-          dictionary: ""
-          user_dict: \(dictionary)
-          db_class: stabledb
-          enable_completion: false
-          enable_sentence: false
-          initial_quality: 100
         """
         guard api.config_init(&patch) != 0 else { throw CustomPhraseError("无法创建输入设置。") }
         defer { _ = api.config_close(&patch) }
@@ -470,7 +512,7 @@ package final class IFEngine {
         }
         var originals: [(String, RimeConfig)] = []
         var patched = true
-        for path in ["menu", "translator", "custom_phrase", "key_binder", "punctuator"] {
+        for path in ["menu", "translator", "key_binder", "punctuator"] {
             var original = RimeConfig(), replacement = RimeConfig()
             guard api.config_get_item(&config, path, &original) != 0 else { patched = false; break }
             originals.append((path, original))
@@ -485,7 +527,6 @@ package final class IFEngine {
         let loaded = patched && api.select_schema(session, "inkflow_pinyin") != 0
         if loaded {
             candidateCount = requestedCount
-            appliedPhrases = requestedPhrases
             inputPreferences = requestedInput
         }
         var restored = true
@@ -606,7 +647,7 @@ package final class IFEngine {
         // Explicit custom codes keep the user's ordered phrases ahead of ordinary words.
         // Use the applied snapshot so deferred settings cannot change a live composition.
         let input = Self.string(Self.api.pointee.get_input(session))
-        let hasCustomCode = appliedPhrases.contains { $0.code == input }
+        let hasCustomCode = Self.loadedPhrases.contains { $0.code == input }
         // Once a segment is selected, the immediate prefix is inside the mark.
         // Leave these remaining candidates to Rime instead of applying older document text.
         candidateOrder = Array(raw.candidates.indices)
@@ -631,18 +672,8 @@ package final class IFEngine {
                                       inputLength: Int) -> [IFCandidateRankingMetadata]? {
         guard page >= 0, page <= Int.max / candidateCount, (1...9).contains(count) else { return nil }
         let offset = page * candidateCount
-        let api = Self.api.pointee
-        api.set_property(session, "inkflow_input_coverage_result", "")
-        defer {
-            api.set_property(session, "inkflow_input_coverage", "")
-            api.set_property(session, "inkflow_input_coverage_result", "")
-        }
-        // Rime delivers the property observer synchronously on this engine's main actor.
-        "\(offset),\(count)".withCString { api.set_property(session, "inkflow_input_coverage", $0) }
-        var buffer = [CChar](repeating: 0, count: 512)
-        guard api.get_property(session, "inkflow_input_coverage_result", &buffer, buffer.count) != 0 else { return nil }
-        return IFContextRanker.parseMetadata(Self.string(buffer), offset: offset, count: count,
-                                             inputLength: inputLength)
+        guard let reply = call("input_coverage", [String(offset), String(count)]), reply.status == "ok" else { return nil }
+        return IFContextRanker.parseMetadata(reply.body, offset: offset, count: count, inputLength: inputLength)
     }
 
     package func takeCommit(recordQuality: Bool = true) -> String {
@@ -685,7 +716,7 @@ package final class IFEngine {
 
     private func updateQualityConfiguration(asciiMode: Bool) {
         let configuration = QualityAppliedConfiguration(candidateCount: candidateCount,
-            customPhrases: appliedPhrases.map { QualityPhrase(id: $0.id.uuidString, code: $0.code, text: $0.text) },
+            customPhrases: Self.loadedPhrases.map { QualityPhrase(id: $0.id.uuidString, code: $0.code, text: $0.text) },
             asciiMode: asciiMode, fontSize: qualityFontSize, vertical: qualityVertical,
             inputOptions: inputPreferences?.recordedValues)
         if configuration != qualityRevision.configuration {

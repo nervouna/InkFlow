@@ -1,5 +1,6 @@
 -- Read only already materialized native candidates. Return bounded, content-free
 -- page metadata; no candidate or context text crosses this bridge.
+local channel = require("inkflow_channel")
 local M = {}
 
 local function candidate_metadata(candidate, input_length)
@@ -43,30 +44,27 @@ local function candidate_metadata(candidate, input_length)
   return table.concat({candidate.start, candidate._end, class, exact, personal, source}, ",")
 end
 
+local function input_coverage(fields, context)
+  if #fields ~= 2 or not fields[1]:match("^%d+$") or not fields[2]:match("^%d+$") then return "failed" end
+  local offset, count = tonumber(fields[1]), tonumber(fields[2])
+  if count < 1 or count > 9 then return "failed" end
+  local segment = context.composition:back()
+  if not segment or not segment.menu then return "failed" end
+  local menu = segment.menu
+  -- get_candidate_at can prepare more translations; never request unmaterialized rows.
+  if offset + count > menu:candidate_count() then return "failed" end
+  local rows = {fields[1] .. "," .. fields[2]}
+  for index = offset, offset + count - 1 do
+    local candidate = menu:get_candidate_at(index)
+    if not candidate then return "failed" end
+    rows[#rows + 1] = candidate_metadata(candidate, #context.input)
+  end
+  return "ok", table.concat(rows, ";")
+end
+
 function M.init(env)
-  env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
-    if name ~= "inkflow_input_coverage" then return end
-    local request = context:get_property(name)
-    if request == "" then return end
-    local ok, result = pcall(function()
-      local offset, count = request:match("^(%d+),(%d+)$")
-      offset, count = tonumber(offset), tonumber(count)
-      if not offset or not count or count < 1 or count > 9 then return "" end
-      local segment = context.composition:back()
-      if not segment or not segment.menu then return "" end
-      local menu = segment.menu
-      -- get_candidate_at can prepare more translations; never request unmaterialized rows.
-      if offset + count > menu:candidate_count() then return "" end
-      local rows = {request}
-      for index = offset, offset + count - 1 do
-        local candidate = menu:get_candidate_at(index)
-        if not candidate then return "" end
-        rows[#rows + 1] = candidate_metadata(candidate, #context.input)
-      end
-      return table.concat(rows, ";")
-    end)
-    context:set_property("inkflow_input_coverage_result", ok and result or "")
-  end)
+  env.connection = env.engine.context.property_update_notifier:connect(
+    channel.observer({ input_coverage = input_coverage }))
 end
 
 function M.fini(env)
