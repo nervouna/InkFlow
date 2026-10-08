@@ -3,6 +3,7 @@
 pub mod channel;
 pub mod engine;
 mod ffi;
+pub mod personal;
 pub mod phrases;
 pub mod preferences;
 pub mod ranking;
@@ -63,6 +64,31 @@ unsafe fn copy(value: *const c_char) -> Result<String> {
         .to_str()
         .map(str::to_owned)
         .map_err(|_| Error::InvalidUtf8)
+}
+
+/// Back up or restore one closed user dictionary through the native helper, which runs its
+/// own Rime instance; rejected while a runtime is initialized in this process.
+pub(crate) fn personal_data_snapshot(
+    root: &Path,
+    name: &str,
+    file: &Path,
+    restore: bool,
+) -> Result<bool> {
+    let root = path(root)?;
+    let name = string(name)?;
+    let file = path(file)?;
+    let active = lock()?;
+    if *active {
+        return Err(Error::AlreadyRunning);
+    }
+    Ok(unsafe {
+        ffi::ifp_personal_data_snapshot(
+            root.as_ptr(),
+            name.as_ptr(),
+            file.as_ptr(),
+            i32::from(restore),
+        )
+    } == 0)
 }
 
 struct RuntimeOwner {

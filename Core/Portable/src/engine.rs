@@ -241,6 +241,76 @@ struct State {
     loaded_phrases: Vec<CustomPhrase>,
     sessions: BTreeMap<u64, Core>,
     next: u64,
+    /// Invalidates management snapshots/undo after any observed learning or reset.
+    learning_revision: u64,
+    last_commit: Option<std::time::Instant>,
+}
+
+impl State {
+    fn observe_learning(&mut self) {
+        self.learning_revision = self.learning_revision.wrapping_add(1);
+    }
+    /// Native Rime allows undo while time(NULL) - transaction_time <= 3 seconds.
+    fn can_read_learning(&self) -> bool {
+        self.last_commit
+            .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(4))
+    }
+}
+
+/// One personal-learning record of the shared English or voice-alias namespace.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LearningEntry {
+    pub source: LearningSource,
+    pub code: String,
+    pub text: String,
+    pub commits: u32,
+    revision: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LearningSource {
+    English,
+    Voice,
+}
+
+impl LearningSource {
+    fn name(self) -> &'static str {
+        match self {
+            LearningSource::English => "english",
+            LearningSource::Voice => "voice",
+        }
+    }
+}
+
+impl LearningEntry {
+    pub fn id(&self) -> String {
+        format!("{}\t{}\t{}", self.source.name(), self.code, self.text)
+    }
+    fn fields(&self) -> [String; 4] {
+        [
+            self.source.name().to_owned(),
+            self.code.clone(),
+            self.text.clone(),
+            self.commits.to_string(),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LearningUndo {
+    pub entry: LearningEntry,
+    revision: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LearningError {
+    /// A session is composing, a commit is undrained, or the native undo window is open.
+    Busy,
+    Unavailable,
+    /// The live state changed since the entry or undo was captured.
+    Conflict,
+    TooLarge,
+    Native(Error),
 }
 
 pub struct Engine {
@@ -300,6 +370,8 @@ impl Engine {
             loaded_phrases: Vec::new(),
             sessions: BTreeMap::new(),
             next: 1,
+            learning_revision: 0,
+            last_commit: None,
         };
         // No session exists yet: whatever the file holds now is what they all load.
         if let Some(error) = sync_phrase_file(&mut state, &file) {
@@ -334,6 +406,7 @@ impl Engine {
         let mut state = self.lock()?;
         let id = state.next;
         state.next += 1;
+        state.observe_learning();
         let core = Core::new(self.runtime.session(SCHEMA)?);
         state.sessions.insert(id, core);
         let session = InputSession {
@@ -436,16 +509,25 @@ impl Engine {
         })
     }
 
-    fn read_commit(core: &mut Core) -> Result<String> {
-        match &mut core.session {
-            Some(session) if !core.lost => Ok(session.take_commit()?.unwrap_or_default()),
-            _ => Ok(String::new()),
+    /// Drains Rime's commit; a non-empty commit may have trained the user dictionary.
+    fn read_commit(state: &mut State, id: u64) -> Result<String> {
+        let core = state.sessions.get_mut(&id).unwrap();
+        let text = match &mut core.session {
+            Some(session) if !core.lost => session.take_commit()?.unwrap_or_default(),
+            _ => String::new(),
+        };
+        if !text.is_empty() {
+            state.observe_learning();
+            state.last_commit = Some(std::time::Instant::now());
         }
+        Ok(text)
     }
 
     fn all_sessions_idle(state: &mut State) -> Result<bool> {
-        for core in state.sessions.values_mut() {
-            let commit = Self::read_commit(core)?;
+        let ids: Vec<u64> = state.sessions.keys().copied().collect();
+        for id in ids {
+            let commit = Self::read_commit(state, id)?;
+            let core = state.sessions.get_mut(&id).unwrap();
             core.buffered_commit.push_str(&commit);
             if !Self::raw(core)?.preedit.is_empty() || !core.buffered_commit.is_empty() {
                 return Ok(false);
@@ -483,10 +565,8 @@ impl Engine {
         if !Self::raw(core)?.preedit.is_empty() {
             return Ok(());
         }
-        match self.recreate_schema(core)? {
-            Ok(()) => core.error = None,
-            Err(error) => core.error = Some(error),
-        }
+        let outcome = self.recreate_schema(state, id)?;
+        state.sessions.get_mut(&id).unwrap().error = outcome.err();
         Ok(())
     }
 
@@ -530,8 +610,10 @@ impl Engine {
 
     fn recreate_schema(
         &self,
-        core: &mut Core,
+        state: &mut State,
+        id: u64,
     ) -> Result<std::result::Result<(), ConfigurationError>> {
+        let core = state.sessions.get_mut(&id).unwrap();
         let profile = core.requested_input.spelling_profile();
         if !self.compiled.join(format!("{profile}.prism.bin")).is_file() {
             return Ok(Err(ConfigurationError::MissingPrism));
@@ -543,7 +625,8 @@ impl Engine {
         );
         // select_schema resets the commit buffer as well as the schema. Preserve completed text
         // even if settings arrive before the frontend has drained the previous key's commit.
-        let commit = Self::read_commit(core)?;
+        let commit = Self::read_commit(state, id)?;
+        let core = state.sessions.get_mut(&id).unwrap();
         core.buffered_commit.push_str(&commit);
         let session = core.session.as_mut().unwrap();
         let outcome = match session.apply_schema_patch(SCHEMA, &yaml, &PATCHED_NODES)? {
@@ -665,6 +748,10 @@ impl Engine {
             return self.move_highlight(state, id, delta, key);
         }
         let handled = core.session.as_mut().unwrap().process_key(key, modifiers)?;
+        // Rime can undo learning while leaving Backspace unhandled for the client.
+        if key == 0xff08 || key == 0xffff {
+            state.observe_learning();
+        }
         self.update_ordering(state, id, false)?;
         Ok(handled)
     }
@@ -714,6 +801,152 @@ impl Engine {
             Self::highlight_display(core, before.highlighted)?;
         }
         Ok(handled)
+    }
+}
+
+impl Engine {
+    /// No filesystem enumeration and no secondary store: the active Rime memories own both
+    /// namespaces. This lifecycle API must never run in a key callback.
+    pub fn personal_learning_entries(
+        &self,
+    ) -> std::result::Result<Vec<LearningEntry>, LearningError> {
+        let (reply, revision) = self.learning_request(&["list"])?;
+        if reply.status != "ok" || !(reply.body.is_empty() || reply.body.ends_with('\n')) {
+            return Err(LearningError::Unavailable);
+        }
+        let lines: Vec<&str> = reply.body.split('\n').collect();
+        let lines = &lines[..lines.len() - 1];
+        if lines.len() > 8192 {
+            return Err(LearningError::TooLarge);
+        }
+        let mut ids = std::collections::HashSet::new();
+        let mut entries = Vec::with_capacity(lines.len());
+        for line in lines {
+            let parts: Vec<&str> = line.split('\t').collect();
+            let [source, code, text, count] = parts[..] else {
+                return Err(LearningError::Unavailable);
+            };
+            let source = match source {
+                "english" => LearningSource::English,
+                "voice" => LearningSource::Voice,
+                _ => return Err(LearningError::Unavailable),
+            };
+            let commits: u32 = count.parse().map_err(|_| LearningError::Unavailable)?;
+            if !(1..=64).contains(&code.len())
+                || !code.bytes().all(|b| b.is_ascii_lowercase())
+                || !(1..=256).contains(&text.len())
+                || text.chars().any(char::is_control)
+                || commits == 0
+            {
+                return Err(LearningError::Unavailable);
+            }
+            let entry = LearningEntry {
+                source,
+                code: code.to_owned(),
+                text: text.to_owned(),
+                commits,
+                revision,
+            };
+            if !ids.insert(entry.id()) {
+                return Err(LearningError::Unavailable);
+            }
+            entries.push(entry);
+        }
+        entries.sort_by_key(LearningEntry::id);
+        Ok(entries)
+    }
+
+    pub fn delete_personal_learning(
+        &self,
+        entry: &LearningEntry,
+    ) -> std::result::Result<LearningUndo, LearningError> {
+        if entry.revision != self.learning_revision()? {
+            return Err(LearningError::Conflict);
+        }
+        if entry.commits >= i32::MAX as u32 {
+            return Err(LearningError::TooLarge);
+        }
+        let fields = entry.fields();
+        let mut request = vec!["delete"];
+        request.extend(fields.iter().map(String::as_str));
+        self.learning_mutation(&request)?;
+        Ok(LearningUndo {
+            entry: entry.clone(),
+            revision: self.learning_revision()?,
+        })
+    }
+
+    pub fn undo_personal_learning(
+        &self,
+        undo: &LearningUndo,
+    ) -> std::result::Result<(), LearningError> {
+        if undo.revision != self.learning_revision()? {
+            return Err(LearningError::Conflict);
+        }
+        let fields = undo.entry.fields();
+        let mut request = vec!["restore"];
+        request.extend(fields.iter().map(String::as_str));
+        self.learning_mutation(&request)
+    }
+
+    /// Drop every session's cached learning view after external changes to the dictionaries.
+    pub fn invalidate_personal_learning(&self) -> Result<()> {
+        let mut state = self.lock()?;
+        for core in state.sessions.values_mut() {
+            if let Some(session) = core.session.as_mut().filter(|_| !core.lost) {
+                session.call("learning_invalidate", &[], 512)?;
+            }
+        }
+        state.observe_learning();
+        Ok(())
+    }
+
+    fn learning_revision(&self) -> std::result::Result<u64, LearningError> {
+        Ok(self
+            .lock()
+            .map_err(LearningError::Native)?
+            .learning_revision)
+    }
+
+    fn learning_mutation(&self, fields: &[&str]) -> std::result::Result<(), LearningError> {
+        let status = self.learning_request(fields)?.0.status;
+        // A failed native write may have applied part of the operation. Do not retain a
+        // stale snapshot or allow an older undo after any attempt.
+        self.invalidate_personal_learning()
+            .map_err(LearningError::Native)?;
+        match status.as_str() {
+            "ok" => Ok(()),
+            "conflict" => Err(LearningError::Conflict),
+            _ => Err(LearningError::Unavailable),
+        }
+    }
+
+    fn learning_request(
+        &self,
+        fields: &[&str],
+    ) -> std::result::Result<(crate::channel::Reply, u64), LearningError> {
+        let mut state = self.lock().map_err(LearningError::Native)?;
+        if !Self::all_sessions_idle(&mut state).map_err(LearningError::Native)?
+            || !state.can_read_learning()
+        {
+            return Err(LearningError::Busy);
+        }
+        let revision = state.learning_revision;
+        let live = state.sessions.values_mut().find(|core| core.available());
+        let mut temporary = None;
+        let session = match live {
+            Some(core) => core.session.as_mut().unwrap(),
+            None => temporary.insert(
+                self.runtime
+                    .session(SCHEMA)
+                    .map_err(LearningError::Native)?,
+            ),
+        };
+        let reply = session
+            .call("learning_manage", fields, 3 * 1024 * 1024)
+            .map_err(LearningError::Native)?
+            .ok_or(LearningError::Unavailable)?;
+        Ok((reply, revision))
     }
 }
 
@@ -898,8 +1131,8 @@ impl InputSession {
     /// Drain completed text once, including text preserved across a settings reload.
     pub fn take_commit(&self) -> Result<String> {
         let mut state = self.engine.lock()?;
+        let commit = Engine::read_commit(&mut state, self.id)?;
         let core = state.sessions.get_mut(&self.id).unwrap();
-        let commit = Engine::read_commit(core)?;
         let text = std::mem::take(&mut core.buffered_commit) + &commit;
         Ok(text)
     }

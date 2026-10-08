@@ -58,6 +58,10 @@ int ifp_call(uintptr_t session, const char* request, size_t capacity, char** res
  * init or patch load failed before any change. */
 int ifp_apply_schema_patch(uintptr_t session, const char* schema, const char* yaml,
                            const char* const* paths, size_t count, int* outcome);
+/* Back up (restore == 0) or restore a closed user dictionary `root/<name>.userdb` to/from the
+ * TSV snapshot `file`. Runs its own Rime instance: only while no runtime is initialized.
+ * -1: the snapshot or database was rejected; nothing is reported about why. */
+int ifp_personal_data_snapshot(const char* root, const char* name, const char* file, int restore);
 #ifdef __cplusplus
 }
 #endif
