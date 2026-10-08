@@ -25,8 +25,9 @@ package struct IFCandidateRankingMetadata: Equatable, Sendable {
 
 /// Exact dictionary phrases plus bounded, content-free Rime evidence, not a language model.
 ///
-/// Phrases live in a sorted, fixed-width index built once at dictionary preparation and
-/// mapped read-only at startup, so no key-event or startup path parses the dictionary.
+/// Phrases live in a sorted, fixed-width index built once at dictionary preparation and read
+/// whole into memory when the ranker loads, so no key-event path parses, maps or faults in
+/// the dictionary.
 package struct IFContextRanker: Sendable {
     package static let contextLimit = 16
     private static let magic = Array("IFCX".utf8)
@@ -39,7 +40,7 @@ package struct IFContextRanker: Sendable {
     private let tables: [(offset: Int, count: Int)]
 
     package init(index path: String) throws {
-        let data = try Data(contentsOf: URL(fileURLWithPath: path), options: .alwaysMapped)
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
         guard data.count >= Self.headerSize, Array(data.prefix(4)) == Self.magic else {
             throw IFDictionaryError("context-index", "Expected an InkFlow context index")
         }

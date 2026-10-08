@@ -69,7 +69,7 @@ Keep complete evidence directories under ignored `build/`. The [recorded macOS r
 
 ### Measurement boundaries
 
-Startup measures prepared-cache descriptor validation, context-index mapping, Rime initialization, session creation, and default configuration. It excludes process launch, dictionary compilation, and app/UI startup. Processes are fresh, but filesystem caches are not flushed; these are not disk-cold startup measurements.
+Startup measures prepared-cache descriptor validation, context-index loading, Rime initialization, session creation, and default configuration. It excludes process launch, dictionary compilation, and app/UI startup. Processes are fresh, but filesystem caches are not flushed; these are not disk-cold startup measurements.
 
 A key sample includes synchronous `IFEngine.input`, `takeCommit`, and `snapshot`. It excludes platform delivery, UI rendering, queued actor work, and telemetry. Input is the checked-in ASCII-letter corpus with uppercase modifiers, empty preceding context, no custom phrases, and nine candidates. It does not measure deletion, candidate selection, learned-user latency, or full application typing latency.
 
