@@ -25,8 +25,6 @@ package enum IFDictionaryToolBootstrap {
             let output = URL(fileURLWithPath: arguments[2])
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
             try IFSpellingGenerator.write(dictionary: dictionary, to: output)
-            try IFContextRanker.buildIndex(dictionary: dictionary)
-                .write(to: output.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename), options: .atomic)
         } else {
             throw IFDictionaryError("arguments", "Usage: dictionary-generator sources | generate SOURCES LEGACY CORRECTIONS OUTPUT | spelling DICTIONARY OUTPUT")
         }

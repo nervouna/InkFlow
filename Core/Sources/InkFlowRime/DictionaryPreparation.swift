@@ -72,9 +72,6 @@ package enum IFDictionaryPreparation {
                 // Keep replacement staging inside the sandbox's candidate directory.
                 try IFDictionaryFiles.atomicWrite(spelling[name]!, to: shared.appendingPathComponent(name))
             }
-            operation = "generate-context-index"
-            try IFDictionaryFiles.atomicWrite(IFContextRanker.buildIndex(dictionary: dictionary),
-                to: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
             operation = "create-isolated-directories"
             let cache = try IFDictionaryFiles.child("cache", in: root)
             let compiler = try IFDictionaryFiles.child("compile-user", in: root)
