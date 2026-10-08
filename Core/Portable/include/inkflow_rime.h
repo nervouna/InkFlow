@@ -61,12 +61,20 @@ enum {
   IFR_CONFIGURATION = 8,      /* A session could not apply its configuration. */
   IFR_IO = 9,
   IFR_STALE_SNAPSHOT = 10,
-  IFR_INVALID_CANDIDATE = 11
+  IFR_INVALID_CANDIDATE = 11,
+  IFR_ENGINE_ACTIVE = 12,     /* Personal-data work needs every engine destroyed first. */
+  IFR_INCOMPATIBLE = 13,      /* Another backup format, Rime version or dictionary set. */
+  IFR_UNKNOWN_FIELDS = 14,
+  IFR_SETTINGS = 15,
+  IFR_PHRASES = 16,
+  IFR_SNAPSHOT = 17,          /* A dictionary snapshot breaks the TSV contract. */
+  IFR_RECOVERY_REQUIRED = 18  /* An earlier import was interrupted; call ifr_personal_recover. */
 };
 
 typedef struct IFREngine IFREngine;
 typedef struct IFRSession IFRSession;
 typedef struct IFRSnapshot IFRSnapshot;
+typedef struct IFRBackup IFRBackup;
 
 typedef struct {
   const char* shared;        /* Prepared shared resources. */
@@ -185,6 +193,27 @@ int ifr_session_input_options(const IFRSession* session, uint32_t* options);
 IFRStatus ifr_session_set_ascii_mode(const IFRSession* session, int value);
 IFRStatus ifr_session_ascii_mode(const IFRSession* session, int* value);
 IFRStatus ifr_session_toggle_ascii_mode(const IFRSession* session, int* handled);
+
+/* Portable personal data: the macOS format-1 backup document. Parsing validates the
+ * document and keeps its portable settings; macOS-only preferences are listed as
+ * unsupported. Importing replaces the user directory's three Rime dictionaries with
+ * the backup's (absence removes the local one) with rollback on failure, and is
+ * rejected with IFR_ENGINE_ACTIVE while any engine is initialized in the process:
+ * destroy every session and engine first, import, then recreate the engine and apply
+ * the backup's settings through ifr_session_set_configuration. Phrase strings are
+ * borrowed from the backup. Never call these from the key path. */
+IFRStatus ifr_backup_parse(const uint8_t* bytes, size_t length, IFRBackup** backup);
+void ifr_backup_free(IFRBackup* backup);
+size_t ifr_backup_candidate_count(const IFRBackup* backup);
+uint32_t ifr_backup_input_options(const IFRBackup* backup);
+size_t ifr_backup_phrase_count(const IFRBackup* backup);
+/* Returns 1 and fills phrase, or 0 when index is out of range. */
+int ifr_backup_phrase(const IFRBackup* backup, size_t index, IFRPhrase* phrase);
+size_t ifr_backup_unsupported_count(const IFRBackup* backup);
+const char* ifr_backup_unsupported(const IFRBackup* backup, size_t index);
+IFRStatus ifr_backup_import(const IFRBackup* backup, const char* user);
+/* Finish an interrupted import in `user`; a no-op without a pending transaction. */
+IFRStatus ifr_personal_recover(const char* user);
 
 #ifdef __cplusplus
 }

@@ -10,6 +10,7 @@ use crate::{
         Action, Configuration, ConfigurationError, Engine, EngineError, InputSession, Mutation,
         Snapshot,
     },
+    personal::{self, Backup, PersonalError},
     phrases::CustomPhrase,
     preferences::{InputOption, InputPreferences},
 };
@@ -17,8 +18,8 @@ use std::{
     cell::RefCell,
     ffi::{CStr, CString, c_char, c_int, c_void},
     panic::{AssertUnwindSafe, catch_unwind},
-    path::PathBuf,
-    ptr,
+    path::{Path, PathBuf},
+    ptr, slice,
     sync::Arc,
 };
 
@@ -37,6 +38,13 @@ pub const CONFIGURATION: Status = 8;
 pub const IO: Status = 9;
 pub const STALE_SNAPSHOT: Status = 10;
 pub const INVALID_CANDIDATE: Status = 11;
+pub const ENGINE_ACTIVE: Status = 12;
+pub const INCOMPATIBLE: Status = 13;
+pub const UNKNOWN_FIELDS: Status = 14;
+pub const SETTINGS: Status = 15;
+pub const PHRASES: Status = 16;
+pub const SNAPSHOT: Status = 17;
+pub const RECOVERY_REQUIRED: Status = 18;
 
 pub struct Failure {
     status: Status,
@@ -78,6 +86,23 @@ impl From<EngineError> for Failure {
             EngineError::Io(_) => IO,
         };
         Self::new(status, message)
+    }
+}
+
+impl From<PersonalError> for Failure {
+    fn from(error: PersonalError) -> Self {
+        let status = match error {
+            PersonalError::Incompatible => INCOMPATIBLE,
+            PersonalError::UnknownFields => UNKNOWN_FIELDS,
+            PersonalError::Settings => SETTINGS,
+            PersonalError::Phrases(_) => PHRASES,
+            PersonalError::Snapshot => SNAPSHOT,
+            PersonalError::NativeSnapshot => NATIVE,
+            PersonalError::RecoveryRequired => RECOVERY_REQUIRED,
+            PersonalError::EngineActive => ENGINE_ACTIVE,
+            PersonalError::Io(_) => IO,
+        };
+        Self::new(status, error.to_string())
     }
 }
 
@@ -143,7 +168,9 @@ fn mask_from_options(input: &InputPreferences) -> u32 {
     InputOption::ALL
         .iter()
         .enumerate()
-        .fold(0, |mask, (bit, option)| mask | (u32::from(input.get(*option)) << bit))
+        .fold(0, |mask, (bit, option)| {
+            mask | (u32::from(input.get(*option)) << bit)
+        })
 }
 
 fn configuration_code(error: ConfigurationError) -> &'static CStr {
@@ -225,7 +252,8 @@ pub struct MutationRecord {
     pub after: *const SnapshotHandle,
 }
 
-pub type ObserverCallback = unsafe extern "C" fn(user_data: *mut c_void, mutation: *const MutationRecord);
+pub type ObserverCallback =
+    unsafe extern "C" fn(user_data: *mut c_void, mutation: *const MutationRecord);
 
 struct Observer {
     callback: ObserverCallback,
@@ -415,7 +443,9 @@ pub unsafe extern "C" fn ifr_session_snapshot(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_free(snapshot: *mut SnapshotHandle) {
     if !snapshot.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(snapshot) })));
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            drop(unsafe { Box::from_raw(snapshot) })
+        }));
     }
 }
 
@@ -683,6 +713,144 @@ pub unsafe extern "C" fn ifr_session_toggle_ascii_mode(
     })
 }
 
+/// A parsed macOS backup with NUL-terminated copies of its portable settings.
+pub struct BackupHandle {
+    backup: Backup,
+    phrases: Vec<(CString, CString, CString)>,
+    unsupported: Vec<CString>,
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_parse(
+    bytes: *const u8,
+    length: usize,
+    backup: *mut *mut BackupHandle,
+) -> Status {
+    guard(|| {
+        if backup.is_null() || (length != 0 && bytes.is_null()) {
+            return Err(Failure::argument("backup or bytes is NULL"));
+        }
+        if length > personal::MAXIMUM_DOCUMENT_BYTES {
+            return Err(Failure::new(INCOMPATIBLE, "document too large"));
+        }
+        let document = if length == 0 {
+            &[][..]
+        } else {
+            unsafe { slice::from_raw_parts(bytes, length) }
+        };
+        let parsed = Backup::from_json(document)?;
+        let phrases = parsed
+            .phrases
+            .iter()
+            .map(|p| Ok((c_string(&p.id)?, c_string(&p.code)?, c_string(&p.text)?)))
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let unsupported = parsed
+            .unsupported
+            .iter()
+            .map(|key| c_string(key))
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let handle = BackupHandle {
+            backup: parsed,
+            phrases,
+            unsupported,
+        };
+        unsafe { write(backup, Box::into_raw(Box::new(handle))) };
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_free(backup: *mut BackupHandle) {
+    if !backup.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(backup) })));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_candidate_count(backup: *const BackupHandle) -> usize {
+    unsafe { backup.as_ref() }.map_or(5, |b| b.backup.candidate_count)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_input_options(backup: *const BackupHandle) -> u32 {
+    unsafe { backup.as_ref() }.map_or_else(
+        || ifr_input_options_default(),
+        |b| mask_from_options(&b.backup.input),
+    )
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_phrase_count(backup: *const BackupHandle) -> usize {
+    unsafe { backup.as_ref() }.map_or(0, |b| b.phrases.len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_phrase(
+    backup: *const BackupHandle,
+    index: usize,
+    phrase: *mut Phrase,
+) -> c_int {
+    let Some((id, code, text)) = unsafe { backup.as_ref() }.and_then(|b| b.phrases.get(index))
+    else {
+        return 0;
+    };
+    unsafe {
+        write(
+            phrase,
+            Phrase {
+                id: id.as_ptr(),
+                code: code.as_ptr(),
+                text: text.as_ptr(),
+            },
+        )
+    };
+    1
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_unsupported_count(backup: *const BackupHandle) -> usize {
+    unsafe { backup.as_ref() }.map_or(0, |b| b.unsupported.len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_unsupported(
+    backup: *const BackupHandle,
+    index: usize,
+) -> *const c_char {
+    unsafe { backup.as_ref() }
+        .and_then(|b| b.unsupported.get(index))
+        .map_or(ptr::null(), |key| key.as_ptr())
+}
+
+/// Replace the user directory's dictionaries with the backup's. Rejected while any engine
+/// is initialized in this process; settings are applied by the frontend afterwards.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_backup_import(
+    backup: *const BackupHandle,
+    user: *const c_char,
+) -> Status {
+    guard(|| {
+        let backup = unsafe { reference(backup, "backup") }?;
+        let user = PathBuf::from(unsafe { text(user, "user") }?);
+        if crate::engine_active() {
+            return Err(Failure::new(ENGINE_ACTIVE, "an engine is initialized"));
+        }
+        Ok(personal::import(&user, &backup.backup.dictionaries)?)
+    })
+}
+
+/// Finish an interrupted import; a no-op without a pending transaction.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_recover(user: *const c_char) -> Status {
+    guard(|| {
+        let user = PathBuf::from(unsafe { text(user, "user") }?);
+        if crate::engine_active() {
+            return Err(Failure::new(ENGINE_ACTIVE, "an engine is initialized"));
+        }
+        Ok(personal::recover(Path::new(&user))?)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -695,6 +863,9 @@ mod tests {
         let mask = mask_from_options(&traditional);
         assert_eq!(mask, ifr_input_options_default() | (1 << 13));
         assert_eq!(options_from_mask(mask), traditional);
-        assert_eq!(configuration_code(ConfigurationError::PhraseWrite), c"phrase-write");
+        assert_eq!(
+            configuration_code(ConfigurationError::PhraseWrite),
+            c"phrase-write"
+        );
     }
 }

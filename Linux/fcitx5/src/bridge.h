@@ -137,5 +137,14 @@ inline std::string preceding_text(const std::string& text, std::size_t cursor, s
   return text.substr(offsets[first], offsets[cursor] - offsets[first]);
 }
 
+// One configured custom phrase, "code=text"; the engine validates both parts.
+inline bool parse_phrase(const std::string& entry, std::string& code, std::string& text) {
+  auto separator = entry.find('=');
+  if (separator == std::string::npos) return false;
+  code = entry.substr(0, separator);
+  text = entry.substr(separator + 1);
+  return !code.empty() && !text.empty();
+}
+
 }  // namespace inkflow
 #endif
