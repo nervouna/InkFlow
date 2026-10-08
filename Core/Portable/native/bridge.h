@@ -43,6 +43,21 @@ void ifp_snapshot_free(IFPSnapshot* snapshot);
 /* A successful empty read returns NULL. A non-NULL commit is consumed once. */
 int ifp_take_commit(uintptr_t session, char** commit);
 void ifp_string_free(char* string);
+/* Raw composition input; an empty composition yields an empty string. */
+int ifp_get_input(uintptr_t session, char** input);
+int ifp_highlight_candidate(uintptr_t session, size_t index, int* handled);
+int ifp_commit_composition(uintptr_t session, int* handled);
+int ifp_set_option(uintptr_t session, const char* option, int value);
+int ifp_get_option(uintptr_t session, const char* option, int* value);
+/* One synchronous property-channel round trip. NULL result: unanswered or a reply
+ * that would not fit in capacity bytes. Properties never retain request or reply. */
+int ifp_call(uintptr_t session, const char* request, size_t capacity, char** result);
+/* Replace whole configuration nodes of the schema with the patch's, reselect the
+ * schema in this session, then restore the originals. outcome: bit 0 patched,
+ * bit 1 selected, bit 2 restored. -1 with outcome 1/2/3: schema open, patch
+ * init or patch load failed before any change. */
+int ifp_apply_schema_patch(uintptr_t session, const char* schema, const char* yaml,
+                           const char* const* paths, size_t count, int* outcome);
 #ifdef __cplusplus
 }
 #endif

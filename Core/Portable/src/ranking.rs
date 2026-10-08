@@ -158,11 +158,94 @@ fn technical(text: &str) -> bool {
         .any(|suffix| canonical.ends_with(suffix))
 }
 
+/// Exact Han phrase frequencies, read whole into memory before key events.
+enum Phrases {
+    Map(HashMap<String, i64>),
+    /// The prepared `IFCX` index: one sorted fixed-width table per phrase length,
+    /// keyed by three bytes per NFC scalar so byte order is table order.
+    Index {
+        data: Vec<u8>,
+        tables: [(usize, usize); PHRASE_LIMIT - 1],
+    },
+}
+const PHRASE_LIMIT: usize = 8;
+const INDEX_HEADER: usize = 12 + (PHRASE_LIMIT - 1) * 4;
+
+fn encode(text: &str) -> Vec<u8> {
+    text.nfc()
+        .flat_map(|scalar| {
+            let value = scalar as u32;
+            [(value >> 16) as u8, (value >> 8) as u8, value as u8]
+        })
+        .collect()
+}
+
+impl Phrases {
+    fn frequency(&self, phrase: &str) -> Option<i64> {
+        match self {
+            Phrases::Map(map) => map.get(&normalized(phrase)).copied(),
+            Phrases::Index { data, tables } => {
+                let key = encode(phrase);
+                let length = key.len() / 3;
+                if !(2..=PHRASE_LIMIT).contains(&length) {
+                    return None;
+                }
+                let (offset, count) = tables[length - 2];
+                let record = length * 3 + 8;
+                let (mut low, mut high) = (0, count);
+                while low < high {
+                    let mid = (low + high) / 2;
+                    let start = offset + mid * record;
+                    match data[start..start + key.len()].cmp(&key[..]) {
+                        std::cmp::Ordering::Less => low = mid + 1,
+                        std::cmp::Ordering::Greater => high = mid,
+                        std::cmp::Ordering::Equal => {
+                            let bytes = &data[start + key.len()..start + record];
+                            return Some(u64::from_le_bytes(bytes.try_into().unwrap()) as i64);
+                        }
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+
 pub struct ContextRanker {
-    frequencies: HashMap<String, i64>,
+    frequencies: Phrases,
     longest: usize,
 }
 impl ContextRanker {
+    /// Load the prepared `pinyin_simp.context.bin` written by dictionary preparation.
+    pub fn from_index(data: Vec<u8>) -> Result<Self, String> {
+        if data.len() < INDEX_HEADER || &data[..4] != b"IFCX" {
+            return Err("Expected an InkFlow context index".into());
+        }
+        let field = |position: usize| {
+            u32::from_le_bytes(data[4 * position..4 * position + 4].try_into().unwrap()) as usize
+        };
+        let mut tables = [(0, 0); PHRASE_LIMIT - 1];
+        let mut offset = INDEX_HEADER;
+        for length in 2..=PHRASE_LIMIT {
+            let count = field(length + 1);
+            tables[length - 2] = (offset, count);
+            offset = offset
+                .checked_add(
+                    count
+                        .checked_mul(length * 3 + 8)
+                        .ok_or("Oversized context index")?,
+                )
+                .ok_or("Oversized context index")?;
+        }
+        if field(1) != 1 || field(2) > PHRASE_LIMIT || offset != data.len() {
+            return Err("Unsupported or truncated context index".into());
+        }
+        Ok(Self {
+            longest: field(2),
+            frequencies: Phrases::Index { data, tables },
+        })
+    }
+
     /// Build before accepting key events. Ranking itself does not access storage.
     pub fn from_dictionary(text: &str) -> Self {
         let mut frequencies = HashMap::<String, i64>::new();
@@ -195,7 +278,7 @@ impl ContextRanker {
             longest = longest.max(count);
         }
         Self {
-            frequencies,
+            frequencies: Phrases::Map(frequencies),
             longest,
         }
     }
@@ -241,13 +324,16 @@ impl ContextRanker {
                     return (0, 0);
                 }
                 for count in (1..=prefix.len()).rev() {
+                    if count + first_length > PHRASE_LIMIT {
+                        continue;
+                    }
                     let phrase: String = prefix[..count]
                         .iter()
                         .rev()
                         .copied()
                         .chain(std::iter::once(candidate.as_str()))
                         .collect();
-                    if let Some(&frequency) = self.frequencies.get(&normalized(&phrase)) {
+                    if let Some(frequency) = self.frequencies.frequency(&phrase) {
                         return (count, frequency);
                     }
                 }

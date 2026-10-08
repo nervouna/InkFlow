@@ -1,5 +1,10 @@
-//! Minimal synchronous desktop Rime host. No frontend or InkFlow ranking policy.
+//! Synchronous desktop Rime host: the native `Runtime`/`Session` layer plus the
+//! InkFlow session policy in [`engine`].
+pub mod channel;
+pub mod engine;
 mod ffi;
+pub mod phrases;
+pub mod preferences;
 pub mod ranking;
 
 use std::{
@@ -19,6 +24,8 @@ pub enum Error {
     InvalidCandidate,
     Poisoned,
     Native(i32),
+    /// A session could not apply its configuration; the code names the failure.
+    Configuration(&'static str),
 }
 
 impl std::fmt::Display for Error {
@@ -247,6 +254,140 @@ impl Session {
         value.map(Some)
     }
 }
+/// Outcome of replacing schema nodes for one session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct PatchOutcome {
+    pub patched: bool,
+    pub selected: bool,
+    pub restored: bool,
+}
+
+/// Why a schema patch could not start; nothing was changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PatchFailure {
+    SchemaOpen,
+    PatchInit,
+    PatchLoad,
+}
+
+impl Session {
+    fn owned_string(raw: *mut c_char) -> Result<String> {
+        if raw.is_null() {
+            return Ok(String::new());
+        }
+        let value = unsafe { copy(raw) };
+        unsafe { ffi::ifp_string_free(raw) };
+        value
+    }
+
+    /// Rime's raw composition input.
+    pub(crate) fn input(&mut self) -> Result<String> {
+        let _lock = lock()?;
+        let mut raw = std::ptr::null_mut();
+        check(unsafe { ffi::ifp_get_input(self.id, &mut raw) })?;
+        Self::owned_string(raw)
+    }
+
+    pub(crate) fn highlight(&mut self, index: usize) -> Result<bool> {
+        let _lock = lock()?;
+        self.published = None;
+        let mut handled = 0;
+        check(unsafe { ffi::ifp_highlight_candidate(self.id, index, &mut handled) })?;
+        Ok(handled != 0)
+    }
+
+    /// Select a native index without snapshot identity; the policy layer validates its own.
+    pub(crate) fn select_native(&mut self, index: usize) -> Result<bool> {
+        let _lock = lock()?;
+        self.published = None;
+        Ok(unsafe { ffi::ifp_select_candidate(self.id, index) } == 0)
+    }
+
+    pub(crate) fn commit_composition(&mut self) -> Result<bool> {
+        let _lock = lock()?;
+        self.published = None;
+        let mut handled = 0;
+        check(unsafe { ffi::ifp_commit_composition(self.id, &mut handled) })?;
+        Ok(handled != 0)
+    }
+
+    pub(crate) fn set_option(&mut self, option: &str, value: bool) -> Result<()> {
+        let option = string(option)?;
+        let _lock = lock()?;
+        check(unsafe { ffi::ifp_set_option(self.id, option.as_ptr(), i32::from(value)) })
+    }
+
+    pub(crate) fn option(&mut self, option: &str) -> Result<bool> {
+        let option = string(option)?;
+        let _lock = lock()?;
+        let mut value = 0;
+        check(unsafe { ffi::ifp_get_option(self.id, option.as_ptr(), &mut value) })?;
+        Ok(value != 0)
+    }
+
+    /// One synchronous round trip through this session's Lua modules. `None` when no module
+    /// answers, the reply does not fit `capacity` bytes, or the request cannot be framed.
+    pub(crate) fn call(
+        &mut self,
+        op: &str,
+        fields: &[&str],
+        capacity: usize,
+    ) -> Result<Option<channel::Reply>> {
+        let Some(request) = channel::request(op, fields) else {
+            return Ok(None);
+        };
+        let request = string(&request)?;
+        let _lock = lock()?;
+        let mut raw = std::ptr::null_mut();
+        check(unsafe { ffi::ifp_call(self.id, request.as_ptr(), capacity, &mut raw) })?;
+        if raw.is_null() {
+            return Ok(None);
+        }
+        Ok(channel::reply(&Self::owned_string(raw)?, op))
+    }
+
+    pub(crate) fn apply_schema_patch(
+        &mut self,
+        schema: &str,
+        yaml: &str,
+        paths: &[&str],
+    ) -> Result<std::result::Result<PatchOutcome, PatchFailure>> {
+        let schema = string(schema)?;
+        let yaml = string(yaml)?;
+        let paths = paths
+            .iter()
+            .map(|p| string(p))
+            .collect::<Result<Vec<_>>>()?;
+        let pointers: Vec<_> = paths.iter().map(|p| p.as_ptr()).collect();
+        let _lock = lock()?;
+        self.published = None;
+        let mut outcome = 0;
+        let status = unsafe {
+            ffi::ifp_apply_schema_patch(
+                self.id,
+                schema.as_ptr(),
+                yaml.as_ptr(),
+                pointers.as_ptr(),
+                pointers.len(),
+                &mut outcome,
+            )
+        };
+        if status == -1 {
+            return Ok(Err(match outcome {
+                1 => PatchFailure::SchemaOpen,
+                2 => PatchFailure::PatchInit,
+                _ => PatchFailure::PatchLoad,
+            }));
+        }
+        check(status)?;
+        Ok(Ok(PatchOutcome {
+            patched: outcome & 1 != 0,
+            selected: outcome & 2 != 0,
+            restored: outcome & 4 != 0,
+        }))
+    }
+}
+
 impl Drop for Session {
     fn drop(&mut self) {
         let _lock = ENGINE.lock().unwrap_or_else(|e| e.into_inner());

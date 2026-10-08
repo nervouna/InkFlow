@@ -58,4 +58,23 @@ unsafe extern "C" {
     pub fn ifp_snapshot_free(snapshot: *mut Snapshot);
     pub fn ifp_take_commit(session: usize, commit: *mut *mut c_char) -> c_int;
     pub fn ifp_string_free(string: *mut c_char);
+    pub fn ifp_get_input(session: usize, input: *mut *mut c_char) -> c_int;
+    pub fn ifp_highlight_candidate(session: usize, index: usize, handled: *mut c_int) -> c_int;
+    pub fn ifp_commit_composition(session: usize, handled: *mut c_int) -> c_int;
+    pub fn ifp_set_option(session: usize, option: *const c_char, value: c_int) -> c_int;
+    pub fn ifp_get_option(session: usize, option: *const c_char, value: *mut c_int) -> c_int;
+    pub fn ifp_call(
+        session: usize,
+        request: *const c_char,
+        capacity: usize,
+        result: *mut *mut c_char,
+    ) -> c_int;
+    pub fn ifp_apply_schema_patch(
+        session: usize,
+        schema: *const c_char,
+        yaml: *const c_char,
+        paths: *const *const c_char,
+        count: usize,
+        outcome: *mut c_int,
+    ) -> c_int;
 }
