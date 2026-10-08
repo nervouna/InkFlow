@@ -615,13 +615,16 @@ struct ControllerTests {
         // Check after the defer restored permissions, including on the expected RED run.
         check(warning != nil, "An unwritable phrase directory must produce a settings warning")
         check(handled && !engine.snapshot().preedit.isEmpty)
-        check(retained, "CP-001: typing must retain the warning while failed settings remain deferred")
+        check(retained, "CP-001: typing must retain the warning of a failed save")
         check(controller.handle(keyEvent(0, "z"), client: client))
-        check(settings.inputSettingsError == warning, "Restored permissions alone must not clear a deferred warning")
+        check(settings.inputSettingsError == warning, "Restored permissions alone must not clear the warning")
         check(controller.handle(keyEvent(53, ""), client: client))
-        check(settings.inputSettingsError == nil && engine.configurationError == nil)
+        check(settings.inputSettingsError == warning && engine.configurationError == warning,
+              "No key event retries a failed save: the file is written on the settings path only")
+        let saved = try settings.saveCustomPhrase(id: phrase.id, code: phrase.code, text: "警告恢复后的新地址")
+        check(settings.inputSettingsError == nil && engine.configurationError == nil, "A changed save writes the file and clears the warning")
         for letter in "dz" { check(controller.handle(keyEvent(0, String(letter)), client: client)) }
-        check(engine.snapshot().candidates.first == phrase.text)
+        check(engine.snapshot().candidates.first == saved.text)
         check(controller.handle(keyEvent(53, ""), client: client))
 
         let failedAgain: Bool, reverted: Bool
@@ -631,17 +634,19 @@ struct ControllerTests {
                 do { try files.setAttributes([.posixPermissions: permissions], ofItemAtPath: user) }
                 catch { check(false, "Cannot restore temporary directory permissions: \(error)") }
             }
-            try settings.saveCustomPhrase(id: phrase.id, code: phrase.code, text: "尚未载入的修改")
+            try settings.saveCustomPhrase(id: saved.id, code: saved.code, text: "尚未载入的修改")
             failedAgain = settings.inputSettingsError != nil
-            try settings.saveCustomPhrase(id: phrase.id, code: phrase.code, text: phrase.text)
+            try settings.saveCustomPhrase(id: saved.id, code: saved.code, text: saved.text)
             reverted = settings.inputSettingsError == nil && engine.configurationError == nil
         }
         check(failedAgain && reverted, "Returning to the already-applied configuration must clear the warning")
-        try settings.deleteCustomPhrase(id: phrase.id)
-        print("PASS CP-001: write failure warning survives typing/deferred reload, clears after successful idle retry or return to applied settings")
+        try settings.deleteCustomPhrase(id: saved.id)
+        print("PASS CP-001: write failure warning survives typing and restored permissions, clears after a new save or return to applied settings")
     }
 
     @MainActor static func customPhrases(settings: IFSettings) throws {
+        // Phrases reload in every session at once; earlier autoreleased fixtures must not keep composing.
+        for engine in IFEngine.liveSessions { engine.clear(); _ = engine.takeCommit() }
         let client = RecordingClient()
         let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
                                                 settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!

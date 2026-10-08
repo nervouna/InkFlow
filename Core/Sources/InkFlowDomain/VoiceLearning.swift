@@ -63,12 +63,12 @@ package struct VoiceAliasSnapshot: Equatable, Sendable {
         }
     }
 
-    package init(payload: String, generation: UInt64, revision: UInt64) {
-        guard payload.utf8.count <= Self.byteLimit, payload.hasPrefix("ok\n") else {
+    package init(status: String, rows: String, generation: UInt64, revision: UInt64) {
+        guard status == "ok", rows.utf8.count <= Self.byteLimit else {
             self = .unknown(generation: generation, revision: revision); return
         }
         var parsed: [Entry] = []
-        for row in payload.dropFirst(3).split(separator: "\n") {
+        for row in rows.split(separator: "\n") {
             let fields = row.split(separator: "\t", omittingEmptySubsequences: false)
             guard fields.count == 3, let commits = Int(fields[2]), commits > 0 else {
                 self = .unknown(generation: generation, revision: revision); return

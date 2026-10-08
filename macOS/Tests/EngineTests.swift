@@ -44,6 +44,7 @@ struct EngineTests {
         if selected("basic") {
             EngineRegression.chineseDictionaryCoverage()
             try EngineRegression.runCases(event: nativeEvent)
+            EngineRegression.propertyChannel()
         }
         if selected("english") {
             try EngineRegression.domainVocabulary()

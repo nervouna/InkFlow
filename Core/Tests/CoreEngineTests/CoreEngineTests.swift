@@ -24,7 +24,7 @@ import InkFlowEngineTestSupport
         if selected("options") { try EngineRegression.inputSettings(user: user) }
         let schemaURL = URL(fileURLWithPath: user).appendingPathComponent("build/inkflow_pinyin.schema.yaml")
         let schemaBefore = try Data(contentsOf: schemaURL)
-        if selected("basic") { EngineRegression.chineseDictionaryCoverage(); try EngineRegression.runCases() }
+        if selected("basic") { EngineRegression.chineseDictionaryCoverage(); try EngineRegression.runCases(); EngineRegression.propertyChannel() }
         if selected("english") {
             try EngineRegression.domainVocabulary()
             EngineRegression.englishAdmission()

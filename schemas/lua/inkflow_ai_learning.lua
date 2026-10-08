@@ -1,22 +1,22 @@
 -- Writer for the ordinary Pinyin user dictionary. No independent candidate stream.
+local channel = require("inkflow_channel")
 local M = {}
 
 -- Lua Memory inherits native commit/key callbacks. Keeping its user_dict alive
 -- between callbacks would prematurely commit ordinary undoable learning.
 local function with_memory(env, operation)
   local memory
-  local ok, result = pcall(function()
+  local called, status, body = pcall(function()
     memory = Memory(env.engine, env.engine.schema, "translator")
     return operation(memory)
   end)
   -- Clear native dictionary handles even when an operation fails. The remaining
   -- callbacks then return immediately until Lua GC destroys/disconnects the object.
   if memory then memory:disconnect() end
-  return ok, result
+  return called, status, body
 end
 
-local function readings(env, context, input, text, memory)
-  local path = context:get_property("inkflow_ai_reverse_path")
+local function readings(env, context, path, input, text, memory)
   if env.reverse_path ~= path then
     env.reverse = ReverseDb(path)
     env.reverse_path = path
@@ -50,62 +50,65 @@ local function readings(env, context, input, text, memory)
   return table.concat(rows, "\n")
 end
 
-function M.init(env)
-  env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
-    if name == "inkflow_voice_lexicon" then
-      if context:get_property(name) == "" then return end
-      -- The Swift caller waits past the native undo window before reading: releasing
-      -- a temporary UserDictionary commits any shared pending transaction. Never
-      -- call this transport directly from a key callback or retain its raw pointer.
-      local ok, result = with_memory(env, function(memory)
-        if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
-        -- Empty predictive prefix caps accepted rows in native LookupWords, in key order:
-        -- keep the cap above a typical user dictionary so later codes stay visible.
-        local iterator = memory.user_dict:lookup_words("", true, 8192)
-        local rows, bytes = {"ok"}, 3
-        for entry in iterator:iter() do
-          local text, code = entry.text, entry.custom_code
-          if text and code and not text:find("[%c]") and code:match("^[a-z ]+$") then
-            local row = text .. "\t" .. code .. "\t" .. tostring(entry.commit_count)
-            if bytes + #row + 1 > 524288 then break end
-            rows[#rows + 1] = row
-            bytes = bytes + #row + 1
-          end
-        end
-        return table.concat(rows, "\n") .. "\n"
-      end)
-      context:set_property("inkflow_voice_lexicon_result", ok and result or "unknown")
-      return
-    end
-    if name == "inkflow_ai_readings" then
-      local input, text = context:get_property(name):match("^([^\t]*)\t([^\t\r\n]+)$")
-      if input and text then
-        local ok, result = with_memory(env, function(memory)
-          return readings(env, context, input, text, memory)
-        end)
-        context:set_property("inkflow_ai_readings_result", ok and result or "")
+local function voice_lexicon(env)
+  -- The Swift caller waits past the native undo window before reading: releasing
+  -- a temporary UserDictionary commits any shared pending transaction. Never
+  -- call this transport directly from a key callback or retain its raw pointer.
+  local called, status, body = with_memory(env, function(memory)
+    if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
+    -- Empty predictive prefix caps accepted rows in native LookupWords, in key order:
+    -- keep the cap above a typical user dictionary so later codes stay visible.
+    local iterator = memory.user_dict:lookup_words("", true, 8192)
+    local rows, bytes = {}, 3
+    for entry in iterator:iter() do
+      local text, code = entry.text, entry.custom_code
+      if text and code and not text:find("[%c]") and code:match("^[a-z ]+$") then
+        local row = text .. "\t" .. code .. "\t" .. tostring(entry.commit_count)
+        if bytes + #row + 1 > 524288 then break end
+        rows[#rows + 1] = row
+        bytes = bytes + #row + 1
       end
-      return
     end
-    if name ~= "inkflow_ai_learning" then return end
-    local payload = context:get_property(name)
-    if payload == "" then return end
-    local code, text = payload:match("^([a-z ]+ )\t([^\t\r\n]+)$")
-    if not code or not text then return end
-    local ok, updated = with_memory(env, function(memory)
-      if not memory:start_session() then return false end
-      local written, result = pcall(function()
-        local entry = DictEntry()
-        entry.text = text
-        entry.custom_code = code
-        return memory:update_userdict(entry, 1, "")
-      end)
-      -- Always close the transaction, including a failed update.
-      local finished = memory:finish_session()
-      return written and result and finished
-    end)
-    context:set_property("inkflow_ai_learning_result", ok and updated and "ok" or "failed")
+    return "ok", table.concat(rows, "\n") .. (#rows > 0 and "\n" or "")
   end)
+  if not called then return "unknown" end
+  return status, body
+end
+
+local function ai_readings(env, fields, context)
+  local path, input, text = fields[1], fields[2], fields[3]
+  if #fields ~= 3 or text == "" then return "failed" end
+  local called, body = with_memory(env, function(memory)
+    return readings(env, context, path, input, text, memory)
+  end)
+  if not called then return "failed" end
+  return "ok", body
+end
+
+local function ai_learning(env, fields)
+  local code, text = fields[1], fields[2]
+  if #fields ~= 2 or not code:match("^[a-z ]+ $") or text == "" then return "failed" end
+  local called, updated = with_memory(env, function(memory)
+    if not memory:start_session() then return false end
+    local written, result = pcall(function()
+      local entry = DictEntry()
+      entry.text = text
+      entry.custom_code = code
+      return memory:update_userdict(entry, 1, "")
+    end)
+    -- Always close the transaction, including a failed update.
+    local finished = memory:finish_session()
+    return written and result and finished
+  end)
+  return called and updated and "ok" or "failed"
+end
+
+function M.init(env)
+  env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
+    voice_lexicon = function() return voice_lexicon(env) end,
+    ai_readings = function(fields, context) return ai_readings(env, fields, context) end,
+    ai_learning = function(fields) return ai_learning(env, fields) end,
+  }))
 end
 
 function M.fini(env)

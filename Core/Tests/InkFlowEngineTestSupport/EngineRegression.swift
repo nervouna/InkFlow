@@ -338,6 +338,7 @@ package enum EngineRegression {
         check(engine.snapshot().candidates.first == "我的接口" && allCandidates(engine).contains("API"),
               "Explicit custom phrases keep priority while technical English remains reachable")
         engine.clear()
+        engine.setConfiguration(candidateCount: 5, customPhrases: [])
         print("PASS domain vocabulary: structured technology source plus representative case/punctuation/space goldens, aliases, prefix/backspace, mixed boundaries and custom phrase coexistence")
     }
 
@@ -387,7 +388,7 @@ package enum EngineRegression {
     @MainActor package static func missingEnglishResources(shared: String, user: String) throws {
         for resource in ["inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                          "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                         "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua"] {
+                         "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua", "lua/inkflow_channel.lua"] {
             let copy = FileManager.default.temporaryDirectory.appendingPathComponent("inkflow-missing-\(UUID().uuidString)")
             try FileManager.default.copyItem(at: URL(fileURLWithPath: shared), to: copy)
             defer { try? FileManager.default.removeItem(at: copy) }
@@ -534,6 +535,7 @@ package enum EngineRegression {
         check(allCandidates(engine).contains("email"), "Custom phrase priority retains ordinary English")
         engine.key(32)
         check(engine.takeCommit() == "电子邮件")
+        engine.setConfiguration(candidateCount: 5, customPhrases: [])
         print("PASS English integration: Chinese context priority, English reachability/order, mixed commits and custom phrase coexistence")
     }
 
@@ -556,6 +558,7 @@ package enum EngineRegression {
         check(phrases.allSatisfy { all.contains($0.text) },
               "Bounded lookahead retains every high-cardinality candidate across pages")
         engine.clear()
+        engine.setConfiguration(candidateCount: 9, customPhrases: [])
         print("PASS short-conflict bounds: 256-candidate lookahead, 1024-candidate latency/memory envelope, pagination and exact reachability")
     }
 
@@ -645,7 +648,7 @@ package enum EngineRegression {
                      "easy_en.schema.yaml", "easy_en.dict.yaml",
                      "inkflow_mixed.schema.yaml", "inkflow_mixed.dict.yaml",
                      "lua/inkflow_english.lua", "lua/inkflow_mixed.lua", "lua/inkflow_short_conflict.lua",
-                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua",
+                     "lua/inkflow_ai_learning.lua", "lua/inkflow_input_coverage.lua", "lua/inkflow_channel.lua",
                      "opencc/inkflow_emoji.json", "opencc/emoji.txt"] {
             try files.createSymbolicLink(at: directory.appendingPathComponent(name),
                                          withDestinationURL: URL(fileURLWithPath: shared).appendingPathComponent(name))
@@ -777,8 +780,8 @@ package enum EngineRegression {
         check(a.snapshot().page == 1 && a.snapshot().candidates == ["地址丁", "地址戊", "地址己"])
         a.key(50); check(a.takeCommit() == "地址戊")
         let shiPhrases = phrases.prefix(12).map { CustomPhrase(id: $0.id, code: "shi", text: $0.text) }
-        a.setConfiguration(candidateCount: 3, customPhrases: shiPhrases)
         type(b, "shi"); let ordinary = b.snapshot().candidates; b.clear()
+        a.setConfiguration(candidateCount: 3, customPhrases: shiPhrases)
         type(a, "shi")
         for _ in 0..<4 { a.key(0xff56) }
         check(!ordinary.isEmpty && a.snapshot().candidates == ordinary, "Ordinary candidates must remain after all custom phrases")
@@ -801,7 +804,10 @@ package enum EngineRegression {
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.takeCommit() == "地址甲")
         type(a, "dz"); check(a.snapshot().candidates.first == "更新地址" && a.candidateCount == 3)
-        a.clear(); type(b, "dz"); check(b.snapshot().candidates.first == "地址甲")
+        a.clear(); type(b, "dz")
+        check(b.snapshot().candidates.first == "更新地址" && b.candidateCount == 3,
+              "Every idle session reloads the saved phrases together and keeps its own count")
+        b.clear()
         do {
             let fresh = IFEngine()!
             fresh.setConfiguration(candidateCount: 3, customPhrases: [changed])
@@ -831,11 +837,19 @@ package enum EngineRegression {
         try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user)
         check(writeFailed, "An unwritable dictionary directory must surface failure and retain the old configuration")
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
-        check(a.configurationError == nil)
-        type(a, "dz"); check(a.snapshot().candidates.first == changed.text); a.clear()
+        check(a.configurationError != nil && a.candidateCount == 5,
+              "The same request is pushed on every refresh and must not retry the write")
+        let retried = try CustomPhrase.validated(id: changed.id, code: "dz", text: "重试地址")
+        a.setConfiguration(candidateCount: 3, customPhrases: [retried])
+        check(a.configurationError == nil, "A changed request writes the file again")
+        type(a, "dz"); check(a.snapshot().candidates.first == retried.text && a.candidateCount == 3); a.clear()
+        let file = URL(fileURLWithPath: user).appendingPathComponent("custom_phrase.txt")
+        let saved = try String(contentsOf: file, encoding: .utf8)
+        check(saved == "# no comment\n重试地址\tdz\t1\n", "Rime's native custom_phrase.txt holds the saved phrases")
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: user).filter { $0.hasPrefix("inkflow_phrases_") }
-        check(leftovers.isEmpty, "Temporary dictionaries must be removed after synchronous load")
-        print("PASS custom phrase engine: exact match, priority/coexistence, Unicode/hash text, dedup, native pagination/digits/click, coalesced idle reload, pending commits, ASCII, existing/fresh sessions, removal after selection, write failure/retry, TSV cleanup")
+        check(leftovers.isEmpty, "No temporary dictionaries")
+        a.setConfiguration(candidateCount: 5, customPhrases: [])
+        print("PASS custom phrase engine: exact match, priority/coexistence, Unicode/hash text, dedup, native pagination/digits/click, coalesced idle reload, pending commits, ASCII, shared/fresh sessions, removal after selection, write failure/retry, native custom_phrase.txt")
     }
 
     @MainActor package static func runCases(event: Event = rimeEvent) throws {
@@ -1058,6 +1072,39 @@ package enum EngineRegression {
         check(internalPrefix.takeCommit() == expectedRemaining && internalPlain.takeCommit() == expectedRemaining)
         check(internalPrefix.snapshot().preedit.isEmpty && internalPlain.snapshot().preedit.isEmpty)
         print("PASS context engine: real phrases, 3/5/9 pages, stable fallback, digits/click/default/arrow mappings, paging, raw Return, edit/cancel, partial selection, session isolation")
+    }
+
+    /// Swift–Lua requests travel through one versioned property protocol.
+    @MainActor package static func propertyChannel() {
+        check(IFRimeChannel.request("input_coverage", ["9", "3"]) == "1\tinput_coverage\t9\t3")
+        check(IFRimeChannel.request("learning_invalidate", []) == "1\tlearning_invalidate")
+        check(IFRimeChannel.request("ai_learning", ["ni hao ", "你好"]) == "1\tai_learning\tni hao \t你好")
+        for (op, fields) in [("", ["a"]), ("Input", []), ("ai-learning", []), ("ai_learning", ["a\tb"]),
+                             ("ai_learning", ["a\nb"]), ("ai_learning", ["a\rb"])] {
+            check(IFRimeChannel.request(op, fields) == nil, "Framing characters and bad operation names fail closed: \(op) \(fields)")
+        }
+        check(IFRimeChannel.reply("1\tvoice_lexicon\tok\n你好\tni hao\t2\n", op: "voice_lexicon") ==
+              IFRimeChannel.Reply(status: "ok", body: "你好\tni hao\t2\n"))
+        check(IFRimeChannel.reply("1\tai_learning\tfailed", op: "ai_learning") == IFRimeChannel.Reply(status: "failed"))
+        check(IFRimeChannel.reply("1\tai_learning\tfailed\n", op: "ai_learning") == IFRimeChannel.Reply(status: "failed"))
+        check(IFRimeChannel.reply("1\tinput_coverage\tok\n9,3;0,4,n,1,0,n", op: "input_coverage")?.body == "9,3;0,4,n,1,0,n")
+        for result in ["", "ok", "2\tai_learning\tok", "1\tai_readings\tok", "1\tai_learning\t", "1\tai_learning\tOK",
+                       "1\tai_learning\tok\textra", "1\tai_learning", "\n1\tai_learning\tok"] {
+            check(IFRimeChannel.reply(result, op: "ai_learning") == nil, "Other versions, operations or malformed headers fail closed: \(result)")
+        }
+        let engine = IFEngine()!
+        check(engine.call("learning_invalidate") == IFRimeChannel.Reply(status: "ok"), "A live module answers a version 1 request")
+        check(engine.call("no_such_operation") == nil, "No module answers an unknown operation")
+        check(engine.call("ai_learning", ["bad code", "你好"])?.status == "failed", "Modules validate their own fields")
+        check(engine.call("input_coverage", ["0", "3"])?.status == "failed", "Input coverage without a composition fails closed")
+        let api = IFEngine.api.pointee
+        api.set_property(engine.session, IFRimeChannel.resultProperty, "")
+        api.set_property(engine.session, IFRimeChannel.requestProperty, "2\tlearning_invalidate")
+        var buffer = [CChar](repeating: 0, count: 64)
+        check(api.get_property(engine.session, IFRimeChannel.resultProperty, &buffer, buffer.count) == 0,
+              "Lua leaves another protocol version unanswered")
+        api.set_property(engine.session, IFRimeChannel.requestProperty, "")
+        print("PASS property channel: version 1 framing, field validation, reply parsing, live dispatch and version rejection")
     }
 
     @MainActor package static func contextCustomPhrasePriority() {
