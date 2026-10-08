@@ -2,26 +2,26 @@
   "formatVersion": 1,
   "configuration": "release",
   "target": "arm64-apple-macosx26.0",
-  "sourceRevision": "75e5c70e85164bfd9fd67e3e0f9dc1829dcd48f0",
+  "sourceRevision": "c918273edf1341199cf2b5a6bd84f98c5e473b79",
   "behaviorProvenance": {
     "Core/DataSHA256": "7a2e3d3e6c0e8d6ecf3b41db7ae3a8279dee4c260fdea935b9d32d1e4306624a",
     "Core/Package.swiftSHA256": "b3010fbd3bbbe1a940b9d1d34a03ed0f697d022cbad7043fbe5f82029422f84a",
-    "Core/SourcesSHA256": "5d007f9b473baa946e3243e89dc29917df85c52ea2b9aa9592aa254a45e0a315",
+    "Core/SourcesSHA256": "e2770d57b58ca4e1854fab3eae1db81ebf30990d67a3b1a6629f98c320defa3e",
     "Core/configSHA256": "b0f3f6b084b83151b0447939b0cfd0cc29c3bbf99a3ea708615a9d7cece3ac99",
     "Core/scripts/prepare-rime.shSHA256": "696530b0a42a92e5ff619a3a7c4b93647930d81c64723b6e8adca8fddbd59ccb",
     "Core/scripts/swift-package.shSHA256": "cfb9ff33e8c4041df1d6b893f9ba4002ce3ca95fddcf6f956baf7678e9411a09",
     "Core/scripts/test-quality-baseline.shSHA256": "4409ac37bbcccad9adb0550347cc86832cffa599100d65eaa89ab4c66ed98526",
     "appVersion": "0.6.1",
-    "compiledResourcesSHA256": "28f2d948163dd3c3f3845112fc315934c81a922e69d7be53fb4c4d68f5616a63",
+    "compiledResourcesSHA256": "41337c247717931b2a0324b574711d84c0f5a1a87645082109c7a6c5e897cca6",
     "fixtureSHA256": "79bfeb612416bb805d0bd524f20a29b8175e65c3f04b9565b2f6ab7a36ab7d28",
     "librimeSHA256": "1adb725a081b0accc1451034f6f1bb78cbfe8252a65245f1511f4b3f2038c487",
     "luaPluginSHA256": "9e5086f73b90481530bb2aa08a615044c90242eee4b98eef12fcdd1a1c391e68",
     "macOS/scripts/dependencies.shSHA256": "4e684ca4c32bec2218173a6e98d1579cecf9b4d88e0c08a8be8a21183cd481d8",
     "resourcesSHA256": "2b58eca13d37156a9af85070f14b6e15ae86aa546879317598b0f7995eb77633",
-    "runnerBinarySHA256": "63f0a28cce1054bb3fc15d088ee7059d5b137123eabb15eff518402225037c80",
+    "runnerBinarySHA256": "ba4dced742dca4fec85a53e26d72a9780a3962fd79038e2bc83a4e5e0b28a8ac",
     "runnerSHA256": "d82686e296f7fd04d5c45c1a670a9ad94365c401677415c6f50e11f611f7e001",
     "schemasSHA256": "a2b03669d40cd3686112e773f4cb4ba5000c54fc14a8c1e1d2c499dd4a0b3191",
-    "sourceRevision": "75e5c70e85164bfd9fd67e3e0f9dc1829dcd48f0",
+    "sourceRevision": "c918273edf1341199cf2b5a6bd84f98c5e473b79",
     "system": "Version 27.0 (Build 26A428)"
   },
   "system": "macOS-27.0-arm64-arm-64bit-Mach-O",
@@ -36,15 +36,15 @@
     "Core/Tests/PerformanceBaseline/PerformanceBaseline.swift": "0cc411bf0b8624f92d1a677956d1b452bdb837025e2143833a20dcb1e00bfb3e",
     "Core/scripts/capture-migration-baseline.sh": "18b42df332a5581499240a6205ec8b005333143d0d2a930276adce6387141870",
     "Core/scripts/summarize-performance.py": "93a540e0fbcb21f9d8c5d78fc179fde65cc1c67b93e1c289f39b13b5a31fd4a6",
-    "build/core-tests/performance-baseline": "656bc073b19a5181644870eee2f2695cab2bd9f2cfbd728d0de2757dc569ff12"
+    "build/core-tests/performance-baseline": "e8266ea3470eac0ca8d44dd4178f4845427be4ffa632521ed942613f87cfbc3e"
   },
   "rawReportSHA256": {
-    "behavior.json": "efb2201ff2b2aa6af669f6acd494abdd46cd324db06fe4b3a5fe9b696e0bcdf4",
-    "performance-1.json": "03171e48f6e82136c7e66bf85dc6b40c20da5f128c8fcc699b1ddb70b60df906",
-    "performance-2.json": "43de01c68341d91b277ab16f385835668f78d32ae887d0b4edeeac26b2e56f29",
-    "performance-3.json": "d520520c1b26178175e0b7fc3150b92288bddd31311dfff9ef8948d49587c298",
-    "performance-4.json": "b56f68b35f41d6215ee1d47aa3931e448d78c947d5ea98395a4392764938ddd8",
-    "performance-5.json": "b6d2bb8c1c44703f1d3628c991c40fcb7a1e1f100e91e1c6d1b5b24c280492bc"
+    "behavior.json": "8340557ccd9894aefd62d53ad8044daa3a8d7ed3aaa80d222adf14fa2f20a1f0",
+    "performance-1.json": "8efc813bd7e98e21629735c95142bb36a09f745d56a7b1a8fc6ae7b2f6c97ecc",
+    "performance-2.json": "c7112bbfe6e43df11c5376df3bc06506490ec49a8968c5feaa5b953b09ec538c",
+    "performance-3.json": "cec5e815388b05991ab6d0883f024fdf1f61f211bc9b2df4a7ae3cce5e4ca991",
+    "performance-4.json": "5215539ef38b8744aa7b139881a2d8189b9771bc2205cdea02e5c1a33738a2d2",
+    "performance-5.json": "4578390e8e385bce7c7ae9a61e0c217229774769fca27568099b0141105603ba"
   },
   "protocol": {
     "processTrials": 5,
@@ -58,251 +58,251 @@
   },
   "startupMilliseconds": {
     "count": 5,
-    "median": 237.905667,
-    "p95": 248.326208,
-    "p99": 248.326208,
-    "max": 248.326208
+    "median": 252.912583,
+    "p95": 258.154167,
+    "p99": 258.154167,
+    "max": 258.154167
   },
   "peakResidentBytesAfterStartup": {
     "count": 5,
-    "median": 20840448,
-    "p95": 22872064,
-    "p99": 22872064,
-    "max": 22872064
+    "median": 39026688,
+    "p95": 39043072,
+    "p99": 39043072,
+    "max": 39043072
   },
   "peakResidentBytesAfterInput": {
     "count": 5,
-    "median": 42598400,
-    "p95": 44630016,
-    "p99": 44630016,
-    "max": 44630016
+    "median": 60735488,
+    "p95": 60964864,
+    "p99": 60964864,
+    "max": 60964864
   },
   "firstPassKeyMilliseconds": {
     "count": 1235,
-    "median": 0.32075,
-    "p95": 1.107292,
-    "p99": 1.473125,
-    "max": 7.786
+    "median": 0.345666,
+    "p95": 1.190459,
+    "p99": 1.571125,
+    "max": 10.526083
   },
   "repeatedPassKeyMilliseconds": {
     "count": 4940,
-    "median": 0.312,
-    "p95": 1.05775,
-    "p99": 1.324417,
-    "max": 1.916625
+    "median": 0.317458,
+    "p95": 1.06625,
+    "p99": 1.375042,
+    "max": 2.449584
   },
   "perProcess": [
     {
       "trial": 1,
-      "startupMilliseconds": 248.326208,
+      "startupMilliseconds": 251.000542,
       "firstPassKeyMilliseconds": {
         "count": 247,
-        "median": 0.33375,
-        "p95": 1.102875,
-        "p99": 1.536709,
-        "max": 7.786
+        "median": 0.345666,
+        "p95": 1.145292,
+        "p99": 1.427625,
+        "max": 10.49875
       },
       "repeatedPassKeyMilliseconds": {
         "count": 988,
-        "median": 0.317021,
-        "p95": 1.052167,
-        "p99": 1.355083,
-        "max": 1.916625
+        "median": 0.2991665,
+        "p95": 1.014958,
+        "p99": 1.257291,
+        "max": 1.540792
       }
     },
     {
       "trial": 2,
-      "startupMilliseconds": 227.615584,
+      "startupMilliseconds": 252.912583,
       "firstPassKeyMilliseconds": {
         "count": 247,
-        "median": 0.310959,
-        "p95": 1.070625,
-        "p99": 1.564959,
-        "max": 7.013541
+        "median": 0.339958,
+        "p95": 1.168459,
+        "p99": 1.38825,
+        "max": 9.845083
       },
       "repeatedPassKeyMilliseconds": {
         "count": 988,
-        "median": 0.3017495,
-        "p95": 1.025291,
-        "p99": 1.28525,
-        "max": 1.658125
+        "median": 0.2971875,
+        "p95": 1.0195,
+        "p99": 1.259709,
+        "max": 1.512334
       }
     },
     {
       "trial": 3,
-      "startupMilliseconds": 226.165292,
+      "startupMilliseconds": 258.154167,
       "firstPassKeyMilliseconds": {
         "count": 247,
-        "median": 0.315125,
-        "p95": 1.072375,
-        "p99": 1.410083,
-        "max": 7.162625
+        "median": 0.336041,
+        "p95": 1.162416,
+        "p99": 1.39775,
+        "max": 9.863958
       },
       "repeatedPassKeyMilliseconds": {
         "count": 988,
-        "median": 0.31562500000000004,
-        "p95": 1.052042,
-        "p99": 1.328041,
-        "max": 1.581375
+        "median": 0.304479,
+        "p95": 1.02375,
+        "p99": 1.289917,
+        "max": 1.57125
       }
     },
     {
       "trial": 4,
-      "startupMilliseconds": 237.905667,
+      "startupMilliseconds": 246.106583,
       "firstPassKeyMilliseconds": {
         "count": 247,
-        "median": 0.320417,
-        "p95": 1.208333,
-        "p99": 1.473125,
-        "max": 7.163542
+        "median": 0.332208,
+        "p95": 1.120541,
+        "p99": 1.379333,
+        "max": 9.615208
       },
       "repeatedPassKeyMilliseconds": {
         "count": 988,
-        "median": 0.3105,
-        "p95": 1.06625,
-        "p99": 1.301542,
-        "max": 1.561667
+        "median": 0.3425415,
+        "p95": 1.161375,
+        "p99": 1.778708,
+        "max": 2.449584
       }
     },
     {
       "trial": 5,
-      "startupMilliseconds": 240.213125,
+      "startupMilliseconds": 256.997667,
       "firstPassKeyMilliseconds": {
         "count": 247,
-        "median": 0.319959,
-        "p95": 1.123208,
-        "p99": 1.419375,
-        "max": 7.094084
+        "median": 0.442667,
+        "p95": 1.423208,
+        "p99": 2.633708,
+        "max": 10.526083
       },
       "repeatedPassKeyMilliseconds": {
         "count": 988,
-        "median": 0.3158755,
-        "p95": 1.08075,
-        "p99": 1.343375,
-        "max": 1.879667
+        "median": 0.34724999999999995,
+        "p95": 1.103333,
+        "p99": 1.461084,
+        "max": 2.018167
       }
     }
   ],
   "slowestKeys": [
     {
-      "milliseconds": 7.786,
+      "milliseconds": 10.526083,
       "offset": 0,
       "pass": 0,
       "sample": "ordinary-hello"
     },
     {
-      "milliseconds": 7.163542,
+      "milliseconds": 10.49875,
       "offset": 0,
       "pass": 0,
       "sample": "ordinary-hello"
     },
     {
-      "milliseconds": 7.162625,
+      "milliseconds": 9.863958,
       "offset": 0,
       "pass": 0,
       "sample": "ordinary-hello"
     },
     {
-      "milliseconds": 7.094084,
+      "milliseconds": 9.845083,
       "offset": 0,
       "pass": 0,
       "sample": "ordinary-hello"
     },
     {
-      "milliseconds": 7.013541,
+      "milliseconds": 9.615208,
       "offset": 0,
       "pass": 0,
       "sample": "ordinary-hello"
     },
     {
-      "milliseconds": 1.916625,
+      "milliseconds": 2.688958,
+      "offset": 10,
+      "pass": 0,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.633708,
+      "offset": 19,
+      "pass": 0,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.6105,
+      "offset": 16,
+      "pass": 0,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.449584,
+      "offset": 2,
+      "pass": 3,
+      "sample": "abbreviation-china"
+    },
+    {
+      "milliseconds": 2.373042,
+      "offset": 19,
+      "pass": 3,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.306,
+      "offset": 16,
+      "pass": 3,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.281583,
+      "offset": 1,
+      "pass": 3,
+      "sample": "abbreviation-not"
+    },
+    {
+      "milliseconds": 2.227625,
+      "offset": 1,
+      "pass": 3,
+      "sample": "abbreviation-internet"
+    },
+    {
+      "milliseconds": 2.201666,
+      "offset": 9,
+      "pass": 0,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.060375,
+      "offset": 21,
+      "pass": 3,
+      "sample": "long-better"
+    },
+    {
+      "milliseconds": 2.049917,
       "offset": 25,
       "pass": 3,
       "sample": "long-better"
     },
     {
-      "milliseconds": 1.879667,
+      "milliseconds": 2.018167,
       "offset": 27,
       "pass": 4,
       "sample": "long-friends"
     },
     {
-      "milliseconds": 1.814041,
-      "offset": 16,
-      "pass": 4,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.766666,
-      "offset": 25,
-      "pass": 0,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.68575,
-      "offset": 30,
-      "pass": 0,
+      "milliseconds": 1.932958,
+      "offset": 34,
+      "pass": 1,
       "sample": "mixed-offer"
     },
     {
-      "milliseconds": 1.658125,
-      "offset": 25,
-      "pass": 2,
-      "sample": "long-better"
+      "milliseconds": 1.836375,
+      "offset": 1,
+      "pass": 3,
+      "sample": "abbreviation-china"
     },
     {
-      "milliseconds": 1.581375,
-      "offset": 25,
-      "pass": 2,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.580708,
+      "milliseconds": 1.796083,
       "offset": 10,
-      "pass": 0,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.569917,
-      "offset": 10,
-      "pass": 4,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.564959,
-      "offset": 25,
-      "pass": 0,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.561667,
-      "offset": 10,
-      "pass": 4,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.547375,
-      "offset": 25,
-      "pass": 0,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.543708,
-      "offset": 9,
-      "pass": 4,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.537375,
-      "offset": 25,
-      "pass": 2,
-      "sample": "long-better"
-    },
-    {
-      "milliseconds": 1.536709,
-      "offset": 27,
-      "pass": 0,
-      "sample": "long-friends"
+      "pass": 3,
+      "sample": "mixed-email"
     }
   ]
 }
