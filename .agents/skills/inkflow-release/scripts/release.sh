@@ -85,8 +85,10 @@ trap 'rm -rf "$extract"' EXIT
 
 # 4. Appcast, dictionary corresponding-source bundle and checksums.
 bash "$scripts/release-appcast.sh" generate "$previous_tag"
+# Always rebuilt: a rerun after another commit must package the HEAD being tagged.
 source_bundle="$release_dir/InkFlow-$version-$build-dictionary-source.tar.gz"
-[[ -f "$source_bundle" ]] || bash macOS/scripts/dictionary-source-bundle.sh "$source_bundle" "$build"
+rm -f "$source_bundle"
+bash macOS/scripts/dictionary-source-bundle.sh "$source_bundle" "$build"
 printf '%s  %s\n' "$(sha256 "$dmg")" "$(basename "$dmg")" "$(sha256 "$source_bundle")" "$(basename "$source_bundle")" > "$checksum"
 assets=("$dmg" "$checksum" "$update_zip" "$appcast" "$source_bundle")
 
