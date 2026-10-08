@@ -27,6 +27,13 @@ struct SettingsTests {
               "clear reports completion and preserves pause")
         await settings.setQualityRecordingPaused(false)
         check(qualityStore.captureState.enabled && !IFSettings(defaults: defaults).qualityRecordingPaused)
+        check(!settings.qualityTextCapture, "input text is not recorded by default")
+        await settings.setQualityTextCapture(true)
+        check(IFSettings(defaults: defaults).qualityTextCapture && settings.qualityControlMessage?.contains("已开启文本记录") == true,
+              "text opt-in persists and reports")
+        await settings.setQualityTextCapture(false)
+        check(!IFSettings(defaults: defaults).qualityTextCapture && settings.qualityControlMessage?.contains("删除") == true,
+              "text opt-out persists and reports deletion")
         await qualityStore.close()
         check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14 && !settings.thunderMode)
         check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],

@@ -566,6 +566,38 @@ class QueryTests(unittest.TestCase):
             self.assertIn('incompatible',self.run_cli('summary',db=bad,success=False))
         self.assertIn('not found',self.run_cli('inspect','missing',success=False))
 
+    def test_text_free_records_keep_rank_metrics(self):
+        before = self.result()['coverage']
+        self.assertEqual(before['text_free'], 0)
+        self.assertIn('a', [cid for issue in self.result('ranking-issues', '--min-count', '1')['issues'] for cid in issue['composition_ids']])
+        db = sqlite3.connect(self.db)
+        self.addCleanup(db.close)
+
+        def strip(raw):
+            page = json.loads(raw)
+            page.update(rawInput='', selectedPrefix='', precedingContext='', textCaptured=False)
+            for candidate in page['candidates']:
+                candidate['text'] = ''
+            return json.dumps(page)
+        for cid in ('a', 'c', 'd'):
+            snapshot, first = db.execute('SELECT snapshot_json,first_page_json FROM candidate_decisions WHERE composition_id=?', (cid,)).fetchone()
+            db.execute('UPDATE candidate_decisions SET selected_text=NULL,snapshot_json=?,first_page_json=? WHERE composition_id=?',
+                       (strip(snapshot), strip(first), cid))
+            db.execute("UPDATE commits SET text='' WHERE composition_id=?", (cid,))
+        db.commit()
+        after = self.result()['coverage']
+        for key in ('valid', 'known_rank', 'unknown_rank', 'comparable', 'top1_selected', 'top3_selected',
+                    'top1_matches', 'top1_rate', 'top3_rate', 'top1_match_rate', 'mean_display_rank', 'mean_native_rank'):
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual(after['text_free'], 3)
+        issues = self.result('ranking-issues', '--min-count', '1')['issues']
+        self.assertFalse({'a', 'c', 'd'} & {cid for issue in issues for cid in issue['composition_ids']},
+                         'text-free decisions never form recurring-choice issues')
+        inspected = json.dumps(self.result('inspect', 'a'), ensure_ascii=False)
+        self.assertNotIn('shi', inspected)
+        self.assertNotIn('使', inspected)
+        self.assertIn('series', self.result('trend', '--days', '7'))
+
     def test_incomplete_evidence_bounded_ids_and_concurrent_reader(self):
         db = sqlite3.connect(self.db)
         self.addCleanup(db.close)

@@ -245,6 +245,8 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
     /// Engine observation alone does not establish that a client requested or showed candidates.
     package var presentation: QualityPresentation = .notShown
     package var capturedAt = Date()
+    /// False once every typed, shown or chosen string was removed before persistence.
+    package var textCaptured = true
     package init(generation: Int,
         rawInput: String,
         caret: Int,
@@ -258,7 +260,8 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
         highlightedDisplayIndex: Int,
         selectedPrefixValid: Bool = true,
         presentation: QualityPresentation = .notShown,
-        capturedAt: Date = Date()) {
+        capturedAt: Date = Date(),
+        textCaptured: Bool = true) {
         self.generation = generation
         self.rawInput = rawInput
         self.caret = caret
@@ -273,8 +276,22 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
         self.selectedPrefixValid = selectedPrefixValid
         self.presentation = presentation
         self.capturedAt = capturedAt
+        self.textCaptured = textCaptured
     }
 
+    /// Keeps positions, ranks and classification; removes every string the user typed, saw or chose.
+    package func redactingText() -> Self {
+        var page = self
+        page.rawInput = ""
+        page.selectedPrefix = ""
+        page.precedingContext = ""
+        for index in page.candidates.indices {
+            page.candidates[index].text = ""
+            page.candidates[index].comment = nil
+        }
+        page.textCaptured = false
+        return page
+    }
 }
 
 package enum QualityPresentation: String, Codable, Sendable {
@@ -285,6 +302,7 @@ extension QualityPageSnapshot {
     private enum CodingKeys: String, CodingKey {
         case generation, rawInput, caret, selectedPrefix, precedingContext, configurationRevisionID, configuration
         case page, pageSize, candidates, highlightedDisplayIndex, selectedPrefixValid, presentation, capturedAt
+        case textCaptured
     }
 
     package func encode(to encoder: Encoder) throws {
@@ -305,6 +323,7 @@ extension QualityPageSnapshot {
         try container.encode(selectedPrefixValid, forKey: .selectedPrefixValid)
         try container.encode(presentation, forKey: .presentation)
         try container.encode(capturedAt, forKey: .capturedAt)
+        if !textCaptured { try container.encode(false, forKey: .textCaptured) }
     }
 
     package init(from decoder: Decoder) throws {
@@ -329,7 +348,8 @@ extension QualityPageSnapshot {
             highlightedDisplayIndex: try container.decode(Int.self, forKey: .highlightedDisplayIndex),
             selectedPrefixValid: try container.decode(Bool.self, forKey: .selectedPrefixValid),
             presentation: try container.decode(QualityPresentation.self, forKey: .presentation),
-            capturedAt: try container.decode(Date.self, forKey: .capturedAt))
+            capturedAt: try container.decode(Date.self, forKey: .capturedAt),
+            textCaptured: try container.decodeIfPresent(Bool.self, forKey: .textCaptured) ?? true)
     }
 }
 
@@ -609,6 +629,19 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
             }
         }
         return reduced
+    }
+
+    /// Text-free mode: ranking, timing and outcome facts stay; input, candidate, commit and context text go.
+    package func redactingText() -> Self {
+        var envelope = self
+        for index in envelope.commits.indices { envelope.commits[index].text = "" }
+        for index in envelope.decisions.indices {
+            envelope.decisions[index].selectedText = nil
+            envelope.decisions[index].snapshot = envelope.decisions[index].snapshot.redactingText()
+            envelope.decisions[index].firstPage = envelope.decisions[index].firstPage?.redactingText()
+            envelope.decisions[index].visitedPages = envelope.decisions[index].visitedPages.map { $0.redactingText() }
+        }
+        return envelope
     }
 
     /// Includes reference-only pages; conflicting identity is invalid evidence.

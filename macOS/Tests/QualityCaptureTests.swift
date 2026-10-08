@@ -59,7 +59,7 @@ struct QualityCaptureTests {
         defer { try? files.removeItem(at: scratch) }
         let db = CaptureDatabase(url: output.appendingPathComponent("engine-controller.sqlite3"))
         if files.fileExists(atPath: db.url.path) { try files.removeItem(at: db.url) }
-        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
+        let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata, textCapture: true)
         try IFEngine.start(shared: shared, user: scratch.appendingPathComponent("rime").path)
         IFStubHeadlessControllerFramework()
         let isolated = IsolatedSettings()
@@ -71,12 +71,12 @@ struct QualityCaptureTests {
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
-        let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata)
+        let pagingStore = QualityStore(url: pagingDB.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata, textCapture: true)
         await pagingSettings(pagingStore, pagingDB)
         await pagingStore.close()
         let syntheticDB = CaptureDatabase(url: output.appendingPathComponent("recorder-synthetic.sqlite3"))
         if files.fileExists(atPath: syntheticDB.url.path) { try files.removeItem(at: syntheticDB.url) }
-        let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: qualityCaptureBuildMetadata)
+        let syntheticStore = QualityStore(url: syntheticDB.url, engineVersion: "synthetic", buildMetadata: qualityCaptureBuildMetadata, textCapture: true)
         await synthetic(syntheticStore, syntheticDB)
         try await recordingControlComposition(syntheticStore, syntheticDB)
         await syntheticStore.close()

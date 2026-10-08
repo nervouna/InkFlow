@@ -148,7 +148,8 @@ final class IFSmartSettings: ObservableObject {
 
     func save(baseURL: String, apiKey: String, model: String) throws {
         let updated = AISuggestionConfiguration(baseURL: baseURL, apiKey: apiKey, model: model)
-        // Keychain update is the only fallible step. Never publish partially saved fields.
+        try AIChatCompletionsClient.validateBaseURL(updated.baseURL)
+        // Keychain update is the only remaining fallible step. Never publish partially saved fields.
         do { try credentials.write(updated.apiKey) }
         catch {
             AIDiagnostics.emit(.credentialFailed, reason: .credentialWrite)

@@ -94,6 +94,8 @@ package final class QualityStore: @unchecked Sendable {
     private var scheduled = false
     private var accepting = true
     private var paused: Bool
+    /// Off by default: envelopes lose every input, candidate, commit and context string before buffering.
+    private var textCapture: Bool
     private var commandPending = false
     private var captureGeneration: UInt64 = 0
     private var stats = QualityStoreStatistics()
@@ -109,10 +111,12 @@ package final class QualityStore: @unchecked Sendable {
 
     package init(maintenanceNow: @escaping @Sendable () -> Date = { Date() },
          url: URL, engineVersion: String, buildMetadata: QualityBuildMetadata? = nil,
-         metadataURL: URL? = nil, hooks: QualityStoreHooks = QualityStoreHooks(), paused: Bool = false) {
+         metadataURL: URL? = nil, hooks: QualityStoreHooks = QualityStoreHooks(), paused: Bool = false,
+         textCapture: Bool = false) {
         runID = UUID().uuidString
         self.hooks = hooks
         self.paused = paused
+        self.textCapture = textCapture
         self.maintenanceNow = maintenanceNow
         database = QualityDatabase(url: url, runID: runID, engineVersion: engineVersion,
                                    buildMetadata: buildMetadata, metadataURL: metadataURL, hooks: hooks)
@@ -135,6 +139,8 @@ package final class QualityStore: @unchecked Sendable {
 
     @discardableResult
     package func submit(_ envelope: QualityEnvelope) -> QualitySubmission {
+        let redacted = lock.withLock { !textCapture }
+        let envelope = redacted ? envelope.redactingText() : envelope
         let bounded = envelope.bounded()
         var invalid = false
         if bounded == nil {
@@ -145,7 +151,8 @@ package final class QualityStore: @unchecked Sendable {
         let bytes = bounded?.retainedBytes ?? 0
         return lock.withLock {
             stats.submitted += 1
-            guard accepting && !stats.disabled && !paused && !commandPending else { stats.droppedDisabled += 1; return .disabled }
+            guard accepting && !stats.disabled && !paused && !commandPending,
+                  textCapture || redacted else { stats.droppedDisabled += 1; return .disabled }
             guard !invalid else { stats.droppedInvalid += 1; return .invalid }
             guard let bounded else { stats.droppedOversized += 1; return .oversized }
             guard pending.count + inFlight < QualityLimits.bufferedEnvelopes,
@@ -208,20 +215,29 @@ package final class QualityStore: @unchecked Sendable {
     /// The memory gate changes before the worker barrier. No caller waits for disk under the lock.
     package func setPaused(_ paused: Bool) async throws {
         try beginControl(paused: paused)
-        try await finishControl(clear: false)
+        try await finishControl(.none)
+    }
+
+    /// Turning text off also removes every stored record that still carries text.
+    package func setTextCapture(_ enabled: Bool) async throws {
+        try beginControl(textCapture: enabled)
+        try await finishControl(enabled ? .none : .purgeText)
     }
 
     package func clearRecords() async throws {
-        try beginControl(paused: nil)
-        try await finishControl(clear: true)
+        try beginControl()
+        try await finishControl(.clear)
     }
 
-    private func beginControl(paused newValue: Bool?) throws {
+    private enum ControlCleanup { case none, purgeText, clear }
+
+    private func beginControl(paused newValue: Bool? = nil, textCapture newTextCapture: Bool? = nil) throws {
         try lock.withLock {
             guard accepting && !stats.disabled else { throw QualityControlError.unavailable }
             guard !commandPending else { throw QualityControlError.commandPending }
             commandPending = true
             if let newValue { paused = newValue }
+            if let newTextCapture { textCapture = newTextCapture }
             captureGeneration &+= 1
             stats.droppedDisabled += pending.count
             stats.bufferedBytes -= pending.reduce(0) { $0 + $1.bytes }
@@ -230,7 +246,7 @@ package final class QualityStore: @unchecked Sendable {
         }
     }
 
-    private func finishControl(clear: Bool) async throws {
+    private func finishControl(_ cleanup: ControlCleanup) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             queue.async { [self] in
                 guard startIfNeeded() else {
@@ -239,7 +255,11 @@ package final class QualityStore: @unchecked Sendable {
                     return
                 }
                 do {
-                    if clear { try database.removeRecords(before: nil, now: maintenanceNow()) }
+                    switch cleanup {
+                    case .clear: try database.removeRecords(before: nil, now: maintenanceNow())
+                    case .purgeText: try database.removeRecords(before: rawCutoff(maintenanceNow()), now: maintenanceNow(), textRecords: true)
+                    case .none: break
+                    }
                     lock.withLock { commandPending = false }
                     continuation.resume()
                 } catch {
@@ -265,9 +285,12 @@ package final class QualityStore: @unchecked Sendable {
         let now = maintenanceNow()
         guard force || lastMaintenance.map({ now.timeIntervalSince($0) >= QualityLimits.maintenanceInterval }) ?? true else { return }
         lastMaintenance = now
-        do { try database.removeRecords(before: now.addingTimeInterval(-Double(QualityLimits.rawRetentionDays) * 86_400), now: now) }
+        let purgeText = lock.withLock { !textCapture }
+        do { try database.removeRecords(before: rawCutoff(now), now: now, textRecords: purgeText) }
         catch { handle(error, count: 0) }
     }
+
+    private func rawCutoff(_ now: Date) -> Date { now.addingTimeInterval(-Double(QualityLimits.rawRetentionDays) * 86_400) }
 
     /// Only lifecycle/tests/tools await this. Event handlers must never wait for disk.
     /// Drains the accepted prefix at invocation; later submissions need not have finished.
@@ -538,6 +561,7 @@ private final class QualityDatabase: @unchecked Sendable {
                 throw QualityDatabaseError(code: code)
             }
             try check(sqlite3_busy_timeout(connection, 250))
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         }
         try validateSchema()
         try execute("PRAGMA foreign_keys = ON")
@@ -708,7 +732,8 @@ private final class QualityDatabase: @unchecked Sendable {
 
     /// Delete children first because the existing schema intentionally has no cascading deletes.
     /// Logical removal is atomic; secure_delete does not promise erasure from filesystem snapshots.
-    package func removeRecords(before cutoff: Date?, now: Date) throws {
+    /// `textRecords` also removes compositions written with text, however recent, including pre-text-free records.
+    package func removeRecords(before cutoff: Date?, now: Date, textRecords: Bool = false) throws {
         try execute("BEGIN IMMEDIATE")
         do {
             let predicate = cutoff == nil ? "1" : "started_at < ?"
@@ -716,6 +741,17 @@ private final class QualityDatabase: @unchecked Sendable {
             try execute("DELETE FROM candidate_decisions WHERE composition_id IN (SELECT id FROM compositions WHERE \(predicate))", values)
             try execute("DELETE FROM commits WHERE composition_id IN (SELECT id FROM compositions WHERE \(predicate))", values)
             try execute("DELETE FROM compositions WHERE \(predicate)", values)
+            if textRecords {
+                try execute("""
+                    CREATE TEMP TABLE text_compositions AS
+                    SELECT composition_id AS id FROM candidate_decisions WHERE json_extract(snapshot_json, '$.textCaptured') IS NOT 0
+                    UNION SELECT composition_id FROM commits WHERE text != ''
+                    """)
+                try execute("DELETE FROM candidate_decisions WHERE composition_id IN (SELECT id FROM text_compositions)")
+                try execute("DELETE FROM commits WHERE composition_id IN (SELECT id FROM text_compositions)")
+                try execute("DELETE FROM compositions WHERE id IN (SELECT id FROM text_compositions)")
+                try execute("DROP TABLE text_compositions")
+            }
             // Compact historical pages can refer to a different revision than the final snapshot.
             try execute("""
                 WITH referenced(id) AS (

@@ -44,8 +44,9 @@ COUNTERS = {
     'first_page_unavailable': 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL',
     'top1_selected': 'valid AND display_rank=1',
     'top3_selected': 'valid AND display_rank BETWEEN 1 AND 3',
-    'top1_matches': 'valid AND display_rank IS NOT NULL AND selected_text=first_page_top1',
+    'top1_matches': 'valid AND display_rank IS NOT NULL AND top1_match',
     'truncated': 'page_history_truncated=1',
+    'text_free': 'text_captured=0',
 }
 
 
@@ -152,6 +153,7 @@ def ctes(args):
           json_extract(r.build_metadata_json,'$.appBuild') AS app_build,
           json_extract(r.build_metadata_json,'$.sourceRevision') AS source_revision,
           json_extract(d.snapshot_json,'$.presentation') AS presentation,
+          COALESCE(json_extract(d.snapshot_json,'$.textCaptured'),1) AS text_captured,
           json_extract(d.snapshot_json,'$.rawInput') AS raw_input,
           json_extract(d.snapshot_json,'$.caret') AS caret,
           json_extract(d.snapshot_json,'$.selectedPrefix') AS selected_prefix,
@@ -168,12 +170,12 @@ def ctes(args):
         LEFT JOIN commits m ON m.id=d.commit_id AND m.composition_id=d.composition_id
         WHERE {decision_filter}
     ), ranked AS (
-        SELECT *, CASE WHEN json_extract(selected_candidate,'$.text')=selected_text
+        SELECT *, CASE WHEN ((text_captured=0 AND selected_text IS NULL) OR json_extract(selected_candidate,'$.text')=selected_text)
           AND json_extract(selected_candidate,'$.displayIndex')=selected_display_index
           AND page>=0 AND page_size>0 AND selected_display_index<page_size
           AND json_extract(selected_candidate,'$.displayRank')=page*page_size+selected_display_index+1
           THEN json_extract(selected_candidate,'$.displayRank') END AS display_rank,
-          CASE WHEN json_extract(selected_candidate,'$.text')=selected_text
+          CASE WHEN ((text_captured=0 AND selected_text IS NULL) OR json_extract(selected_candidate,'$.text')=selected_text)
           AND json_extract(selected_candidate,'$.nativeIndex')>=0
           AND json_extract(selected_candidate,'$.nativeIndex')<page_size
           AND json_extract(selected_candidate,'$.nativeRank')=page*page_size+json_extract(selected_candidate,'$.nativeIndex')+1
@@ -186,7 +188,8 @@ def ctes(args):
         FROM base
     ), observations AS (
         SELECT *, COALESCE(regular_committed AND insertion_issued=1
-          AND presentation IN ('candidates_requested','panel_show_issued'),0) AS valid
+          AND presentation IN ('candidates_requested','panel_show_issued'),0) AS valid,
+          CASE WHEN text_captured=0 THEN display_rank=1 ELSE selected_text=first_page_top1 END AS top1_match
         FROM ranked
     )
     """
@@ -411,7 +414,7 @@ def trend(db, args):
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL),0) AS first_page_unavailable",
         "COALESCE(SUM(valid AND display_rank=1),0) AS top1_selected",
         "COALESCE(SUM(valid AND display_rank BETWEEN 1 AND 3),0) AS top3_selected",
-        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND selected_text=first_page_top1),0) AS top1_matches",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND top1_match),0) AS top1_matches",
     ])
     grouped = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,
         text_kind,measurement_fingerprint,{fields} FROM observations
@@ -549,7 +552,7 @@ def ranking_issues(db, args):
     operation_sql = ','.join(f"SUM(json_extract(operations_json,'$.{field}')) AS {key}" for key, field in OPERATIONS.items())
     parameters.update(min_count=args.min_count, limit=args.limit)
     issues = rows(db, sql + f""", eligible AS (
-        SELECT * FROM observations WHERE valid AND display_rank IS NOT NULL
+        SELECT * FROM observations WHERE valid AND display_rank IS NOT NULL AND text_captured=1
           AND first_page_top1 IS NOT NULL AND selected_text != first_page_top1
     ), samples AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY {group} ORDER BY composition_id) AS position
@@ -717,7 +720,7 @@ def parser():
     for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'export'):
         sub = commands.add_parser(command)
         if command == 'export':
-            sub.add_argument('--output', type=Path, required=True, help='New JSON file; contains input text, candidates and preceding context. Never uploaded.')
+            sub.add_argument('--output', type=Path, required=True, help='New JSON file; records saved with text recording on contain input text, candidates and preceding context. Never uploaded.')
         else:
             sub.add_argument('--input', type=Path, action='append', default=[], help='Quality export JSON; repeat for multiple files')
             sub.add_argument('--exports-only', action='store_true', help='Analyze files without the local database')

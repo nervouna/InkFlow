@@ -38,6 +38,11 @@ extension AIDiagnostics {
     }
 }
 
+enum AIEndpointError: Error, Equatable, LocalizedError {
+    case insecure
+    var errorDescription: String? { "非本机服务必须使用 https://，否则 API Key 和输入文本会明文传输。只有 localhost、127.0.0.1 和 ::1 允许 http://。" }
+}
+
 final class AIRejectRedirects: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask,
                     willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
@@ -67,9 +72,24 @@ struct AIChatCompletionsClient: AISuggestionServing {
         let family = configuration.model.lowercased().split(separator: ":").first.map(String.init)
         // Ollama's OpenAI endpoint maps reasoning_effort=none to think=false.
         // Limit this inference to its default local endpoint and known Qwen families.
-        return ["http", "https"].contains(components?.scheme?.lowercased() ?? "") &&
-            ["localhost", "127.0.0.1", "[::1]", "::1"].contains(components?.host?.lowercased() ?? "") &&
+        return ["http", "https"].contains(components?.scheme?.lowercased() ?? "") && isLoopback(components?.host) &&
             components?.port == 11434 && ["qwen3", "qwen3.5"].contains(family ?? "")
+    }
+    static func isLoopback(_ host: String?) -> Bool {
+        ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host?.lowercased() ?? "")
+    }
+    /// Bearer keys and document text travel in clear only to a loopback host such as local Ollama.
+    static func secureTransport(scheme: String?, host: String?) -> Bool {
+        switch scheme?.lowercased() {
+        case "https": true
+        case "http": isLoopback(host)
+        default: false
+        }
+    }
+    /// Settings call this before persisting; an empty or unparseable value is left to request-time validation.
+    static func validateBaseURL(_ baseURL: String) throws {
+        guard let components = URLComponents(string: baseURL), let scheme = components.scheme else { return }
+        if scheme.lowercased() == "http", !isLoopback(components.host) { throw AIEndpointError.insecure }
     }
     private let session: URLSession
     private static let defaultSession: URLSession = {
@@ -91,8 +111,8 @@ struct AIChatCompletionsClient: AISuggestionServing {
     static func completionURL(configuration: AISuggestionConfiguration) throws -> URL {
         guard configuration.isComplete,
               var components = URLComponents(string: configuration.baseURL),
-              ["https", "http"].contains(components.scheme?.lowercased() ?? ""),
               let host = components.host, !host.isEmpty,
+              secureTransport(scheme: components.scheme, host: host),
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil else { throw AIServiceError.invalidConfiguration }
         var path = components.path

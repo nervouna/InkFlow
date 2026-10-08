@@ -20,7 +20,7 @@ struct SmartSettingsView: View {
     var body: some View {
         Form {
             Section("服务配置") {
-                TextField("Base URL", text: $baseURL, prompt: Text("服务的 API 基础地址"))
+                TextField("Base URL", text: $baseURL, prompt: Text("服务的 https:// API 基础地址；本机 Ollama 可用 http://localhost"))
                     .accessibilityIdentifier("smart.baseURL")
                 SecureField("API Key", text: $apiKey, prompt: Text("粘贴 API Key"))
                     .accessibilityIdentifier("smart.apiKey")
@@ -87,7 +87,7 @@ struct SmartSettingsView: View {
             saveError = nil
             saved = true
         } catch {
-            saveError = AICredentialError.unavailable.localizedDescription
+            saveError = error.localizedDescription
             saved = false
         }
     }

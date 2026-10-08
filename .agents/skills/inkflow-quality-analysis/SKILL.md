@@ -40,6 +40,13 @@ comparing configurations, investigating incomplete evidence, or changing queries
 
 Use `timing` for key intervals, last-edit waits and candidate visibility.
 
+Records are text-free by default: ranks, indices, text kinds and timing are kept, but
+raw input, candidate text, chosen text and preceding context are empty or null and
+each page carries `textCaptured: false`. `trend`, `summary` and `timing` work
+unchanged (Top1 match uses the chosen display rank). `ranking-issues` and the text
+fields of `inspect` only cover records saved while 「同时保存输入文本」 was on;
+`coverage.text_free` counts the excluded decisions. Say so when it is nonzero.
+
 For cross-device analysis, add repeatable `--input /path/to/export.json`; see
 [export and joint analysis](../../../macOS/QUALITY-EXPORT.md). Export itself
 (`python3 "$query" export --output NEW.json --format json`) writes the user's raw

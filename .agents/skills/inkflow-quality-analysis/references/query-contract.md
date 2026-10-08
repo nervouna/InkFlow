@@ -93,16 +93,17 @@ cancelled and interrupted. Unknown paths never become successful choices.
 | regular_not_issued | Same proven regular commit with insertion_issued=0; outside adoption denominators |
 | regular_insertion_unknown | Same regular committed path without available insertion evidence |
 | valid | regular_issued with candidates_requested or panel_show_issued presentation |
-| known_rank | valid with selected_display_index pointing to the exact matching selected text and consistent global display rank |
+| known_rank | valid with selected_display_index pointing to the exact matching selected text (or, in a text-free record, a null selected text) and consistent global display rank |
 | unknown_rank | valid minus known_rank; missing/ambiguous/mismatched rank evidence |
 | comparable | known_rank with validated selected prefix and a matching-generation first-page snapshot with actual first candidate |
 | first_page_unavailable | known_rank minus comparable; absent, mismatched or invalid-prefix first-page evidence |
 | top1_selected / top1_rate | Known displayed rank 1 count / known_rank |
 | top3_selected / top3_rate | Known displayed rank 1–3 count / known_rank; shares the Top1 denominator |
-| top1_matches / top1_match_rate | Selected text equals actual first-page top1 count / comparable |
+| top1_matches / top1_match_rate | Selected text equals actual first-page top1 count / comparable; a text-free record matches when its chosen display rank is 1 |
 | mean_display_rank | Mean among known_rank |
 | mean_native_rank | Mean of available, internally consistent native ranks among known_rank |
 | truncated / dropped_page_count | Filtered decision history flags and removed snapshot-history entries |
+| text_free | Decisions whose pages carry `textCaptured: false`; outside ranking-issues and without inspectable text |
 
 A zero denominator yields null/N/A, never 0%. `rank_counts` enumerates each exact
 global display rank for known_rank in each group. Page and index are zero-based;
@@ -124,7 +125,8 @@ Issue groups use the ranking fingerprint, measurement fingerprint, raw input **a
 caret**, selected prefix and validity, preceding context actually used, first-page
 top1, chosen text, text kind and custom-phrase-match flag. Distinct revision UUIDs
 and build identities with the same ranking and measurement fingerprints can group
-together. Only comparable choices differing from first-page top1 enter the list.
+together. Only comparable choices differing from first-page top1 enter the list;
+text-free records never do, because their chosen and top1 texts are unavailable.
 Occurrences count decisions, with mean display/native ranks and separate
 actual operation totals. Sort by page-turn total descending, then occurrences
 descending, then grouping fields for deterministic ties. At most five distinct,
