@@ -6,7 +6,7 @@ all_units=(shared-core quality-baseline quality-identity quality-store quality-t
   voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-learning ai-headless
   preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases
   controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation
-  startup-diagnostics local-diagnostics diagnostic-archive termination installer-core workflow)
+  startup-diagnostics local-diagnostics diagnostic-archive termination installer-core workflow source-bundle)
 
 usage() {
   echo 'Usage: test.sh quick | all | UNIT|GROUP ...'

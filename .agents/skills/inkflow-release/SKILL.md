@@ -5,7 +5,7 @@ description: Release InkFlow for macOS from main — version bump, one verificat
 
 # InkFlow release
 
-Ships a notarized Installer DMG, `SHA256SUMS`, a Sparkle app-only ZIP and `appcast.xml` as a GitHub Release tagged `vX.Y.Z` on `main`. Scripts live in `.agents/skills/inkflow-release/scripts/`.
+Ships a notarized Installer DMG, `SHA256SUMS`, a Sparkle app-only ZIP, `appcast.xml` and the dictionary corresponding-source bundle (`InkFlow-X.Y.Z-BUILD-dictionary-source.tar.gz`, built by `macOS/scripts/dictionary-source-bundle.sh`; the About page and README link to it) as a GitHub Release tagged `vX.Y.Z` on `main`. Scripts live in `.agents/skills/inkflow-release/scripts/`.
 
 A release request with a version or bump type authorizes every step below, including both Apple notarization submissions, the tag/main push and publication. Don't ask for confirmation between steps. Never force-push, overwrite a published Release or tag, create Apple credentials, or install the app for the user. Run signing, notarization and network steps outside the sandbox.
 
@@ -18,7 +18,7 @@ Input, Settings and installation behavior are the user's responsibility before t
 3. **Verify once.** `bash macOS/scripts/release-verification.sh` — build, `test.sh all`, deep bundle check, installer receipt. If a unit fails: fix it and commit, or rerun that unit if it was flaky, then rerun verification. No extra rounds.
 4. **Prepare.** `bash scripts/package.sh prepare` signs a copy of the app and its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
 5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md` ([public-notes.md](references/public-notes.md)).
-6. **Release.** `bash scripts/release.sh` notarizes and staples the app, builds and notarizes the DMG, checks the mounted installer and embedded app, generates the appcast, tags and pushes `main` + tag, uploads assets, verifies the downloaded bytes, and publishes.
+6. **Release.** `bash scripts/release.sh` notarizes and staples the app, builds and notarizes the DMG, checks the mounted installer and embedded app, generates the appcast and the dictionary source bundle, tags and pushes `main` + tag, uploads assets, verifies the downloaded bytes, and publishes.
 
    `bash scripts/release.sh --draft` does everything except the tag, push and publish, leaving a GitHub draft for inspection. Running `release.sh` afterwards reuses that draft.
 

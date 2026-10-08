@@ -17,7 +17,6 @@
     "bodies": {
       "frost-computer": "甲\tjia\t9000\n新增\txin zeng\t9000\n专业词\tzhuan ye ci\t3",
       "frost-exthot": "专业词\tzhuan ye ci\t9000\n网络新词\twang luo xin ci\t2\n",
-      "selected-computer": "新增\txin zeng\n旧词\tjiu ci\n二列词\ter lie ci\n串行打印机\tchuan hang da yin ji\n",
       "ice-base": "甲\tjia\t10\n新增\txin zeng\t2\n",
       "legacy": "甲\tjia\t200\n旧词\tjiu ci\t4\n"
     }
@@ -236,12 +235,6 @@
     "name": "missing-weight",
     "bodies": {
       "frost-computer": "专业词\tzhuan ye ci\n"
-    }
-  },
-  {
-    "name": "specialty-empty-weight",
-    "bodies": {
-      "selected-computer": "专业词\tzhuan ye ci\t\n"
     }
   },
   {

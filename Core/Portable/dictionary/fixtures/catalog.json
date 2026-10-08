@@ -97,19 +97,6 @@
   },
   {
     "branch" : "master",
-    "defaultWeight" : 1,
-    "group" : "specialty",
-    "id" : "selected-computer",
-    "name" : "搜狗 · 计算机词汇（Rime 转换）",
-    "path" : "selected.jisuanjicihuidaquan.dict.yaml",
-    "pinnedBlobSHA" : "c61a17b7878a15e418569266b0e58f086789a4c4",
-    "pinnedByteCount" : 309467,
-    "pinnedCommit" : "30d61877615dbee98c3b5b4322d50bdc90226816",
-    "pinnedSHA256" : "804f55821591e112d10df1e78445f945e70f7204c2a9521d2a72c048003fc3e0",
-    "repository" : "alswl/rime-selected"
-  },
-  {
-    "branch" : "master",
     "group" : "legacy",
     "id" : "legacy",
     "name" : "旧版拼音 · 兼容增量",

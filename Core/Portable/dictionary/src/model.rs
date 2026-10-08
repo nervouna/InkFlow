@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
-pub const RECIPE_VERSION: u32 = 2;
+pub const RECIPE_VERSION: u32 = 3;
 pub const MAX_SOURCE_BYTES: usize = 128 * 1024 * 1024;
 pub const MAX_WEIGHT: u32 = i32::MAX as u32;
 
@@ -21,7 +21,6 @@ pub struct SourceSpec {
     #[serde(rename = "pinnedSHA256")]
     pub pinned_sha256: String,
     pub pinned_byte_count: usize,
-    pub default_weight: Option<u32>,
 }
 
 impl SourceSpec {

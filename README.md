@@ -54,4 +54,15 @@
 
 语音音频由 Apple 系统在本机识别，首次准备中文识别资源可能需要联网。「语音润色」默认关闭；开启后，只有本次转写文字会发送给你配置的服务，失败时仍使用本机识别原文。
 
+## 词库来源与许可
+
+墨流代码采用 Apache-2.0 许可。内置词库由以下公开数据生成，编译后仍沿用各自的许可：
+
+- 白霜拼音 rime-frost、雾凇拼音 rime-ice（中文词库、Emoji 表、技术英语选词）：GPL-3.0
+- rime-pinyin-simp 兼容词库与 OpenCC 简繁数据：Apache-2.0
+- rime-easy-en 英文词库：LGPL-3.0
+- wordfreq 英文词频快照：CC BY-SA 4.0
+
+每个发布版本附带词库源码包 `InkFlow-<版本>-<构建号>-dictionary-source.tar.gz`，内含上游数据、墨流的修改与生成脚本、许可证全文，可在[发布页面](https://github.com/nervouna/InkFlow/releases)下载；「设置 → 关于」也提供链接。详见 [NOTICE](NOTICE)、[词库说明](macOS/DICTIONARIES.md) 和 [许可证文本](macOS/Licenses/)。
+
 「智能预测」默认关闭。开启后，墨流会把当前拼音、已选前缀及光标前后有限的文字发送给你配置的服务；服务如何处理数据及产生的费用由服务商决定。API Key 保存在本机钥匙串。

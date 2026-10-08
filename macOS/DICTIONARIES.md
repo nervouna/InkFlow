@@ -10,7 +10,6 @@ count and update actions; provenance and generation details live here.
 | --- | --- | --- |
 | Frost | Character table, base, extended, idioms and poems, computer terms, Internet terms | [`gaboolic/rime-frost`](https://github.com/gaboolic/rime-frost) |
 | Rime Ice | Base and extended Chinese vocabulary | [`iDvel/rime-ice`](https://github.com/iDvel/rime-ice) |
-| Sogou conversion | Computer vocabulary converted for Rime | [`alswl/rime-selected`](https://github.com/alswl/rime-selected) |
 | Legacy Pinyin | Compatibility additions retained from the former baseline | [`rime/rime-pinyin-simp`](https://github.com/rime/rime-pinyin-simp) |
 | InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`Core/config/chinese-overrides.tsv`](../Core/config/chinese-overrides.tsv) |
 | Technical English | Admitted technology terms and abbreviations | [`Core/Data/TECHNOLOGY.md`](../Core/Data/TECHNOLOGY.md) |
@@ -22,16 +21,16 @@ text files into ignored `build/dictionary-sources`. It runs the same
 
 The baseline merge order is Frost `8105`, `base`, `ext`, `idiom`, then Ice `base`,
 `ext`, then the fixed legacy `pinyin_simp` source. Specialty sources then fill
-missing pairs: Frost `computer`, `exthot`, and rime-selected's Sogou computer
-conversion. The catalog keeps legacy last for the existing worker protocol;
+missing pairs: Frost `computer` and `exthot`. The catalog keeps legacy last for the existing worker protocol;
 merge groups, rather than catalog position, enforce baseline-before-specialty
 precedence. Entries are identified by displayed
 text plus explicitly supplied Pinyin, after whitespace/case normalization and
 ü-to-v conversion. No pronunciation is guessed, and no script conversion occurs.
 Duplicate pairs retain the first source's weight; alternate readings remain.
-The pinned domain dictionary contains 969,894 unique pairs, including 5,916
+The pinned domain dictionary contains 965,919 unique pairs, including 1,941
 additions to the original 963,978-pair baseline. Original pair weights remain
-unchanged. English, custom phrases and
+unchanged. Recipe 3 removed the rime-selected Sogou conversion (3,975 unique
+weight-1 pairs); the quality baseline was re-frozen with no candidate-order change. English, custom phrases and
 learned entries are not part of that count.
 
 Baseline Frost weights remain unchanged. For the Ice and legacy groups, positive
@@ -43,12 +42,9 @@ positive weights are rounded, bounded to `1...Int32.max`, and original zero
 weights remain zero. `Core/config/chinese-overrides.tsv` applies explicit
 term/reading replacement weights last and requires a reason for every row.
 It also supplies a small curated technology and Internet supplement with explicit
-readings and conservative weights. Specialty pairs use their own numeric weight;
-rime-selected explicitly declares default weight 1 for its two-column source.
-They do not participate in baseline calibration. One exact rime-selected error,
-`串行打印机 / chuan hang da yin ji`, is patched to `chuan xing da yin ji` before
-merging; other readings are preserved. The curated Sogou `命令行用户交互` entry
-retains the source's `hang` reading for command-line.
+readings and conservative weights. Specialty pairs use their own numeric weight and
+do not participate in baseline calibration. The curated `命令行用户交互` entry
+uses the `hang` reading for command-line.
 
 The parser reads only the tab-separated body following the Rime `---`/`...`
 header. Imports and all other upstream YAML fields are ignored. It requires
@@ -56,9 +52,7 @@ valid UTF-8, nonempty explicit readings, nonnegative integer
 weights, bounded files/lines/record counts, and rejects partial or malformed
 sources. All sources must pass Git blob and SHA-256 verification before merging.
 Once complete byte count and both digests are verified, a missing final newline
-is accepted (the pinned Frost computer file has none). Missing numeric weights
-are accepted only for a catalog source that explicitly declares its default;
-empty weight fields, extra columns and malformed final rows remain errors.
+is accepted (the pinned Frost computer file has none). Missing or empty weight fields, extra columns and malformed final rows are errors.
 
 Canonical rows are sorted by UTF-8 text, then reading. The content version is
 SHA-256 over the recipe version and canonical weighted rows. The generated
@@ -80,10 +74,12 @@ learning, the pinned Frost weights deliberately rank `beijing` as 背景 and
 `shanghai` as 伤害.
 
 License notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt` and the
-per-source files. The rime-selected source's 10,300 pairs match Sogou dictionary
-15117; its upstream redistribution permission is unverified (see
-[the distribution review](../Core/Portable/licenses.md)). Fourteen individually
-verified Sogou terms are curated locally.
+per-source files. No Sogou-derived source remains; the fourteen curated terms in
+`chinese-overrides.tsv` carry InkFlow readings and weights (see the notice and
+[the distribution review](../Core/Portable/licenses.md)). Each release attaches the
+corresponding source for the GPL/LGPL inputs as
+`InkFlow-<version>-<build>-dictionary-source.tar.gz`, built by
+`macOS/scripts/dictionary-source-bundle.sh` and checked by `test.sh source-bundle`.
 
 THUOCL is an optional coverage audit, never a pronunciation or weight source.
 For the pinned corpus below, all 8,519 distinct listed words are present. To
@@ -105,7 +101,7 @@ awk -F '\t' '
 
 ## Verified update preparation
 
-`IFDictionarySourceClient` checks only the fixed Frost, Ice and rime-selected repositories. A
+`IFDictionarySourceClient` checks only the fixed Frost and Ice repositories. A
 branch check resolves a commit and its complete Git tree; only allowlisted regular
 file paths, Git blob identifiers and sizes are accepted. Unrelated upstream
 commits do not offer an update. Downloads bind the checked immutable commit,

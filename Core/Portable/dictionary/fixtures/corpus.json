@@ -76,13 +76,13 @@
         "sourceGroup": "legacy"
       }
     ],
-    "contentSHA256": "3233c909aef0d25a7f8930bfb9c69b2915515402bcb35ecdd61f273b5bac47d5",
-    "contentVersion": "r2-0f6965ffc115ffb79fcf6f52cb5c79a4310c49e9981e325da904c15c31ff4ec4",
-    "correctionsSHA256": "9b03c8690edf4148d28b30cd6d921e7fcb2282045d288f1c922fd3b01995856b",
-    "dictionarySHA256": "d6327de9da8fd4b9644baaaf35acc09dd490e111da69a2afe3b6b10292aa12c6",
-    "entryCount": 969894,
+    "contentSHA256": "2b10a468a479bff16c3aa9aa79d3441015a7187e4562bb2b7471bc08bd2285ac",
+    "contentVersion": "r3-1428e5c0ff62f17cf50879eda1247389468dc2e66ee29082d70569d8912e4da9",
+    "correctionsSHA256": "719aa628cc7b5cb03ed502947a35d72dd9e554eee5c2bbc4c9b09ee7db51b4c9",
+    "dictionarySHA256": "c78e85b744f9b0c2246de2e5ed3574d392b952b48b0a265b75dacd83cdccc3b6",
+    "entryCount": 965919,
     "formatVersion": 1,
-    "recipeVersion": 2,
+    "recipeVersion": 3,
     "sources": [
       {
         "blobSHA": "9cbfe2acf59bb3124993d4b8b3b271f8e246b72d",
@@ -171,17 +171,6 @@
         "recordCount": 2080,
         "repository": "gaboolic/rime-frost",
         "sha256": "d5f8bda70bb621f82ed85e4e8dbe8386c81effb856ff82ebb5c708d18ae993c1"
-      },
-      {
-        "blobSHA": "c61a17b7878a15e418569266b0e58f086789a4c4",
-        "byteCount": 309467,
-        "commit": "30d61877615dbee98c3b5b4322d50bdc90226816",
-        "id": "selected-computer",
-        "name": "搜狗 · 计算机词汇（Rime 转换）",
-        "path": "selected.jisuanjicihuidaquan.dict.yaml",
-        "recordCount": 10300,
-        "repository": "alswl/rime-selected",
-        "sha256": "804f55821591e112d10df1e78445f945e70f7204c2a9521d2a72c048003fc3e0"
       },
       {
         "blobSHA": "6f2e996d2792416cb7f41bb49967a1dec7060c92",

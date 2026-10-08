@@ -23,7 +23,7 @@ On the Mac, after preparing the pinned dependencies:
 bash Core/scripts/prepare-rime.sh build/shared-rime
 ```
 
-The result contains source dictionaries and configuration. Compiled tables and prisms must be prepared by each target's runtime; never copy a macOS compiled cache to Linux.
+The result contains source dictionaries and configuration. `bash macOS/scripts/dictionary-source-bundle.sh OUT.tar.gz` packs the verified pinned inputs, this recipe at `HEAD` and the license texts; releases attach it as the corresponding source. Compiled tables and prisms must be prepared by each target's runtime; never copy a macOS compiled cache to Linux.
 
 The preparation cache hashes the shared package, generator sources/tools/scripts, data, configuration, schemas, and downloaded inputs; macOS frontend changes don't invalidate it. The destination is replaced only after generation succeeds.
 
