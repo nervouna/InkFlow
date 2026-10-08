@@ -1,5 +1,6 @@
 //! Synchronous desktop Rime host: the native `Runtime`/`Session` layer plus the
 //! InkFlow session policy in [`engine`].
+pub mod abi;
 pub mod channel;
 pub mod engine;
 mod ffi;
