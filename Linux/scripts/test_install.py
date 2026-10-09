@@ -228,6 +228,39 @@ class InstallTests(unittest.TestCase):
         with patch.object(self.desktop, "stop", side_effect=inspect_stop):
             self.manager.install(self.package("a"), self.desktop)
 
+    def test_recovery_before_mutations_preserves_shutdown_profile_flush(self):
+        self.manager.journal.write_text(json.dumps({"files": None, "service": self.desktop.service}))
+        profile = self.manager.paths["profile"]
+        profile.write_text(profile.read_text() + "[Groups/0/Items/2]\nName=recently-added-ime\n")
+        after_shutdown = profile.read_bytes()
+        self.manager.recover(self.desktop)
+        self.assertEqual(profile.read_bytes(), after_shutdown)
+        self.assertEqual(self.desktop.starts, 1)
+
+    def test_partial_manual_registration_is_saved(self):
+        package = self.package("a")
+        for name in ("addon", "entry"):
+            with self.subTest(name=name):
+                manager = installer.Installer(self.root / name / "data", self.root / name / "config")
+                with manager.locked():
+                    path = manager.paths[name]
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("manual override")
+                    manager.install(package, self.desktop)
+                    manager.restore_manual(self.desktop)
+                    self.assertEqual(path.read_text(), "manual override")
+                    absent = "entry" if name == "addon" else "addon"
+                    self.assertFalse(manager.paths[absent].exists())
+
+    def test_atomic_updates_sync_the_containing_directory(self):
+        path = self.manager.root / "durability-fixture"
+        with patch.object(installer, "sync_directory", wraps=installer.sync_directory) as sync:
+            installer.atomic_write(path, b"fixture")
+            sync.assert_called_with(path.parent)
+            sync.reset_mock()
+            installer.durable_unlink(path)
+            sync.assert_called_once_with(path.parent)
+
     def test_missing_compiled_resource_is_rejected_even_with_fresh_hashes(self):
         package = self.package("a")
         (package / (installer.CACHE + "inkflow_spelling_31.prism.bin")).unlink()

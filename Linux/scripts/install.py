@@ -77,6 +77,20 @@ def check_libraries(package):
         raise RuntimeError("Fcitx5 or native dependencies are missing:\n" + result.stdout + result.stderr)
 
 
+def sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def durable_unlink(path):
+    path.unlink(missing_ok=True)
+    if path.parent.exists():
+        sync_directory(path.parent)
+
+
 def atomic_write(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix=".inkflow-", dir=path.parent)
@@ -86,6 +100,7 @@ def atomic_write(path, data):
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
+        sync_directory(path.parent)
     finally:
         Path(temporary).unlink(missing_ok=True)
 
@@ -95,6 +110,7 @@ def atomic_link(path, target):
     temporary.unlink(missing_ok=True)
     temporary.symlink_to(target)
     os.replace(temporary, path)
+    sync_directory(path.parent)
 
 
 def edit_profile(path, enable):
@@ -172,6 +188,7 @@ class Installer:
     @contextmanager
     def locked(self):
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        sync_directory(self.root.parent)
         with (self.root / ".installation.lock").open("w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
@@ -198,7 +215,7 @@ class Installer:
         for name, value in backup.items():
             path = self.paths[name]
             if value is None:
-                path.unlink(missing_ok=True)
+                durable_unlink(path)
             elif "link" in value:
                 atomic_link(path, value["link"])
             else:
@@ -208,8 +225,8 @@ class Installer:
     def transaction(self, desktop):
         if self.journal.exists():
             raise RuntimeError("An interrupted operation needs the recover command first")
-        backup = self.snapshot()
-        record = {"files": backup, "service": desktop.service}
+        backup = None
+        record = {"files": None, "service": desktop.service}
         atomic_write(self.journal, json.dumps(record).encode())
         try:
             desktop.stop()
@@ -219,21 +236,24 @@ class Installer:
             atomic_write(self.journal, json.dumps(record).encode())
             yield
             desktop.start()
-            self.journal.unlink()
+            durable_unlink(self.journal)
         except BaseException:
             desktop.stop()
-            self.restore(backup)
+            if backup is not None:
+                self.restore(backup)
             desktop.start()
-            self.journal.unlink()
+            durable_unlink(self.journal)
             raise
 
     def recover(self, desktop):
         if not self.journal.exists():
             raise RuntimeError("No interrupted operation to recover")
         desktop.stop()
-        self.restore(json.loads(self.journal.read_text())["files"])
+        backup = json.loads(self.journal.read_text())["files"]
+        if backup is not None:
+            self.restore(backup)
         desktop.start()
-        self.journal.unlink()
+        durable_unlink(self.journal)
 
     def restore_manual(self, desktop):
         if not self.manual.exists():
@@ -264,6 +284,7 @@ class Installer:
             print("Already installed:", identifier)
             return
         self.releases.mkdir(parents=True, exist_ok=True)
+        sync_directory(self.root)
         target = self.releases / identifier
         if not target.exists():
             staging = Path(tempfile.mkdtemp(prefix=".stage-", dir=self.releases))
@@ -271,14 +292,23 @@ class Installer:
                 shutil.copytree(package, staging, dirs_exist_ok=True)
                 if validate(staging) != identifier:
                     raise ValueError("Package changed while being copied")
+                # Persist the payload before a durable current link can refer to it.
+                for path in staging.rglob("*"):
+                    if path.is_file():
+                        with path.open("rb") as source:
+                            os.fsync(source.fileno())
+                    elif path.is_dir():
+                        sync_directory(path)
+                sync_directory(staging)
                 staging.rename(target)
+                sync_directory(self.releases)
             finally:
                 if staging.exists():
                     shutil.rmtree(staging)
         elif validate(target) != identifier:
             raise ValueError("Installed release does not match its name")
         with self.transaction(desktop):
-            if not state and self.paths["addon"].exists() and self.paths["entry"].exists():
+            if not state and (self.paths["addon"].exists() or self.paths["entry"].exists()):
                 baseline = {name: value for name, value in self.snapshot().items() if name != "profile"}
                 atomic_write(self.manual, json.dumps(baseline).encode())
             self.activate(identifier, state.get("current"))
@@ -304,8 +334,9 @@ class Installer:
         with self.transaction(desktop):
             atomic_write(self.paths["profile"], edit_profile(self.paths["profile"], False))
             for name in ("current", "addon", "entry", "state"):
-                self.paths[name].unlink(missing_ok=True)
+                durable_unlink(self.paths[name])
         shutil.rmtree(self.releases)
+        sync_directory(self.root)
         print("Uninstalled. Personal dictionaries and conf/inkflow.conf were kept.")
 
 
