@@ -26,6 +26,10 @@ int main() {
   assert(paths.user == "/data/inkflow/rime" && paths.shared == "/usr/share/inkflow/rime/shared");
   present.insert("/opt/share/inkflow/rime/prepared/complete");
   assert(resolve_paths(getenv, exists).shared == "/opt/share/inkflow/rime/shared");
+  present.insert("/data/inkflow/current/share/inkflow/rime/shared");
+  present.insert("/data/inkflow/current/share/inkflow/rime/prepared/complete");
+  assert(resolve_paths(getenv, exists).shared == "/data/inkflow/current/share/inkflow/rime/shared");
+  assert(resolve_paths(getenv, exists).user == "/data/inkflow/rime");
   env["INKFLOW_RESOURCES"] = "/tmp/res";
   present.insert("/tmp/res/shared");
   present.insert("/tmp/res/prepared/complete");

@@ -8,6 +8,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 find_package(Fcitx5Core REQUIRED)
+# Package staging uses relative paths regardless of the host Fcitx installation.
+set(INKFLOW_ADDONDIR "${FCITX_INSTALL_ADDONDIR}" CACHE STRING "Fcitx addon install directory")
+set(INKFLOW_PKGDATADIR "${FCITX_INSTALL_PKGDATADIR}" CACHE STRING "Fcitx data install directory")
 
 # The Rust engine is built first: cargo build --release in Core/Portable (see README).
 get_filename_component(INKFLOW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
@@ -27,21 +30,23 @@ target_compile_options(inkflow PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(inkflow PRIVATE Fcitx5::Core
   "${INKFLOW_CARGO_DIR}/libinkflow_rime.a" "${INKFLOW_NATIVE_PREFIX}/lib/librime.so"
   stdc++ dl pthread m)
-set(INKFLOW_LIBDIR "${CMAKE_INSTALL_PREFIX}/lib/inkflow")
-set_target_properties(inkflow PROPERTIES INSTALL_RPATH "${INKFLOW_LIBDIR}" BUILD_WITH_INSTALL_RPATH OFF)
+set(INKFLOW_LIBDIR "lib/inkflow")
+set_target_properties(inkflow PROPERTIES INSTALL_RPATH "$ORIGIN/../inkflow" BUILD_WITH_INSTALL_RPATH OFF)
 
 configure_file(inkflow.conf.in inkflow.conf @ONLY)
-install(TARGETS inkflow DESTINATION "${FCITX_INSTALL_ADDONDIR}")
-install(FILES "${CMAKE_CURRENT_BINARY_DIR}/inkflow.conf" DESTINATION "${FCITX_INSTALL_PKGDATADIR}/addon")
-install(FILES inkflow-pinyin.conf DESTINATION "${FCITX_INSTALL_PKGDATADIR}/inputmethod")
+install(TARGETS inkflow DESTINATION "${INKFLOW_ADDONDIR}")
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/inkflow.conf" DESTINATION "${INKFLOW_PKGDATADIR}/addon")
+install(FILES inkflow-pinyin.conf DESTINATION "${INKFLOW_PKGDATADIR}/inputmethod")
 file(GLOB INKFLOW_RIME_LIBS "${INKFLOW_NATIVE_PREFIX}/lib/librime.so*")
 install(FILES ${INKFLOW_RIME_LIBS} DESTINATION "${INKFLOW_LIBDIR}")
 if(INKFLOW_RESOURCES)
   install(DIRECTORY "${INKFLOW_RESOURCES}/shared" "${INKFLOW_RESOURCES}/prepared"
-          DESTINATION "${CMAKE_INSTALL_PREFIX}/share/inkflow/rime")
+          DESTINATION "share/inkflow/rime")
 endif()
 
 enable_testing()
 add_executable(bridge_test tests/bridge_test.cpp)
 target_include_directories(bridge_test PRIVATE src)
+# Release builds must still execute the assert-based helper checks.
+target_compile_options(bridge_test PRIVATE -UNDEBUG)
 add_test(NAME bridge_test COMMAND bridge_test)
