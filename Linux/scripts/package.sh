@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -s) == Linux ]] || { echo 'Linux host required.' >&2; exit 1; }
 [[ $# -le 1 ]] || { echo 'Usage: package.sh [PREPARED_RESOURCES]' >&2; exit 1; }
-[[ -z $(git status --porcelain --untracked-files=no) ]] || {
+[[ -z $(git status --porcelain --untracked-files=normal) ]] || {
   echo 'Commit tracked source changes before packaging for exact provenance.' >&2; exit 1;
 }
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"

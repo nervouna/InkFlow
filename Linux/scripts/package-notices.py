@@ -65,7 +65,7 @@ def check_resources(resources, reused):
 
 def main():
     package = Path(sys.argv[1]).resolve()
-    if command('git', 'status', '--porcelain', '--untracked-files=no'):
+    if command('git', 'status', '--porcelain', '--untracked-files=normal'):
         raise SystemExit('Commit tracked changes before packaging')
     revision = command('git', 'rev-parse', 'HEAD')
     for name in ('lib/fcitx5/libinkflow.so', 'lib/inkflow/librime.so',
@@ -123,8 +123,10 @@ def main():
     catalog = json.loads((ROOT / 'Core/config/chinese-sources.json').read_text())
     for item in catalog:
         name = item['id'] + '.yaml'
-        copy(ROOT / 'build/dictionary-sources' / name,
-             source / 'dictionary-sources' / name, item['pinnedSHA256'])
+        original = ROOT / 'build/dictionary-sources' / name
+        if item['group'] == 'legacy':
+            original = ROOT / 'build/deps' / ('rime-pinyin-simp-' + item['pinnedCommit']) / item['path']
+        copy(original, source / 'dictionary-sources' / name, item['pinnedSHA256'])
 
     # Both locked Rust graphs are used: engine and dictionary generator.
     for crate in ('Core/Portable', 'Core/Portable/dictionary'):
