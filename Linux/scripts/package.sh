@@ -1,18 +1,21 @@
 #!/bin/bash
-# Build a directory package only. Commit tracked changes before packaging.
+# Build a directory package only. Commit source changes before packaging.
 # Usage: bash Linux/scripts/package.sh [PREPARED_RESOURCES]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -s) == Linux ]] || { echo 'Linux host required.' >&2; exit 1; }
 [[ $# -le 1 ]] || { echo 'Usage: package.sh [PREPARED_RESOURCES]' >&2; exit 1; }
 [[ -z $(git status --porcelain --untracked-files=normal) ]] || {
-  echo 'Commit tracked source changes before packaging for exact provenance.' >&2; exit 1;
+  echo 'Commit source changes before packaging for exact provenance.' >&2; exit 1;
 }
+mkdir -p build/linux
+work=$(mktemp -d "$PWD/build/linux/package-work.XXXXXX")
+trap 'rm -rf "$work"' EXIT
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
 python3 Core/Portable/build-native.py
 bash Core/scripts/resource-dependencies.sh
 bash Core/scripts/prepare-chinese.sh --sources-only
-resources=${1:-$PWD/build/linux/resources}
+resources=${1:-$work/resources}
 resources=$(realpath -m "$resources")
 if [[ $# == 0 ]]; then
   bash Core/scripts/prepare-rime.sh "$resources/shared"
@@ -33,9 +36,8 @@ cmake -S Linux/fcitx5 -B build/linux/cmake -G Ninja \
   -DINKFLOW_RESOURCES="$resources"
 cmake --build build/linux/cmake --target inkflow --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
 # A failed build never replaces a previously completed package.
-mkdir -p build/linux
-stage=$(mktemp -d "$PWD/build/linux/stage.XXXXXX")
-trap 'rm -rf "$stage"' EXIT
+stage="$work/stage"
+mkdir -p "$stage"
 DESTDIR="$stage" cmake --install build/linux/cmake
 cp "$resources/resources.json" "$stage/usr/share/inkflow/rime/resources.json"
 # The addon loader resolves a bare library name in its configured addon paths.
