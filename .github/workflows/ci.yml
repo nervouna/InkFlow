@@ -67,10 +67,14 @@ jobs:
         run: bash Core/Portable/dictionary/test.sh
 
   scripts:
-    name: Remote runner tests
+    name: Script and frontend helper tests
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - name: Test scripts/mac-remote.py
         run: python3 -B scripts/tests/test_mac_remote.py
+      - name: Test Linux installer and frontend helpers
+        run: |
+          python3 -B Linux/scripts/test_install.py
+          bash Linux/fcitx5/test.sh

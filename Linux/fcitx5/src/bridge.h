@@ -48,6 +48,7 @@ inline Paths resolve_paths(const Env& env, const Exists& exists) {
   std::vector<std::string> roots;
   std::string override = env_or(env, "INKFLOW_RESOURCES", "");
   if (!override.empty()) roots.push_back(override);
+  roots.push_back(data_home + "/inkflow/current/share/inkflow/rime");
   roots.push_back(data_home + "/inkflow/rime");
   for (const auto& dir : split(env_or(env, "XDG_DATA_DIRS", "/usr/local/share:/usr/share"), ':')) {
     roots.push_back(dir + "/inkflow/rime");

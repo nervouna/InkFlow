@@ -1,6 +1,6 @@
 # Fcitx5 adapter
 
-Fcitx5 input-method addon over the shared Rust/Rime engine for [#36](https://github.com/nervouna/InkFlow/issues/36). Targets Omarchy/Hyprland and Steam Deck Desktop Mode (KDE Plasma); GNOME/IBus is deferred. The addon has been built, installed and activated on ARM64 Omarchy with Fcitx5 5.1.23. Application-level typing checks and Steam Deck validation remain open.
+Fcitx5 input-method addon over the shared Rust/Rime engine for [#36](https://github.com/nervouna/InkFlow/issues/36). Targets Omarchy/Hyprland and Steam Deck Desktop Mode (KDE Plasma); GNOME/IBus is deferred. The addon has been built, installed and activated on ARM64 Omarchy with Fcitx5 5.1.23, and the user confirmed typing works. Steam Deck validation is deferred.
 
 ## What it does
 
@@ -12,7 +12,7 @@ Fcitx5 input-method addon over the shared Rust/Rime engine for [#36](https://git
 - Personal-data import (`ImportBackup=/path/to/backup.json` in that file, then reload with `fcitx5-remote -r` or apply in the configuration tool): the addon consumes the request first so a bad file cannot repeat, parses the macOS format-1 document, logs the non-portable preferences it skips, destroys every session and the engine (Rime finalizes), imports the three dictionaries with rollback on failure, writes the backup's candidate count, options and phrases into the configuration, and recreates the engine. Compositions in progress are lost, which is why the entry point is explicit. An interrupted earlier import is recovered first.
 - `src/bridge.h`: the pure helpers (XDG paths, preedit layout, modifier translation, bounded preceding text) with `tests/bridge_test.cpp`, which runs on any platform.
 
-Resources are found at `INKFLOW_RESOURCES` (a prepared directory from `Core/Portable/prepare-resources.sh`, holding `shared/` and `prepared/cache/`), else the first `inkflow/rime` under `XDG_DATA_HOME` then `XDG_DATA_DIRS` that is prepared. User data lives in `$XDG_DATA_HOME/inkflow/rime` (default `~/.local/share/inkflow/rime`). Without resources the addon loads, logs a warning and passes every key through.
+Resources are found at `INKFLOW_RESOURCES` (a prepared directory from `Core/Portable/prepare-resources.sh`, holding `shared/` and `prepared/cache/`), then the managed installation at `$XDG_DATA_HOME/inkflow/current/share/inkflow/rime`, then the first prepared `inkflow/rime` under `XDG_DATA_HOME` or `XDG_DATA_DIRS`. User data lives in `$XDG_DATA_HOME/inkflow/rime` (default `~/.local/share/inkflow/rime`). Without resources the addon loads, logs a warning and passes every key through.
 
 ## Build on Linux
 
@@ -33,7 +33,11 @@ The addon links the crate's `staticlib` (which bundles the C++ bridge) and the p
 
 ## User-local installation and installed-addon test
 
-For an installation without sudo, configure with `-DCMAKE_INSTALL_PREFIX="$HOME/.local" -DFCITX_INSTALL_USE_FCITX_SYS_PATHS=OFF`, then build and install with CMake. The generated addon descriptor names its absolute library path, so Fcitx5 can load it without a global `FCITX_ADDON_DIRS` override. Back up `~/.config/fcitx5/` before enabling InkFlow. Keep the existing keyboard and input-method entries; add `inkflow-pinyin` through Fcitx5 configuration and restart the user's Fcitx5 service. On Omarchy that service is `omarchy-fcitx5.service`.
+Use `Linux/scripts/package.sh` to build a package directory with the addon, target-native resources, notices, corresponding dictionary sources, and a SHA-256 file manifest. See [Linux installation](../README.md) for packaging and install commands.
+
+`Linux/scripts/install.py` installs that directory without sudo or network access. It keeps immutable releases under `$XDG_DATA_HOME/inkflow/releases/` and switches the `current` symlink during upgrades. The generated addon descriptor names its absolute library path, so no global `FCITX_ADDON_DIRS` override is needed. Personal dictionaries remain in `$XDG_DATA_HOME/inkflow/rime`; configuration and custom phrases remain in `~/.config/fcitx5/conf/inkflow.conf`.
+
+Install, rollback and uninstall briefly stop and restart an active Fcitx5 user service. The installer recognizes `omarchy-fcitx5.service`, `fcitx5.service` and `plasma-fcitx5.service`; pass `--service NAME` for another service, or quit Fcitx5 first. It preserves other input-method entries and keeps a keyboard fallback. Ordinary builds and tests never install or activate the addon.
 
 The installed-addon test requires `dbus-run-session` and Python with `dbus-next==0.2.3`:
 
@@ -47,4 +51,4 @@ It starts a private Fcitx5 daemon on a separate D-Bus with temporary configurati
 
 On ARM64 Arch Linux/Omarchy with Hyprland, Fcitx5 5.1.23 and GCC 16.1.1, the native build, Rust runtime tests, 291 ranking cases, production resource preparation, 21-sample learned baseline, engine/personal-data parity, C ABI consumers, addon build, helper tests and installed-addon test passed. The desktop service loaded InkFlow and reported `inkflow-pinyin` as selected; the existing US keyboard and Pinyin entries were retained.
 
-Actual application rendering and typing still need a user check. Steam Deck/KDE Plasma, older Fcitx5 versions, Flatpak clients, distribution packaging and OS-update persistence have not been verified. Fcitx5 5.1.14 headers need C++20; older releases may need `FCITX_ADDON_FACTORY` (the fallback is compiled in).
+The user confirmed the Omarchy installation works. Steam Deck/KDE Plasma, older Fcitx5 versions, Flatpak clients and OS-update persistence have not been verified; Steam Deck work is deferred at the user's request. Fcitx5 5.1.14 headers need C++20; older releases may need `FCITX_ADDON_FACTORY` (the fallback is compiled in).
