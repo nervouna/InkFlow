@@ -38,6 +38,7 @@ public:
   }
   IFRSession* session = nullptr;
   SnapshotRef snapshot;
+  ShiftToggle shiftToggle;
 };
 
 class Engine final : public fcitx::InputMethodEngineV2 {

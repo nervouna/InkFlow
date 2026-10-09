@@ -54,6 +54,13 @@ int main() {
   assert(rime_modifiers(1u << 26, true) == ((1u << 26) | (1u << 30)));
   assert(rime_modifiers(1u << 4 | 1u << 31, false) == 0);
 
+  ShiftToggle shift;
+  assert(!shift.key(0xffe1, 0, false) && shift.key(0xffe1, 1u << 0, true));
+  assert(!shift.key(0xffe1, 1u << 0, true));
+  assert(!shift.key(0xffe1, 0, false) && !shift.key('A', 1u << 0, false) && !shift.key(0xffe1, 1u << 0, true));
+  assert(!shift.key(0xffe1, 1u << 2, false) && !shift.key(0xffe1, 1u << 2, true));
+  assert(!shift.key(0xffe2, 0, false) && !shift.key(0xffe2, 1u << 0, true));
+
   assert(preceding_text("中文abc", 5, 16) == "中文abc");
   assert(preceding_text("中文abc", 5, 2) == "bc");
   assert(preceding_text("中文abc", 2, 16) == "中文");

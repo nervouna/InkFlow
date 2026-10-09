@@ -104,6 +104,27 @@ inline std::uint32_t rime_modifiers(std::uint32_t fcitx_states, bool release) {
   return mask;
 }
 
+// A standalone left Shift toggles ASCII mode, as on macOS: a press without Control, Alt
+// or Super arms it, any other key disarms it, and the release that follows toggles.
+struct ShiftToggle {
+  bool armed = false;
+  bool key(std::uint32_t keysym, std::uint32_t fcitx_states, bool release) {
+    const std::uint32_t shift_l = 0xffe1;
+    const std::uint32_t others = 1u << 2 | 1u << 3 | 1u << 6 | 1u << 26;
+    if (keysym != shift_l || (fcitx_states & others)) {
+      armed = false;
+      return false;
+    }
+    if (!release) {
+      armed = true;
+      return false;
+    }
+    bool toggle = armed;
+    armed = false;
+    return toggle;
+  }
+};
+
 inline std::size_t utf8_sequence_length(unsigned char lead) {
   if (lead < 0x80) return 1;
   if ((lead & 0xE0) == 0xC0) return 2;
