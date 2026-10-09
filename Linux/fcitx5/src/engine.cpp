@@ -131,7 +131,7 @@ void Engine::applyConfiguration(IFRSession* session) {
   for (std::size_t index = 0; index < entries.size(); ++index) {
     std::string code, text;
     if (!parse_phrase(entries[index], code, text)) {
-      INKFLOW_WARN() << "skipping custom phrase without code=text: " << entries[index];
+      INKFLOW_WARN() << "skipping custom phrase without code=text at index " << index;
       continue;
     }
     strings.push_back(std::to_string(index));
@@ -178,7 +178,7 @@ void Engine::setConfig(const fcitx::RawConfig& raw) {
   applyConfigurationToSessions();
 }
 
-void Engine::importBackup(const std::string& file) {
+void Engine::importBackup(std::string file) {
   // The request is consumed whatever happens, so a bad file cannot repeat on every reload.
   config_.importBackup.setValue(std::string());
   saveConfig();
@@ -377,7 +377,8 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
                                             ifr_snapshot_selection_end(raw));
       fcitx::Text text;
       for (const auto& segment : layout.segments) {
-        fcitx::TextFormatFlags flags = fcitx::TextFormatFlag::Underline;
+        fcitx::TextFormatFlags flags{fcitx::TextFormatFlag::Underline,
+                                     fcitx::TextFormatFlag::DontCommit};
         if (segment.highlighted) flags |= fcitx::TextFormatFlag::HighLight;
         text.append(segment.text, flags);
       }

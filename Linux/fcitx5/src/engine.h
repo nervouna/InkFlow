@@ -76,7 +76,7 @@ private:
   void saveConfig();
   // The explicit personal-data entry point: stops the engine, imports, restarts, and
   // writes the backup's settings into the configuration. Never runs on the key path.
-  void importBackup(const std::string& file);
+  void importBackup(std::string file);
 
   fcitx::Instance* instance_;
   Paths paths_;

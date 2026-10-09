@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+sha256=(shasum -a 256)
+if command -v sha256sum >/dev/null; then sha256=(sha256sum); fi
 requested_destination=${1:?Usage: prepare-rime.sh DESTINATION}
 source Core/config/english.conf
 mkdir -p build/rime-cache
@@ -18,9 +20,9 @@ for input_root in rust-toolchain.toml Core/Package.swift Core/Sources Core/Tools
   build/deps/rime-pinyin-simp-* build/deps/rime-easy-en-* build/dictionary-sources; do
   [[ -e "$input_root" ]] || continue
   find "$input_root" -type f -print
-done | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done > "$manifest"
-[[ ! -f build/deps/emoji.txt ]] || shasum -a 256 build/deps/emoji.txt >> "$manifest"
-input_digest=$(shasum -a 256 "$manifest" | awk '{print $1}')
+done | LC_ALL=C sort | while IFS= read -r file; do "${sha256[@]}" "$file"; done > "$manifest"
+[[ ! -f build/deps/emoji.txt ]] || "${sha256[@]}" build/deps/emoji.txt >> "$manifest"
+input_digest=$("${sha256[@]}" "$manifest" | awk '{print $1}')
 cache="$PWD/build/rime-cache/$input_digest"
 if [[ ! -f "$cache/complete" || ! -d "$cache/content" ]]; then
   cache_build=$(mktemp -d "$PWD/build/rime-cache/build.$input_digest.XXXXXX")

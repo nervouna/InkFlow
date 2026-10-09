@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+sha256=(shasum -a 256)
+if command -v sha256sum >/dev/null; then sha256=(sha256sum); fi
 mode=generate
 case "${1:-}" in
   --sources-only) mode=sources-only; destination="" ;;
@@ -19,28 +21,28 @@ while IFS=$'\t' read -r identifier sha bytes url; do
   if [[ ! -f "$source_file" ]]; then
     curl --fail --location --proto '=https' --connect-timeout 20 --max-time 180 --retry 2 \
       --max-filesize "$bytes" "$url" -o "$staging/$identifier.yaml"
-    printf '%s  %s\n' "$sha" "$staging/$identifier.yaml" | shasum -a 256 -c -
+    printf '%s  %s\n' "$sha" "$staging/$identifier.yaml" | "${sha256[@]}" -c -
     [[ $(wc -c < "$staging/$identifier.yaml") -eq $bytes ]]
     mv "$staging/$identifier.yaml" "$source_file"
   fi
-  printf '%s  %s\n' "$sha" "$source_file" | shasum -a 256 -c - > /dev/null
+  printf '%s  %s\n' "$sha" "$source_file" | "${sha256[@]}" -c - > /dev/null
 done < "$staging/sources.tsv"
 [[ "$mode" == generate ]] || exit 0
 mkdir -p "$destination"
 # Cache is only a build optimization. Every raw input is verified above and the key
 # includes the executable, exact legacy bytes and local correction rules.
-shasum -a 256 build/dictionary-generator build/dictionary-sources/*.yaml "${legacy[0]}" \
+"${sha256[@]}" build/dictionary-generator build/dictionary-sources/*.yaml "${legacy[0]}" \
   Core/config/chinese-overrides.tsv > "$staging/inputs.sha256"
 cache=build/generated-chinese
 cache_valid=false
 if [[ -s "$cache/outputs.sha256" ]]; then
-  if (cd "$cache" && shasum -a 256 -c outputs.sha256 > /dev/null 2>&1); then cache_valid=true; fi
+  if (cd "$cache" && "${sha256[@]}" -c outputs.sha256 > /dev/null 2>&1); then cache_valid=true; fi
 fi
 if [[ ! -f "$cache/inputs.sha256" ]] || ! cmp -s "$staging/inputs.sha256" "$cache/inputs.sha256" \
    || ! $cache_valid; then
   build/dictionary-generator generate build/dictionary-sources "${legacy[0]}" Core/config/chinese-overrides.tsv "$staging/generated"
   cp "$staging/inputs.sha256" "$staging/generated/inputs.sha256"
-  (cd "$staging/generated" && shasum -a 256 pinyin_simp.dict.yaml dictionary-manifest.json > outputs.sha256)
+  (cd "$staging/generated" && "${sha256[@]}" pinyin_simp.dict.yaml dictionary-manifest.json > outputs.sha256)
   mkdir -p "$cache"
   cp "$staging/generated/"* "$cache/"
 fi
