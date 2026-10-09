@@ -1,0 +1,9 @@
+[Addon]
+Name=InkFlow
+Comment=InkFlow Pinyin on the shared Rust/Rime core
+Category=InputMethod
+Library=@FCITX_INSTALL_ADDONDIR@/libinkflow
+Type=SharedLibrary
+OnDemand=True
+Configurable=True
+Version=@PROJECT_VERSION@

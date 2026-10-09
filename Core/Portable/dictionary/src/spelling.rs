@@ -1,6 +1,7 @@
-use crate::{Result, read_rows};
+use crate::{CONTEXT_INDEX_FILENAME, Result, context_index, read_rows};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Every resource derived from the generated dictionary: 32 spelling profiles and the context index.
 pub fn spelling(dictionary: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
     let mut syllables = BTreeSet::new();
     read_rows(dictionary, "generated-spelling", |key, _| {
@@ -88,5 +89,6 @@ pub fn spelling(dictionary: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
         );
         schemas.insert(format!("{name}.schema.yaml"), schema.into_bytes());
     }
+    schemas.insert(CONTEXT_INDEX_FILENAME.to_owned(), context_index(dictionary)?);
     Ok(schemas)
 }

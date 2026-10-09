@@ -1,285 +1,101 @@
 import Foundation
+import InkFlowDictionary
 
-/// Reads only the tab-separated body. Remote headers, imports and executable configuration are never interpreted.
+// Foreign input buffers stay alive through each synchronous preparation call.
+private final class DictionaryBuffer {
+    private let pointer: UnsafeMutablePointer<UInt8>
+    private let count: Int
+    init(_ data: Data) {
+        count = data.count
+        pointer = .allocate(capacity: max(1, count))
+        data.copyBytes(to: pointer, count: count)
+    }
+    var borrowed: IFDBytes { .init(data: UnsafePointer(pointer), len: count) }
+    deinit { pointer.deallocate() }
+}
+
+private enum DictionaryNative {
+    private struct Failure: Decodable {
+        let code: String
+        let source: String?
+        let line: Int?
+    }
+    static func copy(_ bytes: IFDBytes) -> Data {
+        bytes.len == 0 ? Data() : Data(bytes: bytes.data!, count: bytes.len)
+    }
+    static func consume(_ result: OpaquePointer) throws -> [String: Data] {
+        defer { ifd_result_free(result) }
+        let error = copy(ifd_result_error(result))
+        if !error.isEmpty {
+            let failure = try JSONDecoder().decode(Failure.self, from: error)
+            throw IFDictionaryError(failure.code, source: failure.source, line: failure.line,
+                                    "Dictionary input validation or generation failed")
+        }
+        var files = [String: Data]()
+        for index in 0..<ifd_result_count(result) {
+            let name = String(decoding: copy(ifd_result_name(result, index)), as: UTF8.self)
+            files[name] = copy(ifd_result_data(result, index))
+        }
+        return files
+    }
+}
+
+/// Calls the shared Rust generator in-process, outside interactive input handling.
 package enum IFDictionaryGenerator {
-    package static let maximumWeight = Int(Int32.max)
-    private struct Key: Hashable { let text: String; let reading: String }
-    private struct Row { let key: Key; let weight: Int }
+    package static let recipeVersion = Int(ifd_recipe_version())
+    package static let maximumSourceBytes = ifd_maximum_source_bytes()
+    package static func catalog() -> [IFDictionarySourceSpec] {
+        // This immutable JSON is compiled into the same verified Rust library.
+        try! JSONDecoder().decode([IFDictionarySourceSpec].self, from: DictionaryNative.copy(ifd_catalog()))
+    }
 
     package static func generate(inputs: [IFDictionaryInput], corrections: Data = Data(),
                          catalog: [IFDictionarySourceSpec] = IFDictionaryCatalog.sources) throws -> IFDictionaryGeneration {
-        let expected = catalog.map(\.id)
-        guard inputs.map(\.receipt.id) == expected else {
-            throw IFDictionaryError("source-set", "Expected every catalog source exactly once, in precedence order")
+        let encoder = JSONEncoder()
+        let catalogBuffer = DictionaryBuffer(try encoder.encode(catalog))
+        let correctionBuffer = DictionaryBuffer(corrections)
+        var buffers = [DictionaryBuffer]()
+        var raw = [IFDInput]()
+        for input in inputs {
+            let receipt = DictionaryBuffer(try encoder.encode(input.receipt))
+            let data = DictionaryBuffer(input.data)
+            buffers += [receipt, data]
+            raw.append(.init(receipt: receipt.borrowed, data: data.borrowed))
         }
-        var groups = [String: [Key: Int]]()
-        var receipts = [IFDictionarySourceReceipt]()
-        for (spec, input) in zip(catalog, inputs) {
-            try validate(input)
-            guard input.receipt.repository == spec.repository, input.receipt.path == spec.path else {
-                throw IFDictionaryError("source-location", source: spec.id, "Source repository or path differs from the catalog")
-            }
-            if !spec.isUpdatable {
-                guard input.receipt.commit == spec.pinnedCommit, input.receipt.blobSHA == spec.pinnedBlobSHA,
-                      input.receipt.sha256 == spec.pinnedSHA256 else {
-                    throw IFDictionaryError("legacy-changed", source: spec.id, "Compatibility source must remain pinned")
-                }
-            }
-            let rows = try parse(input.data, source: spec.id)
-            var receipt = input.receipt
-            receipt.recordCount = rows.count
-            receipts.append(receipt)
-            var group = groups.removeValue(forKey: spec.group) ?? [:]
-            for row in rows where group[row.key] == nil { group[row.key] = row.weight }
-            groups[spec.group] = group
-        }
-        guard let frost = groups["frost"] else { throw IFDictionaryError("source-set", "Missing Frost baseline") }
-        var union = frost
-        var calibrations = [IFDictionaryCalibration]()
-        for groupName in ["ice", "legacy"] {
-            guard let group = groups[groupName] else {
-                throw IFDictionaryError("source-set", source: groupName, "Missing source group")
-            }
-            let calibration = try calibrate(source: group, baseline: frost, name: groupName)
-            calibrations.append(calibration)
-            for (key, weight) in group where union[key] == nil {
-                let factor = calibration.buckets[bucket(key.reading) - 1].multiplier
-                let mapped = Double(weight) * factor
-                // Saturate only mapped source weights at Rime's signed integer boundary.
-                union[key] = weight == 0 ? 0 : max(1, Int(min(Double(maximumWeight), mapped.rounded())))
+        let result = withExtendedLifetime((buffers, catalogBuffer, correctionBuffer)) {
+            raw.withUnsafeBufferPointer {
+                ifd_generate(catalogBuffer.borrowed, $0.baseAddress, $0.count, correctionBuffer.borrowed)!
             }
         }
-        // Specialty dictionaries only fill gaps after the established calibrated union.
-        // They cannot change existing weights or the overlap used for calibration.
-        for (key, weight) in groups["specialty"] ?? [:] where union[key] == nil { union[key] = weight }
-        for row in try parseCorrections(corrections) { union[row.key] = row.weight }
-        let keys = union.keys.sorted {
-            $0.text == $1.text ? $0.reading.utf8.lexicographicallyPrecedes($1.reading.utf8)
-                              : $0.text.utf8.lexicographicallyPrecedes($1.text.utf8)
+        let files = try DictionaryNative.consume(result)
+        guard let dictionary = files[IFDictionaryCatalog.dictionaryFilename],
+              let metadata = files[IFDictionaryManifest.filename] else {
+            throw IFDictionaryError("bridge-output", "Missing generated dictionary or manifest")
         }
-        var body = String()
-        body.reserveCapacity(union.count * 36)
-        for key in keys { body += "\(key.text)\t\(key.reading)\t\(union[key]!)\n" }
-        let contentHash = IFDictionaryHash.sha256(Data(body.utf8))
-        let versionHash = IFDictionaryHash.sha256(Data("recipe:\(IFDictionaryCatalog.recipeVersion)\n\(body)".utf8))
-        let version = "r\(IFDictionaryCatalog.recipeVersion)-\(versionHash)"
-        let header = """
-        # Generated by InkFlow from Rime Frost, Rime Ice and pinned pinyin_simp.
-        # Baseline weights are retained; specialty data fills gaps. See bundled Licenses.
-        ---
-        name: pinyin_simp
-        version: '\(version)'
-        sort: by_weight
-        use_preset_vocabulary: false
-        ...
-
-        """
-        let dictionary = Data((header + body).utf8)
-        let manifest = IFDictionaryManifest(formatVersion: 1, recipeVersion: IFDictionaryCatalog.recipeVersion,
-            contentVersion: version, entryCount: union.count, contentSHA256: contentHash,
-            dictionarySHA256: IFDictionaryHash.sha256(dictionary), correctionsSHA256: IFDictionaryHash.sha256(corrections),
-            sources: receipts, calibrations: calibrations)
+        let manifest = try JSONDecoder().decode(IFDictionaryManifest.self, from: metadata)
         return IFDictionaryGeneration(dictionary: dictionary, manifest: manifest)
     }
 
     package static func validate(_ input: IFDictionaryInput) throws {
-        let receipt = input.receipt
-        guard IFDictionaryHash.isHex(receipt.commit, length: 40), IFDictionaryHash.isHex(receipt.blobSHA, length: 40),
-              IFDictionaryHash.isHex(receipt.sha256, length: 64) else {
-            throw IFDictionaryError("invalid-receipt", source: receipt.id, "Invalid commit or content identifier")
+        let receipt = DictionaryBuffer(try JSONEncoder().encode(input.receipt))
+        let data = DictionaryBuffer(input.data)
+        let result = withExtendedLifetime((receipt, data)) {
+            ifd_validate(.init(receipt: receipt.borrowed, data: data.borrowed))!
         }
-        guard !input.data.isEmpty, input.data.count <= IFDictionaryCatalog.maximumSourceBytes,
-              input.data.count == receipt.byteCount else {
-            throw IFDictionaryError("source-size", source: receipt.id, "Received \(input.data.count) bytes; expected \(receipt.byteCount)")
-        }
-        guard IFDictionaryHash.gitBlob(input.data) == receipt.blobSHA,
-              IFDictionaryHash.sha256(input.data) == receipt.sha256 else {
-            throw IFDictionaryError("source-checksum", source: receipt.id, "Git blob or SHA-256 verification failed")
-        }
-    }
-
-    package static func normalizedReading(_ value: String) throws -> String {
-        let code = value.precomposedStringWithCanonicalMapping.lowercased().replacingOccurrences(of: "ü", with: "v")
-        let syllables = code.split(whereSeparator: \.isWhitespace)
-        guard !syllables.isEmpty, syllables.count <= 128,
-              syllables.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 8 && $0.utf8.allSatisfy { (97...122).contains($0) } }) else {
-            throw IFDictionaryError("invalid-reading", "Expected explicit, toneless Pinyin syllables")
-        }
-        return syllables.joined(separator: " ")
-    }
-
-    private static func parse(_ data: Data, source: String) throws -> [Row] {
-        var rows = [Row]()
-        try readRows(data, source: source) { rows.append($0) }
-        return rows
-    }
-
-    package static func spellingSyllables(in dictionary: Data) throws -> Set<String> {
-        var syllables = Set<String>()
-        try readRows(dictionary, source: "generated-spelling") { row in
-            syllables.formUnion(row.key.reading.split(separator: " ").map(String.init))
-        }
-        return syllables
-    }
-
-    private static func readRows(_ data: Data, source: String, receive: (Row) -> Void) throws {
-        // generate has already verified the complete byte count and both content hashes.
-        guard let string = String(data: data, encoding: .utf8) else {
-            throw IFDictionaryError("source-format", source: source, "Expected complete UTF-8 dictionary")
-        }
-        var inBody = false, sawHeader = false
-        var count = 0
-        for (offset, rawLine) in string.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = rawLine.hasSuffix("\r") ? rawLine.dropLast() : rawLine
-            guard line.utf8.count <= 8_192 else {
-                throw IFDictionaryError("source-format", source: source, line: offset + 1, "Line exceeds 8192 bytes")
-            }
-            if !inBody {
-                if line == "---" { sawHeader = true }
-                if line == "...", sawHeader { inBody = true }
-                continue
-            }
-            if line.trimmingCharacters(in: .whitespaces).isEmpty || line.trimmingCharacters(in: .whitespaces).hasPrefix("#") { continue }
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-            guard fields.count == 3 else {
-                throw IFDictionaryError("source-format", source: source, line: offset + 1, "Expected text, reading and integer weight")
-            }
-            receive(try row(fields, source: source, line: offset + 1))
-            count += 1
-            guard count <= 3_000_000 else { throw IFDictionaryError("source-format", source: source, "Too many records") }
-        }
-        guard inBody, count > 0 else { throw IFDictionaryError("source-format", source: source, "Missing dictionary body") }
-    }
-
-    private static func row(_ fields: [Substring], source: String, line: Int) throws -> Row {
-        let text = String(fields[0])
-        let hasHan = text.unicodeScalars.contains { scalar in
-            scalar.value == 0x3007 || (0x3400...0x9fff).contains(scalar.value) || (0xf900...0xfaff).contains(scalar.value)
-                || (0x20000...0x323af).contains(scalar.value)
-        }
-        guard hasHan, text.count <= 256, text == text.trimmingCharacters(in: .whitespacesAndNewlines),
-              !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
-              !fields[2].isEmpty, fields[2].utf8.allSatisfy({ (48...57).contains($0) }),
-              let weight = Int(fields[2]), weight <= maximumWeight else {
-            throw IFDictionaryError("source-format", source: source, line: line, "Invalid Chinese text or integer weight (0...\(maximumWeight))")
-        }
-        do { return Row(key: Key(text: text, reading: try normalizedReading(String(fields[1]))), weight: weight) }
-        catch { throw IFDictionaryError("invalid-reading", source: source, line: line, "Expected explicit, toneless Pinyin syllables") }
-    }
-
-    private static func parseCorrections(_ data: Data) throws -> [Row] {
-        guard data.count <= 1_048_576, let string = String(data: data, encoding: .utf8) else {
-            throw IFDictionaryError("correction-format", "Expected UTF-8 corrections under 1 MiB")
-        }
-        var rows = [Row](), seen = Set<Key>()
-        for (offset, rawLine) in string.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
-            let line = rawLine.hasSuffix("\r") ? rawLine.dropLast() : rawLine
-            if line.trimmingCharacters(in: .whitespaces).isEmpty || line.trimmingCharacters(in: .whitespaces).hasPrefix("#") { continue }
-            let fields = line.split(separator: "\t", omittingEmptySubsequences: false)
-            guard fields.count == 4, !fields[3].trimmingCharacters(in: .whitespaces).isEmpty else {
-                throw IFDictionaryError("correction-format", line: offset + 1, "Expected text, reading, replacement weight and reason")
-            }
-            let entry = try row(Array(fields.prefix(3)), source: "corrections", line: offset + 1)
-            guard seen.insert(entry.key).inserted else {
-                throw IFDictionaryError("correction-duplicate", line: offset + 1, "Duplicate term/reading correction")
-            }
-            rows.append(entry)
-        }
-        return rows
-    }
-
-    private static func bucket(_ reading: String) -> Int { min(5, reading.split(separator: " ").count) }
-    private static func medianMultiplier(_ values: [Double]) -> Double {
-        let sorted = values.sorted(), middle = values.count / 2
-        let median = sorted.count.isMultiple(of: 2) ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
-        return exp(median)
-    }
-    private static func calibrate(source: [Key: Int], baseline: [Key: Int], name: String) throws -> IFDictionaryCalibration {
-        var groups = Array(repeating: [Double](), count: 5)
-        for (key, weight) in source where weight > 0 {
-            if let reference = baseline[key], reference > 0 {
-                groups[bucket(key.reading) - 1].append(log(Double(reference) / Double(weight)))
-            }
-        }
-        let all = groups.flatMap { $0 }
-        guard !all.isEmpty else { throw IFDictionaryError("calibration-empty", source: name, "No positive-weight overlap with Frost") }
-        let overall = medianMultiplier(all)
-        let buckets = groups.enumerated().map { index, values in
-            IFDictionaryCalibrationBucket(syllables: index + 1, pairCount: values.count,
-                multiplier: values.count >= 100 ? medianMultiplier(values) : overall, usedOverall: values.count < 100)
-        }
-        return IFDictionaryCalibration(sourceGroup: name, pairCount: all.count, overallMultiplier: overall, buckets: buckets)
+        _ = try DictionaryNative.consume(result)
     }
 }
 
-/// Build preparation and the isolated update worker compile the same native algebra.
 package enum IFSpellingGenerator {
     package static func generate(dictionary: Data) throws -> [String: Data] {
-        let syllables = try IFDictionaryGenerator.spellingSyllables(in: dictionary)
-        var schemas = [String: Data]()
-        for profile in 0..<32 {
-            let name = "inkflow_spelling_\(profile)"
-            let rules = try algebra(syllables: syllables, profile: profile)
-            let schema = """
-            # Generated by IFSpellingGenerator. Compilation dependency only.
-            schema:
-              schema_id: \(name)
-              name: InkFlow spelling \(profile)
-              version: '1.1'
-            translator:
-              dictionary: pinyin_simp
-              prism: \(name)
-            speller:
-              algebra:
-            \(rules.map { "    - \($0)" }.joined(separator: "\n"))
-
-            """
-            schemas[name + ".schema.yaml"] = Data(schema.utf8)
-        }
-        return schemas
+        let buffer = DictionaryBuffer(dictionary)
+        let result = withExtendedLifetime(buffer) { ifd_spelling(buffer.borrowed)! }
+        return try DictionaryNative.consume(result)
     }
-
     package static func write(dictionary: Data, to directory: URL) throws {
         let schemas = try generate(dictionary: dictionary)
         for name in schemas.keys.sorted() {
             try schemas[name]!.write(to: directory.appendingPathComponent(name), options: .atomic)
         }
-    }
-
-    private static func algebra(syllables: Set<String>, profile: Int) throws -> [String] {
-        // One list owns normal equivalent spellings and explicitly enabled fuzzy pairs.
-        // These simple derivations also define the legal full-spelling collision set.
-        var equivalents = [("^([nl])ue$", "$1ve"), ("^([jqxy])u", "$1v")]
-        for (initial, bit) in [("z", 4), ("c", 8), ("s", 16)] where profile & bit != 0 {
-            equivalents += [("^\(initial)h", initial), ("^\(initial)([^h])", initial + "h$1")]
-        }
-        var rules = equivalents.map { "derive/\($0.0)/\($0.1)/" }
-        if profile & 1 != 0 {
-            rules += ["abbrev/^([a-z]).+$/$1/", "abbrev/^([zcs]h).+$/$1/"]
-        }
-        if profile & 2 != 0 {
-            var legal = syllables
-            for (pattern, replacement) in equivalents {
-                let expression = try NSRegularExpression(pattern: pattern)
-                legal.formUnion(legal.map {
-                    expression.stringByReplacingMatches(in: $0, range: NSRange($0.startIndex..., in: $0),
-                                                        withTemplate: replacement)
-                })
-            }
-            // Only copies carry typo transformations. Rime retains fuzzy properties,
-            // ordered combinations and the original paths. Guard the final aliases,
-            // then remove the temporary marker before compiling the prism.
-            rules += [
-                "derive/^(.*)$/~$1/",
-                "fuzz/^~([zcs])h/~h$1/",
-                "fuzz/^~([bpmfdtnlgkhjqxrzcsyw])(?=[a-z])/~$1$1/",
-                "fuzz/^~(.*)([aeiou])ng$/~$1$2gn/",
-                "fuzz/^~(.*)ao$/~$1oa/",
-                "fuzz/^~(.*)([iu])a(o|ng?)?$/~$1a$2$3/",
-                "erase/^~(\(legal.sorted().joined(separator: "|")))$/",
-                "xform/^~//",
-            ]
-        }
-        return rules
     }
 }

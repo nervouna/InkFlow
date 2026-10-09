@@ -12,6 +12,8 @@ python3 scripts/mac-remote.py test engine controller
 python3 scripts/mac-remote.py baseline
 python3 scripts/mac-remote.py portable
 python3 scripts/mac-remote.py dictionary
+python3 scripts/mac-remote.py resources
+python3 scripts/mac-remote.py ranking-reference
 ```
 
 `--revision COMMIT` defaults to `HEAD`. Local uncommitted changes are never sent. The runner prints the resolved commit and evidence directory. Use `--host ALIAS` and `--remote-root PATH` to override the defaults, `tanaris` and `~/Develop/Projects/inkflow-remote`.
@@ -26,7 +28,7 @@ Build caches stay under the dedicated checkout's ignored `build/`. Do not share 
 
 - An unowned or dirty remote checkout is rejected. This includes untracked, non-ignored files. The runner does not reset, clean, or stash someone else's changes.
 - A directory lock prevents overlapping runner operations on the same checkout. Do not run builds manually in that checkout while the runner owns it.
-- The runner allows only build, baseline, the portable runtime probe, the dictionary generator comparison, and a small set of focused test units. It rejects `test all` and arbitrary commands.
+- The runner allows only build, baseline, the portable runtime probe, the dictionary generator comparison, target-native resource preparation, and a small set of focused test units. It rejects `test all` and arbitrary commands.
 - Build runs the ordinary build script and one fast bundle check. No sudo or signing-key transfer is needed.
 - Each action records exact commands, elapsed time, exit status, host/toolchain details, and stdout/stderr logs. Failed actions retain evidence and stop before later steps.
 - Results are copied to `build/mac-remote/RUN_ID/` on Linux. Cleanup requires a successful copy and a complete `run.json` matching every request field and the worker exit status, with valid start/completion timestamps. Missing, malformed, or mismatched receipts leave remote evidence in place and return a nonzero status.
@@ -42,7 +44,15 @@ The remote report contains `00-portable.log`, `native-build.json`, and the norma
 
 ## Dictionary generator comparison
 
-`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md).
+`dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It also compiles C and Swift consumers of the in-process Rust dictionary ABI. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, the Swift ABI consumer's `swift-ffi-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md).
+
+## Ranking reference
+
+`ranking-reference` compiles the unchanged Swift ranker with a standalone fixture reader and returns `ranking-reference.json`. It does not initialize Rime or inspect user data. The `portable` action also regenerates this reference on the Mac, compares it with the recorded fixture, and runs the Rust ranking tests. These compare the pure ordering policy, not full engine behavior.
+
+## Target-native production resources
+
+`resources` runs `Core/Portable/prepare-resources.sh`. It uses the shared resource recipe and source-built runtime to compile the full schema list and all 32 spelling profiles, then runs the existing worker's Chinese, English, mixed, and Emoji smoke cases in a separate temporary user directory. The runner returns `resources.json` with source/cache hashes, dictionary metadata, and the native build manifest. Compiled caches stay on their target machine. This does not install a frontend or establish full session/ranking parity.
 
 ## Baseline recipe
 

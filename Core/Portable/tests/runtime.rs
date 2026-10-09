@@ -58,6 +58,7 @@ fn desktop_runtime_contract() {
     ));
     assert!(matches!(runtime.session("missing"), Err(Error::Native(-2))));
     let mut session = runtime.session("probe").unwrap();
+    assert_eq!(runtime.prepare(), Err(Error::SessionsActive));
     assert_eq!(
         runtime.deploy(&fixture.0.join("shared/probe.schema.yaml")),
         Err(Error::SessionsActive)
@@ -228,7 +229,30 @@ fn desktop_runtime_contract() {
     assert_eq!(session.take_commit().unwrap().as_deref(), Some("你好"));
     drop(session);
     drop(runtime);
+    let cache = fixture.0.join("separate-cache");
+    let compiler = fixture.0.join("compile-user");
+    let serving = fixture.0.join("serving-user");
+    for directory in [&cache, &compiler, &serving] {
+        fs::create_dir(directory).unwrap();
+    }
+    let mut prepared = Runtime::with_cache(&fixture.0.join("shared"), &compiler, &cache).unwrap();
+    prepared.prepare().unwrap();
+    assert!(cache.join("probe.table.bin").exists());
+    assert!(!compiler.join("build/probe.table.bin").exists());
+    drop(prepared);
+    let prepared = Runtime::with_cache(&fixture.0.join("shared"), &serving, &cache).unwrap();
+    let mut prepared_session = prepared.session("probe").unwrap();
+    for key in b"nihao" {
+        prepared_session.process_key(i32::from(*key), 0).unwrap();
+    }
+    assert_eq!(
+        prepared_session.snapshot().unwrap().candidates[0].text,
+        "你好"
+    );
+    assert!(!serving.join("build/probe.table.bin").exists());
+    drop(prepared_session);
+    drop(prepared);
     println!(
-        "PASS lifetime, target deployment, Lua, UTF-8 ownership, commits, snapshot-safe selection, paging, serialized sessions, restart"
+        "PASS explicit-cache preparation/serving, lifetime, target deployment, Lua, UTF-8 ownership, commits, snapshot-safe selection, paging, serialized sessions, restart"
     );
 }

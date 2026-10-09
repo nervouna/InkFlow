@@ -6,7 +6,8 @@ Dictionary source data and build-time policy live under `Core/`. The recipe has 
 | --- | --- |
 | Static English frequency snapshot and technical spellings | `Core/Data/` |
 | English admission/scaling and exact corrections; Chinese corrections | `Core/config/` |
-| Chinese source catalog, merge/calibration rules, and spelling profiles | `Core/Sources/InkFlowDomain/DictionaryModels.swift` and `DictionaryGenerator.swift` |
+| Chinese source catalog | `Core/config/chinese-sources.json`, embedded in the Rust library and read by Swift through its C ABI |
+| Merge/calibration rules and spelling profiles | `Core/Portable/dictionary/src/`; Swift preparation/update callers delegate through `DictionaryGenerator.swift` |
 | Downloaded, verified dictionary sources | Ignored `build/deps/` and `build/dictionary-sources/` |
 | English admission, mixed dictionary derivation, and resource assembly | `Core/scripts/prepare-rime.sh` |
 | Chinese source verification and generation | `Core/scripts/prepare-chinese.sh` |
@@ -17,9 +18,11 @@ The optional wordfreq snapshot tool stays under `macOS/scripts/` and writes to `
 
 ## Commands
 
-On the Mac, after preparing the pinned dependencies:
+On Linux or macOS:
 
 ```sh
+bash Core/scripts/resource-dependencies.sh
+bash Core/scripts/prepare-chinese.sh --sources-only
 bash Core/scripts/prepare-rime.sh build/shared-rime
 ```
 
@@ -36,4 +39,6 @@ The shell fixtures use small stand-in generators to isolate admission and delive
 
 ## Migration boundary
 
-Production still builds the Swift generator through the Mac toolchain (`Core/scripts/build-dictionary-generator.sh`). The [Rust generator comparison](../Core/Portable/dictionary/README.md) matches it on Linux and macOS but has not replaced it; target-native preparation is part of [#35](https://github.com/nervouna/InkFlow/issues/35).
+`Core/scripts/build-dictionary-generator.sh` builds the Rust CLI and static library. The Swift dictionary preparation/update worker calls that library in-process. The former Swift implementation exists only in the dictionary test target for [compatibility comparisons](../Core/Portable/dictionary/README.md). SwiftPM tracks a generated archive-identity header so changes in Rust relink native callers.
+
+`bash Core/Portable/prepare-resources.sh` prepares source resources, compiles them with the source-built target runtime, and runs the existing worker smoke cases in separate temporary user directories. It retains source/cache hashes in `resources.json`. The cache is not a portable personal-data backup.

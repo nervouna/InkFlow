@@ -15,9 +15,10 @@ extension DictionaryGeneratorTests {
         for test in cases {
             let (inputs, catalog) = fixture(test.bodies ?? [:], header: test.header ?? "---\nimport_tables: [ignored]\n...\n")
             do {
-                let generated = try IFDictionaryGenerator.generate(inputs: inputs,
+                let generated = try IFReferenceDictionaryGenerator.generate(inputs: inputs,
                     corrections: Data((test.corrections ?? "").utf8), catalog: catalog)
-                let schemas = try IFSpellingGenerator.generate(dictionary: generated.dictionary)
+                var schemas = try IFReferenceSpellingGenerator.generate(dictionary: generated.dictionary)
+                schemas[IFDictionaryCatalog.contextIndexFilename] = try IFContextRanker.buildIndex(dictionary: generated.dictionary)
                 results[test.name] = [
                     "manifest": try JSONSerialization.jsonObject(with: generated.manifest.encoded()),
                     "spellingSHA256": schemas.mapValues { IFDictionaryHash.sha256($0) }

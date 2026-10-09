@@ -117,7 +117,7 @@ fn swift_reference_contract() {
         }
     }
     println!(
-        "PASS {} Swift/Rust contract cases, manifests and 32 spelling profiles",
+        "PASS {} Swift/Rust contract cases, manifests, 32 spelling profiles and context indexes",
         cases.len()
     );
 }

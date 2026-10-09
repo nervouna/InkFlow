@@ -1,8 +1,16 @@
 //! Offline dictionary generation. Inputs and provenance are supplied by the caller.
+mod context;
+mod ffi;
 mod model;
 mod spelling;
+pub use context::{CONTEXT_INDEX_FILENAME, context_index};
 pub use model::*;
 pub use spelling::spelling;
+
+pub const CATALOG_JSON: &[u8] = include_bytes!("../../../config/chinese-sources.json");
+pub fn catalog() -> Result<Vec<SourceSpec>> {
+    serde_json::from_slice(CATALOG_JSON).map_err(|_| Error::new("catalog-format"))
+}
 
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;

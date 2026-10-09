@@ -14,6 +14,39 @@ impl Drop for Scratch {
 }
 
 #[test]
+fn compiled_catalog_and_source_download_list_match() {
+    let output = Command::new(env!("CARGO_BIN_EXE_inkflow-dictionary"))
+        .arg("catalog")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, inkflow_dictionary::CATALOG_JSON);
+    let catalog = inkflow_dictionary::catalog().unwrap();
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/catalog.json")).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap(),
+        reference
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_inkflow-dictionary"))
+        .arg("sources")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let expected: String = catalog
+        .iter()
+        .filter(|s| s.group != "legacy")
+        .map(|s| {
+            format!(
+                "{}\t{}\t{}\thttps://raw.githubusercontent.com/{}/{}/{}\n",
+                s.id, s.pinned_sha256, s.pinned_byte_count, s.repository, s.pinned_commit, s.path
+            )
+        })
+        .collect();
+    assert_eq!(output.stdout, expected.as_bytes());
+}
+
+#[test]
 fn cli_checks_inputs_before_publishing_and_refuses_replacement() {
     let root = std::env::temp_dir().join(format!(
         "inkflow-dictionary-{}-{}",
@@ -72,5 +105,5 @@ fn cli_checks_inputs_before_publishing_and_refuses_replacement() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(fs::read_dir(root.join("spelling")).unwrap().count(), 32);
+    assert_eq!(fs::read_dir(root.join("spelling")).unwrap().count(), 33);
 }

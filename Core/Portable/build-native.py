@@ -83,7 +83,8 @@ def main():
           '-DINSTALL_PRIVATE_HEADERS=ON', '-DENABLE_TIMESTAMP=OFF',
           '-DCMAKE_DISABLE_FIND_PACKAGE_Gflags=ON',
           f'-DBOOST_ROOT={PREFIX}', f'-DBoost_INCLUDE_DIR={PREFIX}/include',
-          f'-DCMAKE_INSTALL_RPATH={PREFIX}/lib')
+          # Shared librime and prefix/bin tools both need relocatable lookup.
+          f'-DCMAKE_INSTALL_RPATH={PREFIX / "lib" if sys.platform == "darwin" else "$ORIGIN;$ORIGIN/../lib"}')
     cmake('bridge', source=HERE / 'native')
     cache = (BUILD / 'cmake-bridge/CMakeCache.txt').read_text().splitlines()
     compiler = next(line.split('=', 1)[1] for line in cache

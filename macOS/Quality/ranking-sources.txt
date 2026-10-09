@@ -3,6 +3,9 @@ macOS/Sources/CandidatePresentation.swift
 macOS/Sources/Context.swift
 macOS/Sources/CustomPhrases.swift
 Core/Sources/InkFlowDomain/DictionaryGenerator.swift
+Core/Portable/dictionary/src/lib.rs
+Core/Portable/dictionary/src/model.rs
+Core/Portable/dictionary/src/spelling.rs
 Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp
 Core/Sources/InkFlowRime/Engine.swift
 Core/Sources/InkFlowRime/EngineAI.swift
