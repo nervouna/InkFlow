@@ -52,6 +52,14 @@ void Engine::createEngine() {
     INKFLOW_WARN() << "no prepared resources under XDG data directories; keys pass through";
     return;
   }
+  // A pending import can leave old and new dictionaries mixed; restore the originals
+  // before Rime opens the directory, or stay off so typing cannot build on that state.
+  IFRStatus recovered = ifr_personal_recover(paths_.user.c_str());
+  if (recovered != IFR_OK) {
+    INKFLOW_WARN() << "personal data needs recovery; keys pass through: " << recovered << " "
+                   << ifr_last_error();
+    return;
+  }
   IFREngineConfig config = {paths_.shared.c_str(), paths_.user.c_str(), paths_.cache.c_str(),
                             paths_.context_index.c_str()};
   IFRStatus status = ifr_engine_create(&config, &engine_);
@@ -206,7 +214,7 @@ void Engine::importBackup(std::string file) {
     }
   }
   if (status != IFR_OK) {
-    INKFLOW_WARN() << "import failed, user data unchanged: " << status << " " << ifr_last_error();
+    INKFLOW_WARN() << "import failed: " << status << " " << ifr_last_error();
   } else {
     config_.candidateCount.setValue(static_cast<int>(ifr_backup_candidate_count(backup)));
     uint32_t options = ifr_backup_input_options(backup);
@@ -272,8 +280,19 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
   }
   if (!session(st)) return;
   const fcitx::Key& key = event.rawKey();
-  if (!st->composing()) refreshContext(ic, st);
   int handled = 0;
+  if (st->shiftToggle.key(static_cast<uint32_t>(key.sym()), static_cast<uint32_t>(key.states()),
+                          event.isRelease())) {
+    IFRStatus status = ifr_session_toggle_ascii_mode(st->session, &handled);
+    if (status != IFR_OK) {
+      failed(ic, st, "ascii toggle", status);
+      return;
+    }
+    refresh(ic, st);
+    event.filterAndAccept();
+    return;
+  }
+  if (!st->composing()) refreshContext(ic, st);
   IFRStatus status = ifr_session_key(st->session, static_cast<int32_t>(key.sym()),
                                      static_cast<int32_t>(rime_modifiers(key.states(), event.isRelease())),
                                      &handled);
