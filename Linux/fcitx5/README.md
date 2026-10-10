@@ -16,7 +16,7 @@ Resources are found at `INKFLOW_RESOURCES` (a prepared directory from `Core/Port
 
 ## Build on Linux
 
-Requirements: the repository's Rust toolchain, CMake 3.31.6 and Ninja 1.11.1.4 for the pinned native build, a C++20 compiler, Python 3, and the Fcitx5 development files (`fcitx5` on Arch/SteamOS, `libfcitx5core-dev` plus `extra-cmake-modules` on Ubuntu). Resource preparation uses `sha256sum` when available, otherwise `shasum -a 256`. From the checkout root:
+Requirements: the repository's Rust toolchain, CMake 3.31.6 and Ninja 1.11.1.4 for the pinned native build, a C++20 compiler, Python 3, and the Fcitx5 development files (`fcitx5` on Arch/SteamOS, `libfcitx5core-dev` plus `extra-cmake-modules` on Ubuntu 26.04). Resource preparation uses `sha256sum` when available, otherwise `shasum -a 256`. From the checkout root:
 
 ```sh
 python3 Core/Portable/build-native.py
@@ -33,7 +33,7 @@ The addon links the crate's `staticlib` (which bundles the C++ bridge) and the p
 
 ## Continuous integration
 
-The Linux `portable` job in [CI](../../.github/workflows/ci.yml) installs Ubuntu 24.04's Fcitx5 development packages and runs the actual CMake configure, build and link, followed by CTest. It reuses `Core/Portable/test.sh`'s debug Rust static library (`abi.sh` builds it) and pinned `librime.so` in the same job, without a second Rust or Rime build. The C++ addon uses `Release`; CI enables `--no-undefined` for the module link so unresolved addon/ABI symbols fail the build. Packaging keeps its release Rust profile.
+The Linux `portable` job in [CI](../../.github/workflows/ci.yml) installs Ubuntu 26.04's Fcitx5 5.1.19 development packages and runs the actual CMake configure, build and link, followed by CTest. It reuses `Core/Portable/test.sh`'s debug Rust static library (`abi.sh` builds it) and pinned `librime.so` in the same job, without a second Rust or Rime build. The C++ addon uses `Release`; CI enables `--no-undefined` for the module link so unresolved addon/ABI symbols fail the build. Packaging keeps its release Rust profile. Ubuntu 24.04's Fcitx5 5.1.7 lacks the `CandidateWord::setComment` API used by the addon; the portable cache is scoped to Ubuntu 26.04 to avoid reusing native outputs from a different distribution toolchain.
 
 This gate covers compilation of `engine.cpp` and `candidates.cpp` against the distribution's Fcitx5 headers, linkage of `libinkflow.so` to Fcitx5 and the shared core, and the existing `bridge_test` behavior checks through CTest (assertions stay enabled in Release). The separate script/helper and isolated installer tests remain in CI. CTest currently exercises only the pure bridge helpers; it does not load the addon or run a desktop session. Installed-addon behavior, real application input, focus, personal-data migration, upgrade and rollback still need the isolated installed-addon tests and target-device validation below. Steam Deck/KDE Plasma validation remains deferred.
 

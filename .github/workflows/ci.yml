@@ -33,7 +33,8 @@ jobs:
 
   portable:
     name: Portable runtime (cargo test)
-    runs-on: ubuntu-24.04
+    # Ubuntu 24.04's Fcitx5 5.1.7 lacks CandidateWord::setComment.
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
@@ -48,8 +49,8 @@ jobs:
         uses: actions/cache@v5
         with:
           path: build/portable
-          key: portable-${{ runner.os }}-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: portable-${{ runner.os }}-
+          key: portable-${{ runner.os }}-ubuntu-26.04-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: portable-${{ runner.os }}-ubuntu-26.04-
       # rustup picks the pinned toolchain from rust-toolchain.toml.
       - name: Build the native runtime and run cargo test
         run: bash Core/Portable/test.sh
