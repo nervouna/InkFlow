@@ -31,6 +31,12 @@ The addon links the crate's `staticlib` (which bundles the C++ bridge) and the p
 
 `bash Linux/fcitx5/test.sh` runs the helper tests anywhere; with `FCITX5_SOURCE=<fcitx5 source tree>` it also compiles the addon syntax-only against those headers (export headers stubbed), which is how it was checked from macOS against fcitx5 5.1.14.
 
+## Continuous integration
+
+The Linux `portable` job in [CI](../../.github/workflows/ci.yml) installs Ubuntu 24.04's Fcitx5 development packages and runs the actual CMake configure, build and link, followed by CTest. It reuses `Core/Portable/test.sh`'s debug Rust static library (`abi.sh` builds it) and pinned `librime.so` in the same job, without a second Rust or Rime build. The C++ addon uses `Release`; CI enables `--no-undefined` for the module link so unresolved addon/ABI symbols fail the build. Packaging keeps its release Rust profile.
+
+This gate covers compilation of `engine.cpp` and `candidates.cpp` against the distribution's Fcitx5 headers, linkage of `libinkflow.so` to Fcitx5 and the shared core, and the existing `bridge_test` behavior checks through CTest (assertions stay enabled in Release). The separate script/helper and isolated installer tests remain in CI. CTest currently exercises only the pure bridge helpers; it does not load the addon or run a desktop session. Installed-addon behavior, real application input, focus, personal-data migration, upgrade and rollback still need the isolated installed-addon tests and target-device validation below. Steam Deck/KDE Plasma validation remains deferred.
+
 ## User-local installation and installed-addon test
 
 Use `Linux/scripts/package.sh` to build a package directory with the addon, target-native resources, notices, corresponding dictionary sources, and a SHA-256 file manifest. See [Linux installation](../README.md) for packaging and install commands.
