@@ -40,6 +40,10 @@ jobs:
       # Same CMake/Ninja releases as the Mac runner (Core/Portable/README.md).
       - name: Install CMake and Ninja
         run: pipx install cmake==3.31.6 && pipx install ninja==1.11.1.4
+      - name: Install Fcitx5 development dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfcitx5core-dev extra-cmake-modules
       - name: Cache the native runtime build
         uses: actions/cache@v5
         with:
@@ -49,6 +53,19 @@ jobs:
       # rustup picks the pinned toolchain from rust-toolchain.toml.
       - name: Build the native runtime and run cargo test
         run: bash Core/Portable/test.sh
+      # test.sh -> abi.sh already builds the debug staticlib and pinned librime.
+      # Reuse those outputs; this gate does not need another Cargo/native build.
+      - name: Configure the Fcitx5 plugin
+        run: |
+          cmake -S Linux/fcitx5 -B build/fcitx5 -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DINKFLOW_CARGO_DIR="$PWD/build/portable/cargo/debug" \
+            -DINKFLOW_NATIVE_PREFIX="$PWD/build/portable/prefix" \
+            -DCMAKE_MODULE_LINKER_FLAGS="-Wl,--no-undefined"
+      - name: Compile and link the Fcitx5 plugin
+        run: cmake --build build/fcitx5 --parallel 4 --verbose
+      - name: Run Fcitx5 CTest
+        run: ctest --test-dir build/fcitx5 --output-on-failure --no-tests=error
 
   dictionary:
     name: Portable dictionary (cargo test)
