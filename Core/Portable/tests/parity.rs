@@ -3,6 +3,7 @@
 //! Needs prepared production resources: set INKFLOW_PORTABLE_RESOURCES to a directory
 //! holding `shared/` and `prepared/cache/` from `Core/Portable/prepare-resources.sh`.
 use inkflow_rime::{
+    channel::Reply,
     engine::{Configuration, Engine, InputSession},
     preferences::InputPreferences,
 };
@@ -1195,8 +1196,8 @@ fn user_dictionary(name: &str, rows: &[(&str, &str, i32)]) -> String {
 /// Transitions recorded by the Swift engine in Core/Tests/AIAdoptionLearningTests
 /// (`personalManagement`) and macOS/Tests/PersonalDataTests.swift, on the same state: a
 /// canonical English record and a voice alias for two spellings of one word. The Swift
-/// seeding went through voice-correction learning, which is not exported yet; the rows are
-/// restored from a snapshot instead.
+/// seeding went through voice-correction learning, which `swift_voice_correction_learning`
+/// ports; the rows are restored from a snapshot here.
 #[test]
 fn swift_personal_learning_management() {
     use inkflow_rime::engine::{LearningEntry, LearningError, LearningSource};
@@ -1382,6 +1383,826 @@ fn swift_personal_snapshot_export() {
     assert_eq!(personal::export(&target).unwrap(), exported);
     fs::remove_dir_all(&root).unwrap();
     println!("PASS Swift personal snapshot export: byte-identical to the recorded worker output");
+}
+
+/// The channel round trip `IFEngine.call` makes, with the capacities the Swift callers pass.
+fn call(session: &InputSession, op: &str, fields: &[&str], capacity: usize) -> Option<Reply> {
+    session.call(op, fields, capacity).unwrap()
+}
+
+fn status(session: &InputSession, op: &str, fields: &[&str]) -> String {
+    call(session, op, fields, 4096)
+        .unwrap_or_else(|| panic!("no reply to {op}"))
+        .status
+}
+
+/// `IFEngine.aiInputIdentity`: the raw input, the raw-input caret and the preedit before the
+/// selection, read from one snapshot.
+fn ai_identity(session: &InputSession) -> Option<(String, usize, String)> {
+    let snapshot = session.snapshot().unwrap();
+    (!snapshot.input.is_empty()).then(|| {
+        (
+            snapshot.input.clone(),
+            snapshot.raw_caret_bytes,
+            snapshot.preedit[..snapshot.selection_bytes.start].to_owned(),
+        )
+    })
+}
+
+/// Type `input`, list every candidate and clear, as the Swift tests' `candidates` helper does.
+fn candidates_of(session: &InputSession, input: &str) -> Vec<String> {
+    session.clear().unwrap();
+    type_keys(session, input);
+    let all = all_candidates(session);
+    session.clear().unwrap();
+    all
+}
+
+/// Type `input`, commit its first candidate with Space and, as the Swift tests' `ordinaryCommit`
+/// does, end the undo window with Tab or undo the commit with Backspace.
+fn ordinary_commit(session: &InputSession, input: &str, expected: &str, undo: bool) {
+    session.clear().unwrap();
+    type_keys(session, input);
+    session.key(32, 0).unwrap();
+    assert_eq!(session.take_commit().unwrap(), expected);
+    session.key(if undo { 0xff08 } else { 0xff09 }, 0).unwrap();
+}
+
+fn choose(session: &InputSession, input: &str, target: &str) {
+    session.clear().unwrap();
+    type_keys(session, input);
+    let page = session.snapshot().unwrap();
+    let index = page
+        .texts()
+        .iter()
+        .position(|c| *c == target)
+        .unwrap_or_else(|| panic!("missing {target} for {input}"));
+    session.select(&page, index).unwrap();
+    assert_eq!(session.take_commit().unwrap(), target);
+}
+
+/// The reading `AIPronunciation.resolve` accepts from `ai_readings` rows: one phrase reading
+/// whose syllable count is the text's.
+fn phrase_readings(body: &str, text: &str) -> Vec<String> {
+    body.lines()
+        .filter_map(|line| line.strip_prefix("P\t"))
+        .filter(|code| code.split(' ').count() == text.chars().count())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn character_readings(body: &str, character: &str) -> Vec<String> {
+    body.lines()
+        .filter_map(|line| line.strip_prefix(&format!("C\t{character}\t")))
+        .flat_map(|codes| codes.split(' ').map(str::to_owned).collect::<Vec<_>>())
+        .collect()
+}
+
+/// Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift `propertyChannel`: the live
+/// dispatch half. Version 1 framing is covered by the unit tests of `src/channel.rs`.
+#[test]
+fn swift_property_channel() {
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP property channel parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let user = scratch("property-channel");
+    let engine = engine(&resources, &user);
+    let session = configured(&engine);
+    assert_eq!(
+        call(&session, "learning_invalidate", &[], 512),
+        Some(Reply {
+            status: "ok".into(),
+            body: String::new()
+        }),
+        "a live module answers a version 1 request"
+    );
+    assert_eq!(
+        call(&session, "no_such_operation", &[], 512),
+        None,
+        "no module answers an unknown operation"
+    );
+    assert_eq!(
+        status(&session, "ai_learning", &["bad code", "你好"]),
+        "failed",
+        "modules validate their own fields"
+    );
+    assert_eq!(
+        status(&session, "input_coverage", &["0", "3"]),
+        "failed",
+        "input coverage without a composition fails closed"
+    );
+    for (op, fields) in [
+        ("", vec!["a"]),
+        ("Input", vec![]),
+        ("ai-learning", vec![]),
+        ("ai_learning", vec!["a\tb"]),
+        ("ai_learning", vec!["a\nb"]),
+        ("ai_learning", vec!["a\rb"]),
+    ] {
+        assert_eq!(
+            call(&session, op, &fields, 512),
+            None,
+            "framing characters and bad operation names fail closed: {op} {fields:?}"
+        );
+    }
+    assert_eq!(
+        call(&session, "voice_aliases", &[], 8),
+        None,
+        "a reply that does not fit is no reply"
+    );
+    drop(session);
+    drop(engine);
+    fs::remove_dir_all(&user).unwrap();
+    println!("PASS Swift property channel: live dispatch, field validation, bounded replies");
+}
+
+/// Core/Tests/AIAdoptionLearningTests `voiceCorrectionLearning` (write, read, clear and
+/// cleared-read scenarios) and the start of `personalManagement`, through the channel
+/// operations `IFEngine.learnVoiceCorrection`, `readVoiceAliases` and
+/// `clearPersonalEnglishLearning` run. The facade keeps the code checks and idle gating.
+#[test]
+fn swift_voice_correction_learning() {
+    use inkflow_rime::engine::{LearningError, LearningSource};
+    use inkflow_rime::ranking::PersonalSource;
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP voice correction parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let aliases = |session: &InputSession| {
+        let reply = call(session, "voice_aliases", &[], 64 * 1024 + 64).expect("alias reply");
+        assert_eq!(reply.status, "ok");
+        reply.body
+    };
+    let learn = |session: &InputSession, source: &str, canonical: &str, text: &str| {
+        status(session, "voice_learning", &[source, canonical, text]) == "ok"
+    };
+    let root = scratch("voice-correction");
+
+    // voice-correction-write
+    let user = root.join("user");
+    {
+        let engine = engine(&resources, &user);
+        let session = configured(&engine);
+        assert_eq!(
+            candidates_of(&session, "nihao")[0],
+            "你好",
+            "voice learning preserves the Chinese baseline"
+        );
+        assert!(
+            learn(&session, "codux", "codex", "Codex"),
+            "one attributable correction updates both Rime namespaces"
+        );
+        assert!(
+            !learn(&session, "co dux", "codex", "Codex"),
+            "malformed source aliases fail closed"
+        );
+        assert_eq!(
+            aliases(&session),
+            "codux\tCodex\t1\n",
+            "the exact voice-only alias is readable with its native count"
+        );
+        assert!(
+            candidates_of(&session, "codex").contains(&"Codex".to_string()),
+            "the canonical display is persisted to shared keyboard English"
+        );
+        type_keys(&session, "codex");
+        let shown = session.snapshot().unwrap();
+        let personal = shown.candidates.iter().find(|c| c.text == "Codex").unwrap();
+        assert_eq!(
+            (personal.personal_source(), personal.consumed_input()),
+            (Some(PersonalSource::ExactEnglish), Some(0..5)),
+            "canonical personal exact evidence reaches quality capture without dictionary text metadata"
+        );
+        session.clear().unwrap();
+        assert!(
+            !candidates_of(&session, "codux").contains(&"Codex".to_string()),
+            "a voice-only alias never leaks into keyboard completion"
+        );
+        let files: Vec<_> = fs::read_dir(&user)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            files.contains(&"inkflow_shared_english.userdb".to_string())
+                && files.contains(&"inkflow_voice_alias.userdb".to_string()),
+            "voice correction uses the two named Rime user dictionaries: {files:?}"
+        );
+    }
+    // voice-correction-read
+    {
+        let engine = engine(&resources, &user);
+        let session = configured(&engine);
+        assert_eq!(
+            aliases(&session),
+            "codux\tCodex\t1\n",
+            "restarted voice aliases keep their native count"
+        );
+        assert!(candidates_of(&session, "codex").contains(&"Codex".to_string()));
+        assert!(!candidates_of(&session, "codux").contains(&"Codex".to_string()));
+    }
+
+    // voice-correction-clear, then cleared-read
+    let user = root.join("clear");
+    {
+        let engine = engine(&resources, &user);
+        let session = configured(&engine);
+        assert!(learn(&session, "codux", "codex", "Codex"));
+        assert!(
+            learn(&session, "codux", "codex", "Codex"),
+            "reset fixture retains arbitrary prior commit counts"
+        );
+        assert_eq!(aliases(&session), "codux\tCodex\t2\n");
+        choose(&session, "ceshi", "测试");
+        session.key(0xff09, 0).unwrap();
+        assert_eq!(
+            call(&session, "clear_english_learning", &[], 512).map(|r| r.status),
+            Some("ok".into()),
+            "explicit lifecycle action clears both English namespaces"
+        );
+        assert_eq!(
+            aliases(&session),
+            "",
+            "voice alias namespace is empty immediately after clear"
+        );
+        assert!(
+            candidates_of(&session, "world").contains(&"world".to_string()),
+            "reset never deletes the public English dictionary"
+        );
+    }
+    {
+        let engine = engine(&resources, &user);
+        let session = configured(&engine);
+        assert_eq!(
+            aliases(&session),
+            "",
+            "cleared voice aliases stay empty after restart"
+        );
+        assert_eq!(
+            candidates_of(&session, "ceshi")[0],
+            "测试",
+            "clearing English learning preserves Chinese userdb"
+        );
+    }
+
+    // personalManagement: every learn and clear supersedes captured listings and undo tokens. The
+    // entries below are never touched by the learn that follows their capture, so the learning
+    // revision alone decides; Swift's own flow also changed the captured entry's count.
+    let user = root.join("management");
+    {
+        let engine = engine(&resources, &user);
+        let first = configured(&engine);
+        assert_eq!(
+            engine.personal_learning_entries(),
+            Ok(vec![]),
+            "empty available management snapshot"
+        );
+        assert!(learn(&first, "codux", "codex", "Codex"), "seed learning");
+        assert!(
+            learn(&first, "codux", "codex", "CODEX"),
+            "distinct case identity"
+        );
+        let entry = |source, text: &str| {
+            engine
+                .personal_learning_entries()
+                .unwrap()
+                .into_iter()
+                .find(|e| e.source == source && e.text == text)
+                .expect("learned entry")
+        };
+        let stale = entry(LearningSource::English, "CODEX");
+        assert!(learn(&first, "codux", "codex", "Codex"), "repeat learning");
+        assert_eq!(
+            engine.delete_personal_learning(&stale),
+            Err(LearningError::Conflict),
+            "a learn supersedes a captured entry it did not touch"
+        );
+        assert_eq!(entry(LearningSource::English, "Codex").commits, 2);
+        assert_eq!(entry(LearningSource::Voice, "Codex").commits, 2);
+        assert_eq!(entry(LearningSource::Voice, "CODEX").commits, 1);
+        let obsolete = engine
+            .delete_personal_learning(&entry(LearningSource::Voice, "CODEX"))
+            .unwrap();
+        assert!(
+            learn(&first, "codux", "codex", "Codex"),
+            "learn after a deletion"
+        );
+        assert_eq!(
+            engine.undo_personal_learning(&obsolete),
+            Err(LearningError::Conflict),
+            "a learn after a delete obsoletes its undo"
+        );
+        let undo = engine
+            .delete_personal_learning(&entry(LearningSource::English, "CODEX"))
+            .unwrap();
+        assert_eq!(
+            call(&first, "clear_english_learning", &[], 512).map(|r| r.status),
+            Some("ok".into())
+        );
+        assert_eq!(
+            engine.undo_personal_learning(&undo),
+            Err(LearningError::Conflict),
+            "a clear supersedes an undo token that the cleared counts would accept"
+        );
+        assert_eq!(engine.personal_learning_entries(), Ok(vec![]));
+        // A refused operation changes nothing.
+        assert!(learn(&first, "codux", "codex", "Codex"));
+        let listing = engine.personal_learning_entries().unwrap();
+        assert!(!learn(&first, "co dux", "codex", "Codex"));
+        assert_eq!(
+            engine.personal_learning_entries().unwrap(),
+            listing,
+            "a refused learn leaves the listing as it was"
+        );
+        engine.delete_personal_learning(&listing[0]).unwrap();
+    }
+    fs::remove_dir_all(&root).unwrap();
+    println!(
+        "PASS Swift voice correction learning: alias counts, evidence, clear, restart, listings and undo tokens superseded"
+    );
+}
+
+/// Core/Tests/AIAdoptionLearningTests main scenario (write and restart): the AI input identity,
+/// native readings, the unobserved clear before an adoption, and one adoption improving the
+/// ordinary rank of a novel word. The pronunciation resolver stays in Swift: the codes below are
+/// the ones it resolves for the same typed inputs.
+#[test]
+fn swift_ai_adoption_learning() {
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP AI adoption parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let reverse = resources
+        .join("prepared/cache/pinyin_simp.reverse.bin")
+        .to_string_lossy()
+        .into_owned();
+    let readings = |session: &InputSession, input: &str, text: &str| {
+        let reply = call(session, "ai_readings", &[&reverse, input, text], 128 * 1024)
+            .expect("readings reply");
+        assert_eq!(reply.status, "ok");
+        reply.body
+    };
+    let user = scratch("ai-adoption");
+    let words = [
+        ("xingmoliang", "星墨量"),
+        ("xingmolan", "星墨蓝"),
+        ("xingmohai", "星墨海"),
+        ("xingmohao", "星墨好"),
+    ];
+    let typed = [
+        ("xingmoliang", "xing mo liang "),
+        ("xml", "xing mo lan "),
+        ("xingmoha", "xing mo hai "),
+        ("xingmohoa", "xing mo hao "),
+    ];
+    let existing = {
+        let observed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let engine = engine(&resources, &user);
+        let count = observed.clone();
+        engine.set_observer(Some(Arc::new(move |_| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })));
+        let session = configured(&engine);
+        let lexicon = |session: &InputSession| {
+            call(session, "voice_lexicon", &[], 512 * 1024 + 64).expect("lexicon reply")
+        };
+        assert_eq!(
+            lexicon(&session).status,
+            "ok",
+            "bundled Lua supports bounded user dictionary lookup"
+        );
+
+        // With AI never requested, its bridge must not change ordinary undo.
+        ordinary_commit(&session, "nihao", "你好", true);
+
+        // AIHeadlessPipelineTests and AIControllerNativeTests: paging and highlighting keep the
+        // request identity, and a partial selection adds the selected prefix to it.
+        type_keys(&session, "nihao");
+        let identity = ai_identity(&session);
+        assert_eq!(identity, Some(("nihao".into(), 5, String::new())));
+        session.key(0xff56, 0).unwrap();
+        let paged = session.snapshot().unwrap();
+        assert_ne!(paged.page, 0, "page down goes through actual Rime");
+        session.highlight(&paged, 2).unwrap();
+        assert_eq!(
+            ai_identity(&session),
+            identity,
+            "paging and highlighting retain request identity"
+        );
+        session.key(0xff55, 0).unwrap();
+        let first = session.snapshot().unwrap();
+        let partial = first.texts().iter().position(|c| *c == "你").unwrap();
+        session.select(&first, partial).unwrap();
+        let (raw, _, prefix) = ai_identity(&session).unwrap();
+        assert_eq!(
+            (raw.as_str(), prefix.as_str()),
+            ("nihao", "你"),
+            "a partial Rime selection is the selected prefix"
+        );
+        session.clear().unwrap();
+
+        type_keys(&session, "yh");
+        assert_eq!(ai_identity(&session), Some(("yh".into(), 2, String::new())));
+        let bank = readings(&session, "yh", "银行");
+        assert!(
+            phrase_readings(&bank, "银行").contains(&"yin hang".to_string()),
+            "existing native phrase resolves abbreviated polyphone: {bank:?}"
+        );
+        session.clear().unwrap();
+        type_keys(&session, "h");
+        let row = readings(&session, "h", "行");
+        assert!(
+            character_readings(&row, "行")
+                .iter()
+                .filter(|code| code.starts_with('h'))
+                .count()
+                > 1,
+            "unification must not hide alternate readings: {row:?}"
+        );
+        let observed_before = observed.load(std::sync::atomic::Ordering::SeqCst);
+        session.clear_unobserved().unwrap();
+        assert_eq!(
+            observed.load(std::sync::atomic::Ordering::SeqCst),
+            observed_before,
+            "consumed adoption clears without a quality record"
+        );
+        assert!(
+            session.snapshot().unwrap().preedit.is_empty()
+                && session.take_commit().unwrap().is_empty(),
+            "preparing AI delivery never commits a default candidate"
+        );
+
+        let dictionary =
+            fs::read_to_string(resources.join("shared/pinyin_simp.dict.yaml")).unwrap();
+        for (_, word) in words {
+            assert!(
+                !dictionary.contains(&format!("\n{word}\t")),
+                "fixture must be novel"
+            );
+        }
+        for (index, (full, word)) in words.iter().enumerate() {
+            assert_ne!(
+                candidates_of(&session, full)[0],
+                *word,
+                "novel fixture ranks first"
+            );
+            let (input, code) = typed[index];
+            type_keys(&session, input);
+            let (raw, _, prefix) = ai_identity(&session).unwrap();
+            assert_eq!((raw.as_str(), prefix.as_str()), (input, ""));
+            if index == 1 {
+                let mut off = InputPreferences::default();
+                off = off.with(inkflow_rime::preferences::InputOption::Abbreviation, false);
+                session.set_configuration(9, &[], Some(&off)).unwrap();
+                assert_eq!(
+                    session
+                        .input_preferences()
+                        .unwrap()
+                        .get(inkflow_rime::preferences::InputOption::Abbreviation),
+                    true,
+                    "active composition retains its own preference snapshot"
+                );
+            }
+            let readings = readings(&session, input, word);
+            assert!(
+                phrase_readings(&readings, word).len() <= 1,
+                "the typed input has at most one phrase reading to resolve: {readings:?}"
+            );
+            session.clear_unobserved().unwrap();
+            assert_eq!(
+                status(&session, "ai_learning", &[code, word]),
+                "ok",
+                "learn {input} → {word}"
+            );
+            assert!(
+                session.snapshot().unwrap().preedit.is_empty()
+                    && session.take_commit().unwrap().is_empty(),
+                "consumed adoption clears without an ordinary commit before platform insertion"
+            );
+            session
+                .set_configuration(9, &[], Some(&InputPreferences::default()))
+                .unwrap();
+            assert_eq!(
+                candidates_of(&session, full)[0],
+                *word,
+                "one adoption improves ordinary rank {word}"
+            );
+        }
+        // Whole original input includes the selected prefix: no suffix-only code is registered.
+        assert_eq!(
+            status(&session, "ai_learning", &["xing mo liang ", "星墨量"]),
+            "ok"
+        );
+        for refused in [
+            ["xing mo liang", "星墨量"],
+            ["Xing mo liang ", "星墨量"],
+            ["xing mo liang ", ""],
+        ] {
+            assert_eq!(
+                status(&session, "ai_learning", &refused),
+                "failed",
+                "{refused:?}"
+            );
+        }
+        let before = candidates_of(&session, "zhangwei");
+        let existing = before
+            .iter()
+            .skip(1)
+            .find(|c| c.chars().count() == 2)
+            .expect("existing-word fixture")
+            .clone();
+        let body = readings(&session, "zhangwei", &existing);
+        let codes = phrase_readings(&body, &existing);
+        let code = if codes.len() == 1 {
+            codes[0].clone()
+        } else {
+            existing
+                .chars()
+                .map(|c| {
+                    let choices = character_readings(&body, &c.to_string());
+                    assert_eq!(choices.len(), 1, "unambiguous character {c}: {body:?}");
+                    choices[0].clone()
+                })
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+        assert_eq!(
+            status(&session, "ai_learning", &[&format!("{code} "), &existing]),
+            "ok"
+        );
+        assert_eq!(
+            candidates_of(&session, "zhangwei")[0],
+            existing,
+            "existing-word adoption improves preference"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(4100));
+        let voice = lexicon(&session);
+        assert!(
+            voice
+                .body
+                .lines()
+                .any(|row| row == "星墨海\txing mo hai \t1"),
+            "voice reads the ordinary learned entry and canonical code: {:?}",
+            voice.body
+        );
+        // Ordinary undo must also survive prior lookup and adoption callbacks.
+        ordinary_commit(&session, "zaijian", "再见", true);
+        ordinary_commit(&session, "ceshi", "测试", false);
+        existing
+    };
+
+    // Restart: the learned words recall first, and no unrelated user dictionary appears.
+    let engine = engine(&resources, &user);
+    let session = configured(&engine);
+    for (full, word) in words {
+        assert_eq!(
+            candidates_of(&session, full)[0],
+            word,
+            "restart ordinary recall {word}"
+        );
+    }
+    assert_eq!(
+        candidates_of(&session, "zhangwei")[0],
+        existing,
+        "existing preference persists"
+    );
+    let files: Vec<_> = fs::read_dir(&user)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".userdb"))
+        .collect();
+    assert!(
+        files.contains(&"pinyin_simp.userdb".to_string())
+            && files.contains(&"inkflow_shared_english.userdb".to_string()),
+        "{files:?}"
+    );
+    assert!(
+        files
+            .iter()
+            .all(|name| name == "pinyin_simp.userdb" || name == "inkflow_shared_english.userdb"),
+        "AI adoption does not create unrelated user dictionaries: {files:?}"
+    );
+    drop((session, engine));
+
+    // The canonical userdb export of macOS/scripts/test-ai-learning.sh: only correct full codes
+    // with exact adoption counts, no raw typo or abbreviation, and the undone commits absent.
+    let exported = inkflow_rime::personal::export(&user).unwrap();
+    let rows: Vec<(String, String, i64)> = exported["pinyin_simp"]
+        .as_deref()
+        .unwrap()
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split('\t').collect();
+            let count = fields
+                .get(2)?
+                .strip_prefix("c=")?
+                .split(' ')
+                .next()?
+                .parse()
+                .ok()?;
+            Some((fields[1].to_owned(), fields[0].trim_end().to_owned(), count))
+        })
+        .collect();
+    let count = |text: &str| {
+        rows.iter()
+            .find(|row| row.0 == text)
+            .map(|row| (row.1.clone(), row.2))
+    };
+    for (text, code, commits) in [
+        ("星墨量", "xing mo liang", 2),
+        ("星墨蓝", "xing mo lan", 1),
+        ("星墨海", "xing mo hai", 1),
+        ("星墨好", "xing mo hao", 1),
+        ("测试", "ce shi", 1),
+    ] {
+        assert_eq!(count(text), Some((code.to_owned(), commits)), "{text}");
+    }
+    for text in ["你好", "再见"] {
+        assert!(
+            count(text).is_none_or(|(_, commits)| commits <= 0),
+            "{text}: an immediate Backspace undoes the commit before and after AI callbacks"
+        );
+    }
+    assert!(
+        rows.iter()
+            .all(|row| !row.1.contains("xml") && !row.1.contains("xingmoha")),
+        "no raw typo or abbreviation is registered: {rows:?}"
+    );
+    fs::remove_dir_all(&user).unwrap();
+    println!(
+        "PASS Swift AI adoption learning: input identity, readings, unobserved clear, novel-word adoption, existing-word preference, restart, canonical userdb export"
+    );
+}
+
+/// What `IFEngine.qualitySnapshot()` records for the displayed page, from the Rust snapshot:
+/// the raw input and its caret, the selected prefix, and per displayed candidate the native
+/// index and rank and the personal-learning source with its consumed input range.
+fn quality_evidence(session: &InputSession, label: &str) -> Value {
+    use inkflow_rime::ranking::PersonalSource;
+    let shown = session.snapshot().unwrap();
+    let size = session.candidate_count();
+    let page = usize::try_from(shown.page).unwrap();
+    let candidates: Vec<Value> = shown
+        .candidates
+        .iter()
+        .enumerate()
+        .map(|(display, candidate)| {
+            let consumed = candidate.consumed_input();
+            json!({
+                "text": candidate.text,
+                "displayIndex": display,
+                "displayRank": page * size + display + 1,
+                "nativeIndex": candidate.native_index,
+                "nativeRank": candidate.native_rank,
+                "source": candidate.personal_source().map(|source| match source {
+                    PersonalSource::ExactEnglish => "personal_exact_english",
+                    PersonalSource::ExactMixed => "personal_exact_mixed",
+                }),
+                "consumedInputStart": consumed.clone().map(|range| range.start),
+                "consumedInputEnd": consumed.map(|range| range.end),
+            })
+        })
+        .collect();
+    json!({
+        "label": label,
+        "rawInput": shown.input,
+        "caret": shown.raw_caret_bytes,
+        "selectedPrefix": &shown.preedit[..shown.selection_bytes.start],
+        "page": shown.page,
+        "pageSize": size,
+        "highlightedDisplayIndex": shown.highlighted,
+        "candidates": candidates,
+    })
+}
+
+/// The quality evidence of `fixtures/quality-evidence-cases.json` against the recording of the
+/// Swift engine's `qualitySnapshot()` for the same steps (`quality-evidence-reference.sh`, at the
+/// revision named in `fixtures/quality-evidence.json`): raw input and caret, selected prefix, native
+/// index and rank, and the personal-learning source with its consumed input span, for every
+/// displayed candidate.
+#[test]
+fn swift_quality_evidence() {
+    use inkflow_rime::phrases::CustomPhrase;
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP quality evidence parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures");
+    let read = |name: &str| -> Value {
+        serde_json::from_str(&fs::read_to_string(fixtures.join(name)).unwrap()).unwrap()
+    };
+    let spec = read("quality-evidence-cases.json");
+    let recorded = read("quality-evidence.json");
+    let count = spec["candidateCount"].as_u64().unwrap() as usize;
+    assert_eq!(count, 9);
+    let user = scratch("quality-evidence");
+    let engine = engine(&resources, &user);
+    let session = configured(&engine);
+    // Seeds are voice corrections, which write the shared English and voice-alias memories.
+    for seed in spec["seeds"].as_array().unwrap() {
+        let (source, text) = (seed[0].as_str().unwrap(), seed[1].as_str().unwrap());
+        assert_eq!(
+            status(
+                &session,
+                "voice_learning",
+                &[source, &text.to_lowercase(), text]
+            ),
+            "ok",
+            "seed {seed}"
+        );
+    }
+    let mut compared = 0;
+    let (mut english, mut mixed, mut reordered, mut later_page) = (0, 0, 0, 0);
+    let mut mismatches = Vec::new();
+    for item in spec["cases"].as_array().unwrap() {
+        let name = item["name"].as_str().unwrap();
+        session.clear().unwrap();
+        session.set_preceding_text("").unwrap();
+        let mut records = Vec::new();
+        for step in item["steps"].as_array().unwrap() {
+            if let Some(text) = step["type"].as_str() {
+                type_keys(&session, text);
+            } else if let Some(key) = step["key"].as_i64() {
+                for _ in 0..step["repeat"].as_u64().unwrap_or(1) {
+                    session.key(key as i32, 0).unwrap();
+                }
+            } else if let Some(context) = step["preceding"].as_str() {
+                session.set_preceding_text(context).unwrap();
+            } else if step["clear"].is_boolean() {
+                session.clear().unwrap();
+            } else if let Some(text) = step["select"].as_str() {
+                let page = session.snapshot().unwrap();
+                let index = page.texts().iter().position(|c| *c == text).unwrap();
+                session.select(&page, index).unwrap();
+            } else if let Some(index) = step["highlight"].as_u64() {
+                let page = session.snapshot().unwrap();
+                session.highlight(&page, index as usize).unwrap();
+            } else if let Some(delta) = step["page"].as_i64() {
+                session
+                    .key(if delta > 0 { 0xff56 } else { 0xff55 }, 0)
+                    .unwrap();
+            } else if let Some(phrases) = step["phrases"].as_array() {
+                let phrases: Vec<CustomPhrase> = phrases
+                    .iter()
+                    .enumerate()
+                    .map(|(n, p)| {
+                        CustomPhrase::validated(
+                            &format!("phrase-{n}"),
+                            p[0].as_str().unwrap(),
+                            p[1].as_str().unwrap(),
+                        )
+                        .unwrap()
+                    })
+                    .collect();
+                session
+                    .set_configuration(count, &phrases, Some(&InputPreferences::default()))
+                    .unwrap();
+                assert_eq!(session.configuration_error(), None);
+            } else if let Some(label) = step["record"].as_str() {
+                records.push(quality_evidence(&session, label));
+            } else {
+                panic!("unknown step {step}");
+            }
+        }
+        session.clear().unwrap();
+        let expected = recorded["cases"][name].as_array().expect(name);
+        assert_eq!(records.len(), expected.len(), "{name}: records");
+        for (actual, swift) in records.iter().zip(expected) {
+            compared += 1;
+            if actual != swift {
+                mismatches.push(format!(
+                    "{name} / {}:\n  swift: {swift}\n  rust:  {actual}",
+                    swift["label"]
+                ));
+            }
+            for candidate in actual["candidates"].as_array().unwrap() {
+                match candidate["source"].as_str() {
+                    Some("personal_exact_english") => english += 1,
+                    Some("personal_exact_mixed") => mixed += 1,
+                    _ => {}
+                }
+                reordered += usize::from(candidate["nativeIndex"] != candidate["displayIndex"]);
+                later_page += usize::from(candidate["nativeRank"].as_u64().unwrap() > count as u64);
+            }
+        }
+    }
+    drop((session, engine));
+    fs::remove_dir_all(&user).unwrap();
+    assert!(
+        mismatches.is_empty(),
+        "quality evidence differs from the Swift recording ({} of {compared}):\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
+    // The corpus must keep exercising every kind of evidence the recorder reads.
+    assert!(
+        english > 0 && mixed > 0 && reordered > 0 && later_page > 0,
+        "english {english}, mixed {mixed}, reordered {reordered}, later page {later_page}"
+    );
+    println!(
+        "PASS Swift quality evidence: {compared} recorded states, {english} personal English and {mixed} personal mixed candidates, {reordered} reordered, {later_page} on later pages"
+    );
 }
 
 fn copy_tree(from: &Path, to: &Path) {

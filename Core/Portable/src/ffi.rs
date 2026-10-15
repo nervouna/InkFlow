@@ -60,6 +60,7 @@ unsafe extern "C" {
     pub fn ifp_take_commit(session: usize, commit: *mut *mut c_char) -> c_int;
     pub fn ifp_string_free(string: *mut c_char);
     pub fn ifp_get_input(session: usize, input: *mut *mut c_char) -> c_int;
+    pub fn ifp_get_caret_pos(session: usize, caret: *mut usize) -> c_int;
     pub fn ifp_highlight_candidate(session: usize, index: usize, handled: *mut c_int) -> c_int;
     pub fn ifp_commit_composition(session: usize, handled: *mut c_int) -> c_int;
     pub fn ifp_set_option(session: usize, option: *const c_char, value: c_int) -> c_int;

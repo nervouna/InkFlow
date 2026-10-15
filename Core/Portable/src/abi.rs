@@ -13,6 +13,7 @@ use crate::{
     personal::{self, Backup, PersonalError},
     phrases::CustomPhrase,
     preferences::{InputOption, InputPreferences},
+    ranking::PersonalSource,
     resources::{self, ResourceError},
 };
 use std::{
@@ -51,6 +52,7 @@ pub const BUSY: Status = 19;
 pub const UNAVAILABLE: Status = 20;
 pub const CONFLICT: Status = 21;
 pub const TOO_LARGE: Status = 22;
+pub const NO_REPLY: Status = 23;
 
 pub struct Failure {
     status: Status,
@@ -537,6 +539,74 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_comment(
         .map_or(ptr::null(), |(_, comment)| comment.as_ptr())
 }
 
+/// The caret in `ifr_snapshot_input`, in bytes; `ifr_snapshot_caret` is the preedit's.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_raw_caret(snapshot: *const SnapshotHandle) -> usize {
+    unsafe { snapshot.as_ref() }.map_or(0, |s| s.snapshot.raw_caret_bytes)
+}
+
+/// Position on Rime's page of the displayed candidate `index`, before InkFlow's ordering.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_candidate_native_index(
+    snapshot: *const SnapshotHandle,
+    index: usize,
+) -> usize {
+    unsafe { snapshot.as_ref() }
+        .and_then(|s| s.snapshot.candidates.get(index))
+        .map_or(0, |c| c.native_index)
+}
+
+/// One-based position across Rime's pages: `page * page size + native index + 1`; 0 out of range.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_candidate_native_rank(
+    snapshot: *const SnapshotHandle,
+    index: usize,
+) -> usize {
+    unsafe { snapshot.as_ref() }
+        .and_then(|s| s.snapshot.candidates.get(index))
+        .map_or(0, |c| c.native_rank)
+}
+
+pub const PERSONAL_NONE: c_int = 0;
+pub const PERSONAL_EXACT_ENGLISH: c_int = 1;
+pub const PERSONAL_EXACT_MIXED: c_int = 2;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_candidate_personal_source(
+    snapshot: *const SnapshotHandle,
+    index: usize,
+) -> c_int {
+    unsafe { snapshot.as_ref() }
+        .and_then(|s| s.snapshot.candidates.get(index))
+        .and_then(|c| c.personal_source())
+        .map_or(PERSONAL_NONE, |source| match source {
+            PersonalSource::ExactEnglish => PERSONAL_EXACT_ENGLISH,
+            PersonalSource::ExactMixed => PERSONAL_EXACT_MIXED,
+        })
+}
+
+/// Returns 1 and writes the raw-input byte range the candidate consumes, which exists only for
+/// a candidate with a personal source; otherwise 0 and the outputs stay untouched.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_candidate_consumed_input(
+    snapshot: *const SnapshotHandle,
+    index: usize,
+    start: *mut usize,
+    end: *mut usize,
+) -> c_int {
+    let Some(range) = unsafe { snapshot.as_ref() }
+        .and_then(|s| s.snapshot.candidates.get(index))
+        .and_then(|c| c.consumed_input())
+    else {
+        return 0;
+    };
+    unsafe {
+        write(start, range.start);
+        write(end, range.end);
+    }
+    1
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_page(snapshot: *const SnapshotHandle) -> i32 {
     unsafe { snapshot.as_ref() }.map_or(0, |s| s.snapshot.page)
@@ -607,6 +677,12 @@ pub unsafe extern "C" fn ifr_session_commit(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_clear(session: *const InputSession) -> Status {
     guard(|| Ok(unsafe { reference(session, "session") }?.clear()?))
+}
+
+/// Clear like `ifr_session_clear`, without a mutation for the observer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_clear_unobserved(session: *const InputSession) -> Status {
+    guard(|| Ok(unsafe { reference(session, "session") }?.clear_unobserved()?))
 }
 
 #[unsafe(no_mangle)]
@@ -806,6 +882,72 @@ pub unsafe extern "C" fn ifr_resources_probe(
         let cache = PathBuf::from(unsafe { text(cache, "cache") }?);
         Ok(resources::probe(&shared, &user, &cache)?)
     })
+}
+
+/// A Lua module's answer to a channel request.
+pub struct ReplyHandle {
+    status: CString,
+    body: CString,
+}
+
+/// The largest reply a call may ask for. Personal-learning listings ask for 3 MiB.
+const MAXIMUM_REPLY_BYTES: usize = 4 * 1024 * 1024;
+const MAXIMUM_FIELDS: usize = 64;
+
+/// One synchronous round trip through the session's Lua modules; see `inkflow_rime.h`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_call(
+    session: *const InputSession,
+    op: *const c_char,
+    fields: *const *const c_char,
+    field_count: usize,
+    capacity: usize,
+    reply: *mut *mut ReplyHandle,
+) -> Status {
+    guard(|| {
+        let session = unsafe { reference(session, "session") }?;
+        let op = unsafe { text(op, "op") }?;
+        if reply.is_null() {
+            return Err(Failure::argument("reply is NULL"));
+        }
+        if capacity > MAXIMUM_REPLY_BYTES {
+            return Err(Failure::argument("capacity is too large"));
+        }
+        if field_count > MAXIMUM_FIELDS || (field_count != 0 && fields.is_null()) {
+            return Err(Failure::argument("fields is NULL or too long"));
+        }
+        let fields = (0..field_count)
+            .map(|n| unsafe { text(*fields.add(n), "field") })
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let answer = session
+            .call(op, &fields, capacity)?
+            .ok_or_else(|| Failure::new(NO_REPLY, "no reply"))?;
+        let handle = ReplyHandle {
+            status: c_string(&answer.status)?,
+            body: c_string(&answer.body)?,
+        };
+        unsafe { write(reply, Box::into_raw(Box::new(handle))) };
+        Ok(())
+    })
+}
+
+/// The module's status word: "ok", "failed", "unknown" or "conflict".
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_reply_status(reply: *const ReplyHandle) -> *const c_char {
+    unsafe { reply.as_ref() }.map_or(ptr::null(), |r| r.status.as_ptr())
+}
+
+/// The reply body, possibly empty.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_reply_body(reply: *const ReplyHandle) -> *const c_char {
+    unsafe { reply.as_ref() }.map_or(ptr::null(), |r| r.body.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_reply_free(reply: *mut ReplyHandle) {
+    if !reply.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(reply) })));
+    }
 }
 
 /// Personal-learning entries captured at one learning revision, with NUL-terminated copies
@@ -1182,11 +1324,11 @@ mod tests {
         ] {
             assert_eq!(Failure::from(error).status, status);
         }
-        let statuses = [BUSY, UNAVAILABLE, CONFLICT, TOO_LARGE];
+        let statuses = [BUSY, UNAVAILABLE, CONFLICT, TOO_LARGE, NO_REPLY];
         assert!(statuses.iter().all(|s| *s > RECOVERY_REQUIRED));
         assert_eq!(
             statuses,
-            [19, 20, 21, 22],
+            [19, 20, 21, 22, 23],
             "appended in order, never renumbered"
         );
     }

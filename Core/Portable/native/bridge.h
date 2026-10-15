@@ -47,6 +47,8 @@ int ifp_take_commit(uintptr_t session, char** commit);
 void ifp_string_free(char* string);
 /* Raw composition input; an empty composition yields an empty string. */
 int ifp_get_input(uintptr_t session, char** input);
+/* The caret in the raw composition input, as a byte offset into the string ifp_get_input returns. */
+int ifp_get_caret_pos(uintptr_t session, size_t* caret);
 int ifp_highlight_candidate(uintptr_t session, size_t index, int* handled);
 int ifp_commit_composition(uintptr_t session, int* handled);
 int ifp_set_option(uintptr_t session, const char* option, int value);

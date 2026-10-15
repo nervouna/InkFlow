@@ -326,6 +326,14 @@ impl Session {
         Self::owned_string(raw)
     }
 
+    /// The caret in Rime's raw composition input, in bytes of [`Session::input`].
+    pub(crate) fn input_caret(&mut self) -> Result<usize> {
+        let _lock = lock()?;
+        let mut caret = 0;
+        check(unsafe { ffi::ifp_get_caret_pos(self.id, &mut caret) })?;
+        Ok(caret)
+    }
+
     pub(crate) fn highlight(&mut self, index: usize) -> Result<bool> {
         let _lock = lock()?;
         self.published = None;

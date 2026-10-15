@@ -1,0 +1,2491 @@
+{
+  "cases" : {
+    "caret-moves" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得显卡"
+          },
+          {
+            "consumedInputEnd" : 13,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex卡"
+          },
+          {
+            "consumedInputEnd" : 13,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX卡"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我要"
+          }
+        ],
+        "caret" : 13,
+        "highlightedDisplayIndex" : 0,
+        "label" : "three characters left",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodexkaifa",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得新开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我要"
+          }
+        ],
+        "caret" : 0,
+        "highlightedDisplayIndex" : 0,
+        "label" : "home",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodexkaifa",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得新开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我要"
+          }
+        ],
+        "caret" : 16,
+        "highlightedDisplayIndex" : 0,
+        "label" : "end",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodexkaifa",
+        "selectedPrefix" : ""
+      }
+    ],
+    "chinese-baseline" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "你好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "👋"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "拟好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "你"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "尼"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "逆"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "拟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "妳"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "泥"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 0,
+        "label" : "typed",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "nihao",
+        "selectedPrefix" : ""
+      }
+    ],
+    "chinese-context-ranking" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "餐"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "惨"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "can"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "残"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "参"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "蚕"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "粲"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "灿"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "骖"
+          }
+        ],
+        "caret" : 3,
+        "highlightedDisplayIndex" : 0,
+        "label" : "context ranked",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "can",
+        "selectedPrefix" : ""
+      }
+    ],
+    "custom-phrase-code" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "自定义词"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "从哦的新很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "Codex很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "CODEX很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "custom code",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codexhenhao",
+        "selectedPrefix" : ""
+      }
+    ],
+    "edit-in-place" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_english",
+            "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_english",
+            "text" : "CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "Codex CLI"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 0,
+        "label" : "edited",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codex",
+        "selectedPrefix" : ""
+      }
+    ],
+    "highlight-and-arrows" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_english",
+            "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_english",
+            "text" : "CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "Codex CLI"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 1,
+        "label" : "down",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codex",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_english",
+            "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_english",
+            "text" : "CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "Codex CLI"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 3,
+        "label" : "highlight",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codex",
+        "selectedPrefix" : ""
+      }
+    ],
+    "personal-english" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_english",
+            "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_english",
+            "text" : "CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "Codex CLI"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 0,
+        "label" : "neutral context",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codex",
+        "selectedPrefix" : ""
+      }
+    ],
+    "personal-english-technical-context" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_english",
+            "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : 5,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_english",
+            "text" : "CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "Codex CLI"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "次"
+          }
+        ],
+        "caret" : 5,
+        "highlightedDisplayIndex" : 0,
+        "label" : "technical context",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codex",
+        "selectedPrefix" : ""
+      }
+    ],
+    "personal-mixed" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新很好"
+          },
+          {
+            "consumedInputEnd" : 11,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "Codex很好"
+          },
+          {
+            "consumedInputEnd" : 11,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "CODEX很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "从"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "吃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "次"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "车"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "suffix",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "codexhenhao",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得新开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我要"
+          }
+        ],
+        "caret" : 16,
+        "highlightedDisplayIndex" : 0,
+        "label" : "prefix and suffix",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodexkaifa",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用欧防风麟儿"
+          },
+          {
+            "consumedInputEnd" : 13,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用offline"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我要"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我又"
+          }
+        ],
+        "caret" : 13,
+        "highlightedDisplayIndex" : 0,
+        "label" : "prefix",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongoffline",
+        "selectedPrefix" : ""
+      }
+    ],
+    "personal-mixed-case" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : 11,
+            "consumedInputStart" : 0,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : "personal_exact_mixed",
+            "text" : "Codex很好"
+          },
+          {
+            "consumedInputEnd" : 11,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "CODEX很好"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "capital",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "Codexhenhao",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "窝"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "握"
+          }
+        ],
+        "caret" : 16,
+        "highlightedDisplayIndex" : 0,
+        "label" : "all capitals",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongCODEXkaifa",
+        "selectedPrefix" : ""
+      }
+    ],
+    "personal-mixed-three-commits" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : 19,
+            "consumedInputStart" : 0,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : "personal_exact_mixed",
+            "text" : "我用SwiftUI很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "我用所谓"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "我用手"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "我用"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "我哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "我晕哦"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "喔哟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "我也"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "我要"
+          }
+        ],
+        "caret" : 19,
+        "highlightedDisplayIndex" : 0,
+        "label" : "swiftui",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongswiftuihenhao",
+        "selectedPrefix" : ""
+      }
+    ],
+    "second-page" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "是"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "时"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "事"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "使"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "式"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "史"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "诗"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "市"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "师"
+          }
+        ],
+        "caret" : 3,
+        "highlightedDisplayIndex" : 0,
+        "label" : "first page",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "shi",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 10,
+            "nativeIndex" : 0,
+            "nativeRank" : 10,
+            "source" : null,
+            "text" : "屎"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 11,
+            "nativeIndex" : 1,
+            "nativeRank" : 11,
+            "source" : null,
+            "text" : "💩"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 12,
+            "nativeIndex" : 2,
+            "nativeRank" : 12,
+            "source" : null,
+            "text" : "石"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 13,
+            "nativeIndex" : 3,
+            "nativeRank" : 13,
+            "source" : null,
+            "text" : "十"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 14,
+            "nativeIndex" : 4,
+            "nativeRank" : 14,
+            "source" : null,
+            "text" : "🔟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 15,
+            "nativeIndex" : 5,
+            "nativeRank" : 15,
+            "source" : null,
+            "text" : "视"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 16,
+            "nativeIndex" : 6,
+            "nativeRank" : 16,
+            "source" : null,
+            "text" : "试"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 17,
+            "nativeIndex" : 7,
+            "nativeRank" : 17,
+            "source" : null,
+            "text" : "室"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 18,
+            "nativeIndex" : 8,
+            "nativeRank" : 18,
+            "source" : null,
+            "text" : "饰"
+          }
+        ],
+        "caret" : 3,
+        "highlightedDisplayIndex" : 0,
+        "label" : "second page",
+        "page" : 1,
+        "pageSize" : 9,
+        "rawInput" : "shi",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 19,
+            "nativeIndex" : 0,
+            "nativeRank" : 19,
+            "source" : null,
+            "text" : "实"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 20,
+            "nativeIndex" : 1,
+            "nativeRank" : 20,
+            "source" : null,
+            "text" : "食"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 21,
+            "nativeIndex" : 2,
+            "nativeRank" : 21,
+            "source" : null,
+            "text" : "氏"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 22,
+            "nativeIndex" : 3,
+            "nativeRank" : 22,
+            "source" : null,
+            "text" : "势"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 23,
+            "nativeIndex" : 4,
+            "nativeRank" : 23,
+            "source" : null,
+            "text" : "湿"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 24,
+            "nativeIndex" : 5,
+            "nativeRank" : 24,
+            "source" : null,
+            "text" : "士"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 25,
+            "nativeIndex" : 6,
+            "nativeRank" : 25,
+            "source" : null,
+            "text" : "世"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 26,
+            "nativeIndex" : 7,
+            "nativeRank" : 26,
+            "source" : null,
+            "text" : "始"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 27,
+            "nativeIndex" : 8,
+            "nativeRank" : 27,
+            "source" : null,
+            "text" : "施"
+          }
+        ],
+        "caret" : 3,
+        "highlightedDisplayIndex" : 0,
+        "label" : "third page",
+        "page" : 2,
+        "pageSize" : 9,
+        "rawInput" : "shi",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 10,
+            "nativeIndex" : 0,
+            "nativeRank" : 10,
+            "source" : null,
+            "text" : "屎"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 11,
+            "nativeIndex" : 1,
+            "nativeRank" : 11,
+            "source" : null,
+            "text" : "💩"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 12,
+            "nativeIndex" : 2,
+            "nativeRank" : 12,
+            "source" : null,
+            "text" : "石"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 13,
+            "nativeIndex" : 3,
+            "nativeRank" : 13,
+            "source" : null,
+            "text" : "十"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 14,
+            "nativeIndex" : 4,
+            "nativeRank" : 14,
+            "source" : null,
+            "text" : "🔟"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 15,
+            "nativeIndex" : 5,
+            "nativeRank" : 15,
+            "source" : null,
+            "text" : "视"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 16,
+            "nativeIndex" : 6,
+            "nativeRank" : 16,
+            "source" : null,
+            "text" : "试"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 17,
+            "nativeIndex" : 7,
+            "nativeRank" : 17,
+            "source" : null,
+            "text" : "室"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 18,
+            "nativeIndex" : 8,
+            "nativeRank" : 18,
+            "source" : null,
+            "text" : "饰"
+          }
+        ],
+        "caret" : 3,
+        "highlightedDisplayIndex" : 0,
+        "label" : "back",
+        "page" : 1,
+        "pageSize" : 9,
+        "rawInput" : "shi",
+        "selectedPrefix" : ""
+      }
+    ],
+    "selected-prefix" : [
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "喔"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "窝"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "握"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "沃"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "卧"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "涡"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "倭"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "龌"
+          }
+        ],
+        "caret" : 2,
+        "highlightedDisplayIndex" : 0,
+        "label" : "caret after wo",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodex",
+        "selectedPrefix" : ""
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "用处哦的新"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "用Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "用CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "用处"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "用词"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "用车"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "咏春"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "用餐"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "泳池"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "prefix selected",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodex",
+        "selectedPrefix" : "我"
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 1,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "用处哦的新"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : null,
+            "text" : "用Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : null,
+            "text" : "用CODEX"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 4,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
+            "source" : null,
+            "text" : "用处"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 5,
+            "nativeIndex" : 4,
+            "nativeRank" : 5,
+            "source" : null,
+            "text" : "用词"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 6,
+            "nativeIndex" : 5,
+            "nativeRank" : 6,
+            "source" : null,
+            "text" : "用车"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 7,
+            "nativeIndex" : 6,
+            "nativeRank" : 7,
+            "source" : null,
+            "text" : "咏春"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 8,
+            "nativeIndex" : 7,
+            "nativeRank" : 8,
+            "source" : null,
+            "text" : "用餐"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 9,
+            "nativeIndex" : 8,
+            "nativeRank" : 9,
+            "source" : null,
+            "text" : "泳池"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "end",
+        "page" : 0,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodex",
+        "selectedPrefix" : "我"
+      },
+      {
+        "candidates" : [
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 0,
+            "displayRank" : 10,
+            "nativeIndex" : 0,
+            "nativeRank" : 10,
+            "source" : null,
+            "text" : "涌出"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 11,
+            "nativeIndex" : 1,
+            "nativeRank" : 11,
+            "source" : null,
+            "text" : "永存"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 12,
+            "nativeIndex" : 2,
+            "nativeRank" : 12,
+            "source" : null,
+            "text" : "用材"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 3,
+            "displayRank" : 13,
+            "nativeIndex" : 3,
+            "nativeRank" : 13,
+            "source" : null,
+            "text" : "用错"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 4,
+            "displayRank" : 14,
+            "nativeIndex" : 4,
+            "nativeRank" : 14,
+            "source" : null,
+            "text" : "用此"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 5,
+            "displayRank" : 15,
+            "nativeIndex" : 5,
+            "nativeRank" : 15,
+            "source" : null,
+            "text" : "庸才"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 6,
+            "displayRank" : 16,
+            "nativeIndex" : 6,
+            "nativeRank" : 16,
+            "source" : null,
+            "text" : "用场"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 7,
+            "displayRank" : 17,
+            "nativeIndex" : 7,
+            "nativeRank" : 17,
+            "source" : null,
+            "text" : "雍齿"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 8,
+            "displayRank" : 18,
+            "nativeIndex" : 8,
+            "nativeRank" : 18,
+            "source" : null,
+            "text" : "勇闯"
+          }
+        ],
+        "caret" : 11,
+        "highlightedDisplayIndex" : 0,
+        "label" : "next page",
+        "page" : 1,
+        "pageSize" : 9,
+        "rawInput" : "woyongcodex",
+        "selectedPrefix" : "我"
+      }
+    ]
+  },
+  "recorded" : {
+    "by" : "Core\/Portable\/quality-evidence-reference.sh",
+    "engine" : "Swift IFEngine.qualitySnapshot()",
+    "librime" : "1.17.0",
+    "revision" : "ab83b5bb0f8832ed75ce26f0ffd18951020e8a4d"
+  }
+}
