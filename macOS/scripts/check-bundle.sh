@@ -23,8 +23,17 @@ icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 [[ "$icon" == InputMethod.icns && -s "$app/Contents/Resources/$icon" ]]
 app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
-lua_plugin="$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
-[[ -s "$lua_plugin" ]]
+# One librime, built from source with Lua merged in. An external plugin would be a second runtime.
+librime="$app/Contents/Frameworks/librime.1.dylib"
+[[ -s "$librime" ]]
+[[ "$(find "$app" -name 'librime*' | sed "s|^$app/||")" == Contents/Frameworks/librime.1.dylib ]] || {
+  echo 'The bundle must carry exactly one librime and no plugin.' >&2
+  exit 1
+}
+[[ "$(vtool -show-build "$librime" | awk '$1 == "minos" { print $2 }')" == "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" ]] || {
+  echo 'librime must target the app minimum macOS version.' >&2
+  exit 1
+}
 sparkle_framework="$app/Contents/Frameworks/Sparkle.framework"
 sparkle_binary="$sparkle_framework/Versions/B/Sparkle"
 app_binary="$app/Contents/MacOS/InkFlow"
@@ -60,17 +69,12 @@ if grep -Fqx "$sparkle_dependency" <<< "$worker_libraries"; then
   exit 1
 fi
 codesign --verify --deep --strict "$sparkle_framework"
-for plugin in "$app/Contents/Frameworks/rime-plugins"/*; do
-  [[ "$plugin" == "$lua_plugin" ]] || { echo "Unexpected engine plugin: $plugin" >&2; exit 1; }
-done
-for binary in "$app_binary" "$app/Contents/MacOS/InkFlowDictionaryWorker" "$app/Contents/Frameworks/librime.1.dylib" "$lua_plugin" "$sparkle_binary"; do
+for binary in "$app_binary" "$app/Contents/MacOS/InkFlowDictionaryWorker" "$librime" "$sparkle_binary"; do
   xcrun lipo "$binary" -verify_arch arm64
   otool -L "$binary" | awk 'NR>1 && /^\t/ {print $1}' | while read -r dependency; do
     case "$dependency" in
       /usr/lib/*|/System/Library/*) ;;
       @rpath/librime.1.dylib) test -f "$app/Contents/Frameworks/librime.1.dylib" ;;
-      # The plugin's first otool entry is its own LC_ID_DYLIB, not a dependency.
-      @rpath/librime-lua.dylib) [[ "$binary" == "$lua_plugin" ]] ;;
       @rpath/Sparkle.framework/Versions/B/Sparkle)
         [[ "$binary" == "$app_binary" || "$binary" == "$sparkle_binary" ]] && test -f "$sparkle_binary" ;;
       *) echo "Unbundled dependency: $dependency" >&2; exit 1 ;;
@@ -88,7 +92,7 @@ cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTempl
 bash macOS/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
 bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
-for license in boost.txt easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime-lua.txt lua.txt wordfreq.txt rime-ice.txt rime-frost.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
+for license in boost.txt easy-en-LGPL-3.0.txt easy-en-GPL-3.0.txt librime.txt librime-lua.txt lua.txt glog.txt leveldb.txt marisa.txt yaml-cpp.txt inkflow-rime-crates.txt wordfreq.txt rime-ice.txt rime-frost.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do
   cmp "macOS/Licenses/$license" "$app/Contents/Resources/Licenses/$license"
 done
 inkflow_test_timing_report bundle deep-resources "$stage_started"

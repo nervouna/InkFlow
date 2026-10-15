@@ -44,7 +44,7 @@ stage_started=$(inkflow_test_timing_now)
 if $preparation_only; then mode=--preparation; else mode=--activation; fi
 build/core-tests/core-dictionary-tests "$mode" "$PWD" "$scratch/scenarios" \
   "$scratch/runtime/Resources/Rime" "$scratch/runtime/bin/preparation-fixture" \
-  "$PWD/build/deps/dist/lib/librime.1.17.0.dylib" "$PWD/build/deps/dist/lib/rime-plugins/librime-lua.dylib"
+  "$PWD/build/portable/prefix/lib/librime.1.dylib"
 if $preparation_only; then stage=native-preparation; else stage=activation; fi
 inkflow_test_timing_report core-dictionaries "$stage" "$stage_started"
 if $preparation_only; then
