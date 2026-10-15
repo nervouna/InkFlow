@@ -140,6 +140,16 @@ across a page may increment both page turns and candidate moves; never add them
 into a distinct-operation count. Dropped page counts are removed history entries,
 possibly including copies across decisions, not unique pages or unseen candidates.
 
+`operations_json.inputBeforeDeletion`, on a decision and on its composition, is the
+raw input just before the first Backspace, Delete or Escape that removed input in
+that span. On a decision the span starts after the previous decision; compare it
+with that decision's `snapshot.rawInput` and selected text to see what was retyped.
+A cancelled composition keeps it only at composition level; its retyped input, if
+any, is in the next composition. It is typed text: present only in text-mode
+records, absent when nothing was deleted, and absent in records written before the
+field existed, so absence alone is not evidence of no deletion. No command
+aggregates it yet; `inspect` shows it.
+
 ## Storage, identity and coverage limits
 
 Schema v3 has application ID `0x49465131` (IFQ1). The query requires v3, checks the

@@ -31,6 +31,11 @@ package enum QualityAction {
     package var cancellation: Bool {
         switch self { case .clear, .key(0xff1b, _, _): true; default: false }
     }
+    /// User keys that remove typed input: Backspace, Delete and Escape.
+    package var deletion: Bool {
+        if case .key(let key, _, _) = self { return [0xff08, 0xffff, 0xff1b].contains(key) }
+        return false
+    }
 }
 
 /// Capture is synchronous bounded memory. This class never encodes JSON, reads a file or waits for SQL.
@@ -231,6 +236,13 @@ package final class QualityRecorder {
         let before = operation.before
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||
             before.selectedPrefix != snapshot.selectedPrefix || before.selectedPrefixValid != snapshot.selectedPrefixValid
+        // Typo evidence: what was typed before the user started removing it. The store drops it without text capture.
+        if operation.action.deletion, !before.rawInput.isEmpty, before.rawInput != snapshot.rawInput {
+            if envelope?.composition.operations.inputBeforeDeletion == nil {
+                envelope?.composition.operations.inputBeforeDeletion = before.rawInput
+            }
+            if sinceDecision.inputBeforeDeletion == nil { sinceDecision.inputBeforeDeletion = before.rawInput }
+        }
         // Final empty state is a selection/cancellation, not a new Pinyin edit.
         // Partial selection establishes a new remaining-input phase at this event.
         if snapshot.rawInput.isEmpty && (!before.rawInput.isEmpty || operation.decision != nil) {
