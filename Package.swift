@@ -125,7 +125,9 @@ let executableTestProducts: [(String, String)] = [
 ]
 
 // Portable Rust core, built by Core/scripts/build-portable.sh. Link the archive by path:
-// the crate also builds a dylib, which `-linkflow_rime` would pick instead.
+// the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
+// libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
+// own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
 let portableRoot = "\(packageRoot)/build/portable"
 let portableLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
