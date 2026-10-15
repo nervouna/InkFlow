@@ -35,7 +35,7 @@ import InkFlowEngineTestSupport
             EngineRegression.englishFeatureCoexistence()
             EngineRegression.spellingCorrection()
         }
-        if selected("context") { EngineRegression.contextReranking(); EngineRegression.contextCustomPhrasePriority(); try EngineRegression.rankingRules() }
+        if selected("context") { EngineRegression.contextReranking(); EngineRegression.contextCustomPhrasePriority() }
         if selected("custom-phrases") {
             try EngineRegression.customPhrases(user: user)
             let phrases = [try CustomPhrase.validated(code: "dz", text: "重启后的地址")]

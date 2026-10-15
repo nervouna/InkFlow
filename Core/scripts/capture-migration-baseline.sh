@@ -16,8 +16,6 @@ source Core/scripts/swift-package.sh
 for product in quality-baseline performance-baseline packaged-cache-tool; do
   build_core_product "$product" "build/core-tests/$product" release
 done
-build_core_product ranking-tests build/core-tests/ranking-tests debug
-build/core-tests/ranking-tests
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-migration-baseline.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 bash Core/scripts/prepare-rime.sh "$scratch/Rime"
@@ -32,4 +30,4 @@ for trial in 1 2 3 4 5; do
 done
 python3 Core/scripts/summarize-performance.py "$output"
 bash macOS/scripts/test.sh engine ai-learning voice-lexicon
-echo 'PASS migration baseline: behavior, performance, ranking, engine, and learning'
+echo 'PASS migration baseline: behavior, performance, engine, and learning'

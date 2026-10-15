@@ -17,7 +17,6 @@ The existing code already separates much of the engine from the macOS frontend:
 - `Core/Sources/InkFlowDomain/`: preferences, custom phrases, ranking, dictionary generation, and learning models.
 - `Core/Sources/InkFlowRime/`: sessions, candidate ordering, learning coordination, dictionary lifecycle, and quality recording.
 - `Core/Sources/InkFlowRimeNative/`: native mixed-input translation and personal dictionary snapshots.
-- `Core/Sources/CRime/` and `Core/Sources/InkFlowRimeWorker/`: native API and worker integration.
 - `schemas/`: Rime configuration, Lua modules, and OpenCC resources.
 - `Core/Tests/` and `Core/Fixtures/QualityBaseline/`: existing regression coverage and behavioral reference material.
 
@@ -133,6 +132,8 @@ Add minimum daily-use configuration, personal-data import, and packaging for the
 Completion means an installable Linux build supports the agreed offline behavior with focused automated coverage.
 
 ### 4. macOS cutover
+
+Status: macOS now runs on the shared core. The app, its dictionary worker and the tools call it through `ifr_*` behind the `IFEngine` facade (#81), and the Swift engine and its Swift-only SwiftPM targets are deleted (#85). The recorded Swift results stay as frozen fixtures that the Rust parity tests compare against.
 
 Connect the existing Swift frontend to the shared engine. Preserve settings, candidate presentation, personal data, and existing optional-feature integrations; deferring new-platform AI/voice does not authorize removing them from macOS.
 

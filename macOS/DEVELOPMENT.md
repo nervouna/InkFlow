@@ -6,7 +6,7 @@ The application, settings interface, registration tool, and test scenarios are w
 
 - `../Core/Package.swift` builds the shared `InkFlowDomain` and `InkFlowRime` sources used by the root package. Dictionary source validation, generation, storage, preparation and activation policy live in Core; macOS owns worker process/sandbox execution, bundle/path discovery, command-line framing, logging adapters and UI.
 - `../Core/Sources/InkFlowRime/Engine.swift` is the `IFEngine` facade over the Rust core's C ABI (`../Core/Portable/include/inkflow_rime.h`, linked as `InkFlowPortable`): sessions, key policy, candidate order, custom phrases and input preferences are the core's (`../Core/Portable/src`); the facade keeps the delivery lease, idle signalling, voice-lexicon gating, quality recording and Settings errors, and converts snapshots to `EngineSnapshot` values. `Sources/EngineEvent.swift` adapts macOS events to semantic engine input. Session calls stay on the main actor.
-- `Context.swift` reads bounded surrounding text through public `IMKTextInput`; `IFContextRanker` reorders Han candidates within their slots from bundled phrase frequencies.
+- `Context.swift` reads bounded surrounding text through public `IMKTextInput`; the Rust core reorders Han candidates within their slots from the bundled context index.
 - `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel.
 - `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (`IFUpdaterAccess`) owns updater preferences.
 - `NativeCandidates.m` is the only Objective-C source: private candidate-panel adaptations (see `DEBUGGING.md`).

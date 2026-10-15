@@ -3,11 +3,6 @@ import Foundation
 import PackageDescription
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().path
-let dependencyRoot = "\(packageRoot)/build/deps/dist"
-let rimeLinkerSettings: [LinkerSetting] = [
-    .unsafeFlags(["-L\(dependencyRoot)/lib"]),
-    .linkedLibrary("rime"),
-]
 let bundledRimeRuntime: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
 ]
@@ -15,8 +10,8 @@ let bundledRimeRuntime: [LinkerSetting] = [
 // the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
 // libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
 // own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
-// The archive contains the InkFlowRimeNative sources, so no binary may also link the
-// InkFlowRimeNative or CRime targets, and the source-built librime.1.dylib is the only librime.
+// The archive contains the InkFlowRimeNative sources (Core/Sources/InkFlowRimeNative, compiled
+// by Core/Portable/native), and the source-built librime.1.dylib is the only librime.
 let portableRoot = "\(packageRoot)/build/portable"
 let portableLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
@@ -26,14 +21,6 @@ let portableRuntime: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(portableRoot)/prefix/lib"]),
 ]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
-let nativeRoot = URL(fileURLWithPath: dependencyRoot).deletingLastPathComponent().appendingPathComponent("native").path
-let nativeCxxSettings: [CXXSetting] = [.unsafeFlags([
-    "-Wall", "-Wextra", "-Werror", "-DBOOST_DLL_USE_STD_FS",
-    "-DGLOG_EXPORT=", "-DGLOG_NO_EXPORT=", "-DGLOG_DEPRECATED=__attribute__((deprecated))",
-    "-isystem", "\(nativeRoot)/deps/include", "-isystem", "\(nativeRoot)/generated",
-    "-isystem", "\(nativeRoot)/boost", "-isystem", "\(nativeRoot)/librime/src",
-    "-isystem", "\(nativeRoot)/librime/include",
-])]
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
 let inkFlowCoreSources = [
     "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
@@ -153,15 +140,12 @@ let package = Package(
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
-        .target(name: "InkFlowRimeNative", path: "Core/Sources/InkFlowRimeNative",
-                publicHeadersPath: "include", cxxSettings: nativeCxxSettings, linkerSettings: rimeLinkerSettings),
         .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Core/Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .executableTarget(name: "VoiceLearningCoordinatorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/VoiceLearningCoordinatorTests", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowDictionaryTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/InkFlowDictionaryTestSupport", swiftSettings: strictSwiftSettings),
         .executableTarget(name: "DictionaryStoreTests", dependencies: ["InkFlowDictionaryTestSupport"], path: "Core/Tests/DictionaryStoreTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
-        .target(name: "InkFlowRankingTestSupport", dependencies: ["InkFlowDomain"], path: "Core/Tests/InkFlowRankingTestSupport", swiftSettings: strictSwiftSettings),
-        .target(name: "InkFlowEngineTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport", "InkFlowRankingTestSupport"], path: "Core/Tests/InkFlowEngineTestSupport", swiftSettings: strictSwiftSettings),
+        .target(name: "InkFlowEngineTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/InkFlowEngineTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowCoreTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/InkFlowCoreTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowRime", dependencies: ["InkFlowDomain", "InkFlowPortable"], path: "Core/Sources/InkFlowRime", swiftSettings: strictSwiftSettings, linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "InkFlowDictionary", path: "Core/Sources/InkFlowDictionary",
@@ -172,26 +156,11 @@ let package = Package(
         .target(name: "InkFlowDomain", dependencies: ["InkFlowDictionary"], path: "Core/Sources/InkFlowDomain",
                 swiftSettings: strictSwiftSettings),
         .target(
-            name: "CRime",
-            dependencies: ["InkFlowRimeNative"],
-            path: "Core/Sources/CRime",
-            publicHeadersPath: "include",
-            cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])],
-            linkerSettings: rimeLinkerSettings
-        ),
-        .target(
             name: "InkFlowNative",
             path: "macOS/SwiftPM/InkFlowNative",
             publicHeadersPath: "include",
             cSettings: strictCSettings + [.unsafeFlags(["-fobjc-arc"])],
             linkerSettings: [.linkedFramework("InputMethodKit")]
-        ),
-        .target(
-            name: "InkFlowRimeWorker",
-            dependencies: ["CRime"],
-            path: "Core/Sources/InkFlowRimeWorker",
-            publicHeadersPath: "include",
-            cSettings: strictCSettings + [.unsafeFlags(["-I\(dependencyRoot)/include"])]
         ),
         .target(
             name: "InkFlowInputSources",
@@ -204,7 +173,7 @@ let package = Package(
             name: "InkFlowCore",
             dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowPortable", "InkFlowNative"],
             path: "macOS/Sources",
-            exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
+            exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m"],
             sources: inkFlowCoreSources,
             swiftSettings: strictSwiftSettings,
             linkerSettings: [
@@ -220,7 +189,7 @@ let package = Package(
             name: "InkFlowApp",
             dependencies: ["InkFlowCore", .product(name: "Sparkle", package: "Sparkle")],
             path: "macOS/Sources",
-            exclude: inkFlowCoreSources + ["NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
+            exclude: inkFlowCoreSources + ["NativeCandidates.h", "NativeCandidates.m"],
             sources: ["main.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime

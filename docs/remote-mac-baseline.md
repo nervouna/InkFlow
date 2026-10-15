@@ -13,7 +13,6 @@ python3 scripts/mac-remote.py baseline
 python3 scripts/mac-remote.py portable
 python3 scripts/mac-remote.py dictionary
 python3 scripts/mac-remote.py resources
-python3 scripts/mac-remote.py ranking-reference
 ```
 
 `--revision COMMIT` defaults to `HEAD`. Local uncommitted changes are never sent. The runner prints the resolved commit and evidence directory. Use `--host ALIAS` and `--remote-root PATH` to override the defaults, `tanaris` and `~/Develop/Projects/inkflow-remote`.
@@ -40,15 +39,11 @@ A nonzero exit status means the action or its evidence transfer failed.
 
 `portable` runs `Core/Portable/test.sh`: build the source-pinned native dependencies and existing extensions, then run the minimal Rust host tests with isolated fixture data. It needs CMake 3.31 and Ninja in the Mac login shell's path in addition to the baseline prerequisites. See [the probe contract and build recipe](../Core/Portable/README.md).
 
-The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt.
+It includes the Rust ranking tests, which compare the pure ordering policy with the frozen `ranking-reference.json` (the Swift ranker's recorded results). The remote report contains `00-portable.log`, `native-build.json`, and the normal `run.json` receipt.
 
 ## Dictionary generator comparison
 
 `dictionary` runs `Core/Portable/dictionary/test.sh`. It exercises the existing Swift generator, exports its contract, and compares the Rust generator against fresh Swift outputs and recorded fixtures. It also compiles C and Swift consumers of the in-process Rust dictionary ABI. It returns `catalog.json`, `reference.json`, the Swift/Rust summaries `corpus.json` and `rust-corpus.json`, the Swift ABI consumer's `swift-ffi-corpus.json`, plus `00-dictionary.log` and the normal receipt. See [the comparison contract](../Core/Portable/dictionary/README.md).
-
-## Ranking reference
-
-`ranking-reference` compiles the unchanged Swift ranker with a standalone fixture reader and returns `ranking-reference.json`. It does not initialize Rime or inspect user data. The `portable` action also regenerates this reference on the Mac, compares it with the recorded fixture, and runs the Rust ranking tests. These compare the pure ordering policy, not full engine behavior.
 
 ## Target-native production resources
 
@@ -59,7 +54,7 @@ The remote report contains `00-portable.log`, `native-build.json`, and the norma
 `baseline` runs `Core/scripts/capture-migration-baseline.sh` in a clean checkout. It:
 
 1. Verifies pinned dependencies and standalone Core boundaries.
-2. Builds the quality harness, performance harness, and cache tool in release mode for `arm64-apple-macosx26.0`. Ranking regressions use debug mode because their existing support module imports the domain with `@testable`.
+2. Builds the quality harness, performance harness, and cache tool in release mode for `arm64-apple-macosx26.0`.
 3. Prepares one resource tree and compiled cache, reused by both observational harnesses.
 4. Runs the existing quality corpus and compares it with the checked-in expected results. Its normal five-selection training and restart recipe is unchanged.
 5. Runs five fresh performance processes with absent user directories. Each types the same corpus five times without committing or training. Pass zero and subsequent passes are reported separately.
