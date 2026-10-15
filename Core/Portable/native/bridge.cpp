@@ -195,6 +195,13 @@ extern "C" int ifp_get_input(uintptr_t session, char** result) {
     return 0;
   } catch (...) { return -3; }
 }
+extern "C" int ifp_get_caret_pos(uintptr_t session, size_t* caret) {
+  try {
+    if (!api()->find_session(session)) return -2;
+    *caret = api()->get_caret_pos(session);
+    return 0;
+  } catch (...) { return -3; }
+}
 extern "C" int ifp_highlight_candidate(uintptr_t session, size_t index, int* handled) {
   try {
     if (!api()->find_session(session)) return -2;

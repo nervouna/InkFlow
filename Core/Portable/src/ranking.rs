@@ -26,6 +26,27 @@ pub struct Metadata {
     pub source: Source,
 }
 
+/// Where a personal-learning candidate comes from, as quality records keep it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PersonalSource {
+    ExactEnglish,
+    ExactMixed,
+}
+
+impl Metadata {
+    /// Present only for an exact record the user's own commits have strengthened.
+    pub fn personal_source(&self) -> Option<PersonalSource> {
+        if !self.exact || self.personal == 0 {
+            return None;
+        }
+        match self.source {
+            Source::English => Some(PersonalSource::ExactEnglish),
+            Source::Mixed => Some(PersonalSource::ExactMixed),
+            Source::Native | Source::Custom => None,
+        }
+    }
+}
+
 pub fn parse_metadata(
     value: &str,
     offset: usize,
@@ -389,5 +410,45 @@ impl ContextRanker {
             result[slot] = candidate;
         }
         result
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(exact: bool, personal: u8, source: Source) -> Metadata {
+        Metadata {
+            coverage: 0..5,
+            class: CandidateClass::Ascii,
+            exact,
+            personal,
+            source,
+        }
+    }
+
+    /// The condition of `IFEngine.qualitySnapshot`: an exact record with personal commits that
+    /// came from the English or the mixed translator.
+    #[test]
+    fn personal_source_names_exact_personal_english_and_mixed() {
+        use PersonalSource::{ExactEnglish, ExactMixed};
+        assert_eq!(
+            row(true, 1, Source::English).personal_source(),
+            Some(ExactEnglish)
+        );
+        assert_eq!(
+            row(true, 3, Source::Mixed).personal_source(),
+            Some(ExactMixed)
+        );
+        for none in [
+            row(true, 0, Source::English),
+            row(false, 2, Source::English),
+            row(true, 0, Source::Mixed),
+            row(true, 1, Source::Native),
+            row(true, 2, Source::Custom),
+            row(false, 0, Source::Native),
+        ] {
+            assert_eq!(none.personal_source(), None, "{none:?}");
+        }
     }
 }

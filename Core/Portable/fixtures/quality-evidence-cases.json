@@ -1,0 +1,27 @@
+{
+  "candidateCount": 9,
+  "seeds": [
+    ["codux", "Codex"],
+    ["codux", "Codex"],
+    ["codux", "CODEX"],
+    ["offlinx", "offline"],
+    ["swiftux", "SwiftUI"],
+    ["swiftux", "SwiftUI"],
+    ["swiftux", "SwiftUI"]
+  ],
+  "cases": [
+    {"name": "chinese-baseline", "steps": [{"type": "nihao"}, {"record": "typed"}]},
+    {"name": "second-page", "steps": [{"type": "shi"}, {"record": "first page"}, {"page": 1}, {"record": "second page"}, {"page": 1}, {"record": "third page"}, {"page": -1}, {"record": "back"}]},
+    {"name": "personal-english", "steps": [{"type": "codex"}, {"record": "neutral context"}]},
+    {"name": "personal-english-technical-context", "steps": [{"preceding": "正在使用 Swift "}, {"type": "codex"}, {"record": "technical context"}]},
+    {"name": "chinese-context-ranking", "steps": [{"preceding": "准备午"}, {"type": "can"}, {"record": "context ranked"}]},
+    {"name": "personal-mixed", "steps": [{"type": "codexhenhao"}, {"record": "suffix"}, {"clear": true}, {"type": "woyongcodexkaifa"}, {"record": "prefix and suffix"}, {"clear": true}, {"type": "woyongoffline"}, {"record": "prefix"}]},
+    {"name": "personal-mixed-case", "steps": [{"type": "Codexhenhao"}, {"record": "capital"}, {"clear": true}, {"type": "woyongCODEXkaifa"}, {"record": "all capitals"}]},
+    {"name": "personal-mixed-three-commits", "steps": [{"type": "woyongswiftuihenhao"}, {"record": "swiftui"}]},
+    {"name": "caret-moves", "steps": [{"type": "woyongcodexkaifa"}, {"key": 65430}, {"key": 65430}, {"key": 65430}, {"record": "three characters left"}, {"key": 65360}, {"record": "home"}, {"key": 65367}, {"record": "end"}]},
+    {"name": "edit-in-place", "steps": [{"type": "codey"}, {"key": 65288}, {"type": "x"}, {"record": "edited"}]},
+    {"name": "selected-prefix", "steps": [{"type": "woyongcodex"}, {"key": 65430, "repeat": 9}, {"record": "caret after wo"}, {"select": "我"}, {"record": "prefix selected"}, {"key": 65367}, {"record": "end"}, {"page": 1}, {"record": "next page"}]},
+    {"name": "highlight-and-arrows", "steps": [{"type": "codex"}, {"key": 65364}, {"record": "down"}, {"highlight": 3}, {"record": "highlight"}]},
+    {"name": "custom-phrase-code", "steps": [{"phrases": [["codexhenhao", "自定义词"]]}, {"type": "codexhenhao"}, {"record": "custom code"}, {"clear": true}, {"phrases": []}, {"type": "x"}, {"clear": true}]}
+  ]
+}

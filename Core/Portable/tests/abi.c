@@ -307,6 +307,20 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   ifr_learning_free(NULL);
   ifr_learning_undo_free(NULL);
   assert(ifr_session_requested_ascii_mode(NULL) == 0);
+
+  /* AI, voice and quality hooks reject a missing session, write no output and answer neutrally. */
+  IFRReply* reply = (IFRReply*)1;
+  expect(ifr_session_call(NULL, "voice_aliases", NULL, 0, 512, &reply), IFR_INVALID_ARGUMENT, "call without a session");
+  assert(reply == (IFRReply*)1 && "outputs are written only on success");
+  expect(ifr_session_clear_unobserved(NULL), IFR_INVALID_ARGUMENT, "unobserved clear without a session");
+  assert(ifr_reply_status(NULL) == NULL && ifr_reply_body(NULL) == NULL);
+  ifr_reply_free(NULL);
+  size_t start = 7, end = 9;
+  assert(ifr_snapshot_raw_caret(NULL) == 0);
+  assert(ifr_snapshot_candidate_native_index(NULL, 0) == 0 && ifr_snapshot_candidate_native_rank(NULL, 0) == 0);
+  assert(ifr_snapshot_candidate_personal_source(NULL, 0) == IFR_PERSONAL_NONE);
+  assert(ifr_snapshot_candidate_consumed_input(NULL, 0, &start, &end) == 0 && start == 7 && end == 9);
+  assert(IFR_NO_REPLY == 23 && "appended to the status enum, never renumbered");
   puts("PASS C ABI: argument validation, fixture runtime lifetime and resource checks");
 }
 
@@ -608,6 +622,234 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   puts("PASS C ABI: personal learning, requested ASCII mode, probe and export beside a live engine");
 }
 
+static IFRReply* call_reply(const IFRSession* session, const char* op, const char* const* fields, size_t count,
+                            size_t capacity) {
+  IFRReply* reply = NULL;
+  expect(ifr_session_call(session, op, fields, count, capacity, &reply), IFR_OK, op);
+  assert(reply != NULL && ifr_reply_status(reply) != NULL && ifr_reply_body(reply) != NULL);
+  return reply;
+}
+
+/* Run `op`, which must be answered with `status` and exactly `body`. */
+static void call_is(const IFRSession* session, const char* op, const char* const* fields, size_t count,
+                    const char* status, const char* body) {
+  IFRReply* reply = call_reply(session, op, fields, count, 4096);
+  if (strcmp(ifr_reply_status(reply), status) != 0 || strcmp(ifr_reply_body(reply), body) != 0) {
+    fprintf(stderr, "%s: replied %s / %s (wanted %s / %s)\n", op, ifr_reply_status(reply), ifr_reply_body(reply),
+            status, body);
+    exit(1);
+  }
+  ifr_reply_free(reply);
+}
+
+static void expect_no_reply(const IFRSession* session, const char* op, const char* const* fields, size_t count,
+                            size_t capacity) {
+  IFRReply* reply = (IFRReply*)1;
+  expect(ifr_session_call(session, op, fields, count, capacity, &reply), IFR_NO_REPLY, op);
+  assert(reply == (IFRReply*)1 && strstr(ifr_last_error(), "no reply") != NULL);
+}
+
+static size_t candidate_index(const IFRSnapshot* snapshot, const char* text) {
+  for (size_t n = 0; n < ifr_snapshot_candidate_count(snapshot); ++n) {
+    if (strcmp(ifr_snapshot_candidate_text(snapshot, n), text) == 0) return n;
+  }
+  return (size_t)-1;
+}
+
+static IFRSnapshot* snapshot_of(const IFRSession* session) {
+  IFRSnapshot* snapshot = NULL;
+  expect(ifr_session_snapshot(session, &snapshot), IFR_OK, "snapshot");
+  return snapshot;
+}
+
+/* The channel, learning revision, raw caret, quality evidence and unobserved clear on production
+ * resources. Seeds go through voice learning, as the macOS voice feature does. */
+static void hooks_checks(const char* resources, const char* scratch) {
+  IFREngine* engine = production(resources, path(9, scratch, "hooks-user"));
+  IFRSession* session = NULL;
+  expect(ifr_session_create(engine, &session), IFR_OK, "hooks session");
+  uint32_t options = ifr_input_options_default();
+  expect(ifr_session_set_configuration(session, 9, NULL, 0, &options), IFR_OK, "configure");
+
+  /* The channel: a module answers its own operations with a status and a body. */
+  call_is(session, "learning_invalidate", NULL, 0, "ok", "");
+  call_is(session, "voice_aliases", NULL, 0, "ok", "");
+  const char* invalid[] = {"bad code", "你好"};
+  call_is(session, "ai_learning", invalid, 2, "failed", "");
+  const char* range[] = {"0", "3"};
+  call_is(session, "input_coverage", range, 2, "failed", "");
+  /* No reply, which is a status of its own: no module, a reply that does not fit, an unframable request. */
+  expect_no_reply(session, "no_such_operation", NULL, 0, 512);
+  expect_no_reply(session, "voice_aliases", NULL, 0, 8);
+  expect_no_reply(session, "Not-An-Op", NULL, 0, 512);
+  const char* tab[] = {"a\tb"};
+  const char* newline[] = {"a\nb"};
+  expect_no_reply(session, "ai_learning", tab, 1, 512);
+  expect_no_reply(session, "ai_learning", newline, 1, 512);
+  IFRReply* reply = (IFRReply*)1;
+  const char* hole[] = {"a", NULL};
+  expect(ifr_session_call(session, NULL, NULL, 0, 512, &reply), IFR_INVALID_ARGUMENT, "no operation");
+  expect(ifr_session_call(session, "voice_aliases", NULL, 1, 512, &reply), IFR_INVALID_ARGUMENT, "missing fields");
+  expect(ifr_session_call(session, "voice_aliases", hole, 2, 512, &reply), IFR_INVALID_ARGUMENT, "missing field");
+  expect(ifr_session_call(session, "voice_aliases", NULL, 0, 512, NULL), IFR_INVALID_ARGUMENT, "no reply out");
+  expect(ifr_session_call(session, "bad\xff", NULL, 0, 512, &reply), IFR_INVALID_ARGUMENT, "non-UTF-8 operation");
+  const char* bytes[] = {"bad\xff"};
+  expect(ifr_session_call(session, "ai_learning", bytes, 1, 512, &reply), IFR_INVALID_ARGUMENT, "non-UTF-8 field");
+  expect(ifr_session_call(session, "voice_aliases", NULL, 0, (size_t)-1, &reply), IFR_INVALID_ARGUMENT, "capacity");
+  assert(reply == (IFRReply*)1 && "outputs are written only on success");
+
+  /* Voice learning updates both English namespaces; the alias is readable with its native count. */
+  const char* correction[] = {"codux", "codex", "Codex"};
+  const char* other[] = {"swiftux", "swiftui", "SwiftUI"};
+  const char* malformed[] = {"co dux", "codex", "Codex"};
+  call_is(session, "voice_learning", malformed, 3, "failed", "");
+  call_is(session, "voice_learning", correction, 3, "ok", "");
+  call_is(session, "voice_learning", other, 3, "ok", "");
+  call_is(session, "voice_aliases", NULL, 0, "ok", "codux\tCodex\t1\nswiftux\tSwiftUI\t1\n");
+
+  /* Every learning write below leaves the entry a listing is later used on untouched, so only the
+   * learning revision can supersede that listing or its undo token. A failed learn changes nothing. */
+  IFRLearning* learning = learning_entries(engine);
+  assert(ifr_learning_count(learning) == 4);
+  size_t swift = entry_index(learning, IFR_LEARNING_ENGLISH, "SwiftUI");
+  assert(swift != (size_t)-1);
+  call_is(session, "voice_learning", malformed, 3, "failed", "");
+  IFRLearningUndo* undo = NULL;
+  expect(ifr_personal_learning_delete(engine, learning, swift, &undo), IFR_OK, "delete after a failed learn");
+  expect(ifr_personal_learning_undo(engine, undo), IFR_OK, "undo after a failed learn");
+  ifr_learning_undo_free(undo);
+  ifr_learning_free(learning);
+
+  learning = learning_entries(engine);
+  call_is(session, "voice_learning", correction, 3, "ok", "");
+  expect(ifr_personal_learning_delete(engine, learning, swift, &undo), IFR_CONFLICT, "listing before a successful learn");
+  ifr_learning_free(learning);
+
+  learning = learning_entries(engine);
+  expect(ifr_personal_learning_delete(engine, learning, swift, &undo), IFR_OK, "delete before the next learn");
+  call_is(session, "voice_learning", correction, 3, "ok", "");
+  expect(ifr_personal_learning_undo(engine, undo), IFR_CONFLICT, "undo token before a successful learn");
+  ifr_learning_undo_free(undo);
+  ifr_learning_free(learning);
+
+  /* AI adoption learns into the ordinary Chinese dictionary, which no listing shows, and supersedes too. */
+  learning = learning_entries(engine);
+  const char* adoption[] = {"xing mo liang ", "星墨量"};
+  call_is(session, "ai_learning", adoption, 2, "ok", "");
+  expect(ifr_personal_learning_delete(engine, learning, 0, &undo), IFR_CONFLICT, "listing before AI learning");
+  ifr_learning_free(learning);
+  learning = learning_entries(engine);
+  const char* refused[] = {"xing mo liang", "星墨量"};
+  call_is(session, "ai_learning", refused, 2, "failed", "");
+  expect(ifr_personal_learning_delete(engine, learning, 0, &undo), IFR_OK, "listing after refused AI learning");
+  ifr_learning_undo_free(undo);
+  ifr_learning_free(learning);
+
+  /* Clearing English learning removes both namespaces and supersedes an undo token that the cleared
+   * counts alone would still accept. */
+  learning = learning_entries(engine);
+  expect(ifr_personal_learning_delete(engine, learning, 0, &undo), IFR_OK, "delete before the clear");
+  ifr_learning_free(learning);
+  call_is(session, "clear_english_learning", NULL, 0, "ok", "");
+  expect(ifr_personal_learning_undo(engine, undo), IFR_CONFLICT, "undo token before the clear");
+  ifr_learning_undo_free(undo);
+  learning = learning_entries(engine);
+  assert(ifr_learning_count(learning) == 0);
+  ifr_learning_free(learning);
+  call_is(session, "voice_aliases", NULL, 0, "ok", "");
+
+  /* Raw caret: bytes of the raw input, apart from the preedit caret, which counts the displayed spaces. */
+  call_is(session, "voice_learning", correction, 3, "ok", "");
+  type_text(session, "nihao");
+  IFRSnapshot* shown = snapshot_of(session);
+  assert(strcmp(ifr_snapshot_input(shown), "nihao") == 0 && ifr_snapshot_raw_caret(shown) == 5);
+  assert(ifr_snapshot_caret(shown) == strlen("ni hao"));
+  ifr_snapshot_free(shown);
+  int handled = 0;
+  expect(ifr_session_key(session, 0xff96, 0, &handled), IFR_OK, "keypad Left");
+  shown = snapshot_of(session);
+  assert(handled == 1 && ifr_snapshot_raw_caret(shown) == 4);
+  ifr_snapshot_free(shown);
+  expect(ifr_session_key(session, 0xff50, 0, &handled), IFR_OK, "Home");
+  shown = snapshot_of(session);
+  assert(ifr_snapshot_raw_caret(shown) == 0);
+  ifr_snapshot_free(shown);
+  expect(ifr_session_clear(session), IFR_OK, "clear");
+
+  /* Quality evidence: native position and rank, and the personal-learning source with its input span. */
+  type_text(session, "codex");
+  shown = snapshot_of(session);
+  size_t codex = candidate_index(shown, "Codex");
+  assert(codex != (size_t)-1 && ifr_snapshot_raw_caret(shown) == 5);
+  assert(ifr_snapshot_candidate_personal_source(shown, codex) == IFR_PERSONAL_EXACT_ENGLISH);
+  size_t start = 7, end = 9;
+  assert(ifr_snapshot_candidate_consumed_input(shown, codex, &start, &end) == 1 && start == 0 && end == 5);
+  size_t natives = 0;
+  for (size_t n = 0; n < ifr_snapshot_candidate_count(shown); ++n) {
+    assert(ifr_snapshot_candidate_native_index(shown, n) < ifr_snapshot_candidate_count(shown));
+    assert(ifr_snapshot_candidate_native_rank(shown, n) == ifr_snapshot_candidate_native_index(shown, n) + 1);
+    natives += ifr_snapshot_candidate_native_index(shown, n);
+  }
+  size_t count = ifr_snapshot_candidate_count(shown);
+  assert(natives == count * (count - 1) / 2 && "the native indices are a permutation of the page");
+  for (size_t n = 0; n < count; ++n) {
+    if (ifr_snapshot_candidate_personal_source(shown, n) != IFR_PERSONAL_NONE) continue;
+    start = 7;
+    end = 9;
+    assert(ifr_snapshot_candidate_consumed_input(shown, n, &start, &end) == 0 && start == 7 && end == 9);
+  }
+  assert(ifr_snapshot_candidate_native_index(shown, count) == 0 && ifr_snapshot_candidate_native_rank(shown, count) == 0);
+  assert(ifr_snapshot_candidate_personal_source(shown, count) == IFR_PERSONAL_NONE);
+  assert(ifr_snapshot_candidate_consumed_input(shown, count, &start, &end) == 0 && start == 7 && end == 9);
+  ifr_snapshot_free(shown);
+  expect(ifr_session_clear(session), IFR_OK, "clear");
+
+  /* Ordering changes the display, not the native evidence: a technical context moves the personal
+   * exact word to the front while it keeps its native position. */
+  expect(ifr_session_set_preceding_text(session, "正在使用 Swift "), IFR_OK, "technical context");
+  type_text(session, "codex");
+  shown = snapshot_of(session);
+  codex = candidate_index(shown, "Codex");
+  assert(codex == 0 && ifr_snapshot_candidate_personal_source(shown, 0) == IFR_PERSONAL_EXACT_ENGLISH);
+  assert(ifr_snapshot_candidate_native_index(shown, 0) != 0 && "the native position survives the ordering");
+  assert(ifr_snapshot_candidate_native_rank(shown, 0) == ifr_snapshot_candidate_native_index(shown, 0) + 1);
+  ifr_snapshot_free(shown);
+  expect(ifr_session_clear(session), IFR_OK, "clear");
+
+  /* Later pages count from the first: rank = page * page size + native index + 1. */
+  type_text(session, "shi");
+  expect(ifr_session_change_page(session, 0, &handled), IFR_OK, "page down");
+  shown = snapshot_of(session);
+  assert(ifr_snapshot_page(shown) == 1);
+  for (size_t n = 0; n < ifr_snapshot_candidate_count(shown); ++n) {
+    assert(ifr_snapshot_candidate_native_rank(shown, n) == 9 + ifr_snapshot_candidate_native_index(shown, n) + 1);
+  }
+  ifr_snapshot_free(shown);
+  expect(ifr_session_clear(session), IFR_OK, "clear");
+
+  /* The unobserved clear empties the composition without a mutation for the observer. */
+  Observed observed = {0, ifr_session_id(session), 0};
+  expect(ifr_engine_set_observer(engine, observe, &observed), IFR_OK, "observer");
+  type_text(session, "nihao");
+  int typed = observed.count;
+  assert(typed == 5);
+  expect(ifr_session_clear_unobserved(session), IFR_OK, "unobserved clear");
+  assert(observed.count == typed);
+  shown = snapshot_of(session);
+  assert(ifr_snapshot_preedit(shown)[0] == 0 && ifr_snapshot_candidate_count(shown) == 0 &&
+         ifr_snapshot_input(shown)[0] == 0 && ifr_snapshot_raw_caret(shown) == 0);
+  ifr_snapshot_free(shown);
+  assert(take(session) == NULL);
+  type_text(session, "ni");
+  expect(ifr_session_clear(session), IFR_OK, "observed clear");
+  assert(observed.count == typed + 3 && observed.bad == 0);
+  expect(ifr_engine_set_observer(engine, NULL, NULL), IFR_OK, "remove observer");
+
+  ifr_session_destroy(session);
+  ifr_engine_destroy(engine);
+  puts("PASS C ABI: session call, learning revision, raw caret, quality evidence and unobserved clear");
+}
+
 int main(int argc, char** argv) {
   if (argc < 3) {
     fputs("usage: abi-test FIXTURE_ROOT SCRATCH [RESOURCES]\n", stderr);
@@ -619,6 +861,7 @@ int main(int argc, char** argv) {
   if (argc > 3) {
     resource_checks(argv[3], argv[2]);
     maintenance_checks(argv[3], argv[2]);
+    hooks_checks(argv[3], argv[2]);
   } else {
     puts("SKIP C ABI production checks: no resources directory");
   }

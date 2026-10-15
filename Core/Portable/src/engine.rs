@@ -12,7 +12,7 @@ use crate::{
     Error, Result, Runtime, Session,
     phrases::{CustomPhrase, PhraseError, phrase_tsv},
     preferences::InputPreferences,
-    ranking::{ContextRanker, Metadata, parse_metadata},
+    ranking::{ContextRanker, Metadata, PersonalSource, parse_metadata},
 };
 use std::{
     collections::BTreeMap,
@@ -113,8 +113,24 @@ pub struct Candidate {
     pub comment: String,
     /// Position in Rime's current page; quality records keep both ranks.
     pub native_index: usize,
+    /// One-based position across Rime's pages: `page * page size + native_index + 1`.
+    pub native_rank: usize,
     /// Bounded ranking evidence for this candidate when ordering applied.
     pub evidence: Option<Metadata>,
+}
+
+impl Candidate {
+    /// The personal-learning source quality records keep, if the evidence names one.
+    pub fn personal_source(&self) -> Option<PersonalSource> {
+        self.evidence.as_ref()?.personal_source()
+    }
+    /// The raw-input bytes the candidate consumes, present only with a personal source.
+    pub fn consumed_input(&self) -> Option<Range<usize>> {
+        self.personal_source()?;
+        self.evidence
+            .as_ref()
+            .map(|evidence| evidence.coverage.clone())
+    }
 }
 
 /// The displayed page in InkFlow order. Offsets count UTF-8 bytes of `preedit`.
@@ -122,6 +138,8 @@ pub struct Candidate {
 pub struct Snapshot {
     token: Arc<()>,
     pub input: String,
+    /// Rime's caret in `input`, in bytes; `caret_bytes` is the caret in `preedit`.
+    pub raw_caret_bytes: usize,
     pub preedit: String,
     pub caret_bytes: usize,
     pub selection_bytes: Range<usize>,
@@ -135,6 +153,7 @@ pub struct Snapshot {
 impl PartialEq for Snapshot {
     fn eq(&self, other: &Self) -> bool {
         self.input == other.input
+            && self.raw_caret_bytes == other.raw_caret_bytes
             && self.preedit == other.preedit
             && self.caret_bytes == other.caret_bytes
             && self.selection_bytes == other.selection_bytes
@@ -471,10 +490,17 @@ impl Engine {
 
     fn display(core: &mut Core) -> Result<Snapshot> {
         let raw = Self::raw(core)?;
-        let input = match &mut core.session {
-            Some(session) if !core.lost => session.input()?,
-            _ => String::new(),
+        let (input, raw_caret_bytes) = match &mut core.session {
+            Some(session) if !core.lost => (session.input()?, session.input_caret()?),
+            _ => (String::new(), 0),
         };
+        // Rime's raw input is ASCII, so its caret is a boundary. A stray value is clamped rather than
+        // failing a key event: the raw caret only serves AI identity and quality evidence.
+        let raw_caret_bytes = (0..=raw_caret_bytes.min(input.len()))
+            .rev()
+            .find(|&offset| input.is_char_boundary(offset))
+            .unwrap_or(0);
+        let page_start = usize::try_from(raw.page).unwrap_or(0) * core.candidate_count;
         let order: Vec<usize> = if core.order.len() == raw.candidates.len() {
             core.order.clone()
         } else {
@@ -486,6 +512,7 @@ impl Engine {
                 text: raw.candidates[native].text.clone(),
                 comment: raw.candidates[native].comment.clone(),
                 native_index: native,
+                native_rank: page_start + native + 1,
                 evidence: core
                     .metadata
                     .as_ref()
@@ -499,6 +526,7 @@ impl Engine {
         Ok(Snapshot {
             token: core.token.clone(),
             input,
+            raw_caret_bytes,
             preedit: raw.preedit,
             caret_bytes: raw.caret_bytes,
             selection_bytes: raw.selection_bytes,
@@ -756,6 +784,15 @@ impl Engine {
         Ok(handled)
     }
 
+    fn clear_session(&self, state: &mut State, id: u64) -> Result<()> {
+        let core = state.sessions.get_mut(&id).unwrap();
+        if !core.available() {
+            return Ok(());
+        }
+        core.session.as_mut().unwrap().clear()?;
+        self.update_ordering(state, id, false)
+    }
+
     fn select_display(&self, state: &mut State, id: u64, index: usize) -> Result<bool> {
         let core = state.sessions.get_mut(&id).unwrap();
         let Some(&native) = core.order.get(index) else {
@@ -891,7 +928,10 @@ impl Engine {
 
     /// Drop every session's cached learning view after external changes to the dictionaries.
     pub fn invalidate_personal_learning(&self) -> Result<()> {
-        let mut state = self.lock()?;
+        Self::invalidate_learning(&mut *self.lock()?)
+    }
+
+    fn invalidate_learning(state: &mut State) -> Result<()> {
         for core in state.sessions.values_mut() {
             if let Some(session) = core.session.as_mut().filter(|_| !core.lost) {
                 session.call("learning_invalidate", &[], 512)?;
@@ -1117,15 +1157,15 @@ impl InputSession {
         self.mutate(
             Action::Clear,
             |_| true,
-            |state, id| {
-                let core = state.sessions.get_mut(&id).unwrap();
-                if !core.available() {
-                    return Ok(());
-                }
-                core.session.as_mut().unwrap().clear()?;
-                engine.update_ordering(state, id, false)
-            },
+            |state, id| engine.clear_session(state, id),
         )
+    }
+
+    /// Clear like [`InputSession::clear`] without delivering a mutation to the observer: the
+    /// composition ended because a feature consumed it, not because the user cancelled.
+    pub fn clear_unobserved(&self) -> Result<()> {
+        let mut state = self.engine.lock()?;
+        self.engine.clear_session(&mut state, self.id)
     }
 
     /// Drain completed text once, including text preserved across a settings reload.
@@ -1272,7 +1312,14 @@ impl InputSession {
         )
     }
 
-    /// Bounded Lua channel request for optional features; never from a key callback.
+    /// Bounded Lua channel request for optional features; never from a key callback. `None`
+    /// when the session is unavailable, no module answers, the reply does not fit `capacity`
+    /// bytes or the request cannot be framed.
+    ///
+    /// A successful learning write advances the learning revision, as the Swift engine's
+    /// `markDirty` and `invalidatePersonalLearning` do after the same operations: listings and
+    /// undo tokens captured earlier then conflict. Clearing English learning also drops every
+    /// session's cached view. The caller keeps the idle checks.
     pub fn call(
         &self,
         op: &str,
@@ -1281,10 +1328,18 @@ impl InputSession {
     ) -> Result<Option<crate::channel::Reply>> {
         let mut state = self.engine.lock()?;
         let core = state.sessions.get_mut(&self.id).unwrap();
-        match core.session.as_mut().filter(|_| !core.lost) {
-            Some(session) => session.call(op, fields, capacity),
-            None => Ok(None),
+        let Some(session) = core.session.as_mut().filter(|_| !core.lost) else {
+            return Ok(None);
+        };
+        let reply = session.call(op, fields, capacity)?;
+        if reply.as_ref().is_some_and(|reply| reply.status == "ok") {
+            match op {
+                "voice_learning" | "ai_learning" => state.observe_learning(),
+                "clear_english_learning" => Engine::invalidate_learning(&mut state)?,
+                _ => {}
+            }
         }
+        Ok(reply)
     }
 }
 
