@@ -1,9 +1,18 @@
-use inkflow_rime::{Error, Runtime};
+use inkflow_rime::{
+    Error, Runtime,
+    personal::{self, DICTIONARIES, PersonalError},
+    resources::{self, ResourceError},
+};
 use std::{
+    collections::BTreeMap,
     fs,
     path::PathBuf,
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+
+// Rime is process-global: the tests of this file take turns.
+static RIME: Mutex<()> = Mutex::new(());
 
 struct Fixture(PathBuf);
 impl Fixture {
@@ -42,6 +51,7 @@ impl Drop for Fixture {
 // One test owns the process-global Rime runtime; concurrency is exercised inside it.
 #[test]
 fn desktop_runtime_contract() {
+    let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
     let fixture = Fixture::new();
     let mut runtime = fixture.runtime();
     assert!(matches!(
@@ -254,5 +264,124 @@ fn desktop_runtime_contract() {
     drop(prepared);
     println!(
         "PASS explicit-cache preparation/serving, lifetime, target deployment, Lua, UTF-8 ownership, commits, snapshot-safe selection, paging, serialized sessions, restart"
+    );
+}
+
+/// The macOS personal-data worker test's synthetic dictionaries (macOS/Tests/PersonalDataTests.swift).
+fn synthetic(name: &str) -> String {
+    let row = match name {
+        "pinyin_simp" => "ni hao \t你好",
+        "inkflow_shared_english" => "backupword \tBackupWord",
+        _ => "beifen \t备份别名",
+    };
+    format!(
+        "# Rime user dictionary\n#@/db_name\t{name}\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n#@/user_id\tsynthetic-source\n#@/tick\t99\n{row}\tc=7 d=0.123456789 t=42\nce shi \t测试\tc=-3 d=0.0000123 t=17\n"
+    )
+}
+
+fn lines(text: &str) -> Vec<&str> {
+    let mut lines: Vec<&str> = text.lines().collect();
+    lines.sort_unstable();
+    lines
+}
+
+// Maintenance operations the macOS frontend calls on the Swift engine today, on the probe
+// fixture. The engine-bound ones (personal learning, requested ASCII) need the production
+// schema and run in tests/parity.rs and tests/abi.c.
+#[test]
+fn maintenance_operations_on_the_probe_fixture() {
+    let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
+    let fixture = Fixture::new();
+
+    // The version is the linked librime's and needs no runtime.
+    assert_eq!(
+        inkflow_rime::rime_version().unwrap(),
+        personal::RIME_VERSION
+    );
+
+    // Compile deploys the source resources, then names the first production file the fixture
+    // lacks; probe needs the production schema.
+    let shared = fixture.0.join("shared");
+    let cache = fixture.0.join("maintenance-cache");
+    let compiler = fixture.0.join("maintenance-compile");
+    let probing = fixture.0.join("maintenance-probe");
+    match resources::compile(&shared, &compiler, &cache) {
+        Err(ResourceError::Missing(file)) => assert_eq!(file, "inkflow_pinyin.schema.yaml"),
+        other => panic!("{other:?}"),
+    }
+    assert!(cache.join("probe.table.bin").exists(), "the deployment ran");
+    assert!(
+        matches!(
+            resources::probe(&shared, &probing, &cache),
+            Err(ResourceError::Probe(_))
+        ),
+        "no inkflow_pinyin schema in the fixture"
+    );
+    // Both release the runtime; while one lives they report the native conflict.
+    let runtime = fixture.runtime();
+    assert!(matches!(
+        resources::compile(&shared, &compiler, &cache),
+        Err(ResourceError::Native(Error::AlreadyRunning))
+    ));
+    assert!(matches!(
+        resources::probe(&shared, &probing, &cache),
+        Err(ResourceError::Native(Error::AlreadyRunning))
+    ));
+    // Personal data waits for every runtime, as for the importer.
+    let busy = fixture.0.join("busy-user");
+    fs::create_dir_all(busy.join("pinyin_simp.userdb")).unwrap();
+    assert!(matches!(
+        personal::export(&busy),
+        Err(PersonalError::EngineActive)
+    ));
+    drop(runtime);
+
+    // Snapshot export: absent dictionaries are absent, restored ones export every row in
+    // Rime's key order, and the exported text restores into another directory unchanged.
+    let user = fixture.0.join("export-user");
+    assert_eq!(
+        personal::export(&user).unwrap(),
+        DICTIONARIES
+            .iter()
+            .map(|name| (name.to_string(), None))
+            .collect::<BTreeMap<_, _>>()
+    );
+    let incoming: BTreeMap<String, Option<String>> = DICTIONARIES
+        .iter()
+        .map(|name| (name.to_string(), Some(synthetic(name))))
+        .collect();
+    personal::import(&user, &incoming).unwrap();
+    let exported = personal::export(&user).unwrap();
+    for name in DICTIONARIES {
+        let text = exported[name].as_deref().unwrap();
+        assert_eq!(lines(text), lines(&synthetic(name)), "{name}");
+    }
+    assert_eq!(
+        fs::read_dir(user.join("PersonalData/staging"))
+            .unwrap()
+            .count(),
+        0,
+        "export removes its staging copy"
+    );
+    let again = fixture.0.join("export-again");
+    personal::import(&again, &exported).unwrap();
+    assert_eq!(personal::export(&again).unwrap(), exported);
+    let document = personal::Backup {
+        rime: personal::RIME_VERSION.into(),
+        candidate_count: 5,
+        input: Default::default(),
+        phrases: vec![],
+        dictionaries: exported.clone(),
+        unsupported: vec![],
+    };
+    assert_eq!(
+        personal::Backup::from_json(&document.to_json().unwrap())
+            .unwrap()
+            .dictionaries,
+        exported,
+        "the exported snapshots are a valid backup"
+    );
+    println!(
+        "PASS maintenance operations: version, compile/probe contracts, snapshot export round trip"
     );
 }

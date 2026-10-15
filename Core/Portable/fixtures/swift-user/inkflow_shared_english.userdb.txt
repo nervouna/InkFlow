@@ -1,0 +1,9 @@
+# Rime user dictionary
+#@/db_name	inkflow_shared_english
+#@/db_type	userdb
+#@/rime_version	1.17.0
+#@/tick	99
+#@/user_id	fixture-source
+backupword 	BackupWord	c=7 d=0.123456789 t=42
+ce shi 	Test	c=-3 d=0.0000123 t=17
+email 	email	c=5 d=0.75 t=60

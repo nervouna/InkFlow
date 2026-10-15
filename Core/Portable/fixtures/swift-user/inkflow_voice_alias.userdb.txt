@@ -1,0 +1,8 @@
+# Rime user dictionary
+#@/db_name	inkflow_voice_alias
+#@/db_type	userdb
+#@/rime_version	1.17.0
+#@/tick	99
+#@/user_id	fixture-source
+beifen 	备份别名	c=7 d=0.123456789 t=42
+codux 	Codex	c=2 d=0.5 t=30

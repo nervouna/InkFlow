@@ -18,6 +18,7 @@ mkdir -p "$scratch/fixture/shared/lua" "$scratch/work"
 for file in default.yaml probe.schema.yaml probe.dict.yaml lua/probe.lua; do
   cp "Core/Portable/fixtures/$file" "$scratch/fixture/shared/$file"
 done
+cp -R Core/Portable/fixtures/swift-user "$scratch/fixture/swift-user"
 cc -std=c11 -Wall -Wextra -Werror -I Core/Portable/include Core/Portable/tests/abi.c \
   -L"$lib" -linkflow_rime -Wl,-rpath,"$lib" -o "$scratch/abi-test"
 "$scratch/abi-test" "$scratch/fixture" "$scratch/work" ${resources:+"$resources"}
