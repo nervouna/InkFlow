@@ -1775,6 +1775,32 @@ fn swift_ai_adoption_learning() {
         // With AI never requested, its bridge must not change ordinary undo.
         ordinary_commit(&session, "nihao", "你好", true);
 
+        // AIHeadlessPipelineTests and AIControllerNativeTests: paging and highlighting keep the
+        // request identity, and a partial selection adds the selected prefix to it.
+        type_keys(&session, "nihao");
+        let identity = ai_identity(&session);
+        assert_eq!(identity, Some(("nihao".into(), 5, String::new())));
+        session.key(0xff56, 0).unwrap();
+        let paged = session.snapshot().unwrap();
+        assert_ne!(paged.page, 0, "page down goes through actual Rime");
+        session.highlight(&paged, 2).unwrap();
+        assert_eq!(
+            ai_identity(&session),
+            identity,
+            "paging and highlighting retain request identity"
+        );
+        session.key(0xff55, 0).unwrap();
+        let first = session.snapshot().unwrap();
+        let partial = first.texts().iter().position(|c| *c == "你").unwrap();
+        session.select(&first, partial).unwrap();
+        let (raw, _, prefix) = ai_identity(&session).unwrap();
+        assert_eq!(
+            (raw.as_str(), prefix.as_str()),
+            ("nihao", "你"),
+            "a partial Rime selection is the selected prefix"
+        );
+        session.clear().unwrap();
+
         type_keys(&session, "yh");
         assert_eq!(ai_identity(&session), Some(("yh".into(), 2, String::new())));
         let bank = readings(&session, "yh", "银行");
