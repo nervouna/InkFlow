@@ -34,6 +34,23 @@ jobs:
             build/rime-cache
           key: macos-inputs-${{ hashFiles('macOS/scripts/dependencies.sh', 'Core/**', 'schemas/**') }}
           restore-keys: macos-inputs-
+      # The app links the Rust core and its source-built librime. This is the portable job's
+      # toolchain and cache: a restored build/portable turns the build below into a rebuild check.
+      - name: Install CMake and Ninja
+        run: |
+          pipx install cmake==3.31.6
+          pipx install ninja==1.11.1.4
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Cache the native runtime build
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/portable
+            !build/portable/resources.*
+          key: portable-${{ runner.os }}-macos-26-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml', 'macOS/Info.plist') }}
+          restore-keys: portable-${{ runner.os }}-macos-26-
+      - name: Build the portable core
+        run: bash Core/scripts/build-portable.sh
       # The `quick` group minus `ai-runtime`: AIRuntimeTests asserts debounce deadlines
       # with 40 ms margins (500 ms sleep, checked at 540 ms), which shared macOS runners
       # do not hold. Keep this list in step with `quick` in macOS/scripts/test.sh.
