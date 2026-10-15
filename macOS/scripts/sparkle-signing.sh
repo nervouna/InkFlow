@@ -35,10 +35,11 @@ verify_sparkle_developer_id() {
   while IFS= read -r component; do
     codesign --verify --strict "$component" || return 1
     metadata=$(codesign -dvvv "$component" 2>&1) || return 1
-    printf '%s\n' "$metadata" | grep -Fxq "TeamIdentifier=$expected_team" || {
+    # Here-strings, not pipes: grep -q exits at the match, and under pipefail the writer's SIGPIPE fails the check.
+    grep -Fxq "TeamIdentifier=$expected_team" <<< "$metadata" || {
       echo "Unexpected Sparkle signing team: $component" >&2; return 1;
     }
-    printf '%s\n' "$metadata" | grep -Fq 'Authority=Developer ID Application:' || {
+    grep -Fq 'Authority=Developer ID Application:' <<< "$metadata" || {
       echo "Expected Developer ID Application signature. Sparkle component: $component" >&2; return 1;
     }
   done < <(sparkle_components "$app")
