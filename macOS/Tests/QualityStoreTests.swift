@@ -572,7 +572,8 @@ private extension QualityStoreTests {
                        "Fixture keeps requested schema version")
             }
             let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata, textCapture: true)
-            expect(store.submit(fixture("malformed-\(label)")) == .accepted,
+            // The worker may reject the topology before or after this submit; either way it must not block or throw.
+            expect([.accepted, .disabled].contains(store.submit(fixture("malformed-\(label)"))),
                    "Malformed topology detection stays off the producer path")
             await store.close()
             expect(store.statistics().disabled, "Malformed \(label) topology disables measurement")
