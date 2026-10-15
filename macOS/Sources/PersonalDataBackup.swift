@@ -212,7 +212,15 @@ package enum IFPersonalDataWorkerBootstrap {
                 catch { throw PersonalDataError("native-snapshot") }
                 for name in PersonalBackupDocument.names {
                     guard let text = exported[name] ?? nil else { continue }
-                    try PersonalDataFiles.write(Data(text.utf8), root.appendingPathComponent(name + ".userdb.txt"))
+                    // Not PersonalDataFiles.write: its atomic replace stages outside the candidate root,
+                    // which the sandbox does not allow.
+                    let file = root.appendingPathComponent(name + ".userdb.txt")
+                    try PersonalDataFiles.safe(file)
+                    let descriptor = open(file.path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0o600)
+                    guard descriptor >= 0 else { throw PersonalDataError("snapshot") }
+                    let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+                    defer { try? handle.close() }
+                    try handle.write(contentsOf: Data(text.utf8))
                 }
                 return 0
             }
