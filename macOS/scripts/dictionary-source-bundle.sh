@@ -36,11 +36,13 @@ cp "$staging/chinese/dictionary-manifest.json" "$root/generated/"
 content_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["contentVersion"])' "$root/generated/dictionary-manifest.json")
 
 # InkFlow-authored recipe exactly as committed: generator, catalog, corrections,
-# data snapshots, schemas, preparation scripts and documentation.
-git archive --format=tar HEAD LICENSE NOTICE Core schemas macOS/Licenses macOS/DICTIONARIES.md macOS/DEPENDENCIES.md \
+# data snapshots, schemas, preparation scripts and documentation. Written to a file
+# first: tar stops at the end-of-archive marker, and a pipe would SIGPIPE git archive.
+git archive --format=tar -o "$staging/recipe.tar" HEAD LICENSE NOTICE Core schemas macOS/Licenses macOS/DICTIONARIES.md macOS/DEPENDENCIES.md \
   docs/shared-dictionary-preparation.md macOS/scripts/dependencies.sh macOS/scripts/prepare-rime.sh \
   macOS/scripts/prepare-chinese.sh macOS/scripts/prepare-spelling.sh macOS/scripts/build-dictionary-generator.sh \
-  macOS/scripts/snapshot-english-frequency.py | tar -xf - -C "$root/inkflow"
+  macOS/scripts/snapshot-english-frequency.py
+tar -xf "$staging/recipe.tar" -C "$root/inkflow"
 cp macOS/Licenses/* "$root/LICENSES/"
 
 sources="$root/SOURCES.tsv"
