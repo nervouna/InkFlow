@@ -26,7 +26,9 @@ app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 # One librime, built from source with Lua merged in. An external plugin would be a second runtime.
 librime="$app/Contents/Frameworks/librime.1.dylib"
 [[ -s "$librime" ]]
-[[ "$(find "$app" -name 'librime*' | sed "s|^$app/||")" == Contents/Frameworks/librime.1.dylib ]] || {
+# The license texts Resources/Licenses/librime*.txt are not libraries.
+[[ "$(find "$app" -name 'librime*' -not -path "$app/Contents/Resources/Licenses/*" | sed "s|^$app/||")" == Contents/Frameworks/librime.1.dylib \
+   && ! -e "$app/Contents/Frameworks/rime-plugins" ]] || {
   echo 'The bundle must carry exactly one librime and no plugin.' >&2
   exit 1
 }
