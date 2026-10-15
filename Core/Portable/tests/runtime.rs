@@ -6,7 +6,7 @@ use inkflow_rime::{
 use std::{
     collections::BTreeMap,
     fs,
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -384,4 +384,48 @@ fn maintenance_operations_on_the_probe_fixture() {
     println!(
         "PASS maintenance operations: version, compile/probe contracts, snapshot export round trip"
     );
+}
+
+// Product identity: a fresh user directory records InkFlow's distribution and holds no logs.
+#[test]
+fn product_traits_record_installation_without_logs() {
+    let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
+    let fixture = Fixture::new();
+    {
+        let mut runtime = fixture.runtime();
+        // Maintenance writes installation.yaml and compiles the probe schema.
+        runtime.prepare().unwrap();
+        let mut session = runtime.session("probe").unwrap();
+        for byte in b"nihao" {
+            session.process_key(*byte as i32, 0).unwrap();
+        }
+        assert_eq!(session.snapshot().unwrap().candidates[0].text, "你好");
+    }
+    let installation = fs::read_to_string(fixture.0.join("user/installation.yaml")).unwrap();
+    // Rime writes string values double-quoted, so the value is compared without quotes.
+    assert!(
+        installation.lines().any(|line| {
+            line.strip_prefix("distribution_code_name: ")
+                .is_some_and(|value| value.trim_matches('"') == "inkflow")
+        }),
+        "{installation}"
+    );
+    let mut logs = Vec::new();
+    collect_log_files(&fixture.0.join("user"), &mut logs);
+    assert_eq!(logs, Vec::<PathBuf>::new());
+    println!(
+        "PASS product traits: installation record is InkFlow's and the user directory has no logs"
+    );
+}
+
+fn collect_log_files(directory: &Path, found: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(directory).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_log_files(&path, found);
+        }
+        if path.file_name().unwrap().to_string_lossy().contains(".log") {
+            found.push(path);
+        }
+    }
 }
