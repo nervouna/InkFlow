@@ -1,6 +1,7 @@
 /* C consumer of the frontend ABI. Arguments: FIXTURE_ROOT SCRATCH [RESOURCES].
  * FIXTURE_ROOT holds shared/ with the tiny probe schema; RESOURCES holds prepared
  * production resources (shared/ and prepared/cache/). */
+#define _POSIX_C_SOURCE 200809L /* sleep() under -std=c11 */
 #include "inkflow_rime.h"
 #include <assert.h>
 #include <stdio.h>
