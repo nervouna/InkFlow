@@ -212,7 +212,7 @@ package final class IFEngine {
             }
             compiledDirectory = compiled
             try fault(.probe)
-            try probe(native)
+            try probe(native, phrases: requestedPhrases)
         } catch { ifr_engine_destroy(native); throw error }
         Self.native = native
         ready = true
@@ -239,13 +239,21 @@ package final class IFEngine {
         }
     }
 
+    /// The new engine starts with no phrases, so the requested ones are written to custom_phrase.txt through
+    /// the probe session: restoring a session later reads that file and never writes it.
     /// A learned user's first candidate need not equal the clean worker probe's first candidate.
-    private static func probe(_ native: OpaquePointer) throws {
+    private static func probe(_ native: OpaquePointer, phrases: [CustomPhrase]) throws {
         var created: OpaquePointer?
         guard ifr_session_create(native, &created) == ifrOK, let probe = created else {
             throw IFDictionaryUpdateError(.apply, "schema-unavailable")
         }
         defer { _ = ifr_session_clear(probe); ifr_session_destroy(probe) }
+        if !phrases.isEmpty {
+            configure(probe, count: 5, options: nil, phrases: phrases)
+            if let code = ifr_session_configuration_error(probe).map({ String(cString: $0) }) {
+                throw IFDictionaryUpdateError(.apply, "custom-phrases", detail: configurationMessage(code))
+            }
+        }
         for key in "nihao".utf8 { _ = ifr_session_key(probe, Int32(key), 0, nil) }
         guard let snapshot = PortableSnapshot(probe) else { throw IFDictionaryUpdateError(.apply, "probe-context") }
         guard snapshot.candidateCount > 0 else { throw IFDictionaryUpdateError(.apply, "probe-empty") }
@@ -384,14 +392,17 @@ package final class IFEngine {
     /// session's next composition boundary, and the phrases to every idle session.
     private func pushConfiguration() {
         guard attached, let session else { return }
-        let phrases = Self.requestedPhrases
-        var options = requestedInput.optionMask
-        let count = requestedCount
+        Self.configure(session, count: requestedCount, options: requestedInput.optionMask, phrases: Self.requestedPhrases)
+        refreshApplied()
+    }
+
+    private static func configure(_ session: OpaquePointer, count: Int, options: UInt32?, phrases: [CustomPhrase]) {
+        var mask = options ?? 0
         withCStrings(phrases.flatMap { [$0.id.uuidString, $0.code, $0.text] }) { strings in
             let list = phrases.indices.map { IFRPhrase(id: strings[3 * $0], code: strings[3 * $0 + 1], text: strings[3 * $0 + 2]) }
-            _ = ifr_session_set_configuration(session, count, list, list.count, &options)
+            if options == nil { _ = ifr_session_set_configuration(session, count, list, list.count, nil) }
+            else { _ = ifr_session_set_configuration(session, count, list, list.count, &mask) }
         }
-        refreshApplied()
     }
 
     /// Existing idle configuration applies before the values a key actually uses are captured.
