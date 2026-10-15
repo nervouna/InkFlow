@@ -1,8 +1,6 @@
 import InkFlowDomain
+import InkFlowPortable
 import Foundation
-#if SWIFT_PACKAGE
-import CRime
-#endif
 
 package struct EngineSnapshot: Equatable {
     package var preedit = ""
@@ -27,10 +25,13 @@ package struct EngineSnapshot: Equatable {
 
 }
 
-/// librime and its shared schema configuration are accessed synchronously on the main actor.
+/// The Swift face of the Rust core (`Core/Portable`, reached through its C ABI). Sessions, keys,
+/// candidate order, selection, paging, commits, custom phrases and input preferences live in the
+/// core; this class keeps what is the frontend's: the delivery lease and idle signalling, the
+/// voice-lexicon gating, the quality recording around each mutation and the Settings-facing
+/// errors. The core and its Rime are process-global and accessed on the main actor.
 @MainActor
 package final class IFEngine {
-    package static let api = rime_get_api()!
     package static let voiceLexicon = VoiceLexiconStore()
     package private(set) static var ready = false
     private static var generation: UInt64 = 0
@@ -42,39 +43,59 @@ package final class IFEngine {
     private static var idleScheduled = false
     package static var idleHandler: (@MainActor () -> Void)?
     private var sessionGeneration: UInt64 = 0
-    private var sessionRestored = false
-    private var sessionLost = false
     private var deliveryDepth = 0
     private var savedASCII = false
 
     package static var liveSessions: [IFEngine] { instances.values.compactMap(\.value) }
     package static var personalDataSuspended = false
-    package var available: Bool { Self.ready && !Self.personalDataSuspended && session != 0 && sessionGeneration == Self.generation }
+    /// Created and still attached to the running core, whether or not the core has lost its Rime session.
+    private var attached: Bool {
+        Self.ready && !Self.personalDataSuspended && session != nil && sessionGeneration == Self.generation
+    }
+    package var available: Bool {
+        guard attached, let session else { return false }
+        return ifr_session_available(session) != 0
+    }
     package var asciiMode: Bool {
-        get { available ? Self.api.pointee.get_option(session, "ascii_mode") != 0 : savedASCII }
+        get {
+            guard available, let session else { return savedASCII }
+            var value: Int32 = 0
+            return ifr_session_ascii_mode(session, &value) == ifrOK ? value != 0 : savedASCII
+        }
         set {
             savedASCII = newValue
-            applyConfigurationIfIdle()
+            guard available, let session else { return }
+            _ = ifr_session_set_ascii_mode(session, newValue ? 1 : 0)
+            refreshApplied()
         }
     }
-    package var requestedASCIIMode: Bool { savedASCII }
+    package var requestedASCIIMode: Bool {
+        guard available, let session else { return savedASCII }
+        return ifr_session_requested_ascii_mode(session) != 0
+    }
     @discardableResult
     package func toggleASCIIMode(capturedAt: TimeInterval? = nil) -> Bool {
         guard available else { return false }
         defer { Self.signalIdle() }
         return qualityOperation(.toggle(false), capturedAt: capturedAt) {
-            asciiMode = !requestedASCIIMode
-            return true
+            var handled: Int32 = 0
+            guard ifr_session_toggle_ascii_mode(session, &handled) == ifrOK else { return false }
+            savedASCII = requestedASCIIMode
+            refreshApplied()
+            return handled != 0
         }
     }
     /// Keep the lease until every native client callback returns, including nested run loops.
     package func beginDelivery() { deliveryDepth += 1 }
     package func endDelivery() { deliveryDepth = max(0, deliveryDepth - 1); Self.signalIdle() }
-    package static var allSessionsIdle: Bool {
+    package static var allSessionsIdle: Bool { sessionsIdle(includingDelivery: true) }
+
+    /// Drains completed text into each session's buffer, so an undelivered commit counts as busy.
+    private static func sessionsIdle(includingDelivery: Bool) -> Bool {
         liveSessions.allSatisfy { engine in
-            guard engine.deliveryDepth == 0 else { return false }
+            guard !includingDelivery || engine.deliveryDepth == 0 else { return false }
             engine.bufferedCommit += engine.readCommit()
-            return engine.rawSnapshot().preedit.isEmpty && engine.bufferedCommit.isEmpty
+            return !engine.isComposing && engine.bufferedCommit.isEmpty
         }
     }
     package static func signalIdle() {
@@ -83,64 +104,41 @@ package final class IFEngine {
         Task { @MainActor in
             idleScheduled = false
             idleHandler?()
-            publishPendingContextRankerIfIdle()
             voiceLexicon.prepareIfNeeded()
         }
     }
-    private static var userDirectory = ""
+    private(set) static var native: OpaquePointer?
     package static var compiledDirectory = URL(fileURLWithPath: "/")
-    private static var contextRanker: IFContextRanker?
-    private static var activeConfiguration: IFEngineConfiguration.Identity?
-    private static var pendingContextRanker: (identity: IFEngineConfiguration.Identity, ranker: IFContextRanker)?
-    package static var contextRankingReady: Bool { contextRanker != nil }
-
-    /// A prepared index is published only to the engine it was built for and only between compositions.
-    package static func publishContextRanker(_ ranker: IFContextRanker, for configuration: IFEngineConfiguration) {
-        pendingContextRanker = (configuration.identity, ranker)
-        signalIdle()
-    }
-
-    package static func cancelPendingContextRanker(for configuration: IFEngineConfiguration) {
-        guard pendingContextRanker?.identity == configuration.identity else { return }
-        pendingContextRanker = nil
-    }
-
-    private static func publishPendingContextRankerIfIdle() {
-        guard let pendingContextRanker else { return }
-        guard ready, pendingContextRanker.identity == activeConfiguration else {
-            Self.pendingContextRanker = nil
-            return
-        }
-        guard allSessionsIdle else { return }
-        contextRanker = pendingContextRanker.ranker
-        Self.pendingContextRanker = nil
-    }
+    package static var contextRankingReady: Bool { native.map { ifr_engine_context_ranking_ready($0) != 0 } ?? false }
     private static var productionQualityStore: QualityStore?
     private final class WeakQualityRecorder {
         weak var value: QualityRecorder?
         init(_ value: QualityRecorder) { self.value = value }
     }
     private static var qualityRecorders: [WeakQualityRecorder] = []
-    package var session: RimeSessionId = 0
-    package private(set) var candidateCount = 5
+    private(set) var session: OpaquePointer?
+    package var candidateCount: Int { available ? Int(ifr_session_candidate_count(session)) : 5 }
     private var requestedCount = 5
     package var requestedInput = InputPreferences()
-    package private(set) var inputPreferences: InputPreferences?
+    /// The preferences the session applied at its last composition boundary.
+    package var inputPreferences: InputPreferences? {
+        var mask: UInt32 = 0
+        guard available, ifr_session_input_options(session, &mask) != 0 else { return nil }
+        return InputPreferences(optionMask: mask)
+    }
     private var bufferedCommit = ""
-    /// Custom phrases are Rime's native custom_phrase.txt in the user directory. The file is
-    /// written only when settings change; every live session reloads it at the next shared idle.
-    /// Requested phrases outlive engine restarts, like each session's requested count.
+    /// Custom phrases are requested for every session and outlive engine restarts, like each session's
+    /// requested count; the core writes Rime's custom_phrase.txt and reloads it at the next shared idle.
     private static var requestedPhrases: [CustomPhrase] = []
-    private static var requestedPhraseTSV = phraseTSV([])
-    private static var phraseFileTSV = ""
-    private static var phraseFileError: String?
-    private static var loadedPhraseTSV = ""
+    /// The phrases Rime has loaded, which quality records. The core applies a change at the first
+    /// idle boundary after the request; this follows the same condition.
     private static var loadedPhrases: [CustomPhrase] = []
     package private(set) var configurationError: String?
+    private var configurationCode: String?
+    // Quality records the preceding context this session last received and clears it when the
+    // composition's content ends, as the core's ranking does.
     private var precedingText = ""
     private var orderedContent = EngineSnapshot()
-    private var candidateOrder: [Int] = []
-    private var candidateRankingMetadata: [IFCandidateRankingMetadata]?
     package let qualityRecorder: QualityRecorder?
     package private(set) var qualityRevision = QualityConfigRevision(configuration: QualityAppliedConfiguration(candidateCount: 5))
     private var qualityDepth = 0
@@ -148,7 +146,7 @@ package final class IFEngine {
     private var qualityFontSize = 14
     private var qualityVertical = false
 
-    package static var version: String { string(api.pointee.get_version()) }
+    package static var version: String { ifrString(ifr_rime_version()) }
 
     /// The process owns recording across native dictionary replacement and recovery.
     package static func configureQualityRecording(_ store: QualityStore?) { productionQualityStore = store }
@@ -156,8 +154,9 @@ package final class IFEngine {
     /// Standalone startup retains the existing explicit quality-store injection.
     package static func start(shared: String, user: String, qualityStore: QualityStore? = nil) throws {
         if ready { return }
-        let configuration = IFEngineConfiguration(shared: URL(fileURLWithPath: shared), cache: nil,
-            user: user, ranker: try IFContextRanker(index: (shared as NSString).appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)))
+        let sharedURL = URL(fileURLWithPath: shared)
+        let configuration = IFEngineConfiguration(shared: sharedURL, cache: nil, user: user,
+            contextIndex: sharedURL.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
         do { try start(configuration); productionQualityStore = qualityStore }
         catch let error as IFDictionaryUpdateError where error.code == "missing-runtime-resource" {
             // Preserve the established standalone API's missing-resource error contract.
@@ -189,39 +188,21 @@ package final class IFEngine {
             }
         }
         let user = configuration.user
-        try FileManager.default.createDirectory(atPath: user, withIntermediateDirectories: true)
-        var traits = RimeTraits()
-        traits.data_size = Int32(MemoryLayout<RimeTraits>.size - MemoryLayout.size(ofValue: traits.data_size))
-        traits.distribution_name = cString("InkFlow")
-        traits.distribution_code_name = cString("inkflow")
-        traits.distribution_version = cString("1.0")
-        traits.app_name = cString("rime.inkflow")
-        traits.min_log_level = 3
-        traits.log_dir = cString("")
+        // Rime initialization (compiling into user/build without a prepared cache), the phrase file and
+        // the context index are all part of creating the core's engine. A prepared cache is never deployed here.
         let initialization = startup.begin(.initialization, source: source)
-        shared.withCString { sharedPath in
-            user.withCString { userPath in
-                @MainActor func initialize(_ cachePath: UnsafePointer<CChar>?) {
-                    traits.shared_data_dir = sharedPath
-                    traits.user_data_dir = userPath
-                    traits.staging_dir = cachePath
-                    traits.prebuilt_data_dir = cachePath
-                    api.pointee.setup(&traits)
-                    api.pointee.initialize(&traits)
-                    IFRegisterRimeComponents()
-                }
-                if let cache = configuration.cache { cache.path.withCString { initialize($0) } }
-                else { initialize(nil) }
-            }
+        var created: OpaquePointer?
+        let status = withCStrings([shared, user, configuration.cache?.path, configuration.contextIndex?.path]
+            .map { $0 ?? "" }) { strings in
+            var config = IFREngineConfig(shared: strings[0], user: strings[1],
+                cache: configuration.cache == nil ? nil : strings[2],
+                context_index: configuration.contextIndex == nil ? nil : strings[3])
+            return ifr_engine_create(&config, &created)
         }
-        startup.end(initialization)
+        startup.end(initialization, status == ifrOK ? .ready : .failed)
+        if configuration.cache != nil { startup.end(startup.begin(.maintenance, source: source), .skipped) }
+        guard status == ifrOK, let native = created else { throw createFailure(status) }
         generation &+= 1
-        // Prepared caches were compiled/probed by the isolated worker. Never deploy on a live switch.
-        let maintenance = startup.begin(.maintenance, source: source)
-        if configuration.cache == nil, api.pointee.start_maintenance(1) != 0 {
-            api.pointee.join_maintenance_thread()
-            startup.end(maintenance)
-        } else { startup.end(maintenance, .skipped) }
         do {
             let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
             for file in ["pinyin_simp.reverse.bin"] + InputPreferences.compiledSpellingFiles {
@@ -231,32 +212,11 @@ package final class IFEngine {
             }
             compiledDirectory = compiled
             try fault(.probe)
-            let probe = api.pointee.create_session()
-            defer {
-                if probe != 0 { api.pointee.clear_composition(probe); _ = api.pointee.destroy_session(probe) }
-            }
-            guard probe != 0, api.pointee.select_schema(probe, "inkflow_pinyin") != 0 else {
-                throw IFDictionaryUpdateError(.apply, "schema-unavailable")
-            }
-            for key in "nihao".utf8 { _ = api.pointee.process_key(probe, Int32(key), 0) }
-            var context = makeContext()
-            guard api.pointee.get_context(probe, &context) != 0 else { throw IFDictionaryUpdateError(.apply, "probe-context") }
-            let hasCandidates = context.menu.num_candidates > 0
-            _ = api.pointee.free_context(&context)
-            // A learned user's first candidate need not equal the clean worker probe's first candidate.
-            guard hasCandidates else { throw IFDictionaryUpdateError(.apply, "probe-empty") }
-        } catch { api.pointee.finalize(); throw error }
+            try probe(native, phrases: requestedPhrases)
+        } catch { ifr_engine_destroy(native); throw error }
+        Self.native = native
         ready = true
-        userDirectory = user
-        activeConfiguration = configuration.identity
-        contextRanker = configuration.ranker
         do {
-            // No session exists yet: whatever the file holds now is what they all load.
-            phraseFileTSV = (try? String(contentsOf: phraseFile, encoding: .utf8)) ?? phraseTSV([])
-            phraseFileError = nil
-            if let error = syncPhraseFile() { throw IFDictionaryUpdateError(.apply, "custom-phrases", detail: error) }
-            loadedPhraseTSV = phraseFileTSV
-            loadedPhrases = requestedPhrases
             for (index, engine) in liveSessions.enumerated() {
                 try fault(.session(index))
                 try engine.restoreSession(afterCreate: { try fault(.sessionCreated(index)) })
@@ -267,18 +227,48 @@ package final class IFEngine {
         started = true
     }
 
+    private static func createFailure(_ status: IFRStatus) -> IFDictionaryUpdateError {
+        let message = ifrString(ifr_last_error())
+        switch Int(status) {
+        case IFR_RESOURCE where message.hasPrefix("missing resource "):
+            return IFDictionaryUpdateError(.apply, "compiled-file-missing", file: String(message.dropFirst("missing resource ".count)))
+        case IFR_RESOURCE: return IFDictionaryUpdateError(.apply, "context-index", detail: message)
+        case IFR_CONFIGURATION: return IFDictionaryUpdateError(.apply, "custom-phrases", detail: message)
+        case IFR_ALREADY_RUNNING: return IFDictionaryUpdateError(.apply, "engine-already-running", detail: message)
+        default: return IFDictionaryUpdateError(.apply, "engine-create", detail: message)
+        }
+    }
+
+    /// The new engine starts with no phrases, so the requested ones are written to custom_phrase.txt through
+    /// the probe session: restoring a session later reads that file and never writes it.
+    /// A learned user's first candidate need not equal the clean worker probe's first candidate.
+    private static func probe(_ native: OpaquePointer, phrases: [CustomPhrase]) throws {
+        var created: OpaquePointer?
+        guard ifr_session_create(native, &created) == ifrOK, let probe = created else {
+            throw IFDictionaryUpdateError(.apply, "schema-unavailable")
+        }
+        defer { _ = ifr_session_clear(probe); ifr_session_destroy(probe) }
+        if !phrases.isEmpty {
+            configure(probe, count: 5, options: nil, phrases: phrases)
+            if let code = ifr_session_configuration_error(probe).map({ String(cString: $0) }) {
+                throw IFDictionaryUpdateError(.apply, "custom-phrases", detail: configurationMessage(code))
+            }
+        }
+        for key in "nihao".utf8 { _ = ifr_session_key(probe, Int32(key), 0, nil) }
+        guard let snapshot = PortableSnapshot(probe) else { throw IFDictionaryUpdateError(.apply, "probe-context") }
+        guard snapshot.candidateCount > 0 else { throw IFDictionaryUpdateError(.apply, "probe-empty") }
+    }
+
     package static func stop() {
         voiceLexicon.reset()
         for recorder in qualityRecorders { recorder.value?.interrupt(reason: "engine_stopped") }
         qualityRecorders = []
-        // Invalidate every object before finalize; a stale deinit can never destroy a reused native ID.
+        // Invalidate every object before the core goes; a stale deinit can never destroy a reused handle.
+        // The core finalizes Rime when its last session and the engine reference are gone.
         for engine in liveSessions { engine.detachSession() }
-        // librime 1.17 RimeFinalize joins maintenance before stopping service/unloading modules.
-        // sync_user_data starts backup/sync maintenance and is not a generic shutdown flush.
-        if ready { api.pointee.finalize(); ready = false }
-        contextRanker = nil
-        activeConfiguration = nil
-        pendingContextRanker = nil
+        if let native { ifr_engine_destroy(native) }
+        native = nil
+        ready = false
         generation &+= 1
     }
 
@@ -318,35 +308,31 @@ package final class IFEngine {
     }
 
     private func restoreSession(afterCreate: () throws -> Void = {}) throws {
-        sessionRestored = false; sessionLost = false
-        session = Self.api.pointee.create_session()
-        sessionGeneration = Self.generation
-        guard session != 0 else { throw IFDictionaryUpdateError(.apply, "session-create") }
-        try afterCreate()
-        guard Self.api.pointee.select_schema(session, "inkflow_pinyin") != 0 else {
+        var created: OpaquePointer?
+        session = nil
+        guard let native = Self.native, ifr_session_create(native, &created) == ifrOK, let created else {
             throw IFDictionaryUpdateError(.apply, "session-create")
         }
+        session = created
+        sessionGeneration = Self.generation
+        try afterCreate()
         if let qualityRecorder {
             Self.qualityRecorders.removeAll { $0.value == nil }
             if !Self.qualityRecorders.contains(where: { $0.value === qualityRecorder }) {
                 Self.qualityRecorders.append(WeakQualityRecorder(qualityRecorder))
             }
         }
-        candidateCount = 5; inputPreferences = nil; configurationError = nil
-        candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
-        applyConfigurationIfIdle()
+        configurationError = nil; configurationCode = nil
+        orderedContent = EngineSnapshot(); precedingText = ""
+        pushConfiguration()
         if let configurationError { throw IFDictionaryUpdateError(.apply, "session-settings", detail: configurationError) }
         asciiMode = savedASCII
-        sessionRestored = true
     }
 
     private func detachSession() {
-        if available {
-            // A partially initialized session still has native defaults. Keep the captured mode for rollback.
-            _ = Self.api.pointee.destroy_session(session)
-        }
-        session = 0; sessionGeneration = 0; sessionRestored = false
-        candidateOrder = []; candidateRankingMetadata = nil; orderedContent = EngineSnapshot(); precedingText = ""
+        if let session { ifr_session_destroy(session) }
+        session = nil; sessionGeneration = 0
+        orderedContent = EngineSnapshot(); precedingText = ""
     }
 
     isolated deinit {
@@ -356,37 +342,24 @@ package final class IFEngine {
         Self.signalIdle()
     }
 
-    /// A session that could not be recreated during a phrase reload is retried on its next use.
-    private func recoverSession() {
-        guard sessionLost, Self.ready, !Self.personalDataSuspended else { return }
-        sessionLost = false
-        do { try restoreSession() } catch { detachSession(); sessionLost = true }
-    }
-
     @discardableResult
     package func key(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false) -> Bool {
-        recoverSession()
-        guard available else { return false }
+        // The core retries a session it lost during a phrase reload on its next use.
+        guard attached else { return false }
         defer { Self.signalIdle() }
         // Apply existing idle configuration before capturing the values this key actually uses.
         applyConfigurationIfIdle()
+        guard available else { return false }
         return qualityOperation(.key(key, modifiers, isRepeat)) { performKey(key, modifiers: modifiers) }
     }
 
     private func performKey(_ key: Int32, modifiers: Int32) -> Bool {
-        let state = snapshot()
-        if modifiers == 0, (49...57).contains(key), Int(key - 49) < state.candidates.count {
-            select(Int(key - 49))
-            return true
-        }
-        if modifiers == 0, (key == 0xff52 || key == 0xff54), !state.candidates.isEmpty {
-            return moveHighlight(key == 0xff54 ? 1 : -1, key: key)
-        }
-        let handled = Self.api.pointee.process_key(session, key, modifiers) != 0
+        var handled: Int32 = 0
+        let status = ifr_session_key(session, key, modifiers, &handled)
         // Rime can undo learning while leaving Backspace unhandled for the client.
         if key == 0xff08 || key == 0xffff { Self.voiceLexicon.markDirty() }
-        updateOrdering()
-        return handled
+        trackOrdering()
+        return status == ifrOK && handled != 0
     }
 
     package func setCandidateCount(_ count: Int) {
@@ -395,173 +368,62 @@ package final class IFEngine {
 
     package func setPrecedingText(_ text: String) {
         let prefix = String(text.suffix(IFContextRanker.contextLimit))
+        if available { _ = ifr_session_set_preceding_text(session, prefix) }
         guard prefix != precedingText else { return }
         precedingText = prefix
-        guard !rawSnapshot().preedit.isEmpty else { return }
-        updateOrdering(force: true)
+        guard isComposing else { return }
+        orderedContent = content(of: snapshotContent())
     }
 
     package func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase], inputPreferences: InputPreferences? = nil) {
         do { try CustomPhrase.validate(customPhrases) }
         catch { reportConfigurationError(error.localizedDescription); return }
-        if customPhrases != Self.requestedPhrases {
-            Self.requestedPhrases = customPhrases
-            Self.requestedPhraseTSV = Self.phraseTSV(customPhrases)
-            Self.phraseFileError = nil
-        }
-        // The settings path writes the file; key events only ever reload it. The controller
-        // pushes the same settings on every refresh, so a failed write is retried only when
-        // the phrases change or the engine restarts, and the whole configuration waits.
-        if Self.ready, let error = Self.syncPhraseFile() { reportConfigurationError(error); return }
+        let previous = (requestedCount, requestedInput, Self.requestedPhrases)
+        Self.requestedPhrases = customPhrases
         requestedCount = (3...9).contains(candidateCount) ? candidateCount : 5
         if let inputPreferences { requestedInput = inputPreferences }
-        configurationError = nil
-        applyConfigurationIfIdle()
+        configurationError = nil; configurationCode = nil
+        pushConfiguration()
+        // A phrase file that could not be written keeps the whole configuration waiting.
+        if configurationCode == "phrase-write" { (requestedCount, requestedInput, _) = previous }
     }
 
-    private static var phraseFile: URL { URL(fileURLWithPath: userDirectory).appendingPathComponent("custom_phrase.txt") }
-
-    /// Rime's custom_phrase.txt: text, code, weight. Earlier phrases outrank later ones.
-    private static func phraseTSV(_ phrases: [CustomPhrase]) -> String {
-        // librime's TSV reader otherwise treats phrases beginning with '#' as comments.
-        "# no comment\n" + phrases.enumerated().map { index, phrase in
-            "\(phrase.text)\t\(phrase.code)\t\(phrases.count - index)\n"
-        }.joined()
+    /// Hand the requested count, preferences and phrases to the core. It applies them at this
+    /// session's next composition boundary, and the phrases to every idle session.
+    private func pushConfiguration() {
+        guard attached, let session else { return }
+        Self.configure(session, count: requestedCount, options: requestedInput.optionMask, phrases: Self.requestedPhrases)
+        refreshApplied()
     }
 
-    /// Returns the failure message; the file keeps its previous content on failure.
-    private static func syncPhraseFile() -> String? {
-        guard requestedPhraseTSV != phraseFileTSV else { return nil }
-        if let phraseFileError { return phraseFileError }
-        do {
-            try Data(requestedPhraseTSV.utf8).write(to: phraseFile, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: phraseFile.path)
-        } catch {
-            phraseFileError = "无法保存自定义短语，请检查墨流数据目录的可用空间和写入权限。"
-            return phraseFileError
+    private static func configure(_ session: OpaquePointer, count: Int, options: UInt32?, phrases: [CustomPhrase]) {
+        var mask = options ?? 0
+        withCStrings(phrases.flatMap { [$0.id.uuidString, $0.code, $0.text] }) { strings in
+            let list = phrases.indices.map { IFRPhrase(id: strings[3 * $0], code: strings[3 * $0 + 1], text: strings[3 * $0 + 2]) }
+            if options == nil { _ = ifr_session_set_configuration(session, count, list, list.count, nil) }
+            else { _ = ifr_session_set_configuration(session, count, list, list.count, &mask) }
         }
-        phraseFileTSV = requestedPhraseTSV
-        return nil
     }
 
+    /// Existing idle configuration applies before the values a key actually uses are captured.
     private func applyConfigurationIfIdle() {
-        recoverSession()
-        guard available else { return }
-        if Self.loadedPhraseTSV != Self.phraseFileTSV {
-            // Rime shares one loaded custom_phrase table among every session that holds it, so
-            // the phrases change for all sessions at once. A composing session keeps its
-            // snapshot and retries on its next idle key; its count still applies below.
-            if snapshot().preedit.isEmpty, Self.allSessionsIdle { Self.reloadSessions(including: self); return }
-        } else if Self.requestedPhraseTSV == Self.loadedPhraseTSV {
+        guard attached, let session else { return }
+        _ = ifr_session_set_ascii_mode(session, requestedASCIIMode ? 1 : 0)
+        refreshApplied()
+    }
+
+    /// What the core applied or refused after a call that can change the configuration.
+    private func refreshApplied() {
+        guard let session else { return }
+        configurationCode = ifr_session_configuration_error(session).map { String(cString: $0) }
+        if let configurationCode { reportConfigurationError(configurationMessage(configurationCode)) }
+        else { configurationError = nil }
+        // Settings, ASCII mode and phrases take effect between compositions, and so does their record.
+        guard orderedContent.preedit.isEmpty else { return }
+        if Self.loadedPhrases != Self.requestedPhrases, configurationCode != "phrase-write",
+           Self.sessionsIdle(includingDelivery: false) {
             Self.loadedPhrases = Self.requestedPhrases
         }
-        guard candidateCount != requestedCount || inputPreferences != requestedInput else {
-            if snapshot().preedit.isEmpty { applyRuntimeOptions() }
-            return
-        }
-        guard snapshot().preedit.isEmpty else { return }
-        do {
-            try recreateSchema()
-            configurationError = nil
-        }
-        catch { reportConfigurationError(error.localizedDescription) }
-    }
-
-    /// The one deploy after a phrase change: release every session's dictionary handles first,
-    /// so the next session reads the current file instead of the cached table, then recreate
-    /// each session and reapply its own settings. All sessions are idle, so nothing is lost.
-    private static func reloadSessions(including caller: IFEngine) {
-        let api = Self.api.pointee
-        // A session registers after its first configuration, so include the caller explicitly.
-        var engines = liveSessions.filter(\.available)
-        if !engines.contains(where: { $0 === caller }) { engines.append(caller) }
-        for engine in engines {
-            _ = api.destroy_session(engine.session)
-            engine.session = 0
-        }
-        loadedPhraseTSV = phraseFileTSV
-        loadedPhrases = requestedPhrases
-        for engine in engines {
-            engine.session = api.create_session()
-            guard engine.session != 0, api.select_schema(engine.session, "inkflow_pinyin") != 0 else {
-                // Siblings already loaded the current file; this session retries alone on its next use.
-                if engine.session != 0 { _ = api.destroy_session(engine.session) }
-                engine.detachSession(); engine.sessionLost = true
-                engine.reportConfigurationError("无法重新载入输入方案，请重试或重启墨流。")
-                continue
-            }
-            engine.candidateCount = 5; engine.inputPreferences = nil
-            engine.candidateOrder = []; engine.candidateRankingMetadata = nil; engine.orderedContent = EngineSnapshot()
-            engine.applyConfigurationIfIdle()
-        }
-    }
-
-    private func recreateSchema() throws {
-        // Replace whole nodes and restore them synchronously. Existing sessions retain their
-        // component configuration, while this idle session loads one coherent snapshot.
-        let api = Self.api.pointee
-        guard FileManager.default.isReadableFile(atPath: Self.compiledDirectory
-            .appendingPathComponent(requestedInput.spellingProfile + ".prism.bin").path) else {
-            throw CustomPhraseError("缺少已编译的拼音规则，设置尚未应用。请重启墨流后重试。")
-        }
-        var config = RimeConfig()
-        guard api.schema_open("inkflow_pinyin", &config) != 0 else {
-            throw CustomPhraseError("无法打开输入方案，设置尚未应用。")
-        }
-        defer { _ = api.config_close(&config) }
-        var patch = RimeConfig()
-        let yaml = requestedInput.schemaPatch + """
-
-        menu:
-          page_size: \(requestedCount)
-        translator:
-          dictionary: pinyin_simp
-          prism: \(requestedInput.spellingProfile)
-          preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']
-        """
-        guard api.config_init(&patch) != 0 else { throw CustomPhraseError("无法创建输入设置。") }
-        defer { _ = api.config_close(&patch) }
-        guard yaml.withCString({ api.config_load_string(&patch, $0) }) != 0 else {
-            throw CustomPhraseError("无法载入输入设置。")
-        }
-        var originals: [(String, RimeConfig)] = []
-        var patched = true
-        for path in ["menu", "translator", "key_binder", "punctuator"] {
-            var original = RimeConfig(), replacement = RimeConfig()
-            guard api.config_get_item(&config, path, &original) != 0 else { patched = false; break }
-            originals.append((path, original))
-            guard api.config_get_item(&patch, path, &replacement) != 0 else { patched = false; break }
-            let changed = api.config_set_item(&config, path, &replacement) != 0
-            _ = api.config_close(&replacement)
-            if !changed { patched = false; break }
-        }
-        // select_schema resets the commit buffer as well as the schema. Preserve completed text
-        // even if settings arrive before the controller has drained the previous key's commit.
-        bufferedCommit += readCommit()
-        let loaded = patched && api.select_schema(session, "inkflow_pinyin") != 0
-        if loaded {
-            candidateCount = requestedCount
-            inputPreferences = requestedInput
-        }
-        var restored = true
-        for (path, var original) in originals.reversed() {
-            if api.config_set_item(&config, path, &original) == 0 { restored = false }
-            _ = api.config_close(&original)
-        }
-        applyRuntimeOptions()
-        guard restored else {
-            throw CustomPhraseError("恢复临时输入方案配置失败，请重启墨流后重试。")
-        }
-        guard loaded else { throw CustomPhraseError("无法应用输入设置，请重启墨流后重试。") }
-    }
-
-    private func applyRuntimeOptions() {
-        guard available, let inputPreferences else { return }
-        let api = Self.api.pointee
-        api.set_option(session, "ascii_mode", savedASCII ? 1 : 0)
-        api.set_option(session, "ascii_punct", savedASCII || inputPreferences[.englishPunctuation] ? 1 : 0)
-        api.set_option(session, "emoji_suggestion", inputPreferences[.emoji] ? 1 : 0)
-        api.set_option(session, "traditional", inputPreferences[.traditional] ? 1 : 0)
         updateQualityConfiguration(asciiMode: savedASCII)
     }
 
@@ -590,10 +452,12 @@ package final class IFEngine {
         guard available else { return }
         defer { Self.signalIdle() }
         _ = qualityOperation(.select(index, trigger, ambiguousText), capturedAt: capturedAt) {
-            guard candidateOrder.indices.contains(index) else { return false }
-            let handled = Self.api.pointee.select_candidate_on_current_page(session, candidateOrder[index]) != 0
-            updateOrdering()
-            return handled
+            // The snapshot is the current page, so the core never sees a stale selection.
+            guard let page = PortableSnapshot(session), index >= 0, index < page.candidateCount else { return false }
+            var handled: Int32 = 0
+            let status = ifr_session_select(session, page.handle, index, &handled)
+            trackOrdering()
+            return status == ifrOK && handled != 0
         }
     }
 
@@ -604,20 +468,21 @@ package final class IFEngine {
     }
 
     private func performHighlight(_ index: Int) {
-        guard candidateOrder.indices.contains(index) else { return }
-        _ = Self.api.pointee.highlight_candidate_on_current_page(session, candidateOrder[index])
+        guard let page = PortableSnapshot(session), index >= 0, index < page.candidateCount else { return }
+        _ = ifr_session_highlight(session, page.handle, index)
         // Highlighting a partial choice can change Rime's preedit and cursor.
         // Record the new content without overriding explicit user navigation.
-        orderedContent = content(of: rawSnapshot())
+        orderedContent = content(of: snapshotContent())
     }
 
     package func commit(trigger: QualityTrigger = .forceFlush, capturedAt: TimeInterval? = nil) {
         guard available else { return }
         defer { Self.signalIdle() }
         _ = qualityOperation(.flush(trigger), capturedAt: capturedAt) {
-            let handled = Self.api.pointee.commit_composition(session) != 0
-            updateOrdering()
-            return handled
+            var handled: Int32 = 0
+            let status = ifr_session_commit(session, &handled)
+            trackOrdering()
+            return status == ifrOK && handled != 0
         }
     }
 
@@ -625,26 +490,13 @@ package final class IFEngine {
         guard available else { return }
         defer { Self.signalIdle() }
         let clear = {
-            Self.api.pointee.clear_composition(self.session)
-            self.updateOrdering()
+            // An adopted AI suggestion ends the composition without being the user's cancellation.
+            _ = recordQuality ? ifr_session_clear(self.session) : ifr_session_clear_unobserved(self.session)
+            self.trackOrdering()
             return true
         }
         if recordQuality { _ = qualityOperation(.clear, clear) }
         else { _ = clear() }
-    }
-
-    private func moveHighlight(_ delta: Int, key: Int32) -> Bool {
-        let before = snapshot()
-        let next = before.highlight + delta
-        if candidateOrder.indices.contains(next) { highlight(next); return true }
-        // Let Rime decide whether another page exists, starting at its native edge.
-        _ = Self.api.pointee.highlight_candidate_on_current_page(session, delta > 0 ? candidateOrder.count - 1 : 0)
-        let handled = Self.api.pointee.process_key(session, key, 0) != 0
-        updateOrdering()
-        if snapshot().page != before.page {
-            if delta < 0 { highlight(candidateOrder.count - 1) }
-        } else if !candidateOrder.isEmpty { highlight(before.highlight) }
-        return handled
     }
 
     private func content(of snapshot: EngineSnapshot) -> EngineSnapshot {
@@ -653,41 +505,13 @@ package final class IFEngine {
         return result
     }
 
-    private func updateOrdering(force: Bool = false) {
+    /// The preceding context ends with the composition whose content it ranked.
+    private func trackOrdering() {
         guard available else { return }
-        let raw = rawSnapshot()
-        let content = content(of: raw)
-        guard force || content != orderedContent else { return }
-        // Explicit custom codes keep the user's ordered phrases ahead of ordinary words.
-        // Use the applied snapshot so deferred settings cannot change a live composition.
-        let input = Self.string(Self.api.pointee.get_input(session))
-        let hasCustomCode = Self.loadedPhrases.contains { $0.code == input }
-        // Once a segment is selected, the immediate prefix is inside the mark.
-        // Leave these remaining candidates to Rime instead of applying older document text.
-        candidateOrder = Array(raw.candidates.indices)
-        candidateRankingMetadata = nil
-        if !raw.hasSelectedPrefix, !hasCustomCode {
-            let metadata = inputRankingMetadata(page: raw.page, count: raw.candidates.count,
-                                                inputLength: input.utf8.count)
-            candidateRankingMetadata = metadata
-            if let ranker = Self.contextRanker {
-                candidateOrder = ranker.order(raw.candidates, precedingText: precedingText,
-                                              metadata: metadata)
-            }
-        }
-        if let first = candidateOrder.first {
-            _ = Self.api.pointee.highlight_candidate_on_current_page(session, first)
-        }
-        orderedContent = self.content(of: rawSnapshot())
-        if raw.preedit.isEmpty { precedingText = "" }
-    }
-
-    private func inputRankingMetadata(page: Int, count: Int,
-                                      inputLength: Int) -> [IFCandidateRankingMetadata]? {
-        guard page >= 0, page <= Int.max / candidateCount, (1...9).contains(count) else { return nil }
-        let offset = page * candidateCount
-        guard let reply = call("input_coverage", [String(offset), String(count)]), reply.status == "ok" else { return nil }
-        return IFContextRanker.parseMetadata(reply.body, offset: offset, count: count, inputLength: inputLength)
+        let current = content(of: snapshotContent())
+        guard current != orderedContent else { return }
+        orderedContent = current
+        if current.preedit.isEmpty { precedingText = "" }
     }
 
     package func takeCommit(recordQuality: Bool = true) -> String {
@@ -700,25 +524,25 @@ package final class IFEngine {
 
     private func readCommit() -> String {
         guard available else { return "" }
-        var commit = RimeCommit()
-        commit.data_size = Int32(MemoryLayout<RimeCommit>.size - MemoryLayout.size(ofValue: commit.data_size))
-        guard Self.api.pointee.get_commit(session, &commit) != 0 else { return "" }
+        var commit: UnsafeMutablePointer<CChar>?
+        guard ifr_session_take_commit(session, &commit) == ifrOK, let commit else { return "" }
+        defer { ifr_string_free(commit) }
         Self.voiceLexicon.nativeCommit()
-        defer { _ = Self.api.pointee.free_commit(&commit) }
-        return Self.string(commit.text)
+        return String(cString: commit)
     }
 
-    package static func utf16Cursor(in preedit: String, byteOffset: Int) -> Int {
+    package nonisolated static func utf16Cursor(in preedit: String, byteOffset: Int) -> Int {
         let bytes = Array(preedit.utf8.prefix(max(0, byteOffset)))
         return String(bytes: bytes, encoding: .utf8)?.utf16.count ?? 0
     }
 
-    package func snapshot() -> EngineSnapshot {
-        var result = rawSnapshot()
-        guard candidateOrder.count == result.candidates.count else { return result }
-        result.candidates = candidateOrder.map { result.candidates[$0] }
-        result.highlight = candidateOrder.firstIndex(of: result.highlight) ?? 0
-        return result
+    package func snapshot() -> EngineSnapshot { snapshotContent() }
+
+    private var isComposing: Bool { available && PortableSnapshot(session).map { !$0.preedit.isEmpty } == true }
+
+    private func snapshotContent() -> EngineSnapshot {
+        guard available else { return EngineSnapshot() }
+        return PortableSnapshot(session)?.content ?? EngineSnapshot()
     }
 
     package func setQualityPresentation(fontSize: Int, vertical: Bool) {
@@ -748,83 +572,38 @@ package final class IFEngine {
         return handled
     }
 
-    /// Read-only C API observation; never reads commit buffers, updates order or changes highlight.
+    /// Read-only observation; never reads commit buffers, updates order or changes highlight.
     package func qualitySnapshot() -> QualityPageSnapshot {
-        guard available else {
+        guard available, let page = PortableSnapshot(session) else {
             return QualityPageSnapshot(generation: 0, rawInput: "", caret: 0, selectedPrefix: "",
                 precedingContext: "", configurationRevisionID: qualityRevision.id,
                 configuration: qualityRevision.configuration, page: 0, pageSize: candidateCount,
                 candidates: [], highlightedDisplayIndex: 0, selectedPrefixValid: false)
         }
-        var context = Self.makeContext()
-        let available = Self.api.pointee.get_context(session, &context) != 0
-        defer { if available { _ = Self.api.pointee.free_context(&context) } }
-        let preedit = Self.string(context.composition.preedit)
-        let offset = Int(context.composition.sel_start)
-        let prefix = offset >= 0 && offset <= preedit.utf8.count ?
-            String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) : nil
-        let page = Int(context.menu.page_no)
-        let size = Int(context.menu.page_size)
-        let count = max(0, Int(context.menu.num_candidates))
-        let order = candidateOrder.count == count ? candidateOrder : Array(0..<count)
-        var candidates: [QualityCandidate] = []
-        if let buffer = context.menu.candidates {
-            candidates = order.enumerated().map { display, native in
-                let evidence = candidateRankingMetadata.flatMap { $0.indices.contains(native) ? $0[native] : nil }
-                let personalSource: String? = evidence.flatMap {
-                    guard $0.exact, $0.personalBucket > 0 else { return nil }
-                    switch $0.source {
-                    case .english: return "personal_exact_english"
-                    case .mixed: return "personal_exact_mixed"
-                    default: return nil
-                    }
-                }
-                return QualityCandidate(text: Self.string(buffer[native].text), comment: Self.string(buffer[native].comment),
-                    displayIndex: display, displayRank: page * size + display + 1,
-                    nativeIndex: native, nativeRank: page * size + native + 1, source: personalSource,
-                    consumedInputStart: personalSource == nil ? nil : evidence?.coverage.lowerBound,
-                    consumedInputEnd: personalSource == nil ? nil : evidence?.coverage.upperBound)
+        let preedit = page.preedit
+        let offset = page.selectionStart
+        let prefix = offset <= preedit.utf8.count ? String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) : nil
+        let number = page.page
+        // Rime reports a page size only while a menu is shown.
+        let size = page.candidateCount > 0 ? candidateCount : 0
+        let candidates = (0..<page.candidateCount).map { display in
+            let source: String? = switch Int(ifr_snapshot_candidate_personal_source(page.handle, display)) {
+            case IFR_PERSONAL_EXACT_ENGLISH: "personal_exact_english"
+            case IFR_PERSONAL_EXACT_MIXED: "personal_exact_mixed"
+            default: nil
             }
+            var start = 0, end = 0
+            let consumed = source != nil && ifr_snapshot_candidate_consumed_input(page.handle, display, &start, &end) != 0
+            return QualityCandidate(text: page.text(display), comment: page.comment(display),
+                displayIndex: display, displayRank: number * size + display + 1,
+                nativeIndex: Int(ifr_snapshot_candidate_native_index(page.handle, display)),
+                nativeRank: Int(ifr_snapshot_candidate_native_rank(page.handle, display)), source: source,
+                consumedInputStart: consumed ? start : nil, consumedInputEnd: consumed ? end : nil)
         }
-        return QualityPageSnapshot(generation: 0, rawInput: Self.string(Self.api.pointee.get_input(session)),
-            caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix ?? "",
-            precedingContext: precedingText, configurationRevisionID: qualityRevision.id,
-            configuration: qualityRevision.configuration, page: page, pageSize: size, candidates: candidates,
-            highlightedDisplayIndex: order.firstIndex(of: Int(context.menu.highlighted_candidate_index)) ?? 0,
-            selectedPrefixValid: available && prefix != nil)
-    }
-
-    private func rawSnapshot() -> EngineSnapshot {
-        guard available else { return EngineSnapshot() }
-        var context = Self.makeContext()
-        guard Self.api.pointee.get_context(session, &context) != 0 else { return EngineSnapshot() }
-        defer { _ = Self.api.pointee.free_context(&context) }
-        let preedit = Self.string(context.composition.preedit)
-        var candidates: [String] = []
-        if let buffer = context.menu.candidates {
-            for index in 0..<Int(context.menu.num_candidates) {
-                candidates.append(Self.string(buffer[index].text))
-            }
-        }
-        return EngineSnapshot(preedit: preedit,
-                              cursor: Self.utf16Cursor(in: preedit, byteOffset: Int(context.composition.cursor_pos)),
-                              candidates: candidates, page: Int(context.menu.page_no),
-                              highlight: Int(context.menu.highlighted_candidate_index),
-                              hasSelectedPrefix: context.composition.sel_start > 0)
-    }
-
-    package static func makeContext() -> RimeContext {
-        var context = RimeContext()
-        context.data_size = Int32(MemoryLayout<RimeContext>.size - MemoryLayout.size(ofValue: context.data_size))
-        return context
-    }
-
-    private static func cString(_ literal: StaticString) -> UnsafePointer<CChar> {
-        UnsafeRawPointer(literal.utf8Start).assumingMemoryBound(to: CChar.self)
-    }
-
-    package static func string(_ pointer: UnsafePointer<CChar>?) -> String {
-        pointer.map(String.init(cString:)) ?? ""
+        return QualityPageSnapshot(generation: 0, rawInput: page.input, caret: page.rawCaretBytes,
+            selectedPrefix: prefix ?? "", precedingContext: precedingText, configurationRevisionID: qualityRevision.id,
+            configuration: qualityRevision.configuration, page: number, pageSize: size, candidates: candidates,
+            highlightedDisplayIndex: page.highlighted, selectedPrefixValid: prefix != nil)
     }
 }
 
@@ -834,7 +613,7 @@ extension Notification.Name {
 
 package enum IFEngineSwitchStep: Equatable { case start, probe, session(Int), sessionCreated(Int) }
 
-/// Immutable index construction and descriptor validation happen away from live native input callbacks.
+/// Descriptor validation happens away from live native input callbacks; the engine loads the context index itself.
 package struct IFEngineConfiguration: Sendable {
     package struct Identity: Equatable, Sendable {
         let shared: String
@@ -845,7 +624,8 @@ package struct IFEngineConfiguration: Sendable {
     package let shared: URL
     package let cache: URL?
     package let user: String
-    package let ranker: IFContextRanker?
+    /// The prepared `pinyin_simp.context.bin`; without it Rime keeps its own candidate order.
+    package let contextIndex: URL?
 
     package var identity: Identity {
         .init(shared: shared.standardizedFileURL.path,
@@ -855,11 +635,11 @@ package struct IFEngineConfiguration: Sendable {
     package init(shared: URL,
         cache: URL?,
         user: String,
-        ranker: IFContextRanker?) {
+        contextIndex: URL?) {
         self.shared = shared
         self.cache = cache
         self.user = user
-        self.ranker = ranker
+        self.contextIndex = contextIndex
     }
 
 }

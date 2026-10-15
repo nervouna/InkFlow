@@ -15,6 +15,8 @@ build_swift_product() {
     return 2
   }
   bash Core/scripts/build-dictionary-generator.sh || return $?
+  # Every consumer links the Rust core; build.sh and test.sh build it once and set the flag.
+  [[ "${INKFLOW_PORTABLE_BUILT:-}" == 1 ]] || bash Core/scripts/build-portable.sh || return $?
   # Every consumer must resolve CRime's headers during explicit module scanning.
   local build_args=(--disable-sandbox --cache-path "$swiftpm_cache"
     --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch"

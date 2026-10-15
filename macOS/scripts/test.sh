@@ -43,7 +43,12 @@ done
 if $needs_app && [[ ! -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]]; then
   echo 'Run build.sh first.' >&2; exit 1
 fi
-if $needs_dependencies || $needs_shared; then macOS/scripts/dependencies.sh; fi
+if $needs_dependencies || $needs_shared; then
+  macOS/scripts/dependencies.sh
+  # Every Swift product links the Rust core: build it once for the whole run.
+  bash Core/scripts/build-portable.sh
+  export INKFLOW_PORTABLE_BUILT=1
+fi
 if $needs_shared; then bash macOS/scripts/prepare-rime.sh build/test-shared; fi
 source macOS/scripts/swift-test.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")

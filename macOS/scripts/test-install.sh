@@ -5,7 +5,7 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-install-tests.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"
 mkdir -p "$repo/macOS/scripts" "$repo/build/InkFlow.app/Contents/MacOS" \
-  "$repo/build/InkFlow.app/Contents/Frameworks/rime-plugins" "$fixture/bin" "$fixture/home"
+  "$repo/build/InkFlow.app/Contents/Frameworks" "$fixture/bin" "$fixture/home"
 cp macOS/scripts/install.sh macOS/scripts/verify-developer-id.sh macOS/scripts/sparkle-signing.sh "$repo/macOS/scripts/"
 source "$repo/macOS/scripts/sparkle-signing.sh"
 while IFS= read -r component; do mkdir -p "$component"; done < <(sparkle_components "$repo/build/InkFlow.app")
@@ -15,7 +15,6 @@ cp macOS/Info.plist macOS/DeveloperID.entitlements macOS/Debug.entitlements "$re
 printf executable > "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 printf worker > "$repo/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
 printf rime > "$repo/build/InkFlow.app/Contents/Frameworks/librime.1.dylib"
-printf lua > "$repo/build/InkFlow.app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 cp macOS/Info.plist "$repo/build/InkFlow.app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string 7 "$repo/build/InkFlow.app/Contents/Info.plist"
 chmod +x "$repo/build/InkFlow.app/Contents/MacOS/"*

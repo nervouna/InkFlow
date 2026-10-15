@@ -59,7 +59,8 @@ extern "C" int ifp_initialize(const char* shared, const char* user, const char* 
     traits.distribution_code_name = "inkflow";
     traits.distribution_version = "1.0";
     traits.app_name = "rime.inkflow";
-    traits.min_log_level = 3;
+    // ERROR and above reach stderr, where the dictionary worker captures compile diagnostics.
+    traits.min_log_level = 2;
     // An empty log_dir sends glog to stderr, so no log files are written.
     traits.log_dir = "";
     static const char* modules[] = {"default", "deployer", "lua", nullptr};

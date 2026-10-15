@@ -2,7 +2,7 @@ import Foundation
 import Darwin
 #if SWIFT_PACKAGE
 import InkFlowCore
-import InkFlowRimeWorker
+import InkFlowRime
 #endif
 
 if CommandLine.arguments.dropFirst().first == "--personal-data" {
@@ -10,5 +10,5 @@ if CommandLine.arguments.dropFirst().first == "--personal-data" {
 }
 exit(IFDictionaryWorkerBootstrap.run(arguments: CommandLine.arguments,
     executablePath: CommandLine.arguments[0],
-    compile: { IFDictionaryCompile($0, $1, $2) },
-    probe: { IFDictionaryProbe($0, $1, $2) }))
+    compile: { IFPortableResources.compile($0, $1, $2) },
+    probe: { IFPortableResources.probe($0, $1, $2) }))

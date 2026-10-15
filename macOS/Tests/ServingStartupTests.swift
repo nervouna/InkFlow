@@ -37,16 +37,6 @@ private final class StartupFactory: @unchecked Sendable {
     func shouldFail() -> Bool { lock.lock(); defer { lock.unlock() }; calls += 1; return calls == 1 }
 }
 
-private final class StartupRankerTracker: @unchecked Sendable {
-    private let lock = NSLock()
-    private var started = 0
-    private var completed = 0
-    func start() { lock.lock(); started += 1; lock.unlock() }
-    func finish() { lock.lock(); completed += 1; lock.unlock() }
-    var startedCount: Int { lock.lock(); defer { lock.unlock() }; return started }
-    var completedCount: Int { lock.lock(); defer { lock.unlock() }; return completed }
-}
-
 @main struct ServingStartupTests {
     @MainActor static func until(_ label: String, timeout: Duration = .seconds(40), _ predicate: () -> Bool) async throws {
         let deadline = ContinuousClock.now.advanced(by: timeout)
@@ -105,7 +95,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
         var retainedServer: IMKServer?
         var candidateLifetime: NativeCandidateLifetime?
         defer { withExtendedLifetime(candidateLifetime) {} }
-        for mode in native ? ["success"] : ["success", "previous", "failure", "activation-failure", "shutdown", "shutdown-ranker"] {
+        for mode in native ? ["success"] : ["success", "previous", "failure", "activation-failure", "shutdown"] {
             let user = root.appendingPathComponent(mode)
             let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
             if mode == "previous" || mode.hasPrefix("shutdown") {
@@ -129,16 +119,7 @@ private final class StartupRankerTracker: @unchecked Sendable {
                 if mode != "success" && mode != "activation-failure" { throw IFDictionaryUpdateError(.prepare, "test-recovery-failure") }
                 return try worker.rebuildBlocking(candidate: candidate, dictionaryShared: inert)
             }
-            let rankerGate = StartupGate(timeout: 60)
-            let rankerTracker = StartupRankerTracker()
-            let bundledIndex = runtime.resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path
-            let coordinator = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: user, services: services),
-                rankerLoader: { path in
-                    rankerTracker.start()
-                    defer { rankerTracker.finish() }
-                    if (mode == "success" || mode.hasPrefix("shutdown")), path == bundledIndex { try rankerGate.wait() }
-                    return try IFContextRanker(index: path)
-                })
+            let coordinator = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: user, services: services))
             var switches = 0
             coordinator.activationFault = { step, rollback in
                 if step == .start && !rollback {
@@ -148,9 +129,13 @@ private final class StartupRankerTracker: @unchecked Sendable {
             }
             coordinator.bootstrapForServing(runtime: runtime, user: user)
             check(coordinator.engineAvailable && coordinator.active?.isBundled == true, "Shipped fallback serves before downloaded recovery")
-            if mode == "success" || mode.hasPrefix("shutdown") {
-                try await until("Bundled context index starts in background") { rankerGate.held }
-                check(!IFEngine.contextRankingReady, "Blocked background index is not published")
+            // The context index loads with the engine: no later publication, and the first key already uses it.
+            check(IFEngine.contextRankingReady, "The shipped fallback starts with its context index")
+            if !native {
+                let ranked = IFEngine()!
+                ranked.setPrecedingText("准备午"); type(ranked, "can")
+                check(ranked.snapshot().candidates.first == "餐", "The first key after startup ranks by context")
+                ranked.clear()
             }
             // IMK owns one process server connection. Reuse it across isolated coordinator cases.
             if retainedServer == nil { retainedServer = IMKServer(name: "inkflow.serving.\(UUID())", bundleIdentifier: Bundle.main.bundleIdentifier ?? "inkflow.serving.tests")! }
@@ -185,33 +170,20 @@ private final class StartupRankerTracker: @unchecked Sendable {
             check(other.engine!.snapshot().candidates.contains("北京"))
             if mode == "success" {
                 gate.open()
-                try await until("Downloaded recovery can prepare while bundled index remains blocked") { rankerTracker.startedCount >= 2 }
-                check(switches == 0 && coordinator.isBusy,
-                      "Recovery retains the live fallback until its ranked rollback configuration is ready")
-                rankerGate.open()
-                try await until("Background index finishes while sessions remain busy") { rankerTracker.completedCount >= 2 }
-                check(!IFEngine.contextRankingReady && switches == 0,
-                      "Context index publishes only at an all-session idle boundary")
+                try await until("Downloaded recovery prepares while sessions are busy") { coordinator.activity == .waitingForIdle }
+                check(switches == 0 && coordinator.isBusy && IFEngine.contextRankingReady,
+                      "Recovery keeps the ranked fallback live until every session is idle")
             }
             if mode.hasPrefix("shutdown") {
-                if mode == "shutdown" {
-                    rankerGate.open()
-                    try await until("Ranker finishes but remains pending behind live sessions") { rankerTracker.completedCount >= 1 }
-                }
-                check(!IFEngine.contextRankingReady, "Busy sessions keep the completed ranker pending before shutdown")
                 var stopped = false
                 let start = ContinuousClock.now
                 let shutdown = Task { try await coordinator.shutdown(); stopped = true }
                 try await until("Shutdown begins while rebuild is held") { coordinator.isShuttingDown }
                 controller.engine?.clear(); other.engine?.clear()
                 await Task.yield()
-                check(!IFEngine.contextRankingReady,
-                      "Shutdown cancels a completed pending ranker before idle signals during task draining")
-                try await until("Shutdown cancels and drains detached recovery/ranker", timeout: .seconds(4)) { stopped }
+                try await until("Shutdown cancels and drains detached recovery", timeout: .seconds(4)) { stopped }
                 try await shutdown.value
-                check(gate.wasCancelled && (mode != "shutdown-ranker" || rankerGate.wasCancelled),
-                      "Cancellation reaches synchronous detached recovery and ranker work")
-                check(rankerTracker.completedCount == 1, "Shutdown starts no further recovery or fallback index work")
+                check(gate.wasCancelled, "Cancellation reaches synchronous detached recovery")
                 let finalState = try store.state()
                 let candidates = try FileManager.default.contentsOfDirectory(atPath: store.root.appendingPathComponent("candidates").path)
                 check(finalState.current == saved.current && finalState.previous == saved.previous && finalState.bundled == nil,
@@ -279,8 +251,8 @@ private final class StartupRankerTracker: @unchecked Sendable {
         catch { denied = true }
         check(denied, "Shipped cache rejects an actual write")
         let user = root.appendingPathComponent("readonly-user")
-        let ranker = try IFContextRanker(index: resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
-        let configuration = IFEngineConfiguration(shared: resources, cache: descriptor.cache, user: user.path, ranker: ranker)
+        let contextIndex = resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)
+        let configuration = IFEngineConfiguration(shared: resources, cache: descriptor.cache, user: user.path, contextIndex: contextIndex)
         let phrase = CustomPhrase(id: UUID(), code: "zz", text: "只读短语")
         for reopen in 0...1 {
             try IFEngine.start(configuration)
@@ -306,6 +278,14 @@ private final class StartupRankerTracker: @unchecked Sendable {
             let after = try IFDictionaryFiles.hashes(in: cache)
             check(before == after, "All cache hashes unchanged after profiles/phrases/reopen \(reopen)")
         }
+        // The index loads with the engine, so one it cannot read fails the start instead of serving unranked.
+        let indexBytes = try Data(contentsOf: contextIndex)
+        try Data("not a context index".utf8).write(to: contextIndex)
+        var indexRejected = false
+        do { try IFEngine.start(configuration) }
+        catch let error as IFDictionaryUpdateError { indexRejected = error.code == "context-index" }
+        try indexBytes.write(to: contextIndex)
+        check(indexRejected && !IFEngine.ready, "An unreadable context index fails the engine start")
         let isolatedRuntime = IFDictionaryRuntime(resources: resources, helper: runtime.helper, libraries: runtime.libraries)
         let factory = StartupFactory()
         let retryUser = root.appendingPathComponent("factory-retry")
@@ -323,8 +303,6 @@ private final class StartupRankerTracker: @unchecked Sendable {
         try await until("Serving recovery retries factory rather than cleanup") { !coordinator.isBusy }
         check(coordinator.canCheck && !coordinator.canRetry && coordinator.engineAvailable)
         try await coordinator.shutdown(); IFEngine.stop()
-
-        try await rankerFailureRetries(root: root, runtime: isolatedRuntime)
 
         let malformedStore = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
         try Data("malformed journal fixture".utf8).write(to: malformedStore.root.appendingPathComponent("state.json"))
@@ -372,58 +350,5 @@ private final class StartupRankerTracker: @unchecked Sendable {
             "Unavailable production retry stays on packaged startup instead of legacy recovery")
         check(!fm.fileExists(atPath: missingUser.appendingPathComponent("build").path))
         print("PASS packaged readonly: write denied, 32 spelling profiles/custom phrases/fresh user/reopen/userdb/cache hashes; backend retry; malformed journal repair; manifest digest rejection; missing cache explicitly unavailable")
-    }
-
-    @MainActor static func rankerFailureRetries(root: URL, runtime: IFDictionaryRuntime) async throws {
-        let firstUser = root.appendingPathComponent("ranker-failure-first")
-        let factoryGate = StartupGate(timeout: 60)
-        let firstTracker = StartupRankerTracker()
-        let failureFirst = IFDictionaryCoordinator(backendFactory: {
-            try factoryGate.wait()
-            return try rankerRetryBackend(user: firstUser, runtime: runtime)
-        }, rankerLoader: { path in
-            firstTracker.start(); defer { firstTracker.finish() }
-            if firstTracker.startedCount == 1 { throw IFDictionaryUpdateError(.prepare, "test-ranker-failure-first") }
-            return try IFContextRanker(index: path)
-        })
-        failureFirst.bootstrapForServing(runtime: runtime, user: firstUser)
-        try await until("Ranker fails before recovery completes") { firstTracker.completedCount == 1 && factoryGate.held }
-        factoryGate.open()
-        try await until("Recovery completes after earlier ranker failure") { !failureFirst.isBusy }
-        check(failureFirst.engineAvailable && failureFirst.canRetry && !IFEngine.contextRankingReady,
-              "A later recovery success preserves the earlier ranker retry")
-        failureFirst.retry()
-        try await until("Retry rebuilds the failed ranker") { !failureFirst.isBusy && IFEngine.contextRankingReady }
-        check(!failureFirst.canRetry)
-        try await failureFirst.shutdown(); IFEngine.stop()
-
-        let lastUser = root.appendingPathComponent("ranker-failure-last")
-        let failureGate = StartupGate(timeout: 60)
-        let lastTracker = StartupRankerTracker()
-        let failureLast = IFDictionaryCoordinator(backend: try rankerRetryBackend(user: lastUser, runtime: runtime), rankerLoader: { path in
-            lastTracker.start(); defer { lastTracker.finish() }
-            if lastTracker.startedCount == 1 {
-                try failureGate.wait()
-                throw IFDictionaryUpdateError(.prepare, "test-ranker-failure-last")
-            }
-            return try IFContextRanker(index: path)
-        })
-        failureLast.bootstrapForServing(runtime: runtime, user: lastUser)
-        try await until("Recovery succeeds before delayed ranker failure") { !failureLast.isBusy && failureGate.held }
-        failureGate.open()
-        try await until("Delayed ranker failure becomes retryable") { lastTracker.completedCount == 1 && failureLast.canRetry }
-        check(failureLast.engineAvailable && !IFEngine.contextRankingReady)
-        failureLast.retry()
-        try await until("Delayed failure retry rebuilds the ranker") { !failureLast.isBusy && IFEngine.contextRankingReady }
-        check(!failureLast.canRetry)
-        try await failureLast.shutdown(); IFEngine.stop()
-        print("PASS serving ranker retry: failure-before-recovery and failure-after-recovery ordering")
-    }
-
-    static func rankerRetryBackend(user: URL, runtime: IFDictionaryRuntime) throws -> IFDictionaryBackend {
-        let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
-        let worker = IFDictionaryWorkerRunner(runtime: runtime, protectedUserRoot: user,
-            candidatesRoot: store.root.appendingPathComponent("candidates"))
-        return .init(store: store, runtime: runtime, user: user, services: .init(client: .init(), worker: worker))
     }
 }

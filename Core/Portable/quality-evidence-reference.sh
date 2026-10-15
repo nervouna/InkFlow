@@ -2,8 +2,9 @@
 # Record the Swift engine's quality evidence for fixtures/quality-evidence-cases.json: what
 # IFEngine.qualitySnapshot() reports for each step, which the Rust engine is compared with in
 # tests/parity.rs. macOS only. Needs the Swift dependencies (macOS/scripts/dependencies.sh) and a
-# prepared resources directory (prepare-resources.sh). The Swift engine goes away with the
-# cutover; the recording stays as the permanent reference.
+# prepared resources directory (prepare-resources.sh). The recording stays as the permanent
+# reference. Since the macOS cutover (#81) IFEngine is a facade over the Rust core, so this
+# reproduces the recording only at a revision before it; run later, it records the Rust core.
 #   quality-evidence-reference.sh RESOURCES [OUTPUT]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -30,7 +31,7 @@ assert location in manifest and '    targets: [\n' in manifest
 manifest = manifest.replace(location, f'URL(fileURLWithPath: "{repository}")')
 manifest = manifest.replace('    targets: [\n', '''    targets: [
         .executableTarget(name: "QualityEvidenceReference", dependencies: ["InkFlowDomain", "InkFlowRime"],
-                          path: "Portable", sources: ["tests/QualityEvidenceReference.swift"], linkerSettings: buildRimeRuntime),
+                          path: "Portable", sources: ["tests/QualityEvidenceReference.swift"], linkerSettings: portableRuntime),
 ''', 1)
 Path(output).write_text(manifest)
 PY

@@ -6,7 +6,7 @@ trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repository"
 app="$fixture/Fixture.app"
 mkdir -p "$repo/Core/Sources/InkFlowRime" "$repo/Core/Sources/InkFlowDomain" "$repo/macOS/Quality" "$repo/macOS/Sources" "$app/Contents/Resources/Rime" \
-  "$app/Contents/MacOS" "$app/Contents/Frameworks/rime-plugins"
+  "$app/Contents/MacOS" "$app/Contents/Frameworks"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 printf 'offline candidate behavior\n' > "$repo/Core/Sources/InkFlowRime/Engine.swift"
 grep -Fxq 'Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift' macOS/Quality/ranking-sources.txt
@@ -25,8 +25,6 @@ cp /usr/bin/true "$app/Contents/MacOS/InkFlow"
 printf 'int inkflow_fixture(void) { return 1; }\n' > "$fixture/nested.c"
 xcrun clang -arch arm64 -dynamiclib -install_name @rpath/librime.1.dylib \
   "$fixture/nested.c" -o "$app/Contents/Frameworks/librime.1.dylib"
-xcrun clang -arch arm64 -dynamiclib -install_name @rpath/librime-lua.dylib \
-  "$fixture/nested.c" -o "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
 chmod +x "$app/Contents/MacOS/InkFlow"
 git -C "$repo" init -q
 git -C "$repo" config user.name 'InkFlow Tests'
@@ -40,8 +38,7 @@ build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
 build/quality-build-metadata "$repo" "$app" --verify
 # Re-signing may or may not change canonical payload bytes on this toolchain.
-for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" \
-  "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlow"; do
+for binary in "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlow"; do
   codesign --force --options runtime --timestamp=none --sign - "$binary"
 done
 codesign --force --options runtime --timestamp=none --sign - "$app"
@@ -278,7 +275,9 @@ printf 'documentation only\n' >> "$identity_repo/README.md"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
 for resource in Core/Data/english-wordfreq.tsv Core/config/english.conf Core/scripts/prepare-rime.sh \
   Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs \
-  Core/Portable/dictionary/Cargo.lock Core/config/chinese-sources.json rust-toolchain.toml; do
+  Core/Portable/dictionary/Cargo.lock Core/config/chinese-sources.json rust-toolchain.toml \
+  Core/Portable/src/engine.rs Core/Portable/include/inkflow_rime.h Core/Portable/native/bridge.cpp \
+  Core/Portable/Cargo.toml Core/Portable/Cargo.lock; do
   cp "$identity_repo/$resource" "$fixture/resource-before"
   printf '\n# changed shared resource input\n' >> "$identity_repo/$resource"
   snapshot=$("$tool" "$identity_repo" --build-snapshot)

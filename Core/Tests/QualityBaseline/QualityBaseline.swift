@@ -134,11 +134,11 @@ func treeDigest(_ root: URL) throws -> String {
         guard let cache = try IFPackagedCache.descriptor(resources: shared).cache else {
             throw BaselineError("Packaged cache is missing")
         }
-        let ranker = try IFContextRanker(index: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
+        let contextIndex = shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)
         for sample in corpus.samples {
             let user = scratch.appendingPathComponent(sample.id)
             try require(!FileManager.default.fileExists(atPath: user.path), "User state must start absent: \(sample.id)")
-            let configuration = IFEngineConfiguration(shared: shared, cache: cache, user: user.path, ranker: ranker)
+            let configuration = IFEngineConfiguration(shared: shared, cache: cache, user: user.path, contextIndex: contextIndex)
             try IFEngine.start(configuration)
             let initial: Observation
             var trainingCommits = 0
@@ -167,8 +167,7 @@ func treeDigest(_ root: URL) throws -> String {
                           "fixtureSHA256": try digest(fixture), "resourcesSHA256": try treeDigest(shared),
                           "compiledResourcesSHA256": try treeDigest(cache),
                           "runnerBinarySHA256": try digest(URL(fileURLWithPath: args[0])),
-                          "librimeSHA256": try digest(root.appendingPathComponent("build/deps/dist/lib/librime.1.17.0.dylib")),
-                          "luaPluginSHA256": try digest(root.appendingPathComponent("build/deps/dist/lib/rime-plugins/librime-lua.dylib")),
+                          "librimeSHA256": try digest(root.appendingPathComponent("build/portable/prefix/lib/librime.1.17.0.dylib")),
                           "system": ProcessInfo.processInfo.operatingSystemVersionString]
         for path in ["Core/Sources", "schemas", "Core/config", "Core/Data"] {
             provenance[path + "SHA256"] = try treeDigest(root.appendingPathComponent(path))

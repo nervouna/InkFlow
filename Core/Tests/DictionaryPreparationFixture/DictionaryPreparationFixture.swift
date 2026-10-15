@@ -1,7 +1,6 @@
 import Foundation
 import InkFlowDomain
 import InkFlowRime
-import InkFlowRimeWorker
 
 /// Test host only. A separate process prevents compile/finalize from touching a serving Rime runtime.
 @main struct DictionaryPreparationFixture {
@@ -22,8 +21,8 @@ import InkFlowRimeWorker
         }
         do {
             _ = try IFDictionaryPreparation.prepare(request: request, runtime: runtime,
-                compile: { IFDictionaryCompile($0, $1, $2) },
-                probe: { IFDictionaryProbe($0, $1, $2) }, emit: emit)
+                compile: { IFPortableResources.compile($0, $1, $2) },
+                probe: { IFPortableResources.probe($0, $1, $2) }, emit: emit)
         } catch {
             try emit(.init(failure: .wrapping(error, stage: .prepare)))
             exit(1)

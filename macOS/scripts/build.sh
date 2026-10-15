@@ -6,6 +6,9 @@ mkdir build/app-build.lock 2>/dev/null || { echo 'App build active or interrupte
 trap 'rmdir build/app-build.lock' EXIT
 build_number=$(bash macOS/scripts/build-number.sh)
 macOS/scripts/dependencies.sh
+# The Rust core and its source-built librime (Lua merged in) are what the app links and ships.
+bash Core/scripts/build-portable.sh
+export INKFLOW_PORTABLE_BUILT=1
 # Download and verify the generator-declared dictionary inputs before freezing the
 # build identity. They remain part of the snapshot, so later changes still fail.
 bash macOS/scripts/prepare-chinese.sh --sources-only
@@ -26,16 +29,14 @@ cleanup() {
   rmdir build/app-build.lock
 }
 trap cleanup EXIT
-mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks/rime-plugins" "$app/Contents/Resources/Rime" "$app/Contents/Resources/Licenses"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Frameworks" "$app/Contents/Resources/Rime" "$app/Contents/Resources/Licenses"
 cp /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns "$app/Contents/Resources/InputMethod.icns"
 bash macOS/scripts/build-icon.sh
 cp build/AppIcon.icns "$app/Contents/Resources/AppIcon.icns"
 ditto macOS/Resources "$app/Contents/Resources"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$build_number" "$app/Contents/Info.plist"
-cp build/deps/dist/lib/librime.1.17.0.dylib "$app/Contents/Frameworks/librime.1.dylib"
-# librime discovers plugins beside its loaded dylib, not beside the executable.
-cp build/deps/dist/lib/rime-plugins/librime-lua.dylib "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
+cp build/portable/prefix/lib/librime.1.dylib "$app/Contents/Frameworks/librime.1.dylib"
 bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
 python3 Core/scripts/dictionary-notices.py "$app/Contents/Resources/Licenses/Rust"

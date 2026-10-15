@@ -5,7 +5,7 @@ fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-build-workflow.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"
 mkdir -p "$repo/macOS/scripts" "$repo/macOS/Resources" "$repo/macOS/Licenses" "$repo/macOS/Sources" "$repo/Core/Tools/DictionaryGeneratorTool" \
-  "$repo/build/deps/dist/lib/rime-plugins" "$repo/build/InkFlow.app/Contents"
+  "$repo/Core/scripts" "$repo/build/portable/prefix/lib" "$repo/build/InkFlow.app/Contents"
 cp macOS/scripts/{build,build-number,build-summary}.sh "$repo/macOS/scripts/"
 mkdir -p "$repo/.git" "$fixture/bin"
 cat > "$fixture/bin/git" <<'STUB'
@@ -21,7 +21,7 @@ printf license > "$repo/macOS/Licenses/license"
 printf input > "$repo/macOS/Sources/input"
 printf entry > "$repo/Core/Tools/DictionaryGeneratorTool/main.swift"
 printf old > "$repo/build/InkFlow.app/Contents/sentinel"
-touch "$repo/build/deps/dist/lib/librime.1.17.0.dylib" "$repo/build/deps/dist/lib/rime-plugins/librime-lua.dylib"
+printf librime > "$repo/build/portable/prefix/lib/librime.1.dylib"
 sparkle_framework="$repo/build/swiftpm/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 mkdir -p "$sparkle_framework/Versions/B/Resources" \
   "$sparkle_framework/Versions/B/XPCServices/Installer.xpc" \
@@ -32,7 +32,7 @@ ln -s B "$sparkle_framework/Versions/Current"
 ln -s Versions/Current/Sparkle "$sparkle_framework/Sparkle"
 ln -s Versions/Current/Resources "$sparkle_framework/Resources"
 for name in dependencies prepare-packaged-cache; do printf '#!/bin/bash\nexit 0\n' > "$repo/macOS/scripts/$name.sh"; done
-mkdir -p "$repo/Core/scripts"
+printf '#!/bin/bash\nexit 0\n' > "$repo/Core/scripts/build-portable.sh"
 printf 'import os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\n' > "$repo/Core/scripts/dictionary-notices.py"
 cat > "$repo/macOS/scripts/prepare-chinese.sh" <<'STUB'
 #!/bin/bash
@@ -134,6 +134,8 @@ chmod +x "$repo/macOS/scripts/"*.sh
   [[ $(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist) == "$second" ]]
   [[ -s build/dictionary-sources/fresh.yaml ]]
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]]
+  # The source-built librime is the only engine library; Lua is merged into it, not a plugin.
+  [[ $(cat build/InkFlow.app/Contents/Frameworks/librime.1.dylib) == librime && ! -e build/InkFlow.app/Contents/Frameworks/rime-plugins ]]
   [[ -s build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate ]]
   [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc ]]
   [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc ]]

@@ -41,17 +41,14 @@ extension IFEngine {
 
     /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
     package func aiInputIdentity() -> AIInputIdentity? {
-        guard available, !asciiMode else { return nil }
-        let input = Self.string(Self.api.pointee.get_input(session))
+        guard available, !asciiMode, let page = PortableSnapshot(session) else { return nil }
+        let input = page.input
         guard !input.isEmpty else { return nil }
-        var context = Self.makeContext()
-        guard Self.api.pointee.get_context(session, &context) != 0 else { return nil }
-        defer { _ = Self.api.pointee.free_context(&context) }
-        let preedit = Self.string(context.composition.preedit)
-        let offset = Int(context.composition.sel_start)
-        guard offset >= 0, offset <= preedit.utf8.count,
+        let preedit = page.preedit
+        let offset = page.selectionStart
+        guard offset <= preedit.utf8.count,
               let prefix = String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) else { return nil }
-        return AIInputIdentity(rawInput: input, caret: Int(Self.api.pointee.get_caret_pos(session)), selectedPrefix: prefix)
+        return AIInputIdentity(rawInput: input, caret: page.rawCaretBytes, selectedPrefix: prefix)
     }
 
     /// Called only for a consumed AI adoption, inside the controller's delivery scope.
