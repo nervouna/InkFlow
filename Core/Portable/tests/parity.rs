@@ -1181,3 +1181,213 @@ fn swift_personal_learning_and_data() {
         "PASS personal learning and data: idle-boundary management, delete/undo/conflict, export/import on isolated directories, macOS document import with disclosure, rejected snapshots roll back"
     );
 }
+
+fn user_dictionary(name: &str, rows: &[(&str, &str, i32)]) -> String {
+    let mut text = format!(
+        "# Rime user dictionary\n#@/db_name\t{name}\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n#@/user_id\tsynthetic-source\n#@/tick\t99\n"
+    );
+    for (code, word, commits) in rows {
+        text += &format!("{code} \t{word}\tc={commits} d=0.5 t=30\n");
+    }
+    text
+}
+
+/// Transitions recorded by the Swift engine in Core/Tests/AIAdoptionLearningTests
+/// (`personalManagement`) and macOS/Tests/PersonalDataTests.swift, on the same state: a
+/// canonical English record and a voice alias for two spellings of one word. The Swift
+/// seeding went through voice-correction learning, which is not exported yet; the rows are
+/// restored from a snapshot instead.
+#[test]
+fn swift_personal_learning_management() {
+    use inkflow_rime::engine::{LearningEntry, LearningError, LearningSource};
+    use inkflow_rime::personal::{self, DICTIONARIES};
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP learning management parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let root = scratch("learning-management");
+    let user = root.join("user");
+    fs::create_dir_all(&user).unwrap();
+    let mut seeded: std::collections::BTreeMap<String, Option<String>> = DICTIONARIES
+        .iter()
+        .map(|name| (name.to_string(), None))
+        .collect();
+    seeded.insert(
+        "inkflow_shared_english".into(),
+        Some(user_dictionary(
+            "inkflow_shared_english",
+            &[("codex", "Codex", 2), ("codex", "CODEX", 1)],
+        )),
+    );
+    seeded.insert(
+        "inkflow_voice_alias".into(),
+        Some(user_dictionary(
+            "inkflow_voice_alias",
+            &[("codux", "Codex", 2), ("codux", "CODEX", 1)],
+        )),
+    );
+    personal::import(&user, &seeded).unwrap();
+
+    let engine = engine(&resources, &user);
+    let first = configured(&engine);
+    let entry = |source, text: &str| -> LearningEntry {
+        engine
+            .personal_learning_entries()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.source == source && e.text == text)
+            .expect("seeded entry")
+    };
+    let commits = |source, text: &str| entry(source, text).commits;
+    let listed = engine.personal_learning_entries().unwrap();
+    assert_eq!(
+        listed.iter().map(LearningEntry::id).collect::<Vec<_>>(),
+        [
+            "english\tcodex\tCODEX",
+            "english\tcodex\tCodex",
+            "voice\tcodux\tCODEX",
+            "voice\tcodux\tCodex"
+        ],
+        "both namespaces, case variants kept apart, sorted by identity"
+    );
+
+    // A later learn supersedes a captured entry.
+    let stale = entry(LearningSource::English, "Codex");
+    let second = configured(&engine);
+    assert_eq!(
+        engine.delete_personal_learning(&stale),
+        Err(LearningError::Conflict)
+    );
+
+    // Delete only the exact alias; the canonical record and the other spelling stay.
+    let alias = entry(LearningSource::Voice, "Codex");
+    let undo = engine.delete_personal_learning(&alias).unwrap();
+    let remaining = engine.personal_learning_entries().unwrap();
+    assert!(
+        remaining
+            .iter()
+            .all(|e| !(e.source == LearningSource::Voice && e.text == "Codex"))
+    );
+    assert_eq!(
+        remaining.iter().filter(|e| e.text == "CODEX").count(),
+        2,
+        "the other display identity is unchanged"
+    );
+    assert_eq!(commits(LearningSource::English, "Codex"), 2);
+    // Native undo restores the count with one more confirmation, once.
+    engine.undo_personal_learning(&undo).unwrap();
+    assert_eq!(commits(LearningSource::Voice, "Codex"), 3);
+    assert_eq!(
+        engine.undo_personal_learning(&undo),
+        Err(LearningError::Conflict)
+    );
+
+    // Another session's composition blocks management; the undo stays valid.
+    let canonical = engine
+        .delete_personal_learning(&entry(LearningSource::English, "Codex"))
+        .unwrap();
+    type_keys(&second, "codex");
+    assert_eq!(
+        engine.undo_personal_learning(&canonical),
+        Err(LearningError::Busy)
+    );
+    second.clear().unwrap();
+    engine.undo_personal_learning(&canonical).unwrap();
+    assert_eq!(commits(LearningSource::English, "Codex"), 3);
+
+    // A learn after a delete obsoletes its undo.
+    let obsolete = engine
+        .delete_personal_learning(&entry(LearningSource::Voice, "Codex"))
+        .unwrap();
+    type_keys(&first, "ceshi");
+    let page = first.snapshot().unwrap();
+    let index = page.texts().iter().position(|c| *c == "测试").unwrap();
+    first.select(&page, index).unwrap();
+    assert_eq!(first.take_commit().unwrap(), "测试");
+    assert_eq!(
+        engine.undo_personal_learning(&obsolete),
+        Err(LearningError::Conflict)
+    );
+    assert_eq!(
+        engine.personal_learning_entries(),
+        Err(LearningError::Busy),
+        "the commit opens the native undo window"
+    );
+    // A rejected management read must not finish Rime's immediate-undo transaction.
+    first.key(0xff08, 0).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(4100));
+    engine.personal_learning_entries().unwrap();
+    type_keys(&first, "ni");
+    assert_eq!(
+        engine.personal_learning_entries(),
+        Err(LearningError::Busy),
+        "composition blocks management"
+    );
+    first.clear().unwrap();
+
+    // Invalidation supersedes captured entries.
+    let captured = entry(LearningSource::English, "CODEX");
+    engine.invalidate_personal_learning().unwrap();
+    assert_eq!(
+        engine.delete_personal_learning(&captured),
+        Err(LearningError::Conflict)
+    );
+    drop((first, second));
+    drop(engine);
+    fs::remove_dir_all(&root).unwrap();
+    println!(
+        "PASS Swift personal learning management: identity, delete/undo, stale and obsolete conflicts, busy boundaries, invalidation"
+    );
+}
+
+/// The user directory below is what the Swift engine's own personal-data worker restored
+/// from the synthetic snapshots of macOS/Tests/PersonalDataTests.swift (the app's
+/// InkFlowDictionaryWorker, 0.6.2 build 164); the `.userdb.txt` files are that worker's
+/// export of the same databases. The Rust export must write the same bytes.
+#[test]
+fn swift_personal_snapshot_export() {
+    use inkflow_rime::personal::{self, DICTIONARIES};
+    let _runtime = RUNTIME.lock().unwrap_or_else(|e| e.into_inner());
+    let recorded = Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/swift-user");
+    let root = scratch("swift-export");
+    let user = root.join("user");
+    fs::create_dir_all(&user).unwrap();
+    for name in DICTIONARIES {
+        copy_tree(
+            &recorded.join(format!("{name}.userdb")),
+            &user.join(format!("{name}.userdb")),
+        );
+    }
+    let exported = personal::export(&user).unwrap();
+    for name in DICTIONARIES {
+        let swift = fs::read_to_string(recorded.join(format!("{name}.userdb.txt"))).unwrap();
+        assert_eq!(
+            exported[name].as_deref(),
+            Some(swift.as_str()),
+            "{name}: the Swift worker's export of the same database"
+        );
+    }
+    // The export is a complete backup: macOS-format document, parsed and imported again.
+    let backup = personal::Backup {
+        rime: personal::RIME_VERSION.into(),
+        candidate_count: 5,
+        input: InputPreferences::default(),
+        phrases: vec![],
+        dictionaries: exported.clone(),
+        unsupported: vec![],
+    };
+    let parsed = personal::Backup::from_json(&backup.to_json().unwrap()).unwrap();
+    let target = root.join("target");
+    personal::import(&target, &parsed.dictionaries).unwrap();
+    assert_eq!(personal::export(&target).unwrap(), exported);
+    fs::remove_dir_all(&root).unwrap();
+    println!("PASS Swift personal snapshot export: byte-identical to the recorded worker output");
+}
+
+fn copy_tree(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap();
+    for entry in fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
+    }
+}

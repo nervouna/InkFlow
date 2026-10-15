@@ -1,0 +1,10 @@
+# Rime user dictionary
+#@/db_name	pinyin_simp
+#@/db_type	userdb
+#@/rime_version	1.17.0
+#@/tick	99
+#@/user_id	fixture-source
+ce shi 	测试	c=-3 d=0.0000123 t=17
+ni hao 	你好	c=7 d=0.123456789 t=42
+wo de 	我的	c=12 d=1.5 t=98
+yi ge ren 	一个人	c=1 d=2.5e-3 t=5

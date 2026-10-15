@@ -27,6 +27,8 @@ typedef struct {
   int last_page;
   void* owner;
 } IFPSnapshot;
+/* The linked librime's version string; valid for the process and needs no initialization. */
+const char* ifp_version(void);
 int ifp_initialize(const char* shared, const char* user, const char* cache);
 int ifp_prepare(void);
 int ifp_finalize(void);

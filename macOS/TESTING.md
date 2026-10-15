@@ -20,7 +20,7 @@ bash Core/scripts/test.sh             # standalone Core package, no app build
 
 `dictionary-worker`, `dictionary-activation`, `personal-data` and `termination` need a current `build.sh` app. The runner stops at the first failing unit; fix it and rerun that unit.
 
-GitHub Actions runs `test.sh quick` on a `macos-26` runner for every pull request and push to `main` (docs-only changes skip it). The ubuntu jobs run the shared-core boundary check, the portable `cargo test` and the remote-runner tests.
+GitHub Actions runs `test.sh quick` and, in a second job, `test.sh portable` on `macos-26` runners for every pull request and push to `main` (docs-only changes skip them). The ubuntu jobs run the shared-core boundary check, the portable `cargo test` and the remote-runner tests.
 
 ## What the units cover
 
@@ -31,6 +31,7 @@ GitHub Actions runs `test.sh quick` on a `macos-26` runner for every pull reques
 - `dictionary-*`, `preparation`, `deployment`: source validation, transactional store, worker sandbox, activation/recovery.
 - `input-source-lifecycle`: the `Shared/` code behind `register-input-source`: process stop and exit observation, update prepare/finish state (first install, declined or timed-out quit, restored selection) and atomic app replacement. Uses fake input sources and child processes; it never touches the desktop.
 - `workflow`: fixtures for the release receipt and release resume, Developer ID identity checks, `install.sh`, the installer package (including `--sign` wiring), the dependency cache, staged builds and cleanup. Stand-in tools only: no keychain, desktop or notarization.
+- `portable`: not in `quick`. Builds librime from source and the release Rust core for macOS 26.0, then runs the Rust tests, old/new parity on freshly prepared production resources, the notices check and a Swift binary linking both Rust staticlibs. The first run builds librime from source (about 4 minutes, then about 2.5 minutes with `build/portable` reused); CI caches that directory.
 - `settings`, `personal-data`, `startup-diagnostics`, `local-diagnostics`, `diagnostic-archive`, `termination`.
 
 GUI harnesses (`test-settings-ui.sh`, AI native/live scripts) are manual diagnostics only; live AI scripts cost money and need explicit approval.

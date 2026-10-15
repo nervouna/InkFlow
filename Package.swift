@@ -116,6 +116,20 @@ let executableTestProducts: [(String, String)] = [
     ("bundle-artifact-smoke-tests", "BundleArtifactSmokeTests"),
     ("voice-lexicon-tests", "VoiceLexiconTests"),
     ("voice-controller-tests", "VoiceControllerTests"),
+    ("portable-abi-tests", "PortableABITests"),
+]
+
+// Portable Rust core, built by Core/scripts/build-portable.sh. Link the archive by path:
+// the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
+// libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
+// own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
+let portableRoot = "\(packageRoot)/build/portable"
+let portableLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
+    .linkedLibrary("rime"), .linkedLibrary("c++"),
+]
+let portableRuntime: [LinkerSetting] = [
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(portableRoot)/prefix/lib"]),
 ]
 
 let package = Package(
@@ -309,6 +323,15 @@ let package = Package(
         .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
+        // Portable core: a C module over Core/Portable/include, and the smoke test that links
+        // it together with the dictionary staticlib.
+        .target(name: "InkFlowPortable", path: "Core/Sources/InkFlowPortable",
+                publicHeadersPath: "include",
+                cSettings: [.unsafeFlags(["-I\(portableRoot)/include"])],
+                linkerSettings: portableLinkerSettings),
+        .executableTarget(name: "PortableABITests", dependencies: ["InkFlowPortable", "InkFlowDictionary"],
+                path: "Core/Tests/PortableABITests", swiftSettings: strictSwiftSettings,
+                linkerSettings: portableRuntime),
     ],
     swiftLanguageModes: [.v6],
     cxxLanguageStandard: .cxx17

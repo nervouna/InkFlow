@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -14,6 +15,13 @@ BUILD = ROOT / 'build/portable'
 PREFIX = BUILD / 'prefix'
 
 
+def deployment_target():
+    """The app's minimum macOS, so native code and Rust load wherever the app does."""
+    if sys.platform != 'darwin':
+        return None
+    return plistlib.loads((ROOT / 'macOS/Info.plist').read_bytes())['LSMinimumSystemVersion']
+
+
 def run(*args, cwd=None):
     subprocess.run([str(a) for a in args], cwd=cwd, check=True)
 
@@ -21,6 +29,10 @@ def run(*args, cwd=None):
 def main():
     if sys.platform not in ('linux', 'darwin'):
         raise SystemExit('Only Linux and macOS are supported by this probe')
+    target = deployment_target()
+    if target:
+        # clang, b2 and rustc read this variable; CMake also gets it explicitly below.
+        os.environ['MACOSX_DEPLOYMENT_TARGET'] = target
     lock = json.loads((HERE / 'native-sources.lock.json').read_text())
     sources = BUILD / 'sources'
     sources.mkdir(parents=True, exist_ok=True)
@@ -54,7 +66,8 @@ def main():
             '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON',
             '-DCMAKE_INSTALL_LIBDIR=lib', f'-DCMAKE_INSTALL_PREFIX={PREFIX}',
             f'-DCMAKE_PREFIX_PATH={PREFIX}', '-DBUILD_SHARED_LIBS=OFF',
-            '-DBUILD_TESTING=OFF', *options)
+            '-DBUILD_TESTING=OFF', *([f'-DCMAKE_OSX_DEPLOYMENT_TARGET={target}'] if target else []),
+            *options)
         run('cmake', '--build', binary, '--parallel', os.environ.get('CMAKE_BUILD_PARALLEL_LEVEL', '4'))
         run('cmake', '--install', binary)
 
@@ -90,7 +103,8 @@ def main():
     compiler = next(line.split('=', 1)[1] for line in cache
                     if line.startswith('CMAKE_CXX_COMPILER:FILEPATH='))
     (BUILD / 'native-build.json').write_text(json.dumps({
-        'platform': sys.platform, 'machine': os.uname().machine, 'sources': lock,
+        'platform': sys.platform, 'machine': os.uname().machine, 'deploymentTarget': target,
+        'sources': lock,
         'cmake': subprocess.check_output(['cmake', '--version'], text=True).splitlines()[0],
         'compiler': subprocess.check_output([compiler, '--version'], text=True).strip(),
         'rust': subprocess.check_output(['rustc', '--version'], cwd=ROOT, text=True).strip(),

@@ -1,4 +1,4 @@
-use inkflow_rime::Runtime;
+use inkflow_rime::resources;
 use std::{error::Error, fs, path::PathBuf};
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
@@ -18,73 +18,8 @@ fn run() -> Result<()> {
     for path in [&cache, &compiler, &probe] {
         fs::create_dir(path)?;
     }
-    {
-        let mut runtime = Runtime::with_cache(&shared, &compiler, &cache)?;
-        runtime.prepare()?;
-    }
-    let mut required = vec![
-        "default.yaml".to_owned(),
-        "inkflow_pinyin.schema.yaml".to_owned(),
-        "pinyin_simp.table.bin".to_owned(),
-        "pinyin_simp.prism.bin".to_owned(),
-        "easy_en.table.bin".to_owned(),
-        "inkflow_mixed.table.bin".to_owned(),
-    ];
-    for profile in 0..32 {
-        required.push(format!("inkflow_spelling_{profile}.schema.yaml"));
-        required.push(format!("inkflow_spelling_{profile}.prism.bin"));
-    }
-    for file in &required {
-        if fs::metadata(cache.join(file))?.len() == 0 {
-            return Err(format!("Empty compiled resource: {file}").into());
-        }
-    }
-    {
-        let runtime = Runtime::with_cache(&shared, &probe, &cache)?;
-        let mut session = runtime.session("inkflow_pinyin")?;
-        // Match the existing worker's smoke cases; no production ranking claim.
-        for (input, target, first_only) in [
-            ("xiehouyu", "歇后语", true),
-            ("suranqijing", "肃然起敬", true),
-            ("email", "email", false),
-            ("wofaleemail", "我发了email", false),
-            ("nihao", "👋", false),
-        ] {
-            session.clear()?;
-            for key in input.bytes() {
-                session.process_key(i32::from(key), 0)?;
-            }
-            let mut found = false;
-            let mut seen = 0;
-            while seen < 1000 {
-                let snapshot = session.snapshot()?;
-                if let Some(index) = snapshot
-                    .candidates
-                    .iter()
-                    .take(1000 - seen)
-                    .position(|c| c.text == target)
-                    && (!first_only || index == 0)
-                {
-                    session.select_candidate(&snapshot, index)?;
-                    if session.take_commit()?.as_deref() != Some(target)
-                        || session.take_commit()?.is_some()
-                    {
-                        return Err(format!("Commit probe failed: {input}").into());
-                    }
-                    found = true;
-                    break;
-                }
-                seen += snapshot.candidates.len().max(1);
-                if first_only || snapshot.last_page || !session.change_page(false)? {
-                    break;
-                }
-            }
-            if !found {
-                return Err(format!("Candidate probe failed: {input}").into());
-            }
-        }
-        session.clear()?;
-    }
+    resources::compile(&shared, &compiler, &cache)?;
+    resources::probe(&shared, &probe, &cache)?;
     fs::remove_dir_all(compiler)?;
     fs::remove_dir_all(probe)?;
     fs::write(
