@@ -407,8 +407,10 @@ package final class IFEngine {
         configurationCode = ifr_session_configuration_error(session).map { String(cString: $0) }
         if let configurationCode { reportConfigurationError(configurationMessage(configurationCode)) }
         else { configurationError = nil }
+        // Settings, ASCII mode and phrases take effect between compositions, and so does their record.
+        guard orderedContent.preedit.isEmpty else { return }
         if Self.loadedPhrases != Self.requestedPhrases, configurationCode != "phrase-write",
-           !isComposing, Self.sessionsIdle(includingDelivery: false) {
+           Self.sessionsIdle(includingDelivery: false) {
             Self.loadedPhrases = Self.requestedPhrases
         }
         updateQualityConfiguration(asciiMode: savedASCII)
