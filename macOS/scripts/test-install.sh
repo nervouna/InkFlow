@@ -16,6 +16,8 @@ printf executable > "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
 printf worker > "$repo/build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker"
 printf rime > "$repo/build/InkFlow.app/Contents/Frameworks/librime.1.dylib"
 printf lua > "$repo/build/InkFlow.app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
+cp macOS/Info.plist "$repo/build/InkFlow.app/Contents/Info.plist"
+plutil -replace CFBundleVersion -string 7 "$repo/build/InkFlow.app/Contents/Info.plist"
 chmod +x "$repo/build/InkFlow.app/Contents/MacOS/"*
 cat > "$repo/macOS/scripts/register.sh" <<'STUB'
 set -e
@@ -23,6 +25,7 @@ echo "register:$1:$2" >> "$EVENTS"
 if [[ "$2" == --prepare-update ]]; then
   [[ "${LIFECYCLE_FAILURE:-}" != prepare ]] || exit 1
   [[ ! -f "$1/old-marker" ]] || echo old-intact-before-stop >> "$EVENTS"
+  echo "expected-build:$4" >> "$EVENTS"
   printf 'fixture lifecycle snapshot\n' > "$3"
 elif [[ "$2" == --commit-update ]]; then
   [[ "${REPLACE_FAILURE:-}" != before-candidate ]] || exit 1
@@ -141,6 +144,8 @@ install --developer-id > "$fixture/output" 2>&1
 [[ -x "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow" ]]
 grep -Fq "register:$HOME/Library/Input Methods/InkFlow.app" "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
+# The lifecycle helper is told the staged app's build number, not a path.
+grep -Fxq 'expected-build:7' "$EVENTS"
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow"
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]]
