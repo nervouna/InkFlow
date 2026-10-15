@@ -345,8 +345,9 @@ let package = Package(
         .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
-        // Portable core: a C module over Core/Portable/include, and the smoke test that links
-        // it together with the dictionary staticlib.
+        // Portable core: a C module over Core/Portable/include with libinkflow_rime.a and the
+        // source-built librime. InkFlowRime and everything that links it depend on it; the smoke
+        // test links it together with the dictionary staticlib.
         .target(name: "InkFlowPortable", path: "Core/Sources/InkFlowPortable",
                 publicHeadersPath: "include",
                 cSettings: [.unsafeFlags(["-I\(portableRoot)/include"])],
