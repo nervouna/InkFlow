@@ -6,7 +6,7 @@ all_units=(shared-core quality-baseline quality-identity quality-store quality-t
   voice-session apple-voice voice-lexicon voice-controller ai-credentials ai-transport ai-runtime ai-learning ai-headless
   preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases
   controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation
-  startup-diagnostics local-diagnostics diagnostic-archive termination installer-core workflow source-bundle)
+  startup-diagnostics local-diagnostics diagnostic-archive termination input-source-lifecycle workflow source-bundle)
 
 usage() {
   echo 'Usage: test.sh quick | all | UNIT|GROUP ...'
@@ -38,7 +38,7 @@ needs_app=false needs_shared=false needs_dependencies=false
 for unit in "${units[@]}"; do
   case "$unit" in dictionary-worker|dictionary-activation|personal-data|termination) needs_app=true ;; esac
   case "$unit" in shared-core|quality-capture-query|ai-headless|deployment|engine-*|controller|voice-controller) needs_shared=true ;; esac
-  case "$unit" in preparation|workflow|installer-core) ;; *) needs_dependencies=true ;; esac
+  case "$unit" in preparation|workflow|input-source-lifecycle) ;; *) needs_dependencies=true ;; esac
 done
 if $needs_app && [[ ! -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]]; then
   echo 'Run build.sh first.' >&2; exit 1

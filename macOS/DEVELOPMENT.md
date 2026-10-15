@@ -10,7 +10,7 @@ The application, settings interface, registration tool, and test scenarios are w
 - `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel.
 - `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (`IFUpdaterAccess`) owns updater preferences.
 - `NativeCandidates.m` is the only Objective-C source: private candidate-panel adaptations (see `DEBUGGING.md`).
-- `Tools/RegisterInputSource.swift` registers and verifies the input source; build and test scripts never install, register or select it.
+- `Tools/RegisterInputSource.swift` registers and verifies the input source and runs the update lifecycle (stop the old process, restore the enabled and selected state, relaunch); `Shared/` holds its code, which `install.sh` and the package scripts use. Build and test scripts never install, register or select it. `test.sh input-source-lifecycle` covers `Shared/`.
 - `scripts/prepare-rime.sh` delegates to the [shared dictionary preparation](../docs/shared-dictionary-preparation.md); see [DEPENDENCIES.md](DEPENDENCIES.md) for pins.
 
 ## Workflows
@@ -31,19 +31,17 @@ bash macOS/scripts/build.sh
 bash macOS/scripts/build-pkg.sh build/InkFlow.app build/InkFlow.pkg
 ```
 
-`build-pkg.sh APP OUT` wraps a built app in an unsigned `.pkg` that Installer.app installs into `~/Library/Input Methods` without administrator rights (`Package/Distribution.xml` allows only the current user's home folder; the app is not relocatable). The package scripts ship with the `register-input-source` tool and the expected build number, and never touch `~/Library/Application Support/InkFlow`:
+`build-pkg.sh APP OUT` wraps a built app in a `.pkg` that Installer.app installs into `~/Library/Input Methods` without administrator rights (`Package/Distribution.xml` allows only the current user's home folder; the app is not relocatable). The package scripts ship with the `register-input-source` tool and the expected build number, and never touch `~/Library/Application Support/InkFlow`:
 
 - `Package/preinstall` records the input-source state and quits the running InkFlow through `--prepare-update`. If that fails the install aborts before any file moves.
 - `Package/postinstall` runs `--finish-update`: register, restore the enabled and selected state (a first install enables and selects InkFlow, or prints the System Settings steps if the system does not confirm), relaunch and check the build number. If it fails, run the package again.
 
-`test-pkg.sh` (part of `test.sh workflow`) builds a package from a fixture app and checks the domain, the non-relocatable app, the app-only payload and the scripts; it installs nothing. Signing and notarization are not part of this script yet.
+The package is unsigned by default and needs no keychain. `build-pkg.sh APP OUT --sign APP_SHA1 INSTALLER_SHA1` signs the embedded `register-input-source` with the Developer ID Application certificate (hardened runtime, secure timestamp) before it is packaged, then signs the package with the Developer ID Installer certificate (`productbuild --sign --timestamp`). Both arguments are certificate SHA-1 hashes, as in `.release.local.plist`; `productbuild` itself takes a common name, so the script looks it up in the keychain. Release packaging passes the identities and notarizes the result.
+
+`test-pkg.sh` (part of `test.sh workflow`) builds packages from a fixture app and checks the domain, the non-relocatable app, the app-only payload, the scripts and the `--sign` wiring with stand-in `codesign` and `security` tools; it installs nothing and touches no keychain.
 
 ### Publish a release
 
-Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all`, runs one deep bundle check, and freezes the Installer receipt for packaging.
+Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all`, runs one deep bundle check, and writes a receipt that freezes the commit and the app build for packaging. Packaging signs and notarizes the app, builds the signed package from the stapled app, notarizes and staples it, and publishes it beside the Sparkle ZIP, the appcast, `SHA256SUMS` and the dictionary source bundle. It needs both a Developer ID Application and a Developer ID Installer certificate in the keychain.
 
 Testing: see [TESTING.md](TESTING.md). Debugging: see [DEBUGGING.md](DEBUGGING.md).
-
-## Native installer
-
-`Installer/CoreAPI.md` describes the core/window/payload boundary; `check-installer-core.sh` compiles the core and registration CLI; `build-installer.sh /abs/InkFlow.zip /new/output.app` builds an unsigned installer. Packaging (`package.sh prepare`, then the release runner) signs, notarizes and staples the app, assembles the installer and builds the DMG.

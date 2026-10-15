@@ -31,7 +31,7 @@ elif [[ "$2" == --commit-update ]]; then
   [[ "${REPLACE_FAILURE:-}" != before-candidate ]] || exit 1
   stage=$(dirname "$3")
   # Fixture models the helper's exchanged slots; real atomic semantics are covered
-  # by InstallerCoreTests using the shared replacement primitive.
+  # by InputSourceLifecycleTests using the shared replacement primitive.
   if [[ -e "$1" ]]; then /bin/mv "$1" "$stage/old"; fi
   /bin/mv "$stage/InkFlow.app" "$1"
   if [[ -e "$stage/old" ]]; then /bin/mv "$stage/old" "$stage/InkFlow.app"; fi

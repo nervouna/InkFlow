@@ -29,9 +29,11 @@ GitHub Actions runs `test.sh quick` on a `macos-26` runner for every pull reques
 - `quality-*`: telemetry store migration/atomicity/retention, timing, build identity, and real capture → query.
 - `ai-*`: credentials (random Keychain service), transport, runtime debounce/invalidation, native learning, headless pipeline. No paid API calls.
 - `dictionary-*`, `preparation`, `deployment`: source validation, transactional store, worker sandbox, activation/recovery.
-- `settings`, `personal-data`, `startup-diagnostics`, `local-diagnostics`, `diagnostic-archive`, `termination`, `installer-core`, `workflow`.
+- `input-source-lifecycle`: the `Shared/` code behind `register-input-source`: process stop and exit observation, update prepare/finish state (first install, declined or timed-out quit, restored selection) and atomic app replacement. Uses fake input sources and child processes; it never touches the desktop.
+- `workflow`: fixtures for the release receipt and release resume, Developer ID identity checks, `install.sh`, the installer package (including `--sign` wiring), the dependency cache, staged builds and cleanup. Stand-in tools only: no keychain, desktop or notarization.
+- `settings`, `personal-data`, `startup-diagnostics`, `local-diagnostics`, `diagnostic-archive`, `termination`.
 
-GUI harnesses (`test-settings-ui.sh`, `test-installer-window.sh`, AI native/live scripts) are manual diagnostics only; live AI scripts cost money and need explicit approval.
+GUI harnesses (`test-settings-ui.sh`, AI native/live scripts) are manual diagnostics only; live AI scripts cost money and need explicit approval.
 
 ## Python query checks
 

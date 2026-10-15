@@ -8,10 +8,11 @@ export TMPDIR="$fixture/"
 git clone --quiet --shared --no-hardlinks "$PWD" "$fixture/repo"
 scripts=.agents/skills/inkflow-release/scripts
 cp "$scripts/release.sh" "$scripts/release-appcast.sh" "$fixture/repo/$scripts/"
+cp macOS/scripts/release-receipt.sh macOS/scripts/release-build.sh "$fixture/repo/macOS/scripts/"
 cd "$fixture/repo"
 # The real corresponding-source bundle downloads pinned inputs; the source-bundle unit covers it.
 printf '#!/bin/bash\nprintf bundle > "$1"\n' > macOS/scripts/dictionary-source-bundle.sh
-git add "$scripts" macOS/scripts/dictionary-source-bundle.sh
+git add "$scripts" macOS/scripts/dictionary-source-bundle.sh macOS/scripts/release-receipt.sh macOS/scripts/release-build.sh
 git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'fixture release scripts'
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
 build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
@@ -21,21 +22,21 @@ app="$release/payload/InkFlow.app"
 mkdir -p "$app/Contents" build/InkFlow.app/Contents build/release-verification "$release/verified" "$fixture/bin"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 cp macOS/Info.plist build/InkFlow.app/Contents/Info.plist
-printf installer > "$release/verified/InkFlowInstaller"
-printf icon > "$release/verified/AppIcon.icns"
-bash macOS/scripts/release-receipt.sh create "$release/verified/InkFlowInstaller" "$release/verified/AppIcon.icns" "$release/verified/installer.plist"
-cp "$release/verified/installer.plist" build/release-verification/installer.plist
+bash macOS/scripts/release-receipt.sh create "$release/verified/receipt.plist"
+cp "$release/verified/receipt.plist" build/release-verification/receipt.plist
 printf notes > build/public-release-notes.md
 printf submission > "$release/inputmethod-submission.zip"
-printf dmg > "$release/InkFlow-$version-$build-arm64.dmg"
+pkg="$release/InkFlow-$version-$build-arm64.pkg"
+printf pkg > "$pkg"
 zip="$release/InkFlow-$version-$build-arm64.zip"
 ditto -c -k --keepParent "$app" "$zip"
-export FIXTURE_INSTALLER="$fixture/installer/InkFlow Installer.app"
-mkdir -p "$FIXTURE_INSTALLER/Contents/Resources/Payload" "$FIXTURE_INSTALLER/Contents/MacOS"
-cp macOS/Info.plist "$FIXTURE_INSTALLER/Contents/Info.plist"
-cp "$zip" "$FIXTURE_INSTALLER/Contents/Resources/Payload/InkFlow.zip"
-printf '#!/bin/bash\nexit 0\n' > "$FIXTURE_INSTALLER/Contents/MacOS/InkFlowInstaller"
-chmod +x "$FIXTURE_INSTALLER/Contents/MacOS/InkFlowInstaller"
+# What pkgutil --expand-full yields for the package, built from the prepared app.
+export FIXTURE_PKG_TREE="$fixture/pkg-tree"
+component="$FIXTURE_PKG_TREE/InkFlow-component.pkg"
+mkdir -p "$component/Payload" "$component/Scripts"
+ditto "$app" "$component/Payload/InkFlow.app"
+printf '#!/bin/bash\nexit 0\n' > "$component/Scripts/register-input-source"
+printf '%s\n' "$build" > "$component/Scripts/build-number"
 cat > "$fixture/bin/gh" <<'MOCK'
 #!/bin/bash
 if [[ "$1 $2" == 'repo view' ]]; then echo fixture/InkFlow; exit 0; fi
@@ -45,18 +46,26 @@ MOCK
 cat > "$fixture/bin/codesign" <<'MOCK'
 #!/bin/bash
 if [[ "$1" == -dvvv ]]; then
-  cat <<'METADATA'
-TeamIdentifier=T7976FL2LP
+  flags=0x10000
+  [[ "$2" != *register-input-source ]] || flags=${FIXTURE_TOOL_FLAGS:-0x10000}
+  cat <<METADATA
 Identifier=io.damao.inputmethod.inkflow
+CodeDirectory v=20500 size=1 flags=$flags(runtime) hashes=1+3 location=embedded
+Authority=Developer ID Application: Fixture (T7976FL2LP)
+Timestamp=Oct 15, 2026 at 10:00:00
+TeamIdentifier=T7976FL2LP
 METADATA
 fi
 MOCK
-cat > "$fixture/bin/hdiutil" <<'MOCK'
+cat > "$fixture/bin/pkgutil" <<'MOCK'
 #!/bin/bash
-if [[ "$1" == attach ]]; then
-  ditto "$FIXTURE_INSTALLER" "$5/InkFlow Installer.app"
-  touch "$5/安装说明.txt"
-fi
+case "$1" in
+  --check-signature)
+    printf '%s\n' 'Package "fixture.pkg":' '   Status: signed by a developer certificate issued by Apple for distribution' \
+      '   Certificate Chain:' "    1. ${FIXTURE_PKG_SIGNER:-Developer ID Installer: Fixture (T7976FL2LP)}" ;;
+  --expand-full) ditto "$FIXTURE_PKG_TREE" "$3" ;;
+  *) exit 64 ;;
+esac
 MOCK
 for tool in xcrun spctl; do printf '#!/bin/bash\nexit 0\n' > "$fixture/bin/$tool"; done
 # No fixture can submit a notarization or make a network request.
@@ -100,9 +109,14 @@ check_release() {
   echo "PASS release resume: $name"
 }
 check_release 'unchanged candidate reaches publication boundary' FIXTURE_PUBLICATION_BOUNDARY
-plutil -replace sourceCommit -string stale "$release/verified/installer.plist"
-check_release 'stale prepared candidate' 'Installer receipt commit does not match current source.'
-cp build/release-verification/installer.plist "$release/verified/installer.plist"
+plutil -replace sourceCommit -string stale "$release/verified/receipt.plist"
+check_release 'stale prepared candidate' 'Release receipt commit does not match current source.'
+cp build/release-verification/receipt.plist "$release/verified/receipt.plist"
+FIXTURE_PKG_SIGNER='Developer ID Application: Fixture (T7976FL2LP)' check_release 'package not signed by the installer certificate' 'Unexpected package signature.'
+FIXTURE_TOOL_FLAGS=0x0 check_release 'embedded tool without hardened runtime' 'Unexpected register-input-source signature.'
+printf 99 > "$component/Scripts/build-number"
+check_release 'package scripts from another build' 'Package scripts expect another build.'
+printf '%s\n' "$build" > "$component/Scripts/build-number"
 cp "$zip" "$fixture/original.zip"
 printf changed > "$app/Contents/changed"
 ditto -c -k --keepParent "$app" "$zip"

@@ -105,7 +105,7 @@ Run `bash macOS/scripts/refresh-menu.sh` (restarts the user's `TextInputMenuAgen
 
 **Cause:** While the bundle path was briefly missing during replacement, macOS rebuilt its private UI-order cache (`AppleInputSourcesInUIOrderPasteboard`) with only ABC. Restarting `TextInputMenuAgent` also causes a brief flicker.
 
-**Fix:** `install.sh` uses the Installer's atomic replacement (`--commit-update`: `RENAME_SWAP` for updates, `RENAME_EXCL` for first install) so the path never disappears, and it no longer restarts the menu agent. **Manual recovery:** remove and re-add InkFlow in Keyboard Settings. AX dumps and menu-bar screenshots are unreliable detectors here.
+**Fix:** `install.sh` and the package use `register-input-source`'s atomic replacement (`--commit-update`: `RENAME_SWAP` for updates, `RENAME_EXCL` for first install) so the path never disappears, and it no longer restarts the menu agent. **Manual recovery:** remove and re-add InkFlow in Keyboard Settings. AX dumps and menu-bar screenshots are unreliable detectors here.
 
 ## Blank name or icon in Keyboard Settings
 

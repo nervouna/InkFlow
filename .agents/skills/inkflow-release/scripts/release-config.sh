@@ -6,7 +6,7 @@ load_release_config() {
   config=${INKFLOW_RELEASE_CONFIG:-$root/.release.local.plist}
   if [[ -e "$config" ]]; then
     plutil -lint "$config" >/dev/null 2>&1 || { echo 'Invalid release configuration plist.' >&2; return 1; }
-    for name in INKFLOW_SIGN_IDENTITY INKFLOW_NOTARY_PROFILE INKFLOW_NOTARY_AUTH INKFLOW_NOTARY_KEY_FILE INKFLOW_NOTARY_KEY_ID INKFLOW_NOTARY_KEY_TYPE INKFLOW_NOTARY_ISSUER; do
+    for name in INKFLOW_SIGN_IDENTITY INKFLOW_INSTALLER_IDENTITY INKFLOW_NOTARY_PROFILE INKFLOW_NOTARY_AUTH INKFLOW_NOTARY_KEY_FILE INKFLOW_NOTARY_KEY_ID INKFLOW_NOTARY_KEY_TYPE INKFLOW_NOTARY_ISSUER; do
       if [[ -z ${!name+x} ]]; then
         printf -v "$name" '%s' "$(plutil -extract "$name" raw "$config" 2>/dev/null || true)"
       fi
@@ -14,7 +14,10 @@ load_release_config() {
   fi
   if [[ ${1:-} != notary ]]; then
     [[ ${INKFLOW_SIGN_IDENTITY:-} =~ ^[[:xdigit:]]{40}$ ]] || {
-    echo 'Set INKFLOW_SIGN_IDENTITY to a Developer ID certificate SHA1 in the environment or .release.local.plist.' >&2; return 1;
+    echo 'Set INKFLOW_SIGN_IDENTITY to a Developer ID Application certificate SHA1 in the environment or .release.local.plist.' >&2; return 1;
+    }
+    [[ ${INKFLOW_INSTALLER_IDENTITY:-} =~ ^[[:xdigit:]]{40}$ ]] || {
+    echo 'Set INKFLOW_INSTALLER_IDENTITY to a Developer ID Installer certificate SHA1 in the environment or .release.local.plist.' >&2; return 1;
     }
   fi
   case ${INKFLOW_NOTARY_AUTH:-keychain} in
@@ -39,5 +42,5 @@ load_release_config() {
     ;;
   *) echo 'INKFLOW_NOTARY_AUTH must be keychain or api-key.' >&2; return 1 ;;
   esac
-  export INKFLOW_SIGN_IDENTITY INKFLOW_NOTARY_PROFILE INKFLOW_NOTARY_AUTH INKFLOW_NOTARY_KEY_FILE INKFLOW_NOTARY_KEY_ID INKFLOW_NOTARY_KEY_TYPE INKFLOW_NOTARY_ISSUER
+  export INKFLOW_SIGN_IDENTITY INKFLOW_INSTALLER_IDENTITY INKFLOW_NOTARY_PROFILE INKFLOW_NOTARY_AUTH INKFLOW_NOTARY_KEY_FILE INKFLOW_NOTARY_KEY_ID INKFLOW_NOTARY_KEY_TYPE INKFLOW_NOTARY_ISSUER
 }
