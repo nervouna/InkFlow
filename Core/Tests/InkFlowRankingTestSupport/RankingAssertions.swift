@@ -19,12 +19,26 @@ package func verifyRankingRules(in directory: URL) throws {
                   personalBucket: personal, source: source)
         }
         let han = [row(), row(), row()]
-        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午", metadata: han) == [2, 1, 0], "Longer crossing phrases precede frequency")
-        check(ranker.order(["惨", "餐", "参"], precedingText: "午", metadata: han) == [1, 2, 0], "Frequency then stable original order")
+        check(ranker.order(["惨", "餐", "参"], precedingText: "准备午", metadata: han) == [2, 0, 1],
+              "Longer crossing phrases precede frequency; the demoted native first stays second")
+        check(ranker.order(["惨", "餐", "参"], precedingText: "午", metadata: han) == [1, 0, 2], "Frequency then stable original order")
         let conflict = [row(), row(0..<3, .ascii, source: .english), row(), row()]
-        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午", metadata: conflict) == [2, 1, 0, 3],
-              "Context reorders eligible Han candidates only within their original slots")
+        check(ranker.order(["惨", "can", "餐", "你"], precedingText: "午", metadata: conflict) == [2, 0, 1, 3],
+              "Context reorders eligible Han candidates only within their original slots; the demoted native first stays ahead of English")
         check(ranker.order(["你好", "你"], precedingText: "迷", metadata: [row(0..<5), row(0..<5)]) == [0, 1], "Unequal-length choices remain in the native relative order")
+        let boundaryURL = directory.appendingPathComponent("ranking-boundary.bin")
+        defer { try? FileManager.default.removeItem(at: boundaryURL) }
+        let boundaryDictionary = "行为\txing wei\t50843\n为时\twei shi\t24\n版本\tban ben\t38049\n本地\tben di\t9515\n" +
+            "然后\tran hou\t100000\n然后把\tran hou ba\t4732\n"
+        try IFContextRanker.buildIndex(dictionary: Data(boundaryDictionary.utf8)).write(to: boundaryURL)
+        let boundary = try IFContextRanker(index: boundaryURL.path)
+        check(boundary.order(["是", "时", "事"], precedingText: "行为", metadata: han) == [0, 1, 2],
+              "A match must not start inside a word that already ends the context: 行为 + 时")
+        let english = [row(0..<2), row(0..<2, .ascii, source: .english), row(0..<2), row(0..<2)]
+        check(boundary.order(["的", "de", "得", "地"], precedingText: "版本", metadata: english) == [0, 1, 2, 3],
+              "版本 + 地 crosses a word boundary, so 的 stays first")
+        check(boundary.order(["吧", "ba", "把"], precedingText: "然后", metadata: Array(english.prefix(3))) == [2, 0, 1],
+              "A phrase extending the whole preceding word still promotes 把, with 吧 kept ahead of English")
         let invalidMetadata: [[IFCandidateRankingMetadata]?] = [nil, [], [row()],
             [row(), row(0..<1)], [row(), row(1..<4)]]
         for metadata in invalidMetadata {
@@ -71,5 +85,5 @@ package func verifyRankingRules(in directory: URL) throws {
         check(ranker.order(["从哦的新", "Codex"], precedingText: "正在使用 CLI ",
                            metadata: [row(0..<5), row(0..<5, .nonASCII, personal: 1, source: .english)]) == [0, 1],
               "Inconsistent candidate class metadata fails closed to native order")
-        print("PASS context ranking rules: equal native spans, unknown metadata fallback, strict page identity, longer match, frequency, stable ties, fixed ineligible slots")
+        print("PASS context ranking rules: equal native spans, unknown metadata fallback, strict page identity, longer match, word boundaries, frequency, stable ties, fixed ineligible slots")
     }

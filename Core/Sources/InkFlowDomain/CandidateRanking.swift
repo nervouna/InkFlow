@@ -144,11 +144,15 @@ package struct IFContextRanker: Sendable {
         let prefix = Array(precedingText.suffix(max(0, longestPhrase - 1))
             .reversed().prefix(while: Self.isHan).reversed())
         let prefixKey = Self.encode(String(prefix))
+        // A word that already ends the preceding text marks a likely boundary: a match may
+        // extend that word but not start inside it, as 为时 would after 行为.
+        let wordStart = stride(from: prefix.count, through: 2, by: -1)
+            .first { frequency(of: Array(prefixKey.suffix($0 * 3))) != nil } ?? 1
         let scores = candidates.enumerated().map { index, candidate -> (length: Int, frequency: Int) in
             guard eligible.contains(index), !prefix.isEmpty, candidate.count == candidates[0].count,
                   candidate.allSatisfy(Self.isHan) else { return (0, 0) }
             let candidateKey = Self.encode(candidate)
-            for count in stride(from: prefix.count, through: 1, by: -1) where count + candidate.count <= Self.phraseLimit {
+            for count in stride(from: prefix.count, through: wordStart, by: -1) where count + candidate.count <= Self.phraseLimit {
                 if let frequency = frequency(of: prefixKey.suffix(count * 3) + candidateKey) {
                     return (count, frequency)
                 }
@@ -156,6 +160,7 @@ package struct IFContextRanker: Sendable {
             return (0, 0)
         }
         let han = eligible.filter { candidates[$0].allSatisfy(Self.isHan) }
+        let nativeHan = han.first
         let leadingHan = han.sorted {
             if scores[$0].length != scores[$1].length { return scores[$0].length > scores[$1].length }
             if scores[$0].frequency != scores[$1].frequency { return scores[$0].frequency > scores[$1].frequency }
@@ -171,7 +176,8 @@ package struct IFContextRanker: Sendable {
             let row = metadata[index]
             if row.source == .custom { return 0 }
             if evidencePromotes(index) { return 1 }
-            if index == leadingHan { return 2 }
+            // A demoted native first choice stays second, ahead of exact English.
+            if index == leadingHan || index == nativeHan { return 2 }
             if row.exact && (row.source == .english || row.source == .mixed) { return 3 }
             if row.exact { return 4 }
             return 5
