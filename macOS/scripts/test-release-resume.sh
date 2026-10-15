@@ -9,7 +9,9 @@ git clone --quiet --shared --no-hardlinks "$PWD" "$fixture/repo"
 scripts=.agents/skills/inkflow-release/scripts
 cp "$scripts/release.sh" "$scripts/release-appcast.sh" "$fixture/repo/$scripts/"
 cd "$fixture/repo"
-git add "$scripts"
+# The real corresponding-source bundle downloads pinned inputs; the source-bundle unit covers it.
+printf '#!/bin/bash\nprintf bundle > "$1"\n' > macOS/scripts/dictionary-source-bundle.sh
+git add "$scripts" macOS/scripts/dictionary-source-bundle.sh
 git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'fixture release scripts'
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
 build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
