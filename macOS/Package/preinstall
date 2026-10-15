@@ -1,0 +1,11 @@
+#!/bin/bash
+# Runs as the logged-in user before the payload is laid down. A non-zero exit makes Installer abort
+# with the installed app and personal data untouched.
+set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
+state_dir="$HOME/Library/Caches/io.damao.inkflow.installer"
+mkdir -p "$state_dir"
+rm -f "$state_dir/state.json"
+# Quitting must go through the tool (applicationShouldTerminate); SIGTERM would skip the app's clean shutdown.
+"$here/register-input-source" "$HOME/Library/Input Methods/InkFlow.app" --prepare-update \
+  "$state_dir/state.json" "$(<"$here/build-number")"
