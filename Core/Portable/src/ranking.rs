@@ -312,6 +312,20 @@ impl ContextRanker {
             .take_while(|g| is_han(g))
             .collect();
         let first_length = candidates[0].graphemes(true).count();
+        let phrase = |count: usize, tail: &str| -> String {
+            prefix[..count]
+                .iter()
+                .rev()
+                .copied()
+                .chain(std::iter::once(tail))
+                .collect()
+        };
+        // A word that already ends the preceding text marks a likely boundary: a match may
+        // extend that word but not start inside it, as 为时 would after 行为.
+        let word_start = (2..=prefix.len())
+            .rev()
+            .find(|&count| self.frequencies.frequency(&phrase(count, "")).is_some())
+            .unwrap_or(1);
         let scores: Vec<_> = candidates
             .iter()
             .enumerate()
@@ -323,28 +337,25 @@ impl ContextRanker {
                 {
                     return (0, 0);
                 }
-                for count in (1..=prefix.len()).rev() {
+                for count in (word_start..=prefix.len()).rev() {
                     if count + first_length > PHRASE_LIMIT {
                         continue;
                     }
-                    let phrase: String = prefix[..count]
-                        .iter()
-                        .rev()
-                        .copied()
-                        .chain(std::iter::once(candidate.as_str()))
-                        .collect();
-                    if let Some(frequency) = self.frequencies.frequency(&phrase) {
+                    if let Some(frequency) = self.frequencies.frequency(&phrase(count, candidate)) {
                         return (count, frequency);
                     }
                 }
                 (0, 0)
             })
             .collect();
-        let leading_han = eligible
-            .iter()
-            .copied()
-            .filter(|&i| all_han(&candidates[i]))
-            .min_by_key(|&i| (std::cmp::Reverse(scores[i]), i));
+        let han = || {
+            eligible
+                .iter()
+                .copied()
+                .filter(|&i| all_han(&candidates[i]))
+        };
+        let native_han = han().next();
+        let leading_han = han().min_by_key(|&i| (std::cmp::Reverse(scores[i]), i));
         let is_technical = technical(preceding);
         let tier = |i: usize| {
             let row = &rows[i];
@@ -353,7 +364,8 @@ impl ContextRanker {
             } else if is_technical && row.exact && row.personal > 0 && row.source == Source::English
             {
                 1
-            } else if Some(i) == leading_han {
+            } else if Some(i) == leading_han || Some(i) == native_han {
+                // A demoted native first choice stays second, ahead of exact English.
                 2
             } else if row.exact && matches!(row.source, Source::English | Source::Mixed) {
                 3
