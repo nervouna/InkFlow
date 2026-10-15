@@ -19,9 +19,13 @@ python3 scripts/mac-remote.py resources
 bash Core/Portable/parity.sh [build/portable/resources.XXXXXX]
 # Capture key latency and memory with the recorded macOS headless protocol:
 bash Core/Portable/performance.sh build/portable/resources.XXXXXX [OUTPUT_DIRECTORY]
+# macOS only: the native build plus the release libinkflow_rime.a that SwiftPM links
+# (target InkFlowPortable), then everything above and the Swift link smoke test in one unit:
+bash Core/scripts/build-portable.sh
+bash macOS/scripts/test.sh portable
 ```
 
-The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture.
+The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. On macOS the native libraries and the release Rust archive target the app's minimum system version, read from `LSMinimumSystemVersion` in `macOS/Info.plist` (`deploymentTarget` in `native-build.json`), so they load wherever the app does. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture or that version.
 
 `native-sources.lock.json` pins source commits, URLs, and SHA-256 hashes. librime is the shipping 1.17.0 revision. Its glog, LevelDB, marisa, OpenCC, and yaml-cpp pins follow that revision's submodules; Boost remains 1.89.0. The Lua plugin is pinned to its last upstream commit before the 1.17.0 release, with Lua 5.4.8 from its pinned thirdparty tree.
 
