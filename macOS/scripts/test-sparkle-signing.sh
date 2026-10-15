@@ -18,7 +18,9 @@ if [[ "$1" == -dvvv ]]; then
     team=${BAD_TEAM:-T7976FL2LP}
     authority=${BAD_AUTHORITY:-Developer ID Application}
   fi
-  printf 'TeamIdentifier=%s\nAuthority=%s: Fixture\n' "$team" "$authority"
+  # Real codesign output continues well past the matched lines.
+  printf 'Authority=%s: Fixture\nTeamIdentifier=%s\n' "$authority" "$team"
+  for line in {1..200}; do printf 'Sealed Resources fixture line %d\n' "$line"; done
 fi
 STUB
 chmod +x "$fixture/bin/codesign"
