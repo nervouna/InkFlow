@@ -35,6 +35,7 @@ impl Drop for Snapshot {
 }
 
 unsafe extern "C" {
+    pub fn ifp_version() -> *const c_char;
     pub fn ifp_initialize(
         shared: *const c_char,
         user: *const c_char,
