@@ -1,6 +1,8 @@
 import Foundation
 
 package enum IFRegisterInputSourceBootstrap {
+    static let firstInstallInstruction = "首次安装：在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。"
+
     @MainActor package static func run(arguments: [String]) async {
         func fail(_ message: String, _ code: Int32) -> Never {
             FileHandle.standardError.write(Data("\(message)\n".utf8))
@@ -48,7 +50,7 @@ package enum IFRegisterInputSourceBootstrap {
     @MainActor private static func trialUpdate(_ arguments: [String]) async throws {
         let prepare = arguments[2] == "--prepare-update"
         guard arguments.count == (prepare ? 5 : 4) else {
-            throw IFInputError.unavailable("Usage: register-input-source target --prepare-update state.json staged.app | target --commit-update state.json | target --finish-update state.json")
+            throw IFInputError.unavailable("Usage: register-input-source target --prepare-update state.json build | target --commit-update state.json | target --finish-update state.json")
         }
         let target = URL(fileURLWithPath: arguments[1]).standardizedFileURL
         let allowed = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods/InkFlow.app")
@@ -56,11 +58,8 @@ package enum IFRegisterInputSourceBootstrap {
         let stateURL = URL(fileURLWithPath: arguments[3])
         let lifecycle = IFTrialInstallation(sources: IFSystemInputSources(), processes: IFTrialSystemProcesses())
         if prepare {
-            let staged = URL(fileURLWithPath: arguments[4])
-            guard let bundle = Bundle(url: staged), bundle.bundleIdentifier == IFInputIdentity.bundleID,
-                  let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
-                throw IFInputError.unavailable("staged candidate identity")
-            }
+            let build = arguments[4]
+            guard !build.isEmpty else { throw IFInputError.unavailable("expected build number") }
             let state = try await lifecycle.prepare(target: target, build: build)
             try JSONEncoder().encode(state).write(to: stateURL, options: .atomic)
             print("old_processes_stopped=\(state.oldPIDs.map(String.init).joined(separator: ","))")
@@ -81,8 +80,15 @@ package enum IFRegisterInputSourceBootstrap {
                   let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
                 throw IFInputError.unavailable("installed candidate identity")
             }
-            let pid = try await lifecycle.finish(target: target, state: state, installedBuild: build)
-            print("running_pid=\(pid)\nrunning_executable=\(target.path)/Contents/MacOS/InkFlow\ninstalled_build=\(build)\ninput_source_state_restored=1")
+            let result = try await lifecycle.finish(target: target, state: state, installedBuild: build)
+            print("running_pid=\(result.pid)\nrunning_executable=\(target.path)/Contents/MacOS/InkFlow\ninstalled_build=\(build)")
+            if !state.firstInstall {
+                print("input_source_state_restored=1")
+            } else if result.confirmed {
+                print("first_install=1\nmode_enabled_and_selected=1")
+            } else {
+                print("first_install=1\nmode_enabled_and_selected=unconfirmed\n\(firstInstallInstruction)")
+            }
         }
     }
 }

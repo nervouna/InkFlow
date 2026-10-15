@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<installer-gui-script minSpecVersion="2">
+    <title>墨流拼音</title>
+    <welcome file="welcome.html" mime-type="text/html"/>
+    <conclusion file="conclusion.html" mime-type="text/html"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+    <!-- Home folder only: no administrator rights, and the same path as earlier releases. -->
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+    <!-- Keep equal to LSMinimumSystemVersion in macOS/Info.plist; test-pkg.sh checks it. -->
+    <volume-check>
+        <allowed-os-versions>
+            <os-version min="26.0"/>
+        </allowed-os-versions>
+    </volume-check>
+    <choices-outline>
+        <line choice="default"/>
+    </choices-outline>
+    <choice id="default" title="墨流拼音">
+        <pkg-ref id="io.damao.inputmethod.inkflow.pkg"/>
+    </choice>
+    <pkg-ref id="io.damao.inputmethod.inkflow.pkg" onConclusion="none">InkFlow-component.pkg</pkg-ref>
+</installer-gui-script>

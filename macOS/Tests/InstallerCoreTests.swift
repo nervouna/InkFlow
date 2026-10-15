@@ -258,6 +258,8 @@ private actor Files: IFInstallerFileOperations {
         var failure = ""
         var enabledCalls = 0
         var delayed = false
+        var registered = true
+        var ignoreEnable = false
         var pendingIDs: [String] = []
         var pendingSelection: String?
         func applyPending() {
@@ -270,13 +272,15 @@ private actor Files: IFInstallerFileOperations {
                 IFInputSource(id: id, bundleID: id == "ascii" ? "system" : IFInputIdentity.bundleID,
                     name: id, enabled: enabled.contains(id), selectable: true, keyboardMode: true, ascii: id == "ascii")
             }
-            return IFInputRoster(installed: sources, enabled: sources.filter(\.enabled), selectedID: selected)
+            return IFInputRoster(installed: registered ? sources : [], enabled: sources.filter(\.enabled), selectedID: selected)
         }
         func register(at url: URL) throws {
             if failure == "register" { throw IFInputError.unavailable("register") }
+            registered = true
         }
         func enable(_ id: String) {
             enabledCalls += 1
+            if ignoreEnable { return }
             if delayed { pendingIDs.append(id) } else { enabled.append(id) }
         }
         func select(_ id: String) throws {
@@ -317,8 +321,8 @@ private actor Files: IFInstallerFileOperations {
         let lifecycle = IFTrialInstallation(sources: s, processes: p)
         let state = try await lifecycle.prepare(target: target, build: "12")
         try check(p.pids.isEmpty && s.selected == "ascii", "prepare returns only after old exit")
-        let pid = try await lifecycle.finish(target: target, state: state, installedBuild: "12")
-        try check(pid == 99 && s.selected == IFInputIdentity.modeID && s.enabledCalls == 0, "fresh process and original selected/enabled state")
+        let pid = try await lifecycle.finish(target: target, state: state, installedBuild: "12").pid
+        try check(!state.firstInstall && pid == 99 && s.selected == IFInputIdentity.modeID && s.enabledCalls == 0, "fresh process and original selected/enabled state")
         for failure in ["register", "select", "launch", "build"] {
             s.failure = failure; p.failure = failure
             do {
@@ -331,7 +335,7 @@ private actor Files: IFInstallerFileOperations {
         let first = IFTrialInstallation(sources: firstSources, processes: firstProcesses)
         let initial = try await first.prepare(target: target, build: "12")
         _ = try await first.finish(target: target, state: initial, installedBuild: "12")
-        try check(firstSources.selected == "ascii" && firstSources.enabledCalls == 0, "first install preserves disabled state")
+        try check(firstSources.selected == "ascii" && firstSources.enabledCalls == 0, "upgrade of a registered but disabled InkFlow keeps it disabled")
         let delayedSources = TrialSources(), delayedProcesses = TrialProcesses()
         delayedSources.delayed = true
         let delayed = IFTrialInstallation(sources: delayedSources, processes: delayedProcesses, pause: { delayedSources.applyPending() })
@@ -339,6 +343,30 @@ private actor Files: IFInstallerFileOperations {
         delayedSources.enabled = ["ascii"]
         _ = try await delayed.finish(target: target, state: delayedState, installedBuild: "12")
         try check(delayedSources.selected == IFInputIdentity.modeID && delayedSources.enabledCalls == 2, "delayed enable and selection readback")
+        // First install: nothing registered or running, so finish enables the parent and mode and selects the mode.
+        let freshSources = TrialSources(), freshProcesses = TrialProcesses()
+        freshSources.registered = false; freshSources.selected = "ascii"; freshSources.enabled = ["ascii"]; freshProcesses.pids = []
+        let fresh = IFTrialInstallation(sources: freshSources, processes: freshProcesses)
+        let freshState = try await fresh.prepare(target: target, build: "12")
+        try check(freshState.firstInstall && freshState.enabledIDs.isEmpty, "unregistered InkFlow with no process is a first install")
+        let freshResult = try await fresh.finish(target: target, state: freshState, installedBuild: "12")
+        try check(freshResult.confirmed && freshResult.pid == 99 && freshProcesses.launches == 1 && freshSources.enabledCalls == 2 &&
+                  freshSources.selected == IFInputIdentity.modeID &&
+                  [IFInputIdentity.bundleID, IFInputIdentity.modeID].allSatisfy(freshSources.enabled.contains),
+                  "first install registers, enables parent and mode, launches and selects the mode")
+        let deniedSources = TrialSources(), deniedProcesses = TrialProcesses()
+        deniedSources.registered = false; deniedSources.ignoreEnable = true; deniedSources.selected = "ascii"
+        deniedSources.enabled = ["ascii"]; deniedProcesses.pids = []
+        let denied = IFTrialInstallation(sources: deniedSources, processes: deniedProcesses)
+        let deniedState = try await denied.prepare(target: target, build: "12")
+        let deniedResult = try await denied.finish(target: target, state: deniedState, installedBuild: "12")
+        try check(!deniedResult.confirmed && deniedProcesses.launches == 1 && deniedSources.selected == "ascii",
+                  "unconfirmed first-install enablement reports it, still launches the new build and leaves the selection alone")
+        let runningSources = TrialSources(), runningProcesses = TrialProcesses()
+        runningSources.registered = false
+        let running = IFTrialInstallation(sources: runningSources, processes: runningProcesses)
+        let runningState = try await running.prepare(target: target, build: "12")
+        try check(!runningState.firstInstall, "a running InkFlow process is never a first install")
         try check(IFTrialSystemProcesses.owns(path: "/tmp/input methods/.inkflow-install.abc/previous/Contents/MacOS/InkFlow", target: target), "old staging path recognized")
         for path in ["/tmp/harness/InkFlow.app/Contents/MacOS/InkFlow", "/tmp/input methods/.inkflow-install.abc/other/Contents/MacOS/InkFlow", "/tmp/else/.inkflow-install.abc/previous/Contents/MacOS/InkFlow"] {
             try check(!IFTrialSystemProcesses.owns(path: path, target: target), "unrelated instance excluded")

@@ -24,6 +24,20 @@ bash macOS/scripts/install.sh --developer-id     # needs INKFLOW_SIGN_IDENTITY (
 
 Every `build.sh` reserves a new build number (shared across worktrees via `build/build-number/last`; keep that directory); only the staged app's `CFBundleVersion` changes. Run builds and installs outside the sandbox in the logged-in session. `install.sh` swaps the app atomically, preserves enabled input sources and verifies the new PID; first installs need InkFlow added in System Settings. `check-bundle.sh --fast` checks plist, architecture, library closure and signing; `--deep` also regenerates resources.
 
+### Building the installer package
+
+```sh
+bash macOS/scripts/build.sh
+bash macOS/scripts/build-pkg.sh build/InkFlow.app build/InkFlow.pkg
+```
+
+`build-pkg.sh APP OUT` wraps a built app in an unsigned `.pkg` that Installer.app installs into `~/Library/Input Methods` without administrator rights (`Package/Distribution.xml` allows only the current user's home folder; the app is not relocatable). The package scripts ship with the `register-input-source` tool and the expected build number, and never touch `~/Library/Application Support/InkFlow`:
+
+- `Package/preinstall` records the input-source state and quits the running InkFlow through `--prepare-update`. If that fails the install aborts before any file moves.
+- `Package/postinstall` runs `--finish-update`: register, restore the enabled and selected state (a first install enables and selects InkFlow, or prints the System Settings steps if the system does not confirm), relaunch and check the build number. If it fails, run the package again.
+
+`test-pkg.sh` (part of `test.sh workflow`) builds a package from a fixture app and checks the domain, the non-relocatable app, the app-only payload and the scripts; it installs nothing. Signing and notarization are not part of this script yet.
+
 ### Publish a release
 
 Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all`, runs one deep bundle check, and freezes the Installer receipt for packaging.
