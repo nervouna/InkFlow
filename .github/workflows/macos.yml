@@ -48,3 +48,51 @@ jobs:
           [[ -f build/test-quick.log ]] || exit 0
           { echo '```'; grep -E '^(END|FAIL) ' build/test-quick.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           grep -E '^FAIL ' build/test-quick.log | sed 's/^/::error title=test.sh quick::/' || true
+
+  portable:
+    # librime built from source, the Rust core tests, old/new parity on production resources and
+    # the Swift link smoke test. Not part of `quick`; runs beside it.
+    name: test.sh portable
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+      # Same CMake/Ninja releases as the Linux job and Core/Portable/README.md. pipx puts them in
+      # ~/.local/bin, which later steps do not have on PATH by default.
+      - name: Install CMake and Ninja
+        run: |
+          pipx install cmake==3.31.6
+          pipx install ninja==1.11.1.4
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # Native dependencies, librime and the Cargo target directory. Prepared resources
+      # (build/portable/resources.*) are per run and stay out of the cache.
+      - name: Cache the native runtime build
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/portable
+            !build/portable/resources.*
+          key: portable-${{ runner.os }}-macos-26-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml', 'macOS/Info.plist') }}
+          restore-keys: portable-${{ runner.os }}-macos-26-
+      # Resource downloads are verified by SHA-256 and prepare-rime.sh keys its cache by its own
+      # input digest, so a stale cache only costs a rebuild.
+      - name: Cache dictionary sources and prepared Rime data
+        uses: actions/cache@v5
+        with:
+          path: |
+            build/deps
+            build/dictionary-sources
+            build/rime-cache
+          key: portable-inputs-${{ hashFiles('Core/scripts/**', 'Core/config/**', 'Core/Data/**', 'Core/Portable/dictionary/**', 'schemas/**') }}
+          restore-keys: portable-inputs-
+      - name: Run the portable unit
+        run: |
+          set -o pipefail
+          mkdir -p build
+          bash macOS/scripts/test.sh portable 2>&1 | tee build/test-portable.log
+      - name: Record unit timings and name the failed unit
+        if: always()
+        run: |
+          [[ -f build/test-portable.log ]] || exit 0
+          { echo '```'; grep -E '^(END|FAIL) ' build/test-portable.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^FAIL ' build/test-portable.log | sed 's/^/::error title=test.sh portable::/' || true
