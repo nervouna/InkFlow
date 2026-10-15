@@ -117,8 +117,8 @@ extracted_app="$extract/InkFlow.app"
 [[ $(plutil -extract SUFeedURL raw "$extracted_app/Contents/Info.plist") == "$expected_feed" ]] || fail 'Sparkle ZIP feed URL mismatch.'
 codesign --verify --deep --strict --verbose=2 "$extracted_app"
 metadata=$(codesign -dvvv "$extracted_app" 2>&1)
-printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Sparkle ZIP Developer ID team mismatch.'
-printf '%s\n' "$metadata" | grep -Fxq "Identifier=$expected_bundle" || fail 'Sparkle ZIP signing identifier mismatch.'
+grep -Fxq 'TeamIdentifier=T7976FL2LP' <<< "$metadata" || fail 'Sparkle ZIP Developer ID team mismatch.'
+grep -Fxq "Identifier=$expected_bundle" <<< "$metadata" || fail 'Sparkle ZIP signing identifier mismatch.'
 xcrun stapler validate "$extracted_app"
 
 if [[ -e "$receipt" || -L "$receipt" || -e "$appcast" || -L "$appcast" ]]; then

@@ -31,9 +31,9 @@ verify_app() {
     verify_sparkle_developer_id "$target" T7976FL2LP
   fi
   metadata=$(codesign -dvvv "$target" 2>&1)
-  printf '%s\n' "$metadata" | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail 'Unexpected signing team.'
-  printf '%s\n' "$metadata" | grep -Fq 'Authority=Developer ID Application:' || fail 'Expected Developer ID Application signature.'
-  printf '%s\n' "$metadata" | grep -Fxq "Identifier=$expected_id" || fail 'Unexpected signed bundle ID.'
+  grep -Fxq 'TeamIdentifier=T7976FL2LP' <<< "$metadata" || fail 'Unexpected signing team.'
+  grep -Fq 'Authority=Developer ID Application:' <<< "$metadata" || fail 'Expected Developer ID Application signature.'
+  grep -Fxq "Identifier=$expected_id" <<< "$metadata" || fail 'Unexpected signed bundle ID.'
   [[ $(plutil -extract CFBundleIdentifier raw "$target/Contents/Info.plist") == "$expected_id" ]] || fail 'Unexpected bundle ID.'
   [[ $(plutil -extract CFBundleShortVersionString raw "$target/Contents/Info.plist") == "$version" && $(plutil -extract CFBundleVersion raw "$target/Contents/Info.plist") == "$build" ]] || fail 'Payload/installer version mismatch.'
   entitlements=$(mktemp "$release_dir/entitlements.XXXXXX")

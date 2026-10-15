@@ -44,7 +44,8 @@ done
 [[ -s "$app/Contents/Resources/Licenses/sparkle.txt" ]]
 cmp macOS/Licenses/sparkle.txt "$app/Contents/Resources/Licenses/sparkle.txt"
 sparkle_dependency='@rpath/Sparkle.framework/Versions/B/Sparkle'
-if ! otool -L "$app_binary" | awk 'NR > 1 && /^\t/ {print $1}' | grep -Fqx "$sparkle_dependency"; then
+app_libraries=$(otool -L "$app_binary" | awk 'NR > 1 && /^\t/ {print $1}')
+if ! grep -Fqx "$sparkle_dependency" <<< "$app_libraries"; then
   echo "InkFlow does not link the bundled Sparkle framework: $sparkle_dependency" >&2
   exit 1
 fi
@@ -53,8 +54,8 @@ if ! grep -Fqx '@executable_path/../Frameworks' <<< "$app_rpaths"; then
   echo 'InkFlow is missing the Frameworks runtime search path.' >&2
   exit 1
 fi
-if otool -L "$app/Contents/MacOS/InkFlowDictionaryWorker" \
-  | awk 'NR > 1 && /^\t/ {print $1}' | grep -Fqx "$sparkle_dependency"; then
+worker_libraries=$(otool -L "$app/Contents/MacOS/InkFlowDictionaryWorker" | awk 'NR > 1 && /^\t/ {print $1}')
+if grep -Fqx "$sparkle_dependency" <<< "$worker_libraries"; then
   echo 'Sparkle must be linked only by InkFlowApp, not the dictionary worker.' >&2
   exit 1
 fi

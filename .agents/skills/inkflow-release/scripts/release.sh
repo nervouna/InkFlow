@@ -74,7 +74,7 @@ ditto -x -k "$installer/Contents/Resources/Payload/InkFlow.zip" "$extract"
 for bundle in "$installer" "$extract/InkFlow.app"; do
   codesign --verify --deep --strict --verbose=2 "$bundle"
   spctl --assess --type execute --verbose=2 "$bundle"
-  codesign -dvvv "$bundle" 2>&1 | grep -Fxq 'TeamIdentifier=T7976FL2LP' || fail "Wrong team: $bundle"
+  grep -Fxq 'TeamIdentifier=T7976FL2LP' <<< "$(codesign -dvvv "$bundle" 2>&1)" || fail "Wrong team: $bundle"
   [[ $(plutil -extract CFBundleShortVersionString raw "$bundle/Contents/Info.plist") == "$version" &&
      $(plutil -extract CFBundleVersion raw "$bundle/Contents/Info.plist") == "$build" ]] || fail "Wrong version/build: $bundle"
 done
