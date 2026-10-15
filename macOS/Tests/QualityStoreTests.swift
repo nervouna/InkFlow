@@ -388,9 +388,13 @@ private extension QualityStoreTests {
         let phrases = QualityAppliedConfiguration(candidateCount: 5, customPhrases: [QualityPhrase(id: "phrase-1", code: "mima", text: "我的密码")])
         phrased.revisions[0].configuration = phrases
         phrased.decisions[0].snapshot.configuration = phrases
+        phrased.composition.operations.inputBeforeDeletion = "nihoa"
+        phrased.decisions[0].operations.inputBeforeDeletion = "nihoa"
         expect(store.submit(phrased) == .accepted, "default mode accepts envelopes")
         await store.flush()
         let reader = try Reader(url)
+        expect(try reader.scalar("SELECT json_extract(c.operations_json,'$.inputBeforeDeletion') IS NULL AND json_extract(d.operations_json,'$.inputBeforeDeletion') IS NULL FROM compositions c JOIN candidate_decisions d ON d.composition_id = c.id") == "1",
+               "input before deletion is text and is dropped by default")
         expect(try reader.scalar("SELECT json_extract(applied_config_json,'$.customPhrases[0].id') || json_extract(applied_config_json,'$.customPhrases[0].code') || json_extract(applied_config_json,'$.customPhrases[0].text') FROM config_revisions") == "phrase-1",
                "custom phrases keep their IDs but lose code and text")
         expect(try reader.scalar("SELECT id FROM config_revisions") == phrased.revisions[0].id + "/text-free", "redacted configurations are their own revision")
@@ -409,6 +413,13 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT count(*) FROM commits WHERE text='你好😀'") == "1" &&
                reader.scalar("SELECT count(*) FROM candidate_decisions WHERE selected_text='你好😀' AND json_extract(snapshot_json,'$.rawInput')='nihao'") == "1",
                "opt-in stores text")
+        // An abandoned composition carries text only in its deleted input: no decision, no commit.
+        var abandoned = QualityEnvelope(composition: QualityComposition(id: "abandoned", appBundleID: "test.app", outcome: .cancelled))
+        abandoned.composition.operations.inputBeforeDeletion = "pniggu"
+        expect(store.submit(abandoned) == .accepted, "opt-in accepts an abandoned composition")
+        await store.flush()
+        expect(try reader.scalar("SELECT count(*) FROM compositions WHERE json_extract(operations_json,'$.inputBeforeDeletion')='pniggu'") == "1",
+               "opt-in stores the input before deletion")
         expect(store.submit(QualityEffectivenessEvent(source: .voiceSession, event: .finalized)) == .accepted, "events accepted")
         await store.flush()
         try await store.setTextCapture(false)
@@ -416,7 +427,7 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1" && reader.scalar("SELECT count(*) FROM commits") == "1" &&
                reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "text-free records and learning events stay")
         await store.close()
-        for secret in ["nihao", "你好😀", "测试", "mima", "我的密码"] {
+        for secret in ["nihao", "你好😀", "测试", "mima", "我的密码", "nihoa", "pniggu"] {
             expect(try Data(contentsOf: url).range(of: Data(secret.utf8)) == nil, "no \(secret) remains in the database file")
         }
         // Upgrade: a database written with text reopens in the text-free default and loses its text at startup maintenance.

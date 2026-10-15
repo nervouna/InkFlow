@@ -194,6 +194,7 @@ struct QualityCaptureTests {
             let row = db.decisions().last!
             check(db.ops(row).candidateMoves == 3 && db.ops(row).pageTurns == 1)
             check(db.ops(row).pageRequests == 0 && db.ops(row).preeditEdits == 0)
+            check(db.ops(row).inputBeforeDeletion == nil, "Navigation alone records no deleted input")
         }
         settings.candidateCount = 5
         do {
@@ -341,6 +342,8 @@ struct QualityCaptureTests {
             let last = db.rows("SELECT * FROM commits ORDER BY rowid DESC LIMIT 1")[0]
             check(last["text"] == "，" && last["kind"] == "direct_symbol")
             check(db.rows("SELECT * FROM candidate_decisions WHERE composition_id='\(last["composition_id"]!)'").isEmpty)
+            let escaped = db.rows("SELECT * FROM compositions WHERE outcome='cancelled' ORDER BY rowid DESC LIMIT 1")[0]
+            check(db.ops(escaped).inputBeforeDeletion == "nihao", "Escape keeps the abandoned input: \(db.ops(escaped))")
         }
         do {
             let client = RecordingClient(document: "")
@@ -388,6 +391,7 @@ struct QualityCaptureTests {
             await store.flush()
             let composition = db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]
             check(composition["outcome"] == "cancelled" && db.ops(composition).keypresses == 2 && db.ops(composition).preeditEdits == 1)
+            check(db.ops(composition).inputBeforeDeletion == "x")
             check(!client.mutations.contains { $0.hasPrefix("insert:") })
         }
         check(reentrantOriginsPassed, "CAP-001: empty nested drains preserve the outer composition, original kind and key counts")
@@ -415,6 +419,8 @@ struct QualityCaptureTests {
             let operations = db.ops(composition)
             check(operations.preeditEdits == 1 && operations.pageRequests == 4 && operations.pageTurns == 4,
                   "Only edits/navigation count: \(operations)")
+            check(operations.inputBeforeDeletion == "ni'hao" && db.ops(rows[0]).inputBeforeDeletion == "ni'hao",
+                  "The decision and composition keep the input before Backspace: \(operations)")
             let countBeforeIdle = db.rows("SELECT * FROM compositions").count
             check(!control.handle(keyEvent(0, "a", .command), client: client))
             check(!control.handle(keyEvent(123, ""), client: client))

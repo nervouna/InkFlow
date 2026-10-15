@@ -746,6 +746,7 @@ private final class QualityDatabase: @unchecked Sendable {
                     CREATE TEMP TABLE text_compositions AS
                     SELECT composition_id AS id FROM candidate_decisions WHERE json_extract(snapshot_json, '$.textCaptured') IS NOT 0
                     UNION SELECT composition_id FROM commits WHERE text != ''
+                    UNION SELECT id FROM compositions WHERE json_extract(operations_json, '$.inputBeforeDeletion') IS NOT NULL
                     """)
                 try execute("DELETE FROM candidate_decisions WHERE composition_id IN (SELECT id FROM text_compositions)")
                 try execute("DELETE FROM commits WHERE composition_id IN (SELECT id FROM text_compositions)")

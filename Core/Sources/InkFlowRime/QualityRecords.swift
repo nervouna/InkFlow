@@ -382,6 +382,9 @@ package struct QualityOperations: Codable, Equatable, Sendable {
     package var preeditEdits = 0
     /// Absent in older records or when capture was suppressed. Never interpret absence as zero.
     package var timing: QualityTiming? = nil
+    /// Raw input just before the first Backspace, Delete or Escape that removed input in this span.
+    /// Typed text: stored only in text mode. Absent when nothing was deleted, and in records written before it existed.
+    package var inputBeforeDeletion: String? = nil
 
     mutating func add(_ other: Self) {
         keypresses += other.keypresses
@@ -389,6 +392,7 @@ package struct QualityOperations: Codable, Equatable, Sendable {
         pageTurns += other.pageTurns
         candidateMoves += other.candidateMoves
         preeditEdits += other.preeditEdits
+        inputBeforeDeletion = inputBeforeDeletion ?? other.inputBeforeDeletion
         // Timing is a phase snapshot, not an additive counter. In particular, do not
         // double-count dwell when a tentative punctuation decision is folded back.
     }
@@ -397,13 +401,15 @@ package struct QualityOperations: Codable, Equatable, Sendable {
         pageTurns: Int = 0,
         candidateMoves: Int = 0,
         preeditEdits: Int = 0,
-        timing: QualityTiming? = nil) {
+        timing: QualityTiming? = nil,
+        inputBeforeDeletion: String? = nil) {
         self.keypresses = keypresses
         self.pageRequests = pageRequests
         self.pageTurns = pageTurns
         self.candidateMoves = candidateMoves
         self.preeditEdits = preeditEdits
         self.timing = timing
+        self.inputBeforeDeletion = inputBeforeDeletion
     }
 
 }
@@ -653,6 +659,7 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
     /// Text-free mode: ranking, timing and outcome facts stay; input, candidate, commit and context text go.
     package func redactingText() -> Self {
         var envelope = self
+        envelope.composition.operations.inputBeforeDeletion = nil
         for index in envelope.commits.indices { envelope.commits[index].text = "" }
         for index in envelope.revisions.indices {
             envelope.revisions[index].id = QualityConfigRevision.redactedID(envelope.revisions[index].id)
@@ -660,6 +667,7 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         }
         for index in envelope.decisions.indices {
             envelope.decisions[index].selectedText = nil
+            envelope.decisions[index].operations.inputBeforeDeletion = nil
             envelope.decisions[index].snapshot = envelope.decisions[index].snapshot.redactingText()
             envelope.decisions[index].firstPage = envelope.decisions[index].firstPage?.redactingText()
             envelope.decisions[index].visitedPages = envelope.decisions[index].visitedPages.map { $0.redactingText() }
@@ -720,7 +728,8 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
     private var eventBytes: Int {
         var budget = QualityMemoryBudget()
         budget.record(512)
-        budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason)
+        budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason,
+                       composition.operations.inputBeforeDeletion)
         budget.timing(composition.operations.timing)
         for revision in revisions {
             if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
@@ -730,7 +739,8 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         for decision in decisions {
             if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
             budget.record(512)
-            budget.strings(decision.id, decision.selectedText, decision.commitID, decision.unknownRankReason, decision.pathReason)
+            budget.strings(decision.id, decision.selectedText, decision.commitID, decision.unknownRankReason, decision.pathReason,
+                           decision.operations.inputBeforeDeletion)
             budget.timing(decision.operations.timing)
             budget.page(decision.snapshot)
             if let first = decision.firstPage { budget.page(first) }
