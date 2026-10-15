@@ -54,7 +54,8 @@ ditto "$app" "$stage/InkFlow.app"
 codesign --verify --deep --strict "$stage/InkFlow.app"
 candidate_identity=$(stat -f '%d:%i' "$stage/InkFlow.app")
 # The lifecycle helper waits for graceful shutdown before any installed file moves.
-bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$stage/InkFlow.app"
+build=$(plutil -extract CFBundleVersion raw "$stage/InkFlow.app/Contents/Info.plist")
+bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$build"
 bash macOS/scripts/register.sh "$target" --commit-update "$stage/state.json"
 codesign --verify --deep --strict "$target"
 bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json"

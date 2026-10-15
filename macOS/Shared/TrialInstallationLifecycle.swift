@@ -64,6 +64,14 @@ struct IFTrialInstallationState: Codable {
     let enabledIDs: [String]
     let selectedID: String
     let oldPIDs: [Int32]
+    /// No InkFlow input source was registered and no InkFlow process ran, so there is no state to restore.
+    let firstInstall: Bool
+}
+
+struct IFTrialFinish {
+    let pid: Int32
+    /// False only for a first install the system did not confirm: the new build runs, but the user must add it.
+    let confirmed: Bool
 }
 
 @MainActor protocol IFTrialProcessOperations {
@@ -82,12 +90,18 @@ struct IFTrialInstallationState: Codable {
         self.pause = pause
     }
 
-    private func waitForState(_ predicate: (IFInputRoster) -> Bool) async throws {
+    private func confirms(_ predicate: (IFInputRoster) -> Bool) async throws -> Bool {
         for attempt in 0..<8 {
-            if predicate(try sources.snapshot()) { return }
+            if predicate(try sources.snapshot()) { return true }
             if attempt < 7 { try await pause() }
         }
-        throw IFInputError.unavailable("input-source state not confirmed after bounded retry")
+        return false
+    }
+
+    private func waitForState(_ predicate: (IFInputRoster) -> Bool) async throws {
+        guard try await confirms(predicate) else {
+            throw IFInputError.unavailable("input-source state not confirmed after bounded retry")
+        }
     }
 
     func prepare(target: URL, build: String) async throws -> IFTrialInstallationState {
@@ -95,7 +109,8 @@ struct IFTrialInstallationState: Codable {
         let ids = [IFInputIdentity.bundleID, IFInputIdentity.modeID]
         let pids = try processes.installedPIDs(at: target)
         let state = IFTrialInstallationState(target: target.path, build: build,
-            enabledIDs: ids.filter { roster.isEnabled($0) }, selectedID: roster.selectedID, oldPIDs: pids)
+            enabledIDs: ids.filter { roster.isEnabled($0) }, selectedID: roster.selectedID, oldPIDs: pids,
+            firstInstall: roster.installed.isEmpty && pids.isEmpty)
         do {
             if ids.contains(roster.selectedID) {
                 guard let fallback = roster.enabled.first(where: {
@@ -115,24 +130,34 @@ struct IFTrialInstallationState: Codable {
         }
     }
 
-    func finish(target: URL, state: IFTrialInstallationState, installedBuild: String) async throws -> Int32 {
+    func finish(target: URL, state: IFTrialInstallationState, installedBuild: String) async throws -> IFTrialFinish {
         guard state.target == target.path, state.build == installedBuild else {
             throw IFInputError.unavailable("installed target/build differs from prepared candidate")
         }
         try sources.register(at: target)
         try await waitForState { $0.source(IFInputIdentity.modeID) != nil }
-        let registered = try sources.snapshot()
-        for id in state.enabledIDs where !registered.isEnabled(id) { try sources.enable(id) }
-        try await waitForState { roster in state.enabledIDs.allSatisfy { roster.isEnabled($0) } }
+        let first = state.firstInstall
+        let ids = first ? [IFInputIdentity.bundleID, IFInputIdentity.modeID] : state.enabledIDs
+        let selectedID = first ? IFInputIdentity.modeID : state.selectedID
+        var confirmed = true
+        for id in ids where confirmed {
+            if !(try sources.snapshot().isEnabled(id)) { try sources.enable(id) }
+            confirmed = try await confirms { $0.isEnabled(id) }
+        }
+        // The system may leave a first install for the user to approve; earlier state must be restored.
+        guard confirmed || first else { throw IFInputError.unavailable("input-source enablement not confirmed after bounded retry") }
         let pid = try await processes.launchAndVerify(at: target, excluding: state.oldPIDs)
-        try sources.select(state.selectedID)
-        try await waitForState { roster in
-            state.enabledIDs.allSatisfy { roster.isEnabled($0) } && roster.selectedID == state.selectedID
+        if confirmed {
+            try sources.select(selectedID)
+            confirmed = try await confirms { roster in
+                ids.allSatisfy { roster.isEnabled($0) } && roster.selectedID == selectedID
+            }
+            guard confirmed || first else { throw IFInputError.unavailable("input-source selection not confirmed after bounded retry") }
         }
         guard try processes.installedPIDs(at: target).contains(pid) else {
             throw IFInputError.unavailable("new process exited before verification")
         }
-        return pid
+        return IFTrialFinish(pid: pid, confirmed: confirmed)
     }
 }
 

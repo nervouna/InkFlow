@@ -45,6 +45,8 @@ struct Commit {
 const char* text(const char* value) { return value ? value : ""; }
 }
 
+extern "C" const char* ifp_version() { return api()->get_version(); }
+
 extern "C" int ifp_initialize(const char* shared, const char* user, const char* cache) {
   try {
     RimeTraits traits{};

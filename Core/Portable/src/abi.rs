@@ -7,20 +7,22 @@
 use crate::{
     Error,
     engine::{
-        Action, Configuration, ConfigurationError, Engine, EngineError, InputSession, Mutation,
-        Snapshot,
+        Action, Configuration, ConfigurationError, Engine, EngineError, InputSession,
+        LearningEntry, LearningError, LearningSource, LearningUndo, Mutation, Snapshot,
     },
     personal::{self, Backup, PersonalError},
     phrases::CustomPhrase,
     preferences::{InputOption, InputPreferences},
+    resources::{self, ResourceError},
 };
 use std::{
     cell::RefCell,
+    collections::BTreeMap,
     ffi::{CStr, CString, c_char, c_int, c_void},
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
     ptr, slice,
-    sync::Arc,
+    sync::{Arc, OnceLock},
 };
 
 pub const ABI_VERSION: u32 = 1;
@@ -45,6 +47,10 @@ pub const SETTINGS: Status = 15;
 pub const PHRASES: Status = 16;
 pub const SNAPSHOT: Status = 17;
 pub const RECOVERY_REQUIRED: Status = 18;
+pub const BUSY: Status = 19;
+pub const UNAVAILABLE: Status = 20;
+pub const CONFLICT: Status = 21;
+pub const TOO_LARGE: Status = 22;
 
 pub struct Failure {
     status: Status,
@@ -103,6 +109,38 @@ impl From<PersonalError> for Failure {
             PersonalError::Io(_) => IO,
         };
         Self::new(status, error.to_string())
+    }
+}
+
+impl From<LearningError> for Failure {
+    fn from(error: LearningError) -> Self {
+        let (status, message) = match error {
+            LearningError::Busy => (
+                BUSY,
+                "an input session is busy or Rime's undo window is open",
+            ),
+            LearningError::Unavailable => {
+                (UNAVAILABLE, "personal learning management is unavailable")
+            }
+            LearningError::Conflict => (CONFLICT, "personal learning changed since it was listed"),
+            LearningError::TooLarge => {
+                (TOO_LARGE, "too many entries or too large a learning count")
+            }
+            LearningError::Native(error) => return Failure::from(error),
+        };
+        Self::new(status, message)
+    }
+}
+
+impl From<ResourceError> for Failure {
+    fn from(error: ResourceError) -> Self {
+        let message = error.to_string();
+        let status = match error {
+            ResourceError::Native(error) => return Failure::from(error),
+            ResourceError::Io(_) => IO,
+            ResourceError::Missing(_) | ResourceError::Probe(_) => RESOURCE,
+        };
+        Self::new(status, message)
     }
 }
 
@@ -701,6 +739,17 @@ pub unsafe extern "C" fn ifr_session_ascii_mode(
     })
 }
 
+/// The ASCII mode the caller last asked for, which starts after the current composition.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_requested_ascii_mode(session: *const InputSession) -> c_int {
+    let mut requested = 0;
+    guard(|| {
+        requested = c_int::from(unsafe { reference(session, "session") }?.requested_ascii_mode());
+        Ok(())
+    });
+    requested
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_toggle_ascii_mode(
     session: *const InputSession,
@@ -711,6 +760,248 @@ pub unsafe extern "C" fn ifr_session_toggle_ascii_mode(
         unsafe { write(handled, c_int::from(result)) };
         Ok(())
     })
+}
+
+/// The linked librime's version, valid for the process; NULL only after an earlier panic
+/// poisoned the Rime lock.
+#[unsafe(no_mangle)]
+pub extern "C" fn ifr_rime_version() -> *const c_char {
+    static VERSION: OnceLock<CString> = OnceLock::new();
+    let mut version = ptr::null();
+    guard(|| {
+        if VERSION.get().is_none() {
+            let _ = VERSION.set(c_string(&crate::rime_version()?)?);
+        }
+        version = VERSION.get().map_or(ptr::null(), |v| v.as_ptr());
+        Ok(())
+    });
+    version
+}
+
+/// Compile `shared` into `cache`, with `user` as scratch. Setup work, never on a key path.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_resources_compile(
+    shared: *const c_char,
+    user: *const c_char,
+    cache: *const c_char,
+) -> Status {
+    guard(|| {
+        let shared = PathBuf::from(unsafe { text(shared, "shared") }?);
+        let user = PathBuf::from(unsafe { text(user, "user") }?);
+        let cache = PathBuf::from(unsafe { text(cache, "cache") }?);
+        Ok(resources::compile(&shared, &user, &cache)?)
+    })
+}
+
+/// Serve the compiled `cache` from a clean `user` directory and select the smoke candidates.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_resources_probe(
+    shared: *const c_char,
+    user: *const c_char,
+    cache: *const c_char,
+) -> Status {
+    guard(|| {
+        let shared = PathBuf::from(unsafe { text(shared, "shared") }?);
+        let user = PathBuf::from(unsafe { text(user, "user") }?);
+        let cache = PathBuf::from(unsafe { text(cache, "cache") }?);
+        Ok(resources::probe(&shared, &user, &cache)?)
+    })
+}
+
+/// Personal-learning entries captured at one learning revision, with NUL-terminated copies
+/// of their strings.
+pub struct LearningHandle {
+    entries: Vec<LearningEntry>,
+    strings: Vec<(CString, CString)>,
+}
+
+/// What a delete needs to be undone.
+pub struct LearningUndoHandle(LearningUndo);
+
+pub const LEARNING_ENGLISH: c_int = 0;
+pub const LEARNING_VOICE: c_int = 1;
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_learning_entries(
+    engine: *const Arc<Engine>,
+    learning: *mut *mut LearningHandle,
+) -> Status {
+    guard(|| {
+        let engine = unsafe { reference(engine, "engine") }?;
+        if learning.is_null() {
+            return Err(Failure::argument("learning is NULL"));
+        }
+        let entries = engine.personal_learning_entries()?;
+        let strings = entries
+            .iter()
+            .map(|e| Ok((c_string(&e.code)?, c_string(&e.text)?)))
+            .collect::<Result<Vec<_>, Failure>>()?;
+        let handle = LearningHandle { entries, strings };
+        unsafe { write(learning, Box::into_raw(Box::new(handle))) };
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_free(learning: *mut LearningHandle) {
+    if !learning.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            drop(unsafe { Box::from_raw(learning) })
+        }));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_count(learning: *const LearningHandle) -> usize {
+    unsafe { learning.as_ref() }.map_or(0, |l| l.entries.len())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_source(
+    learning: *const LearningHandle,
+    index: usize,
+) -> c_int {
+    unsafe { learning.as_ref() }
+        .and_then(|l| l.entries.get(index))
+        .map_or(-1, |e| match e.source {
+            LearningSource::English => LEARNING_ENGLISH,
+            LearningSource::Voice => LEARNING_VOICE,
+        })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_code(
+    learning: *const LearningHandle,
+    index: usize,
+) -> *const c_char {
+    unsafe { learning.as_ref() }
+        .and_then(|l| l.strings.get(index))
+        .map_or(ptr::null(), |(code, _)| code.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_text(
+    learning: *const LearningHandle,
+    index: usize,
+) -> *const c_char {
+    unsafe { learning.as_ref() }
+        .and_then(|l| l.strings.get(index))
+        .map_or(ptr::null(), |(_, text)| text.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_commits(
+    learning: *const LearningHandle,
+    index: usize,
+) -> u32 {
+    unsafe { learning.as_ref() }
+        .and_then(|l| l.entries.get(index))
+        .map_or(0, |e| e.commits)
+}
+
+/// Delete one entry of a listing. `*undo` receives the token that restores it.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_learning_delete(
+    engine: *const Arc<Engine>,
+    learning: *const LearningHandle,
+    index: usize,
+    undo: *mut *mut LearningUndoHandle,
+) -> Status {
+    guard(|| {
+        let engine = unsafe { reference(engine, "engine") }?;
+        let learning = unsafe { reference(learning, "learning") }?;
+        if undo.is_null() {
+            return Err(Failure::argument("undo is NULL"));
+        }
+        let entry = learning
+            .entries
+            .get(index)
+            .ok_or_else(|| Failure::argument("index is out of range"))?;
+        let token = engine.delete_personal_learning(entry)?;
+        unsafe { write(undo, Box::into_raw(Box::new(LearningUndoHandle(token)))) };
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_learning_undo(
+    engine: *const Arc<Engine>,
+    undo: *const LearningUndoHandle,
+) -> Status {
+    guard(|| {
+        let engine = unsafe { reference(engine, "engine") }?;
+        let undo = unsafe { reference(undo, "undo") }?;
+        Ok(engine.undo_personal_learning(&undo.0)?)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_learning_undo_free(undo: *mut LearningUndoHandle) {
+    if !undo.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(undo) })));
+    }
+}
+
+/// Drop every session's cached learning view after the dictionaries changed outside the engine.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_learning_invalidate(engine: *const Arc<Engine>) -> Status {
+    guard(|| Ok(unsafe { reference(engine, "engine") }?.invalidate_personal_learning()?))
+}
+
+/// The snapshots of a user directory's dictionaries; an absent dictionary has no text.
+pub struct ExportHandle(BTreeMap<String, CString>);
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_export(
+    user: *const c_char,
+    exported: *mut *mut ExportHandle,
+) -> Status {
+    guard(|| {
+        let user = PathBuf::from(unsafe { text(user, "user") }?);
+        if exported.is_null() {
+            return Err(Failure::argument("exported is NULL"));
+        }
+        if crate::engine_active() {
+            return Err(Failure::new(ENGINE_ACTIVE, "an engine is initialized"));
+        }
+        let mut snapshots = BTreeMap::new();
+        for (name, snapshot) in personal::export(&user)? {
+            if let Some(snapshot) = snapshot {
+                snapshots.insert(name, c_string(&snapshot)?);
+            }
+        }
+        unsafe { write(exported, Box::into_raw(Box::new(ExportHandle(snapshots)))) };
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_export_free(exported: *mut ExportHandle) {
+    if !exported.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| {
+            drop(unsafe { Box::from_raw(exported) })
+        }));
+    }
+}
+
+/// The snapshot of one of the three dictionaries by name, or NULL when it is absent or the
+/// name is none of them.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_personal_export_text(
+    exported: *const ExportHandle,
+    name: *const c_char,
+) -> *const c_char {
+    let Some(exported) = (unsafe { exported.as_ref() }) else {
+        return ptr::null();
+    };
+    if name.is_null() {
+        return ptr::null();
+    }
+    unsafe { CStr::from_ptr(name) }
+        .to_str()
+        .ok()
+        .and_then(|name| exported.0.get(name))
+        .map_or(ptr::null(), |snapshot| snapshot.as_ptr())
 }
 
 /// A parsed macOS backup with NUL-terminated copies of its portable settings.
@@ -866,6 +1157,37 @@ mod tests {
         assert_eq!(
             configuration_code(ConfigurationError::PhraseWrite),
             c"phrase-write"
+        );
+    }
+
+    #[test]
+    fn maintenance_failures_keep_distinct_statuses() {
+        for (error, status) in [
+            (LearningError::Busy, BUSY),
+            (LearningError::Unavailable, UNAVAILABLE),
+            (LearningError::Conflict, CONFLICT),
+            (LearningError::TooLarge, TOO_LARGE),
+            (LearningError::Native(Error::Poisoned), POISONED),
+        ] {
+            assert_eq!(Failure::from(error).status, status);
+        }
+        for (error, status) in [
+            (
+                ResourceError::Native(Error::AlreadyRunning),
+                ALREADY_RUNNING,
+            ),
+            (ResourceError::Io(std::io::ErrorKind::NotFound.into()), IO),
+            (ResourceError::Missing("default.yaml".into()), RESOURCE),
+            (ResourceError::Probe("candidate nihao".into()), RESOURCE),
+        ] {
+            assert_eq!(Failure::from(error).status, status);
+        }
+        let statuses = [BUSY, UNAVAILABLE, CONFLICT, TOO_LARGE];
+        assert!(statuses.iter().all(|s| *s > RECOVERY_REQUIRED));
+        assert_eq!(
+            statuses,
+            [19, 20, 21, 22],
+            "appended in order, never renumbered"
         );
     }
 }

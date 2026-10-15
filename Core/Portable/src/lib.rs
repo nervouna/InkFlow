@@ -8,6 +8,7 @@ pub mod personal;
 pub mod phrases;
 pub mod preferences;
 pub mod ranking;
+pub mod resources;
 
 use std::{
     ffi::{CStr, CString, c_char},
@@ -69,6 +70,12 @@ unsafe fn copy(value: *const c_char) -> Result<String> {
         .to_str()
         .map(str::to_owned)
         .map_err(|_| Error::InvalidUtf8)
+}
+
+/// The linked librime's version, e.g. "1.17.0". It needs no runtime.
+pub fn rime_version() -> Result<String> {
+    let _lock = lock()?;
+    unsafe { copy(ffi::ifp_version()) }
 }
 
 /// Back up or restore one closed user dictionary through the native helper, which runs its

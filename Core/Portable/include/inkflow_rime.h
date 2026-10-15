@@ -69,12 +69,20 @@ enum {
   IFR_PHRASES = 16,
   IFR_SNAPSHOT = 17,          /* A dictionary snapshot breaks the TSV contract. */
   IFR_RECOVERY_REQUIRED = 18  /* An earlier import was interrupted; call ifr_personal_recover. */
+  ,
+  IFR_BUSY = 19,              /* Not now: a session is composing, a commit is undrained or Rime's undo window is open. */
+  IFR_UNAVAILABLE = 20,       /* Personal learning management gave no valid answer; refresh and retry. */
+  IFR_CONFLICT = 21,          /* The learning changed since the entry was listed or the delete was made. */
+  IFR_TOO_LARGE = 22          /* Too many entries or too large a learning count for the operation. */
 };
 
 typedef struct IFREngine IFREngine;
 typedef struct IFRSession IFRSession;
 typedef struct IFRSnapshot IFRSnapshot;
 typedef struct IFRBackup IFRBackup;
+typedef struct IFRLearning IFRLearning;
+typedef struct IFRLearningUndo IFRLearningUndo;
+typedef struct IFRPersonalExport IFRPersonalExport;
 
 typedef struct {
   const char* shared;        /* Prepared shared resources. */
@@ -133,6 +141,9 @@ typedef void (*IFRObserver)(void* user_data, const IFRMutation* mutation);
 uint32_t ifr_abi_version(void);
 const char* ifr_last_error(void);
 uint32_t ifr_input_options_default(void);
+/* The linked librime's version (for example "1.17.0"), valid for the process and needing
+ * no engine; NULL only after an earlier panic poisoned the Rime lock. */
+const char* ifr_rime_version(void);
 
 /* Engine creation initializes Rime, checks the prepared cache and loads the context
  * index: setup work, never on the key path. */
@@ -192,6 +203,9 @@ int ifr_session_input_options(const IFRSession* session, uint32_t* options);
 
 IFRStatus ifr_session_set_ascii_mode(const IFRSession* session, int value);
 IFRStatus ifr_session_ascii_mode(const IFRSession* session, int* value);
+/* The mode last requested through ifr_session_set_ascii_mode or toggled, which starts
+ * after the current composition; ifr_session_ascii_mode reads Rime's live switch. */
+int ifr_session_requested_ascii_mode(const IFRSession* session);
 IFRStatus ifr_session_toggle_ascii_mode(const IFRSession* session, int* handled);
 
 /* Portable personal data: the macOS format-1 backup document. Parsing validates the
@@ -214,6 +228,58 @@ const char* ifr_backup_unsupported(const IFRBackup* backup, size_t index);
 IFRStatus ifr_backup_import(const IFRBackup* backup, const char* user);
 /* Finish an interrupted import in `user`; a no-op without a pending transaction. */
 IFRStatus ifr_personal_recover(const char* user);
+
+/* Personal learning management over the shared English and voice-alias namespaces.
+ * These run only when every session is idle (nothing composing, no undrained commit) and
+ * Rime's native undo window (4 seconds after the last commit) has passed, otherwise they
+ * return IFR_BUSY. A listing and an undo token carry the learning revision they were made
+ * at; any commit, Backspace/Delete, new session or invalidation supersedes them and the
+ * operation then returns IFR_CONFLICT. Never call these from a key callback. */
+enum { IFR_LEARNING_ENGLISH = 0, IFR_LEARNING_VOICE = 1 };
+/* Entries sorted by source, code and text. */
+IFRStatus ifr_personal_learning_entries(const IFREngine* engine, IFRLearning** learning);
+void ifr_learning_free(IFRLearning* learning);
+size_t ifr_learning_count(const IFRLearning* learning);
+/* IFR_LEARNING_ENGLISH or IFR_LEARNING_VOICE, or -1 when index is out of range. */
+int ifr_learning_source(const IFRLearning* learning, size_t index);
+/* Borrowed from the listing; NULL when index is out of range. */
+const char* ifr_learning_code(const IFRLearning* learning, size_t index);
+const char* ifr_learning_text(const IFRLearning* learning, size_t index);
+uint32_t ifr_learning_commits(const IFRLearning* learning, size_t index);
+/* Delete one entry of a listing; *undo receives the token that restores it. */
+IFRStatus ifr_personal_learning_delete(const IFREngine* engine, const IFRLearning* learning,
+                                       size_t index, IFRLearningUndo** undo);
+/* Restore a deleted entry; native restore revives its count with one more confirmation. */
+IFRStatus ifr_personal_learning_undo(const IFREngine* engine, const IFRLearningUndo* undo);
+void ifr_learning_undo_free(IFRLearningUndo* undo);
+/* Drop every session's cached learning view after the dictionaries changed outside the engine. */
+IFRStatus ifr_personal_learning_invalidate(const IFREngine* engine);
+
+/* Resource maintenance, setup work for an isolated writable `user` directory. Both need
+ * exclusive use of Rime, so they return IFR_ALREADY_RUNNING while any engine is alive,
+ * and release it before returning. compile deploys the shared source resources into
+ * `cache` through Rime's maintenance and returns IFR_RESOURCE if a compiled file the
+ * engine loads (default.yaml, inkflow_pinyin.schema.yaml, the pinyin_simp, easy_en and
+ * inkflow_mixed tables and prisms, 32 spelling profiles) is missing or empty. probe serves
+ * the compiled cache from a clean `user` directory and selects a Chinese, an English, a
+ * mixed and an Emoji candidate; IFR_RESOURCE means the cache does not produce them and
+ * ifr_last_error names the first input that failed. */
+IFRStatus ifr_resources_compile(const char* shared, const char* user, const char* cache);
+IFRStatus ifr_resources_probe(const char* shared, const char* user, const char* cache);
+
+/* Snapshot of the three Rime user dictionaries in `user`, as the macOS personal-data worker
+ * writes them with IFPersonalDataSnapshot(root, name, file, 0): the same TSV text, which
+ * ifr_backup_parse accepts inside a format-1 document and ifr_backup_import restores. The
+ * live databases are copied first, under user/PersonalData/staging and removed afterwards,
+ * and never opened by the helper. Rejected with IFR_ENGINE_ACTIVE while any engine is
+ * initialized in the process. */
+IFRStatus ifr_personal_export(const char* user, IFRPersonalExport** exported);
+void ifr_personal_export_free(IFRPersonalExport* exported);
+/* The snapshot of "pinyin_simp", "inkflow_shared_english" or "inkflow_voice_alias"
+ * (NUL-terminated UTF-8, borrowed from the export), or NULL when that dictionary does
+ * not exist in `user`, which a backup records as explicit absence, or the name is none
+ * of them. */
+const char* ifr_personal_export_text(const IFRPersonalExport* exported, const char* name);
 
 #ifdef __cplusplus
 }
