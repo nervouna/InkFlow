@@ -12,7 +12,7 @@ import InkFlowDictionaryTestSupport
             try await verifyDictionarySources(repository: repository)
             return
         }
-        guard ["--preparation", "--activation"].contains(arguments[1]), arguments.count == 8 else {
+        guard ["--preparation", "--activation"].contains(arguments[1]), arguments.count == 7 else {
             throw CocoaError(.fileReadInvalidFileName)
         }
         let root = try IFDictionaryFiles.canonical(URL(fileURLWithPath: arguments[3]))

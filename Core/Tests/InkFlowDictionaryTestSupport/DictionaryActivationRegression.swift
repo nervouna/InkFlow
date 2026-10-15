@@ -134,7 +134,7 @@ package struct DictionaryActivationRegression: Sendable {
 
     @MainActor func config(_ shared: URL, cache: URL?, user: URL) throws -> IFEngineConfiguration {
         .init(shared: shared, cache: cache, user: user.path,
-              ranker: try IFContextRanker(index: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path))
+              contextIndex: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
     }
 
     @MainActor func nativeLifecycle(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
@@ -159,7 +159,7 @@ package struct DictionaryActivationRegression: Sendable {
         hidden.setCandidateCount(3)
         type(hidden, "nihao")
         let next = try config(template.sharedData, cache: template.cache, user: user)
-        let oldCached = IFEngineConfiguration(shared: old.shared, cache: user.appendingPathComponent("build"), user: old.user, ranker: old.ranker)
+        let oldCached = IFEngineConfiguration(shared: old.shared, cache: user.appendingPathComponent("build"), user: old.user, contextIndex: old.contextIndex)
         expectFailure("sessions-busy") { try IFEngine.replace(with: next, restoring: oldCached, confirm: {}) }
         check(!hidden.snapshot().preedit.isEmpty, "Hidden composition survives deferred update")
         hidden.commit()
@@ -437,13 +437,20 @@ package struct DictionaryActivationRegression: Sendable {
     }
 
     @MainActor func shutdownStages(root: URL, runtime: IFDictionaryRuntime, template: IFDictionaryDescriptor) async throws {
-        let preparedRanker = try IFContextRanker(index: template.sharedData.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path)
         for stage in ["check", "download", "prepare", "pre-activation", "waiting-for-idle"] {
             let base = try backend(root.appendingPathComponent("shutdown-" + stage), runtime: runtime)
             let entered = TestBox(false), cancelled = TestBox(false), producerStopped = TestBox(false)
             let candidateIntact = TestBox(true)
             let calls = TestBox((download: 0, prepare: 0, pending: 0, activate: 0))
             let store = try IFDictionaryStore(root: base.store.root, beforeStateWrite: { state in
+                // The last producer step before an activation is journaled: hold it, and write nothing once cancelled.
+                if stage == "pre-activation", state.pending != nil {
+                    entered.value = true
+                    let deadline = Date(timeIntervalSinceNow: 8)
+                    while !Task.isCancelled, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+                    cancelled.value = Task.isCancelled; producerStopped.value = true
+                    try Task.checkCancellation()
+                }
                 if state.pending != nil { calls.update { $0.pending += 1 } }
             })
             @Sendable func waitForCancellation() async {
@@ -478,16 +485,7 @@ package struct DictionaryActivationRegression: Sendable {
                 }
                 return try copyTemplate(template, to: candidate)
             }
-            let service = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: base.user, services: services),
-                rankerLoader: { path in
-                    if stage == "pre-activation", path != runtime.resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path {
-                        entered.value = true
-                        let deadline = Date(timeIntervalSinceNow: 8)
-                        while !Task.isCancelled, Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
-                        cancelled.value = Task.isCancelled; producerStopped.value = true
-                    }
-                    return preparedRanker
-                })
+            let service = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: base.user, services: services))
             service.activationFault = { _, _ in calls.update { $0.activate += 1 } }
             service.bootstrap(); service.presentationOpened()
             let original = service.active!.manifest.contentVersion

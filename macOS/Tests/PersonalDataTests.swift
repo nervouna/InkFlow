@@ -1,5 +1,4 @@
 import Foundation
-import InkFlowRimeNative
 @testable import InkFlowCore
 import InkFlowDomain
 import InkFlowRime

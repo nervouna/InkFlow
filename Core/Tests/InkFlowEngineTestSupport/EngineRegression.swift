@@ -1073,37 +1073,20 @@ package enum EngineRegression {
         print("PASS context engine: real phrases, 3/5/9 pages, stable fallback, digits/click/default/arrow mappings, paging, raw Return, edit/cancel, partial selection, session isolation")
     }
 
-    /// Swift–Lua requests travel through one versioned property protocol.
+    /// Swift–Lua requests travel through the core's one versioned property protocol. Its framing and
+    /// version checks are the core's (`channel.rs` unit tests, `parity.sh` swift_property_channel).
     @MainActor package static func propertyChannel() {
-        check(IFRimeChannel.request("input_coverage", ["9", "3"]) == "1\tinput_coverage\t9\t3")
-        check(IFRimeChannel.request("learning_invalidate", []) == "1\tlearning_invalidate")
-        check(IFRimeChannel.request("ai_learning", ["ni hao ", "你好"]) == "1\tai_learning\tni hao \t你好")
-        for (op, fields) in [("", ["a"]), ("Input", []), ("ai-learning", []), ("ai_learning", ["a\tb"]),
-                             ("ai_learning", ["a\nb"]), ("ai_learning", ["a\rb"])] {
-            check(IFRimeChannel.request(op, fields) == nil, "Framing characters and bad operation names fail closed: \(op) \(fields)")
-        }
-        check(IFRimeChannel.reply("1\tvoice_lexicon\tok\n你好\tni hao\t2\n", op: "voice_lexicon") ==
-              IFRimeChannel.Reply(status: "ok", body: "你好\tni hao\t2\n"))
-        check(IFRimeChannel.reply("1\tai_learning\tfailed", op: "ai_learning") == IFRimeChannel.Reply(status: "failed"))
-        check(IFRimeChannel.reply("1\tai_learning\tfailed\n", op: "ai_learning") == IFRimeChannel.Reply(status: "failed"))
-        check(IFRimeChannel.reply("1\tinput_coverage\tok\n9,3;0,4,n,1,0,n", op: "input_coverage")?.body == "9,3;0,4,n,1,0,n")
-        for result in ["", "ok", "2\tai_learning\tok", "1\tai_readings\tok", "1\tai_learning\t", "1\tai_learning\tOK",
-                       "1\tai_learning\tok\textra", "1\tai_learning", "\n1\tai_learning\tok"] {
-            check(IFRimeChannel.reply(result, op: "ai_learning") == nil, "Other versions, operations or malformed headers fail closed: \(result)")
-        }
         let engine = IFEngine()!
         check(engine.call("learning_invalidate") == IFRimeChannel.Reply(status: "ok"), "A live module answers a version 1 request")
         check(engine.call("no_such_operation") == nil, "No module answers an unknown operation")
         check(engine.call("ai_learning", ["bad code", "你好"])?.status == "failed", "Modules validate their own fields")
         check(engine.call("input_coverage", ["0", "3"])?.status == "failed", "Input coverage without a composition fails closed")
-        let api = IFEngine.api.pointee
-        api.set_property(engine.session, IFRimeChannel.resultProperty, "")
-        api.set_property(engine.session, IFRimeChannel.requestProperty, "2\tlearning_invalidate")
-        var buffer = [CChar](repeating: 0, count: 64)
-        check(api.get_property(engine.session, IFRimeChannel.resultProperty, &buffer, buffer.count) == 0,
-              "Lua leaves another protocol version unanswered")
-        api.set_property(engine.session, IFRimeChannel.requestProperty, "")
-        print("PASS property channel: version 1 framing, field validation, reply parsing, live dispatch and version rejection")
+        for (op, fields) in [("", ["a"]), ("Input", []), ("ai-learning", []), ("ai_learning", ["a\tb"]),
+                             ("ai_learning", ["a\nb"]), ("ai_learning", ["a\rb"])] {
+            check(engine.call(op, fields) == nil, "Framing characters and bad operation names fail closed: \(op) \(fields)")
+        }
+        check(engine.call("voice_aliases", capacity: 8) == nil, "A reply that does not fit is no reply")
+        print("PASS property channel: live dispatch, field validation and bounded replies through the core")
     }
 
     @MainActor package static func contextCustomPhrasePriority() {
