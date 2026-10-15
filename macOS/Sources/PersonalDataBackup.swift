@@ -1,7 +1,7 @@
 import Foundation
 import InkFlowDomain
 import InkFlowRime
-import InkFlowRimeNative
+import InkFlowPortable
 import Darwin
 
 struct PersonalDataError: LocalizedError, Sendable {
@@ -204,18 +204,26 @@ package enum IFPersonalDataWorkerBootstrap {
             guard let operation = String(data: bytes, encoding: .utf8), ["export", "restore"].contains(operation) else { throw PersonalDataError("operation") }
             let databaseRoot = root.appendingPathComponent("databases")
             try PersonalDataFiles.validateTree(databaseRoot)
+            if operation == "export" {
+                // The staged copies are closed. The core snapshots them through its own staging directory
+                // inside the candidate root, the only place this sandbox lets it write.
+                let exported: [String: String?]
+                do { exported = try IFPortablePersonalData.export(user: databaseRoot.path) }
+                catch { throw PersonalDataError("native-snapshot") }
+                for name in PersonalBackupDocument.names {
+                    guard let text = exported[name] ?? nil else { continue }
+                    try PersonalDataFiles.write(Data(text.utf8), root.appendingPathComponent(name + ".userdb.txt"))
+                }
+                return 0
+            }
             for name in PersonalBackupDocument.names {
                 let database = databaseRoot.appendingPathComponent(name + ".userdb")
                 let snapshot = root.appendingPathComponent(name + ".userdb.txt")
-                if operation == "export" {
-                    guard try PersonalDataFiles.exists(database) else { continue }
-                } else {
-                    guard try PersonalDataFiles.exists(snapshot) else { continue }
-                    guard try !PersonalDataFiles.exists(database),
-                          String(data: try PersonalDataFiles.read(snapshot, limit: 32 * 1024 * 1024), encoding: .utf8) != nil else { throw PersonalDataError("snapshot") }
-                }
+                guard try PersonalDataFiles.exists(snapshot) else { continue }
+                guard try !PersonalDataFiles.exists(database),
+                      String(data: try PersonalDataFiles.read(snapshot, limit: 32 * 1024 * 1024), encoding: .utf8) != nil else { throw PersonalDataError("snapshot") }
                 try PersonalDataFiles.safe(snapshot)
-                guard IFPersonalDataSnapshot(databaseRoot.path, name, snapshot.path, operation == "restore" ? 1 : 0) == 0 else { throw PersonalDataError("native-snapshot") }
+                guard IFPersonalDataSnapshot(databaseRoot.path, name, snapshot.path, 1) == 0 else { throw PersonalDataError("native-snapshot") }
             }
             return 0
         } catch {

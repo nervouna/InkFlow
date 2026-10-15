@@ -11,8 +11,19 @@ let rimeLinkerSettings: [LinkerSetting] = [
 let bundledRimeRuntime: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
 ]
-let buildRimeRuntime: [LinkerSetting] = [
-    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(dependencyRoot)/lib"]),
+// Portable Rust core, built by Core/scripts/build-portable.sh. Link the archive by path:
+// the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
+// libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
+// own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
+// The archive contains the InkFlowRimeNative sources, so no binary may also link the
+// InkFlowRimeNative or CRime targets, and the source-built librime.1.dylib is the only librime.
+let portableRoot = "\(packageRoot)/build/portable"
+let portableLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
+    .linkedLibrary("rime"), .linkedLibrary("c++"),
+]
+let portableRuntime: [LinkerSetting] = [
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(portableRoot)/prefix/lib"]),
 ]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
 let nativeRoot = URL(fileURLWithPath: dependencyRoot).deletingLastPathComponent().appendingPathComponent("native").path
@@ -70,7 +81,7 @@ let standardTestDependencies: [Target.Dependency] = [
 ]
 func executableTestTarget(_ name: String, sources: [String],
                           dependencies: [Target.Dependency]? = nil,
-                          linkerSettings: [LinkerSetting] = buildRimeRuntime) -> Target {
+                          linkerSettings: [LinkerSetting] = portableRuntime) -> Target {
     .executableTarget(
         name: name,
         dependencies: dependencies ?? standardTestDependencies,
@@ -124,19 +135,6 @@ let executableTestProducts: [(String, String)] = [
     ("portable-abi-tests", "PortableABITests"),
 ]
 
-// Portable Rust core, built by Core/scripts/build-portable.sh. Link the archive by path:
-// the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
-// libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
-// own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
-let portableRoot = "\(packageRoot)/build/portable"
-let portableLinkerSettings: [LinkerSetting] = [
-    .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
-    .linkedLibrary("rime"), .linkedLibrary("c++"),
-]
-let portableRuntime: [LinkerSetting] = [
-    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "\(portableRoot)/prefix/lib"]),
-]
-
 let package = Package(
     name: "InkFlow",
     platforms: [.macOS(.v26)],
@@ -157,15 +155,15 @@ let package = Package(
     targets: [
         .target(name: "InkFlowRimeNative", path: "Core/Sources/InkFlowRimeNative",
                 publicHeadersPath: "include", cxxSettings: nativeCxxSettings, linkerSettings: rimeLinkerSettings),
-        .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeWorker"], path: "Core/Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
-        .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Core/Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
+        .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Core/Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .executableTarget(name: "VoiceLearningCoordinatorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/VoiceLearningCoordinatorTests", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowDictionaryTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/InkFlowDictionaryTestSupport", swiftSettings: strictSwiftSettings),
-        .executableTarget(name: "DictionaryStoreTests", dependencies: ["InkFlowDictionaryTestSupport"], path: "Core/Tests/DictionaryStoreTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "DictionaryStoreTests", dependencies: ["InkFlowDictionaryTestSupport"], path: "Core/Tests/DictionaryStoreTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .target(name: "InkFlowRankingTestSupport", dependencies: ["InkFlowDomain"], path: "Core/Tests/InkFlowRankingTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowEngineTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport", "InkFlowRankingTestSupport"], path: "Core/Tests/InkFlowEngineTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowCoreTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/InkFlowCoreTestSupport", swiftSettings: strictSwiftSettings),
-        .target(name: "InkFlowRime", dependencies: ["InkFlowDomain", "CRime"], path: "Core/Sources/InkFlowRime", swiftSettings: strictSwiftSettings, linkerSettings: [.linkedLibrary("sqlite3")] + rimeLinkerSettings),
+        .target(name: "InkFlowRime", dependencies: ["InkFlowDomain", "InkFlowPortable"], path: "Core/Sources/InkFlowRime", swiftSettings: strictSwiftSettings, linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(name: "InkFlowDictionary", path: "Core/Sources/InkFlowDictionary",
                 publicHeadersPath: "include",
                 cSettings: [.unsafeFlags(["-I\(packageRoot)/build/dictionary/include"])],
@@ -204,11 +202,11 @@ let package = Package(
         ),
         .target(
             name: "InkFlowCore",
-            dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowRimeNative", "CRime", "InkFlowNative"],
+            dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowPortable", "InkFlowNative"],
             path: "macOS/Sources",
             exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m", "InkFlow-Bridging-Header.h"],
             sources: inkFlowCoreSources,
-            swiftSettings: strictSwiftSettings + [.unsafeFlags(["-Xcc", "-I\(dependencyRoot)/include"])],
+            swiftSettings: strictSwiftSettings,
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
@@ -216,7 +214,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("QuartzCore"),
                 .linkedLibrary("sqlite3"),
-            ] + rimeLinkerSettings
+            ]
         ),
         .executableTarget(
             name: "InkFlowApp",
@@ -229,7 +227,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "InkFlowDictionaryWorker",
-            dependencies: ["InkFlowCore", "InkFlowRimeWorker"],
+            dependencies: ["InkFlowCore", "InkFlowRime"],
             path: "macOS/DictionaryWorker",
             sources: ["main.swift"],
             swiftSettings: strictSwiftSettings,
@@ -268,10 +266,10 @@ let package = Package(
             exclude: toolSources.filter { $0 != "QualityBuildMetadata.swift" },
             sources: ["QualityBuildMetadata.swift"],
             swiftSettings: strictSwiftSettings,
-            linkerSettings: buildRimeRuntime
+            linkerSettings: portableRuntime
         ),
-        .executableTarget(name: "PackagedCacheTool", dependencies: ["InkFlowRime", "InkFlowRimeWorker"],
-            path: "Core/Tools/PackagedCacheTool", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "PackagedCacheTool", dependencies: ["InkFlowRime"],
+            path: "Core/Tools/PackagedCacheTool", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .target(
             name: "InkFlowNativeTestSupport",
             path: "macOS/Tests",
@@ -302,8 +300,8 @@ let package = Package(
             swiftSettings: strictSwiftSettings,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
-        .executableTarget(name: "AIAdoptionLearningTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/AIAdoptionLearningTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
-        executableTestTarget("PersonalDataTests", sources: ["PersonalDataTests.swift"], dependencies: ["InkFlowCore", "InkFlowRime", "InkFlowDomain", "InkFlowRimeNative"]),
+        .executableTarget(name: "AIAdoptionLearningTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/AIAdoptionLearningTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
+        executableTestTarget("PersonalDataTests", sources: ["PersonalDataTests.swift"], dependencies: ["InkFlowCore", "InkFlowRime", "InkFlowDomain"]),
         executableTestTarget("AICredentialTests", sources: ["AICredentialTests.swift"]),
         executableTestTarget("AIHeadlessTests", sources: ["AIHeadlessPipelineTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
@@ -311,7 +309,7 @@ let package = Package(
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         executableTestTarget("AINativeTests", sources: ["AIControllerNativeTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
-        .executableTarget(name: "AIPronunciationTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/AIPronunciationTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "AIPronunciationTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/AIPronunciationTests", swiftSettings: strictSwiftSettings),
         executableTestTarget("AIRuntimeTests", sources: ["AIRuntimeTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         executableTestTarget("AISuggestionTests", sources: ["AISuggestionTests.swift"],
@@ -320,7 +318,7 @@ let package = Package(
         executableTestTarget("ControllerTests", sources: ["ControllerTests.swift"]),
         executableTestTarget("DeploymentTests", sources: ["DeploymentTests.swift"]),
         executableTestTarget("DictionaryActivationTests", sources: ["DictionaryActivationTests.swift"], dependencies: standardTestDependencies + ["InkFlowDictionaryTestSupport"]),
-        .executableTarget(name: "DictionaryGeneratorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/DictionaryGeneratorTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "DictionaryGeneratorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/DictionaryGeneratorTests", swiftSettings: strictSwiftSettings),
         executableTestTarget("DictionaryUpdateTests", sources: ["DictionaryUpdateTests.swift"], dependencies: standardTestDependencies + ["InkFlowDictionaryTestSupport"]),
         executableTestTarget("DictionaryWorkerFixture", sources: ["DictionaryWorkerFixture.swift"]),
         executableTestTarget("EngineTests", sources: ["EngineTests.swift"], dependencies: standardTestDependencies + ["InkFlowEngineTestSupport"]),
@@ -344,7 +342,7 @@ let package = Package(
         executableTestTarget("BundleArtifactSmokeTests", sources: ["BundleArtifactSmokeTests.swift"],
             dependencies: ["InkFlowDomain", "InkFlowRime"]),
         executableTestTarget("VoiceSessionTests", sources: ["VoiceSessionTests.swift"]),
-        .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: buildRimeRuntime),
+        .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
         // Portable core: a C module over Core/Portable/include, and the smoke test that links
