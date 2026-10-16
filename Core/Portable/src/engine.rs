@@ -775,6 +775,11 @@ impl Engine {
             let delta = if key == 0xff54 { 1 } else { -1 };
             return self.move_highlight(state, id, delta, key);
         }
+        // Shift+Backspace forgets the highlighted candidate's learning. Without candidates it stays
+        // Rime's key, so an idle press still reaches the application.
+        if modifiers == 1 && key == 0xff08 && !displayed.candidates.is_empty() {
+            return self.forget_highlighted(state, id, &displayed);
+        }
         let handled = core.session.as_mut().unwrap().process_key(key, modifiers)?;
         // Rime can undo learning while leaving Backspace unhandled for the client.
         if key == 0xff08 || key == 0xffff {
@@ -782,6 +787,25 @@ impl Engine {
         }
         self.update_ordering(state, id, false)?;
         Ok(handled)
+    }
+
+    /// Rime's own delete_candidate, bound to Control+Delete, acts on the candidate Rime highlights,
+    /// which is the one the user sees highlighted. It then recomposes at the first page and
+    /// candidate, so restore both, the index clamped to the refreshed list.
+    fn forget_highlighted(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<bool> {
+        let core = state.sessions.get_mut(&id).unwrap();
+        let session = core.session.as_mut().unwrap();
+        session.process_key(0xffff, 4)?;
+        for _ in 0..shown.page {
+            session.change_page(false)?;
+        }
+        state.observe_learning();
+        self.update_ordering(state, id, true)?;
+        let core = state.sessions.get_mut(&id).unwrap();
+        if let Some(last) = core.order.len().checked_sub(1) {
+            Self::highlight_display(core, shown.highlighted.min(last))?;
+        }
+        Ok(true)
     }
 
     fn clear_session(&self, state: &mut State, id: u64) -> Result<()> {
@@ -1072,7 +1096,8 @@ impl InputSession {
     }
 
     /// Keys and modifiers use Rime/X11 keysyms and masks. Digits select displayed candidates;
-    /// Up/Down move the displayed highlight; everything else goes to Rime.
+    /// Up/Down move the displayed highlight; Shift+Backspace with candidates forgets the highlighted
+    /// candidate's learning; everything else goes to Rime.
     pub fn key(&self, key: i32, modifiers: i32) -> Result<bool> {
         let engine = self.engine.clone();
         self.mutate(

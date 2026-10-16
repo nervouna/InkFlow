@@ -202,6 +202,29 @@ local function learn_mixed(env, context)
   end
 end
 
+-- Whether the user dictionary holds a positive record for exactly this run.
+local function learned(memory, run)
+  if not memory.user_dict or not memory.user_dict.loaded or not memory:user_lookup(run.code, false) then return false end
+  for entry in memory:iter_user() do
+    local code = entry.custom_code and entry.custom_code:gsub(" +$", "")
+    if code == run.code and entry.text == run.display and entry.commit_count > 0 then return true end
+  end
+  return false
+end
+
+-- Rime's delete_candidate (Shift+Backspace) reaches here for the highlighted candidate. Rime's own
+-- Memory has already marked a Chinese or standalone English record deleted. A mixed sentence belongs
+-- to no Memory, so forget the runs it learned, one negative update each. Either way the cached
+-- English lookup is stale, and the composition is rebuilt from the dictionaries.
+local function forget(env, context)
+  local candidate = context:get_selected_candidate()
+  for _, run in ipairs(candidate and mixed_runs(candidate) or {}) do
+    if learned(env.memory, run) then update(env.memory, run.code, run.display, -1) end
+  end
+  env.input, env.entries, env.learnable = nil, nil, {}
+  context:refresh_non_confirmed_composition()
+end
+
 function M.init(env)
   env.memory = Memory(env.engine, env.engine.schema, "english")
   env.memory:memorize(function(commits)
@@ -215,6 +238,9 @@ function M.init(env)
   end)
   env.commit_connection = env.engine.context.commit_notifier:connect(function(context)
     learn_mixed(env, context)
+  end)
+  env.delete_connection = env.engine.context.delete_notifier:connect(function(context)
+    forget(env, context)
   end)
   env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
     learning_invalidate = function()
@@ -251,6 +277,7 @@ end
 
 function M.fini(env)
   env.commit_connection:disconnect()
+  env.delete_connection:disconnect()
   env.connection:disconnect()
   env.memory:disconnect()
 end

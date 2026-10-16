@@ -73,6 +73,7 @@ struct ControllerTests {
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
         compositionKeys()
+        forgetCandidate()
         try deliveryAndRecovery(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         try inputLifecycleDiagnostics(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         IFEngine.stop()
@@ -992,5 +993,66 @@ struct ControllerTests {
                   "recognizer-url-email: Escape cancels the address")
         }
         print("PASS controller composition keys: shift-tap, chords, recognizer-url-email")
+    }
+    /// Shift+Backspace forgets the highlighted candidate's learning through the real controller. The words
+    /// are used by no other test.
+    @MainActor static func forgetCandidate() {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        func session() -> (controller: InkFlowInputController, client: RecordingClient) {
+            let client = RecordingClient(document: "")
+            let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            return (controller, client)
+        }
+        func typeKeys(_ controller: InkFlowInputController, _ client: RecordingClient, _ text: String) {
+            for character in text { check(controller.handle(keyEvent(0, String(character)), client: client)) }
+        }
+        let shiftBackspace = keyEvent(51, "\u{8}", .shift), backspace = keyEvent(51, "\u{8}")
+
+        // Idle: the key passes through, and the Shift chord does not toggle the mode.
+        let (idle, idleClient) = session()
+        check(!idle.handle(shiftBackspace, client: idleClient) && idleClient.mutations.isEmpty, "forget idle: passes through")
+        check(idle.handle(modifierEvent(56, .shift), client: idleClient))
+        check(!idle.handle(shiftBackspace, client: idleClient), "forget idle chord: the key passes through")
+        check(!idle.handle(modifierEvent(56), client: idleClient) && !idle.engine!.requestedASCIIMode && idleClient.mutations.isEmpty,
+              "forget idle chord: releasing Shift does not toggle the mode")
+
+        // Composing: the learned candidate returns to its native position; nothing is committed.
+        let (controller, client) = session()
+        let engine = controller.engine!
+        typeKeys(controller, client, "tianqi")
+        let native = engine.snapshot().candidates
+        check(controller.handle(keyEvent(0, "3"), client: client) && client.document == native[2], "forget fixture: learn \(native[2])")
+        check(controller.handle(keyEvent(48, "\t"), client: client) == false, "forget fixture: Tab ends the undo window")
+        typeKeys(controller, client, "tianqi")
+        check(engine.snapshot().candidates.first == native[2], "forget fixture: the learned candidate leads")
+        client.mutations.removeAll()
+        let document = client.document
+        check(controller.handle(modifierEvent(56, .shift), client: client))
+        check(controller.handle(shiftBackspace, client: client), "forget composing: the key is consumed")
+        check(!controller.handle(modifierEvent(56), client: client) && !engine.requestedASCIIMode,
+              "forget composing chord: releasing Shift does not toggle the mode")
+        check(engine.snapshot().candidates == native && engine.qualitySnapshot().rawInput == "tianqi",
+              "forget composing: the candidate returns to its native position and the input stays: \(engine.snapshot())")
+        check(client.document == document && !client.mutations.contains { $0.hasPrefix("insert:") },
+              "forget composing: nothing is committed: \(client.mutations)")
+        check((controller.candidates(nil) as? [String]) == native, "forget composing: the panel lists the refreshed candidates")
+
+        // Plain Backspace edits as before; Control, Option and Command chords still commit and pass through.
+        check(controller.handle(backspace, client: client) && engine.qualitySnapshot().rawInput == "tianq", "forget: plain Backspace deletes a letter")
+        for (name, flags) in [("Control", NSEvent.ModifierFlags.control), ("Option", .option), ("Command", .command),
+                              ("Shift-Control", [.shift, .control])] {
+            let (chord, chordClient) = session()
+            typeKeys(chord, chordClient, "tianqi")
+            let first = chord.engine!.snapshot().candidates[0]
+            check(!chord.handle(keyEvent(51, "\u{8}", flags), client: chordClient)
+                  && chordClient.mutations.last == "insert:\(first)" && chord.engine!.snapshot().preedit.isEmpty,
+                  "forget: \(name)-Backspace commits \(first) and passes through: \(chordClient.mutations)")
+        }
+        engine.clear()
+        controller.refresh(client)
+        print("PASS controller forget candidate: idle passthrough, consumed while composing, learned candidate forgotten without commit, Shift chord never toggles the mode, other Backspace chords unchanged")
     }
 }

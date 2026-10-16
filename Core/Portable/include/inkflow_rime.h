@@ -33,7 +33,8 @@ extern "C" {
  *
  * Keys: Rime/X11 keysyms with Rime modifier masks (Shift 1<<0, Control 1<<2,
  * Alt 1<<3, Super 1<<26, Release 1<<30). Digits select displayed candidates, Up/Down
- * move the highlight, Page_Up/Page_Down page; everything else goes to Rime.
+ * move the highlight, Page_Up/Page_Down page, Shift+BackSpace with candidates forgets the
+ * highlighted candidate's learning; everything else goes to Rime.
  *
  * Candidate selection and highlight take the snapshot they were decided on. A
  * snapshot superseded by any mutation returns IFR_STALE_SNAPSHOT; an index outside its
