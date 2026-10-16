@@ -225,6 +225,33 @@ private final class StartupFactory: @unchecked Sendable {
             print("PASS serving startup \(mode): gate/main heartbeat/Chinese composition/journal/idle switch or failure/shutdown")
             fflush(stdout)
         }
+        if !native {
+            // #95: an older-recipe artifact without raw sources can never rebuild. Recovery confirms the
+            // shipped dictionary instead of keeping a retry that fails the same way forever.
+            let user = root.appendingPathComponent("obsolete")
+            let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
+            let version = try adoptTemplate(store)
+            try store.beginValidatedActivation(version); try store.confirmActivation(version)
+            let manifestURL = store.root.appendingPathComponent(version.directory + "/shared/" + IFDictionaryManifest.filename)
+            let current = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: manifestURL)
+            try IFDictionaryManifest(formatVersion: 1, recipeVersion: current.recipeVersion - 1, contentVersion: current.contentVersion,
+                entryCount: current.entryCount, contentSHA256: current.contentSHA256, dictionarySHA256: current.dictionarySHA256,
+                correctionsSHA256: current.correctionsSHA256, sources: current.sources, calibrations: current.calibrations)
+                .encoded().write(to: manifestURL)
+            let worker = IFDictionaryWorkerRunner(runtime: runtime, protectedUserRoot: user,
+                candidatesRoot: store.root.appendingPathComponent("candidates"))
+            var services = IFDictionaryServices(client: .init(), worker: worker)
+            services.rebuild = { _, _ in fatalError("An obsolete artifact never reaches the worker") }
+            let coordinator = IFDictionaryCoordinator(backend: .init(store: store, runtime: runtime, user: user, services: services))
+            coordinator.bootstrapForServing(runtime: runtime, user: user)
+            try await until("Obsolete recovery finishes") { !coordinator.isBusy }
+            let state = try store.state()
+            check(coordinator.active?.isBundled == true && !coordinator.canRetry && state.current == nil && state.bundled != nil,
+                  "Obsolete download falls back to the shipped dictionary without a retry")
+            try await coordinator.shutdown()
+            IFEngine.stop()
+            print("PASS serving startup obsolete: older recipe without raw sources confirms the shipped dictionary")
+        }
         check(packaged.cache != nil)
         if !native { try await packagedReadOnly(root: root, runtime: runtime) }
         if native { print("PASS native serving startup: focused host/real candidate panel/two isolated clients/exact delivery/idle recovery; IMK client lookup shim retained") }

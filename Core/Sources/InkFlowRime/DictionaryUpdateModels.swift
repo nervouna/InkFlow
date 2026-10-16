@@ -32,7 +32,7 @@ package struct DictionaryDiagnosticCode: DiagnosticLabel {
         "runtime-changed", "runtime-fingerprint", "symlink-path", "symlink-resource", "unsafe-candidate", "unsafe-path",
         "worker-arguments", "worker-exit", "worker-launch", "worker-timeout", "candidate-not-empty",
         "compiled-file-missing", "rebuild-integrity", "rime-compile", "smoke-probe", "legacy-changed",
-        "calibration-empty", "correction-duplicate", "correction-format", "invalid-reading"
+        "calibration-empty", "correction-duplicate", "correction-format", "invalid-reading", "artifact-obsolete"
     ]
     package init(rawValue: String) { self.rawValue = Self.allowed.contains(rawValue) ? rawValue : "unknown" }
 }

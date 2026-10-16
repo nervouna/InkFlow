@@ -301,7 +301,11 @@ package final class IFDictionaryCoordinator {
                         if error is CancellationError { throw error }
                         try Task.checkCancellation()
                         errors.append(.wrapping(error, stage: .recovery))
-                        versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint)
+                        do { versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint) }
+                        catch let failure as IFDictionaryUpdateError where failure.code == "artifact-obsolete" {
+                            // Never rebuildable: the bundled fallback replaces it instead of keeping a retry.
+                            errors.removeLast()
+                        }
                     }
                 } catch {
                     if error is CancellationError { throw error }

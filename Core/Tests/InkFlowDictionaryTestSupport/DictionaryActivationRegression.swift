@@ -692,6 +692,23 @@ package struct DictionaryActivationRegression: Sendable {
         rebuiltSession.clear()
         IFEngine.stop()
 
+        // An artifact prepared by an older recipe regenerates from its retained raw sources (#95).
+        let olderBase = try backend(root.appendingPathComponent("older-recipe"), runtime: runtime)
+        let older = try installTemplate(template, store: olderBase.store, date: 300)
+        let olderManifest = olderBase.store.root.appendingPathComponent(older.directory + "/shared/" + IFDictionaryManifest.filename)
+        let current = template.manifest
+        try IFDictionaryManifest(formatVersion: 1, recipeVersion: current.recipeVersion - 1, contentVersion: current.contentVersion,
+            entryCount: current.entryCount, contentSHA256: current.contentSHA256, dictionarySHA256: current.dictionarySHA256,
+            correctionsSHA256: current.correctionsSHA256, sources: current.sources, calibrations: current.calibrations)
+            .encoded().write(to: olderManifest)
+        let upgraded = IFDictionaryCoordinator(backend: .init(store: olderBase.store, runtime: currentRuntime, user: olderBase.user,
+            services: makeServices(currentRuntime, olderBase.user, olderBase.store)))
+        upgraded.bootstrap()
+        check(upgraded.engineAvailable && upgraded.active?.isBundled == false &&
+              upgraded.active?.manifest.recipeVersion == IFDictionaryCatalog.recipeVersion, "Older-recipe download rebuilds with the current recipe")
+        check(try! olderBase.store.state().current?.runtimeFingerprint == (try! currentRuntime.fingerprint()))
+        IFEngine.stop()
+
         // Corrupt all recoverable dictionaries. Confirmed bundled fallback must not retry previous artifacts next launch.
         for version in [try base.store.state().current, try base.store.state().previous].compactMap({ $0 }) {
             try Data("corrupt".utf8).write(to: base.store.root.appendingPathComponent(version.directory + "/shared/pinyin_simp.dict.yaml"))
