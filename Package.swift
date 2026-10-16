@@ -41,10 +41,6 @@ let inkFlowCoreSources = [
     "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift",
     "UpdateSettingsView.swift",
 ]
-let installerCoreSources = [
-    "Bootstrap.swift", "InstallerCoordinator.swift", "InstallerLifecycle.swift", "InstallerTransaction.swift",
-    "InstallerValidation.swift", "NativeWindow.swift", "ShippedPayload.swift",
-]
 let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "quality_exchange.py"]
 let testSwiftSources = [
     "PersonalDataTests.swift", "QualityExportFixture.swift",
@@ -54,8 +50,8 @@ let testSwiftSources = [
     "AIRuntimeTests.swift", "AISuggestionTests.swift",
     "ControllerInitializationTests.swift", "ControllerTests.swift", "DeploymentTests.swift",
     "DictionaryActivationTests.swift", "DictionarySettingsUITests.swift",
-    "BundleArtifactSmokeTests.swift", "DictionaryUpdateTests.swift", "DictionaryWorkerFixture.swift", "EngineTests.swift", "InstallerCoreTests.swift",
-    "InstallerWindowTests.swift", "MetadataTests.swift", "QualityCaptureTests.swift",
+    "BundleArtifactSmokeTests.swift", "DictionaryUpdateTests.swift", "DictionaryWorkerFixture.swift", "EngineTests.swift", "InputSourceLifecycleTests.swift",
+    "MetadataTests.swift", "QualityCaptureTests.swift",
     "QualityControllerTimingTests.swift", "QualityIdentityTests.swift", "QualityStoreTests.swift", "QualityTimingTests.swift",
     "ServingStartupTests.swift", "SettingsTests.swift", "DiagnosticFeedbackModelTests.swift", "SettingsUITests.swift", "StartupDiagnosticsTests.swift", "LocalDiagnosticsTests.swift", "DiagnosticArchiveTests.swift",
     "TerminationTests.swift", "TestSupport.swift", "UpdateTests.swift", "VoiceSessionTests.swift", "AppleVoiceRecognizerTests.swift", "VoiceControllerTests.swift",
@@ -100,8 +96,7 @@ let executableTestProducts: [(String, String)] = [
     ("dictionary-update-tests", "DictionaryUpdateTests"),
     ("dictionary-worker-fixture", "DictionaryWorkerFixture"),
     ("engine-tests", "EngineTests"),
-    ("installer-core-tests", "InstallerCoreTests"),
-    ("installer-window-tests", "InstallerWindowTests"),
+    ("input-source-lifecycle-tests", "InputSourceLifecycleTests"),
     ("metadata-tests", "MetadataTests"),
     ("quality-capture-tests", "QualityCaptureTests"),
     ("quality-store-tests", "QualityStoreTests"),
@@ -130,7 +125,6 @@ let package = Package(
         .executable(name: "core-dictionary-tests", targets: ["CoreDictionaryTests"]),
         .executable(name: "InkFlow", targets: ["InkFlowApp"]),
         .executable(name: "InkFlowDictionaryWorker", targets: ["InkFlowDictionaryWorker"]),
-        .executable(name: "InkFlowInstaller", targets: ["InkFlowInstaller"]),
         .executable(name: "dictionary-generator", targets: ["DictionaryGeneratorTool"]),
         .executable(name: "register-input-source", targets: ["RegisterInputSourceTool"]),
         .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
@@ -201,22 +195,6 @@ let package = Package(
             sources: ["main.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime
-        ),
-        .target(
-            name: "InkFlowInstallerCore",
-            dependencies: ["InkFlowInputSources"],
-            path: "macOS/Installer",
-            exclude: ["AppMain.swift", "CoreAPI.md", "Info.plist"],
-            sources: installerCoreSources,
-            swiftSettings: strictSwiftSettings
-        ),
-        .executableTarget(
-            name: "InkFlowInstaller",
-            dependencies: ["InkFlowInstallerCore"],
-            path: "macOS/Installer",
-            exclude: installerCoreSources + ["CoreAPI.md", "Info.plist"],
-            sources: ["AppMain.swift"],
-            swiftSettings: strictSwiftSettings
         ),
         .executableTarget(name: "DictionaryGeneratorTool", dependencies: ["InkFlowDomain"],
             path: "Core/Tools/DictionaryGeneratorTool", swiftSettings: strictSwiftSettings),
@@ -291,10 +269,8 @@ let package = Package(
         executableTestTarget("DictionaryUpdateTests", sources: ["DictionaryUpdateTests.swift"], dependencies: standardTestDependencies + ["InkFlowDictionaryTestSupport"]),
         executableTestTarget("DictionaryWorkerFixture", sources: ["DictionaryWorkerFixture.swift"]),
         executableTestTarget("EngineTests", sources: ["EngineTests.swift"], dependencies: standardTestDependencies + ["InkFlowEngineTestSupport"]),
-        executableTestTarget("InstallerCoreTests", sources: ["InstallerCoreTests.swift"],
-            dependencies: ["InkFlowInstallerCore", "InkFlowInputSources"], linkerSettings: []),
-        executableTestTarget("InstallerWindowTests", sources: ["InstallerWindowTests.swift"],
-            dependencies: ["InkFlowInstallerCore", "InkFlowInputSources"], linkerSettings: []),
+        executableTestTarget("InputSourceLifecycleTests", sources: ["InputSourceLifecycleTests.swift"],
+            dependencies: ["InkFlowInputSources"], linkerSettings: []),
         executableTestTarget("MetadataTests", sources: ["MetadataTests.swift"]),
         executableTestTarget("QualityCaptureTests",
             sources: ["QualityCaptureTests.swift", "QualityControllerTimingTests.swift"]),

@@ -1,68 +1,13 @@
 import Foundation
 import Darwin
-#if SWIFT_PACKAGE
-@testable import InkFlowInstallerCore
 @testable import InkFlowInputSources
-private typealias TestInputSourceOperations = IFPackageInputSourceOperations
-private typealias TestInputSource = IFPackageInputSource
-private typealias TestInputRoster = IFPackageInputRoster
-private typealias TestInputIdentity = IFPackageInputIdentity
-#else
-private typealias TestInputSourceOperations = IFInputSourceOperations
-private typealias TestInputSource = IFInputSource
-private typealias TestInputRoster = IFInputRoster
-private typealias TestInputIdentity = IFInputIdentity
-#endif
 
+private struct TestFailure: Error { let message: String }
 private func check(_ value: Bool, _ message: String) throws {
-    if !value { throw IFInstallerError.invalid("TEST: \(message)") }
-}
-private actor Files: IFInstallerFileOperations {
-    nonisolated let target = URL(fileURLWithPath: "/tmp/arbitrary parent/InkFlow.app")
-    var old = false
-    var commits = 0
-    var cleaned = 0
-    func prepare() -> Bool { old }
-    func commit() { commits += 1 }
-    func clean() { cleaned += 1 }
-    func counts() -> (Int, Int) { (commits, cleaned) }
-}
-@MainActor private final class Lifecycle: IFInstallerLifecycleOperations {
-    var error: IFInstallerError?
-    var stops = 0
-    func terminateOld() throws { stops += 1; if let error { throw error } }
-}
-@MainActor private final class Sources: TestInputSourceOperations {
-    var registered = false
-    var enabled: Set<String> = []
-    var selected = ""
-    var calls: [String] = []
-    var failure = ""
-    var refuses = false
-    func source(_ id: String) -> TestInputSource {
-#if SWIFT_PACKAGE
-        .init(id: id, bundleID: TestInputIdentity.bundleID, name: "Any localized name",
-              enabled: enabled.contains(id), selectable: true, ascii: false)
-#else
-        .init(id: id, bundleID: TestInputIdentity.bundleID, name: "Any localized name",
-              enabled: enabled.contains(id), selectable: true, keyboardMode: true, ascii: false)
-#endif
-    }
-    func snapshot() throws -> TestInputRoster {
-        if failure == "snapshot" { throw IFInputError.api("snapshot", -50) }
-        let all = registered ? [source(TestInputIdentity.bundleID), source(TestInputIdentity.modeID)] : []
-        return .init(installed: all, enabled: all.filter(\.enabled), selectedID: selected)
-    }
-    func record(_ operation: String) throws {
-        calls.append(operation)
-        if operation == failure { throw IFInputError.api(operation, -50) }
-    }
-    func register(at url: URL) throws { try record("register"); registered = true }
-    func enable(_ id: String) throws { try record("enable"); if !refuses { enabled.insert(id) } }
-    func select(_ id: String) throws { try record("select"); selected = id }
+    if !value { throw TestFailure(message: "TEST: \(message)") }
 }
 
-@main struct InstallerCoreTests {
+@main struct InputSourceLifecycleTests {
     @MainActor private final class ControlledProcess: IFTrialInstalledProcess {
         enum QuitBehavior { case exit, delayedExit, decline, keepRunning, exitAndDecline }
         private let child = Process()
@@ -118,7 +63,7 @@ private actor Files: IFInstallerFileOperations {
         let guarded = IFTrialSystemProcesses(application: { _ in unrelated })
         do {
             try await guarded.stop([unrelated.processIdentifier], at: URL(fileURLWithPath: "/tmp/unrelated/InkFlow.app"))
-            throw IFInstallerError.invalid("changed executable identity must refuse termination")
+            throw TestFailure(message: "changed executable identity must refuse termination")
         } catch is IFInputError {}
         try check(unrelated.terminationRequests == 0,
                   "ownership mismatch must not request termination of the live child")
@@ -126,7 +71,7 @@ private actor Files: IFInstallerFileOperations {
         try await missing.stop([process.processIdentifier], at: URL(fileURLWithPath: "/bin/cat"))
         do {
             try await missing.stop([unrelated.processIdentifier], at: URL(fileURLWithPath: "/bin/cat"))
-            throw IFInstallerError.invalid("unidentified live PID must refuse replacement")
+            throw TestFailure(message: "unidentified live PID must refuse replacement")
         } catch is IFInputError {}
         print("PASS developer stop: stale exit, ownership mismatch and missing application identity")
     }
@@ -142,7 +87,7 @@ private actor Files: IFInstallerFileOperations {
         try check(try processes.installedPIDs(at: unrelated).isEmpty,
                   "live executable path takes precedence over cached unrelated path")
         guard let path = IFTrialSystemProcesses.executablePath(process.processIdentifier) else {
-            throw IFInstallerError.invalid("controlled child executable must be observable")
+            throw TestFailure(message: "controlled child executable must be observable")
         }
         let target = URL(fileURLWithPath: path)
         process.executableURL = target
@@ -156,68 +101,57 @@ private actor Files: IFInstallerFileOperations {
         print("PASS developer prepare: live path ownership, stale cached target after real child exit (fake input sources)")
     }
 
-    @MainActor private static func stopControlledProcesses(_ processes: [ControlledProcess], native: Bool,
+    @MainActor private static func stopControlledProcesses(_ processes: [ControlledProcess],
                                                           timeout: Duration = .milliseconds(20)) async throws {
-        if native {
-            try await IFSystemLifecycle(applications: { processes }, terminationTimeout: timeout).terminateOld()
-        } else {
-            let system = IFTrialSystemProcesses(application: { pid in
-                processes.first { $0.processIdentifier == pid }
-            }, terminationTimeout: timeout)
-            try await system.stop(processes.map(\.processIdentifier), at: URL(fileURLWithPath: "/bin/cat"))
-        }
+        let system = IFTrialSystemProcesses(application: { pid in
+            processes.first { $0.processIdentifier == pid }
+        }, terminationTimeout: timeout)
+        try await system.stop(processes.map(\.processIdentifier), at: URL(fileURLWithPath: "/bin/cat"))
     }
 
     @MainActor static func systemTerminationTests() async throws {
         try check(IFInstallationProcessLifecycle.terminationTimeout == .seconds(10),
                   "production graceful-termination deadline remains ten seconds")
-        for native in [true, false] {
-            try await stopControlledProcesses([], native: native)
-            for behavior: ControlledProcess.QuitBehavior in [.exit, .delayedExit, .exitAndDecline] {
-                let process = try ControlledProcess()
-                defer { process.finish() }
-                process.quitBehavior = behavior
-                try await stopControlledProcesses([process], native: native, timeout: .seconds(2))
-                try check(process.terminationRequests == 1 && !process.isTerminated &&
-                          IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
-                          "both system adapters accept real exit despite stale AppKit state or an exit racing the request")
-            }
-            do {
-                let process = try ControlledProcess()
-                defer { process.finish() }
-                process.finish()
-                process.quitBehavior = .decline
-                try await stopControlledProcesses([process], native: native)
-                try check(process.terminationRequests == 0, "already-exited process needs no normal quit request")
-            }
-            for declined in [true, false] {
-                let process = try ControlledProcess()
-                defer { process.finish() }
-                process.quitBehavior = declined ? .decline : .keepRunning
-                let start = ContinuousClock.now
-                do {
-                    try await stopControlledProcesses([process], native: native)
-                    throw IFInstallerError.invalid("live child must refuse replacement")
-                } catch {
-                    if native {
-                        try check(error as? IFInstallerError == (declined ? .terminationDeclined : .terminationTimeout),
-                                  "native installer preserves declined/timeout errors")
-                    } else {
-                        let message = declined ? "process \(process.processIdentifier) declined normal termination; installation unchanged"
-                            : "normal termination timed out; installation unchanged"
-                        try check(error as? IFInputError == .unavailable(message),
-                                  "developer installer preserves declined/timeout errors")
-                    }
-                }
-                let elapsed = start.duration(to: .now)
-                try check(elapsed < .seconds(2) && (declined || elapsed >= .milliseconds(20)),
-                          "injected short deadline is bounded and is not reported before expiry")
-                try check(process.terminationRequests == 1 &&
-                          !IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
-                          "declined/timed-out child remains alive without force termination")
-            }
+        try await stopControlledProcesses([])
+        for behavior: ControlledProcess.QuitBehavior in [.exit, .delayedExit, .exitAndDecline] {
+            let process = try ControlledProcess()
+            defer { process.finish() }
+            process.quitBehavior = behavior
+            try await stopControlledProcesses([process], timeout: .seconds(2))
+            try check(process.terminationRequests == 1 && !process.isTerminated &&
+                      IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
+                      "real exit accepted despite stale AppKit state or an exit racing the request")
         }
-        print("PASS both system adapters: stale and delayed exit, pre-exited child, request race, live refusal, bounded timeout, exact errors, no force termination")
+        do {
+            let process = try ControlledProcess()
+            defer { process.finish() }
+            process.finish()
+            process.quitBehavior = .decline
+            try await stopControlledProcesses([process])
+            try check(process.terminationRequests == 0, "already-exited process needs no normal quit request")
+        }
+        for declined in [true, false] {
+            let process = try ControlledProcess()
+            defer { process.finish() }
+            process.quitBehavior = declined ? .decline : .keepRunning
+            let start = ContinuousClock.now
+            do {
+                try await stopControlledProcesses([process])
+                throw TestFailure(message: "live child must refuse replacement")
+            } catch {
+                let message = declined ? "process \(process.processIdentifier) declined normal termination; installation unchanged"
+                    : "normal termination timed out; installation unchanged"
+                try check(error as? IFInputError == .unavailable(message),
+                          "register-input-source preserves declined/timeout errors")
+            }
+            let elapsed = start.duration(to: .now)
+            try check(elapsed < .seconds(2) && (declined || elapsed >= .milliseconds(20)),
+                      "injected short deadline is bounded and is not reported before expiry")
+            try check(process.terminationRequests == 1 &&
+                      !IFInstallationProcessLifecycle.hasExited(applicationTerminated: false, processID: process.processIdentifier),
+                      "declined/timed-out child remains alive without force termination")
+        }
+        print("PASS register-input-source stop: stale and delayed exit, pre-exited child, request race, live refusal, bounded timeout, exact errors, no force termination")
     }
 
     @MainActor static func exitPredicateTests() throws {
@@ -313,7 +247,7 @@ private actor Files: IFInstallerFileOperations {
             let trial = IFTrialInstallation(sources: s, processes: p)
             do {
                 _ = try await trial.prepare(target: target, build: "12")
-                throw IFInstallerError.invalid("prepare must refuse \(failure)")
+                throw TestFailure(message: "prepare must refuse \(failure)")
             } catch is IFInputError {}
             try check(p.launches == 0 && s.selected == IFInputIdentity.modeID, "refused prepare restores selection without launch")
         }
@@ -327,7 +261,7 @@ private actor Files: IFInstallerFileOperations {
             s.failure = failure; p.failure = failure
             do {
                 _ = try await lifecycle.finish(target: target, state: state, installedBuild: failure == "build" ? "11" : "12")
-                throw IFInstallerError.invalid("finish must refuse \(failure)")
+                throw TestFailure(message: "finish must refuse \(failure)")
             } catch is IFInputError {}
         }
         let firstSources = TrialSources(), firstProcesses = TrialProcesses()
@@ -377,51 +311,42 @@ private actor Files: IFInstallerFileOperations {
         try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: nil, cachedPath: nil, target: target) == nil, "unknown process identity fails closed")
         print("PASS trial lifecycle: stale AppKit exit observation; declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; scoped ownership (fake backends, no desktop mutation)")
     }
-    static func fileTests() throws {
+    static func atomicReplacementTests() throws {
         let fm = FileManager.default
-        let root = fm.temporaryDirectory.appendingPathComponent("installer-test-\(UUID().uuidString)")
-        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let root = fm.temporaryDirectory.appendingPathComponent("replacement-test-\(UUID().uuidString)")
+        let target = root.appendingPathComponent("destination").appendingPathComponent("InkFlow.app")
+        try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: root) }
-        let source = root.appendingPathComponent("arbitrary source.app")
-        let parent = root.appendingPathComponent("destination")
-        let target = parent.appendingPathComponent("InkFlow.app")
-        try fm.createDirectory(at: source, withIntermediateDirectories: true)
-        let content = source.appendingPathComponent("version")
-        try Data("99-preview".utf8).write(to: content)
-        let transaction = IFFileTransaction(target: target)
-        try transaction.prepare(source)
-        try check(!fm.fileExists(atPath: target.path), "prepare does not publish")
-        try transaction.commit(); try transaction.clean()
-        try check(try String(contentsOf: target.appendingPathComponent("version"), encoding: .utf8) == "99-preview", "first installation")
-        try Data("1-old-build".utf8).write(to: content)
-        try transaction.prepare(source)
-        try check(try String(contentsOf: target.appendingPathComponent("version"), encoding: .utf8) == "99-preview", "old intact until replacement")
-        try transaction.commit(); try transaction.clean()
-        try check(try String(contentsOf: target.appendingPathComponent("version"), encoding: .utf8) == "1-old-build", "upgrade permits arbitrary versions and paths")
-        let failure = IFFileTransaction(target: target, copy: { _, to in
-            try fm.createDirectory(at: to, withIntermediateDirectories: false)
-            throw CocoaError(.fileWriteOutOfSpace)
-        })
-        do { try failure.prepare(source); throw IFInstallerError.invalid("copy must fail") }
-        catch let error as CocoaError { try check(error.code == .fileWriteOutOfSpace, "original copy error") }
-        try check(try String(contentsOf: target.appendingPathComponent("version"), encoding: .utf8) == "1-old-build", "failed copy preserves old")
-        try check(try fm.contentsOfDirectory(atPath: parent.path) == ["InkFlow.app"], "no staging, journal or persistent backup")
-        try transaction.prepare(source); try transaction.clean()
-        try check(try fm.contentsOfDirectory(atPath: parent.path) == ["InkFlow.app"], "cancel cleans prepared app")
-        let oldIdentity = try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber
-        let newIdentity = try fm.attributesOfItem(atPath: source.path)[.systemFileNumber] as? NSNumber
-        try IFAtomicAppReplacement.replace(candidate: source, target: target)
-        try check(try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber == newIdentity,
-                  "atomic replacement publishes the candidate inode")
-        try check(try fm.attributesOfItem(atPath: source.path)[.systemFileNumber] as? NSNumber == oldIdentity,
-                  "atomic replacement retains the original inode in the staging slot")
+        func candidate(_ version: String) throws -> URL {
+            let url = root.appendingPathComponent("arbitrary \(version).app")
+            try fm.createDirectory(at: url, withIntermediateDirectories: true)
+            try Data(version.utf8).write(to: url.appendingPathComponent("version"))
+            return url
+        }
+        func installed() throws -> String {
+            try String(contentsOf: target.appendingPathComponent("version"), encoding: .utf8)
+        }
+        func inode(_ url: URL) throws -> NSNumber? {
+            try fm.attributesOfItem(atPath: url.path)[.systemFileNumber] as? NSNumber
+        }
+        // First install: the exclusive rename publishes the candidate and never overwrites.
+        let first = try candidate("99-preview")
+        try IFAtomicAppReplacement.replace(candidate: first, target: target)
+        try check(try installed() == "99-preview" && !fm.fileExists(atPath: first.path), "first installation")
+        // Update: the swap keeps the target path present and leaves the old app in the candidate slot.
+        let second = try candidate("1-old-build")
+        let oldIdentity = try inode(target), newIdentity = try inode(second)
+        try IFAtomicAppReplacement.replace(candidate: second, target: target)
+        try check(try installed() == "1-old-build", "upgrade permits arbitrary versions and paths")
+        try check(try inode(target) == newIdentity, "atomic replacement publishes the candidate inode")
+        try check(try inode(second) == oldIdentity, "atomic replacement retains the original inode in the candidate slot")
         do {
             try IFAtomicAppReplacement.replace(candidate: root.appendingPathComponent("missing.app"), target: target)
-            throw IFInstallerError.invalid("missing candidate must fail")
+            throw TestFailure(message: "missing candidate must fail")
         } catch is IFInputError {}
-        try check(try fm.attributesOfItem(atPath: target.path)[.systemFileNumber] as? NSNumber == newIdentity,
+        try check(try inode(target) == newIdentity && (try installed()) == "1-old-build",
                   "failed replacement leaves the installed app intact")
-        print("PASS real filesystem: first install, replacement, failed partial copy preserves old, cleanup, no backup, no path/version gates")
+        print("PASS atomic replacement: first install, swap keeps the old app in the candidate slot, failed replacement leaves the installed app intact")
     }
     @MainActor static func main() async throws {
         try await trialExitObservationTest()
@@ -429,30 +354,6 @@ private actor Files: IFInstallerFileOperations {
         try await systemTerminationTests()
         try exitPredicateTests()
         try await trialTests()
-        try fileTests()
-        let files = Files(), sources = Sources(), lifecycle = Lifecycle()
-        let coordinator = IFInstallerCoordinator(files: files, sources: sources, lifecycle: lifecycle, pause: {})
-        await coordinator.perform(.installAndEnable)
-        try check(coordinator.state == .installedEnabled, "first install without ASCII source")
-        try check(sources.calls == ["register", "enable", "enable", "select"], "register missing, enable parent+mode, select")
-        await coordinator.perform(.retryActivation)
-        try check(sources.calls.filter { $0 == "register" }.count == 1, "do not register existing source")
-        try check(await files.counts().0 == 1, "retry does not reinstall")
-        for operation in ["snapshot", "register", "enable", "select"] {
-            let f = Files(), s = Sources(), l = Lifecycle(); s.failure = operation
-            let c = IFInstallerCoordinator(files: f, sources: s, lifecycle: l, pause: {})
-            await c.perform(.installAndEnable)
-            guard case .failed(let installed, let message) = c.state else { throw IFInstallerError.invalid("API failure hidden") }
-            try check(installed && message.contains(operation) && message.contains("-50"), "API error correctly reported")
-            s.failure = ""; await c.perform(.retryActivation)
-            try check(c.state == .installedEnabled, "API retry")
-        }
-        let stoppedFiles = Files(), stoppedSources = Sources(), stoppedLifecycle = Lifecycle()
-        stoppedLifecycle.error = .terminationTimeout
-        let stopped = IFInstallerCoordinator(files: stoppedFiles, sources: stoppedSources, lifecycle: stoppedLifecycle, pause: {})
-        await stopped.perform(.installAndEnable)
-        let counts = await stoppedFiles.counts()
-        try check(counts.0 == 0 && counts.1 == 1, "termination failure preserves old and cleans staging")
-        print("PASS fake backends: TIS result/errors/retry, no ASCII/name gates, bounded termination failure prevents commit; no system mutations")
+        try atomicReplacementTests()
     }
 }
