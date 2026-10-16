@@ -195,21 +195,21 @@
   "provenance" : {
     "Core/DataSHA256" : "7a2e3d3e6c0e8d6ecf3b41db7ae3a8279dee4c260fdea935b9d32d1e4306624a",
     "Core/Package.swiftSHA256" : "6e65ce84068bedb7386ce7b745641b985a9c5b6ffebc82d78b65f44c6667b1bc",
-    "Core/SourcesSHA256" : "59a9ebf3c823f805de7c06678789f8d301da48ad627aba46d0ed5cbc59d29edf",
-    "Core/configSHA256" : "0792c0571de047d1da2832085cea3285db76744ea96f6bbbeacf69ee311471d9",
+    "Core/SourcesSHA256" : "fbcbfa45fc02e61d6a55cd1b8192b12eb35bba70c3d40878104ba3ee57554da5",
+    "Core/configSHA256" : "aac4026227a66b99124b7e95ecbbb24fb0197295e51afdb4c94382239630a720",
     "Core/scripts/prepare-rime.shSHA256" : "047cd300347d44075bd162bff2f2552cd3177db52085001d90ca60970a3332a0",
     "Core/scripts/swift-package.shSHA256" : "a3c44c92542bc9063bee7e85ead4907830047526d83e8f1ece1845cd75740373",
     "Core/scripts/test-quality-baseline.shSHA256" : "4409ac37bbcccad9adb0550347cc86832cffa599100d65eaa89ab4c66ed98526",
     "appVersion" : "0.6.3",
-    "compiledResourcesSHA256" : "4917a6e468f1456ae6b3ec02d3e951738023318d4a706758fcfc316a9f854af1",
+    "compiledResourcesSHA256" : "3a77da3dd4c8baf4a9e1f1edbe2c15817a555c490860bb82a2665f3e97ae077f",
     "fixtureSHA256" : "c0b04f707db3fb2b53defb307cf3a167bb3b1a3be0c3f488581696514f701f5d",
-    "librimeSHA256" : "7f313a4b8153a2ac7225c1ddbfa9c536010acdd2168a5bcb76fa841d422cae3f",
-    "macOS/scripts/dependencies.shSHA256" : "ebe6d7f1f64fae40447efc3f3345c9c3f53e943971fff14098452b898e868313",
-    "resourcesSHA256" : "fc37ce6d431bb030f1c042485a5ce22fe581ef77e02fe1b594d0754b0598f3e7",
-    "runnerBinarySHA256" : "d7ad467a7fae624929d673740538fb4a2e091f8555bcac67fead171016b38bb6",
+    "librimeSHA256" : "b076c9a68bae79cc997de05171e12c2984315ab25eed7f2034e134dee57912da",
+    "macOS/scripts/dependencies.shSHA256" : "8656a1059095c1f07792b35021aad2cfa172936da8c3eedcf57313dfe4b323a6",
+    "resourcesSHA256" : "699aa87d87c23c4ee8562b18ca831fed8b131adddaba823b3c12368596b32915",
+    "runnerBinarySHA256" : "91c536374d6cdcdd1b72d08d14af42f5867bd167cd290462a7d54776a5960ec5",
     "runnerSHA256" : "d1a953e9a7b4ecddfc29572823c5d75d5f21fc1bf17e11a4a1eb4c3b04e95cca",
-    "schemasSHA256" : "a40d9072a9e79f92cae283cb9187b6bd49ab7ac02985ad20758871c90eed923b",
-    "sourceRevision" : "f30e8f55ea8e62ed265e822c22d32744a1f0314c-dirty",
+    "schemasSHA256" : "9ac17796303da85db7b0af1a7ccc6eb0e676149e098360d57278226b8206338b",
+    "sourceRevision" : "59030a5f9b85b10d105f68f123459cff2260b9e7",
     "system" : "Version 27.0.1 (Build 26A434)"
   },
   "results" : [
@@ -884,30 +884,30 @@
     {
       "initial" : {
         "committedText" : "macOS",
-        "first" : "马刺欧式",
+        "first" : "macOS",
         "inputOperations" : 5,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 2,
+        "targetRank" : 1,
         "topThree" : [
-          "马刺欧式",
           "macOS",
+          "马刺欧式",
           "马刺"
         ],
         "totalOperations" : 6
       },
       "learned" : {
         "committedText" : "macOS",
-        "first" : "马刺欧式",
+        "first" : "macOS",
         "inputOperations" : 5,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 2,
+        "targetRank" : 1,
         "topThree" : [
-          "马刺欧式",
           "macOS",
+          "马刺欧式",
           "马刺"
         ],
         "totalOperations" : 6
@@ -924,14 +924,13 @@
     {
       "initial" : {
         "committedText" : "iOS",
-        "first" : "ios",
+        "first" : "iOS",
         "inputOperations" : 3,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 2,
+        "targetRank" : 1,
         "topThree" : [
-          "ios",
           "iOS"
         ],
         "totalOperations" : 4
@@ -945,8 +944,7 @@
         "selectionOperations" : 1,
         "targetRank" : 1,
         "topThree" : [
-          "iOS",
-          "ios"
+          "iOS"
         ],
         "totalOperations" : 4
       },
@@ -962,30 +960,30 @@
     {
       "initial" : {
         "committedText" : "DeepSeek",
-        "first" : "德尔配色儿科",
+        "first" : "DeepSeek",
         "inputOperations" : 8,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 2,
+        "targetRank" : 1,
         "topThree" : [
-          "德尔配色儿科",
           "DeepSeek",
+          "德尔配色儿科",
           "德尔"
         ],
         "totalOperations" : 9
       },
       "learned" : {
         "committedText" : "DeepSeek",
-        "first" : "德尔配色儿科",
+        "first" : "DeepSeek",
         "inputOperations" : 8,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 2,
+        "targetRank" : 1,
         "topThree" : [
-          "德尔配色儿科",
           "DeepSeek",
+          "德尔配色儿科",
           "德尔"
         ],
         "totalOperations" : 9
