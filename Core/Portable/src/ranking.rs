@@ -30,6 +30,10 @@ pub struct Metadata {
     /// which native Rime does not read as Pinyin up to an unfinished final syllable. The first
     /// such candidate leads the page. Transported as `exact` = 2.
     pub lead: bool,
+    /// A native candidate that the poet composed from separate words and that covers the whole
+    /// input. When it is the page's first candidate, the user's own exact standalone English word
+    /// leads it. Transported as `exact` = 3.
+    pub sentence: bool,
 }
 
 /// Where a personal-learning candidate comes from, as quality records keep it.
@@ -91,10 +95,11 @@ pub fn parse_metadata(
             "o" => CandidateClass::Other,
             _ => return None,
         };
-        let (exact, lead) = match fields[3] {
-            "2" => (true, true),
-            "1" => (true, false),
-            "0" => (false, false),
+        let (exact, lead, sentence) = match fields[3] {
+            "3" => (true, false, true),
+            "2" => (true, true, false),
+            "1" => (true, false, false),
+            "0" => (false, false, false),
             _ => return None,
         };
         let personal = match fields[4] {
@@ -122,6 +127,14 @@ pub fn parse_metadata(
         {
             return None;
         }
+        if sentence
+            && !(source == Source::Native
+                && class == CandidateClass::NonAscii
+                && start == 0
+                && end as usize == input_length)
+        {
+            return None;
+        }
         result.push(Metadata {
             coverage: start as usize..end as usize,
             class,
@@ -129,6 +142,7 @@ pub fn parse_metadata(
             personal,
             source,
             lead,
+            sentence,
         });
     }
     (result.len() == count).then_some(result)
@@ -396,11 +410,21 @@ impl ContextRanker {
         let is_technical = technical(preceding);
         // The first exact English candidate in English order, when the input is not Pinyin.
         let technical_lead = eligible.iter().copied().find(|&i| rows[i].lead);
+        // The user's own exact English word, the first in English order, leads a sentence the engine
+        // composed from separate words. A dictionary or learned phrase, and any other first candidate,
+        // keeps its place.
+        let learned_lead = eligible.iter().copied().find(|&i| {
+            rows[0].sentence
+                && rows[i].exact
+                && rows[i].personal > 0
+                && rows[i].source == Source::English
+        });
         let tier = |i: usize| {
             let row = &rows[i];
             if row.source == Source::Custom {
                 0
             } else if Some(i) == technical_lead
+                || Some(i) == learned_lead
                 || (is_technical && row.exact && row.personal > 0 && row.source == Source::English)
             {
                 1
@@ -447,6 +471,7 @@ mod tests {
             personal,
             source,
             lead: false,
+            sentence: false,
         }
     }
 

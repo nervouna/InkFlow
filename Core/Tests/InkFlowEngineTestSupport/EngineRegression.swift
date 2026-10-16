@@ -988,6 +988,7 @@ package enum EngineRegression {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation(event: event)
+        learnedEnglishOverSentence(event: event)
         technicalEnglishLead(event: event)
         compositionKeys(event: event)
         forgetCandidate(event: event)
@@ -1977,5 +1978,71 @@ package enum EngineRegression {
         check(candidates("zhishi") == plain, "forget custom phrase: removing it restores the dictionary list")
         engine.clear()
         print("PASS forget candidate: idle passthrough, Chinese native delete, sentences made of learned words, personal English, mixed runs, unlearned and custom phrase unchanged, composition kept, highlight kept")
+    }
+
+    /// An English word the user chose leads the next time when the only Chinese rival is a sentence the
+    /// engine composed from separate words (rule 14). A dictionary phrase and a phrase the user learned keep
+    /// the first place. The guards kept the first candidate recorded on `main` before this rule existed:
+    /// `shanghai` 伤害, `a` 啊 and `release` 热了阿瑟. The learned records stay in the test's user directory.
+    @MainActor package static func learnedEnglishOverSentence(event: Event = rimeEvent) {
+        let engine = IFEngine()!
+        func compose(_ input: String) {
+            engine.clear()
+            for character in input {
+                _ = event(engine, Int32(character.asciiValue!), 0, String(character), character.isUppercase ? 1 : 0)
+            }
+        }
+        func candidates(_ input: String) -> [String] { compose(input); return engine.snapshot().candidates }
+        // The texts of the first page that carry the user's own confirmations.
+        func personal(_ input: String) -> [String] {
+            compose(input)
+            return engine.qualitySnapshot().candidates.filter { $0.source != nil }.map(\.text)
+        }
+        // Select a candidate, then end the undo window as the next key of a user typing on does.
+        func learn(_ input: String, _ text: String) {
+            guard let index = candidates(input).firstIndex(of: text) else {
+                check(false, "learned-english fixture: \(text) is missing for \(input): \(engine.snapshot().candidates)"); return
+            }
+            engine.select(index)
+            check(engine.takeCommit() == text && engine.snapshot().preedit.isEmpty, "learned-english fixture: select \(text)")
+            engine.key(0xff09)
+        }
+
+        // learned-guard: a dictionary phrase leads `shanghai` with or without the learned English word.
+        let shanghai = candidates("shanghai")
+        check(shanghai.prefix(3) == ["伤害", "Shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
+        learn("shanghai", "Shanghai")
+        check(personal("shanghai") == ["Shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
+        check(candidates("shanghai") == shanghai, "learned-guard shanghai: the phrase keeps its place: \(engine.snapshot().candidates)")
+        // learned-guard: a single syllable has no sentence, so a learned `A` stays behind 啊 without a technical context.
+        check(candidates("a").first == "啊", "learned-guard a fixture: \(engine.snapshot().candidates)")
+        learn("A", "A")
+        check(personal("a") == ["A"], "learned-guard a: the English letter is learned: \(engine.qualitySnapshot().candidates)")
+        check(engine.snapshot().candidates.first == "啊", "learned-guard a: 啊 keeps its place: \(engine.snapshot().candidates)")
+
+        // learned-lead: before anything is learned, the sentence composed from separate words leads.
+        let release = candidates("release")
+        check(release.first == "热了阿瑟" && release.contains("release") && personal("release").isEmpty,
+              "learned-lead release fixture: \(release)")
+        learn("release", "release")
+        // learned-lead: the word chosen once leads, and the sentence stays selectable behind it.
+        let learned = candidates("release")
+        check(learned.first == "release" && learned.contains("热了阿瑟") && engine.snapshot().highlight == 0,
+              "learned-lead release: the learned word leads: \(learned)")
+        check(personal("release") == ["release"], "learned-lead release: it carries personal evidence: \(engine.qualitySnapshot().candidates)")
+        engine.key(32)
+        check(engine.takeCommit() == "release", "learned-lead release: the highlighted first candidate commits")
+        engine.key(0xff09)
+        // learned-lead: the second candidate commits the Chinese reading, which Rime now learns as a phrase.
+        compose("release")
+        engine.key(0xff54)
+        engine.key(32)
+        check(engine.takeCommit() == "热了阿瑟", "learned-lead release: the displayed second candidate commits the sentence")
+        engine.key(0xff09)
+        // learned-guard: a phrase the user learned keeps the first place, with the English word behind it.
+        let phrase = candidates("release")
+        check(phrase.prefix(2) == ["热了阿瑟", "release"], "learned-guard release: the learned phrase keeps its place: \(phrase)")
+        engine.clear()
+        print("PASS learned English over sentence: release leads a composed sentence once chosen, a dictionary phrase (shanghai), a single syllable (a) and a learned phrase keep the first place")
     }
 }
