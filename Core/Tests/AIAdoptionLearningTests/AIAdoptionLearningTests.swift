@@ -399,6 +399,9 @@ struct AIAdoptionLearningTests {
         case "contract-ranking-seed":
             check(request("update\tshared\tcodex\tCodex\t1") == "ok", "Seed one unambiguous ranking record")
             expectEntry("shared", "codex", "Codex", "Ranking seed persists")
+            // Pinyin-shaped, so only the technical context can lead it (a technical lead needs a non-Pinyin input).
+            check(request("update\tshared\tcan\tcan\t1") == "ok", "Seed a Pinyin-shaped ranking record")
+            expectEntry("shared", "can", "can", "Pinyin-shaped ranking seed persists")
         case "contract-mixed-seed":
             for (code, text) in [("codex", "Codex"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
                                  ("offline", "offline"), ("can", "can")] {
@@ -517,11 +520,15 @@ struct AIAdoptionLearningTests {
             engine.setPrecedingText("正在使用 Swift ")
             type(engine, "codey"); engine.key(0xff08); type(engine, "x")
             check(engine.snapshot().candidates.first == "Codex", "Editing recomputes bounded evidence ranking")
-            engine.clear(); type(engine, "codex")
-            check(engine.snapshot().candidates.first != "Codex", "Clearing invalidates stale technical context")
+            // `codex` is not Pinyin, so it leads in every context (rule 14); `can` is, so only the context lifts it.
+            engine.clear(); engine.setPrecedingText("正在使用 Swift "); type(engine, "can")
+            check(engine.snapshot().candidates.first == "can",
+                  "Personal exact Pinyin-shaped English leads in bounded technical context: \(engine.snapshot().candidates)")
+            engine.clear(); type(engine, "can")
+            check(engine.snapshot().candidates.first != "can", "Clearing invalidates stale technical context")
             let isolated = IFEngine()!
-            type(isolated, "codex")
-            check(isolated.snapshot().candidates.first != "Codex", "Technical context remains session-local")
+            type(isolated, "can")
+            check(isolated.snapshot().candidates.first != "can", "Technical context remains session-local")
             return
         }
 
