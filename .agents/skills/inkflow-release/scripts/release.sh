@@ -3,14 +3,17 @@
 # generate the appcast and the dictionary source bundle, tag, upload and publish. Existing outputs are reused after
 # receipt and artifact validation, so rerunning after a failure resumes the release.
 #
-#   release.sh           full release (tag + push + publish)
-#   release.sh --draft   everything except tag/push/publish; leaves a GitHub draft
+#   release.sh              full release (tag + push + publish as latest)
+#   release.sh --prerelease full release published as a GitHub pre-release; the Sparkle feed
+#                           (releases/latest) keeps serving the previous stable release
+#   release.sh --draft      everything except tag/push/publish; leaves a GitHub draft
 set -euo pipefail
-draft=false
+draft=false prerelease=false
 case "${1:-}" in
   '') ;;
   --draft) draft=true ;;
-  *) echo 'Usage: release.sh [--draft]' >&2; exit 2 ;;
+  --prerelease) prerelease=true ;;
+  *) echo 'Usage: release.sh [--draft|--prerelease]' >&2; exit 2 ;;
 esac
 cd "$(dirname "$0")/../../../.."
 scripts=.agents/skills/inkflow-release/scripts
@@ -122,6 +125,10 @@ if $draft; then
   exit 0
 fi
 
-# 8. Publish.
-gh release edit "$tag" --repo "$repo" --draft=false --latest
+# 8. Publish. A pre-release is never "latest", so Sparkle clients are not offered it.
+if $prerelease; then
+  gh release edit "$tag" --repo "$repo" --draft=false --prerelease --latest=false
+else
+  gh release edit "$tag" --repo "$repo" --draft=false --prerelease=false --latest
+fi
 echo "PASS release $tag build $build: $(gh release view "$tag" --repo "$repo" --json url --jq .url)"

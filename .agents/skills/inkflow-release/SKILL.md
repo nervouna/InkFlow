@@ -22,6 +22,8 @@ Input, Settings and installation behavior are the user's responsibility before t
 
    `bash scripts/release.sh --draft` does everything except the tag, push and publish, leaving a GitHub draft for inspection. Running `release.sh` afterwards reuses that draft.
 
+   `bash scripts/release.sh --prerelease` publishes the release as a GitHub pre-release. The Sparkle feed (`releases/latest`) keeps serving the previous stable release, so existing installs are not offered it. To promote it later without a new build: `gh release edit vX.Y.Z --prerelease=false --latest`.
+
 ## If something fails
 
 Every step in `release.sh` is skipped when its output already exists, so fix the cause and rerun the same command. Don't bump the version again to retry. If `package.sh prepare` refuses an existing output directory from a broken attempt, move it aside and rerun prepare. A notarization interrupted mid-upload is simply resubmitted on rerun; a duplicate submission is harmless.
