@@ -18,6 +18,8 @@ fi
 plist="$app/Contents/Info.plist"
 [[ -d "$app" && ! -L "$app" && -f "$plist" ]] || { echo 'Application must be an existing InkFlow.app bundle.' >&2; exit 2; }
 [[ $(plutil -extract CFBundleIdentifier raw "$plist") == io.damao.inputmethod.inkflow ]] || { echo 'Unexpected application bundle identity.' >&2; exit 1; }
+# build.sh output is unsealed; macOS does not connect to or relaunch an input method whose signature does not verify.
+codesign --verify --deep --strict "$app" >/dev/null 2>&1 || { echo 'Application signature does not verify; sign it first with install.sh or the release flow.' >&2; exit 1; }
 build=$(plutil -extract CFBundleVersion raw "$plist")
 version=$(plutil -extract CFBundleShortVersionString raw "$plist")
 source macOS/scripts/swift-package.sh

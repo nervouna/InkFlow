@@ -30,11 +30,21 @@ cp macOS/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string 42 "$app/Contents/Info.plist"
 printf '#!/bin/sh\n' > "$app/Contents/MacOS/InkFlow"
 chmod +x "$app/Contents/MacOS/InkFlow"
+# build.sh leaves the app unsealed, so a copy taken before the fixture is signed is the refusal case.
+unsealed="$fixture/unsealed/InkFlow.app"
+mkdir -p "$fixture/unsealed"
+cp -R "$app" "$unsealed"
+# build-pkg.sh needs a sealed app, so the fixture carries an ad-hoc signature (no keychain).
+codesign --sign - "$app"
 out="$fixture/out/InkFlow.pkg"
 build_pkg() { (cd "$repo" && bash macOS/scripts/build-pkg.sh "$@"); }
 
 if build_pkg > "$fixture/output" 2>&1; then exit 1; fi
 grep -Fq 'Usage: build-pkg.sh' "$fixture/output"
+# An unsealed app is refused with one line, before any package or build state is written.
+if build_pkg "$unsealed" "$fixture/unsealed.pkg" > "$fixture/output" 2>&1; then exit 1; fi
+[[ $(<"$fixture/output") == 'Application signature does not verify; sign it first with install.sh or the release flow.' ]]
+[[ ! -e "$fixture/unsealed.pkg" && -z "$(ls -A "$repo/build")" ]]
 if build_pkg "$fixture/missing.app" "$out" > "$fixture/output" 2>&1; then exit 1; fi
 [[ ! -e "$out" ]]
 build_pkg "$app" "$out" > "$fixture/output" 2>&1
@@ -131,6 +141,8 @@ printf '  1) %s "Developer ID Application: Fixture (T7976FL2LP)"\n' "$APP_IDENTI
 STUB
 cat > "$shims/codesign" <<'STUB'
 #!/bin/bash
+# Verification is read-only: it reaches the real codesign and is not a signing event.
+[[ "$1" != --verify ]] || exec /usr/bin/codesign "$@"
 echo "codesign:$*" >> "$EVENTS"
 printf '# signed\n' >> "${!#}"
 STUB
