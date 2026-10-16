@@ -932,7 +932,7 @@ package enum EngineRegression {
         check(writeFailed, "An unwritable dictionary directory must surface failure and retain the old configuration")
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.configurationError != nil && a.candidateCount == 5,
-              "The same request is pushed on every refresh and must not retry the write")
+              "Pushing the same request again must not retry the write")
         let retried = try CustomPhrase.validated(id: changed.id, code: "dz", text: "重试地址")
         a.setConfiguration(candidateCount: 3, customPhrases: [retried])
         check(a.configurationError == nil, "A changed request writes the file again")

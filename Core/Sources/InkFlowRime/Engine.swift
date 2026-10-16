@@ -405,8 +405,9 @@ package final class IFEngine {
         }
     }
 
-    /// Existing idle configuration applies before the values a key actually uses are captured.
-    private func applyConfigurationIfIdle() {
+    /// Existing idle configuration applies before the values a key actually uses are captured,
+    /// and when the frontend ends a composition.
+    package func applyConfigurationIfIdle() {
         guard attached, let session else { return }
         _ = ifr_session_set_ascii_mode(session, requestedASCIIMode ? 1 : 0)
         refreshApplied()

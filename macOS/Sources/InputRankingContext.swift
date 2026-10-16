@@ -4,15 +4,8 @@ import InkFlowRime
 /// Offline context-ranking glue kept separate from AI controller behavior for build identity auditing.
 @MainActor
 enum IFInputRankingContext {
-    static func refresh(_ engine: IFEngine?, client: IMKTextInput?, ownsMarkedText: Bool,
-                        secureInput: () -> Bool = IsSecureEventInputEnabled) {
-        guard let engine else { return }
-        let preceding = engine.snapshot().preedit.isEmpty ? "" :
-            IFPrecedingText.read(from: client, ownsMarkedText: ownsMarkedText, secureInput: secureInput)
-        engine.setPrecedingText(preceding)
-    }
-
-    /// Capture client context only at composition start. Later selection and flush events retain shown order.
+    /// Capture client context only at composition start. Later keys, selection and flush events retain shown order;
+    /// the engine drops the context when the composition ends.
     static func prepareForKey(_ engine: IFEngine, client: IMKTextInput?, ownsMarkedText: Bool,
                               secureInput: () -> Bool = IsSecureEventInputEnabled) {
         guard engine.snapshot().preedit.isEmpty else { return }

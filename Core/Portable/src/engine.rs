@@ -1316,9 +1316,9 @@ impl InputSession {
             state.requested_tsv = phrase_tsv(phrases);
             state.file_error = false;
         }
-        // The settings path writes the file; key events only ever reload it. Frontends push
-        // the same settings on every refresh, so a failed write is retried only when the
-        // phrases change or the engine restarts, and the whole configuration waits.
+        // The settings path writes the file; key events only ever reload it. Frontends may push
+        // the same settings again, so a failed write is retried only when the phrases change
+        // or the engine restarts, and the whole configuration waits.
         if let Some(error) = sync_phrase_file(&mut state, &self.engine.user.join(PHRASE_FILE)) {
             state.sessions.get_mut(&self.id).unwrap().error = Some(error);
             return Ok(());
