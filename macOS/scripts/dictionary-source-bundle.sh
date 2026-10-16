@@ -120,7 +120,7 @@ On a Mac with the Swift and pinned Rust toolchains, from \`inkflow/\`:
 mkdir -p build/deps build/dictionary-sources
 cp ../upstream/deps/* build/deps/
 cp ../upstream/dictionary-sources/* build/dictionary-sources/
-bash macOS/scripts/dependencies.sh        # fetches the remaining librime build inputs
+bash macOS/scripts/dependencies.sh        # verifies and extracts the pinned dictionary archives
 bash Core/scripts/prepare-rime.sh build/shared-rime
 \`\`\`
 
