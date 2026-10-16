@@ -29,7 +29,7 @@ struct AboutSettingsView: View {
         ("rime-pinyin-simp 兼容词库、OpenCC 简繁数据", "Apache-2.0"),
         ("rime-easy-en 英文词库", "LGPL-3.0"),
         ("wordfreq 英文词频快照", "CC BY-SA 4.0"),
-        ("librime、librime-lua、Lua、Boost、Sparkle", "BSD、MIT、BSL-1.0"),
+        ("librime、librime-lua、Lua、Boost、Sparkle、OpenCC、glog、LevelDB、marisa、yaml-cpp、Rust crates", "BSD、MIT、BSL-1.0、Apache-2.0、Unlicense、Zlib"),
     ]
 
     var body: some View {
