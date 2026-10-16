@@ -4,8 +4,10 @@
 #include <limits>
 #include <tuple>
 #include <rime/algo/syllabifier.h>
+#include <rime/context.h>
 #include <rime/dict/dictionary.h>
 #include <rime/dict/user_dictionary.h>
+#include <rime/engine.h>
 #include <rime/gear/poet.h>
 #include <rime/language.h>
 #include <rime/registry.h>
@@ -35,6 +37,9 @@ string Lowercase(string text) {
 bool IsPublicEnglish(const string& text) {
   return !text.empty() && std::all_of(text.begin(), text.end(), IsLetter);
 }
+
+// Context property that carries IsTechnicalInput's verdict to the Lua metadata.
+const char* const kTechnicalInputProperty = "inkflow_technical_input";
 
 enum class Origin { Chinese, PublicEnglish, PersonalEnglish };
 
@@ -123,6 +128,18 @@ bool RecoverSpans(const SyllableGraph& graph, const Code& code, size_t index,
 
 using Edges = vector<vector<size_t>>;
 
+// A prism key is normal when one of its spellings is neither an abbreviation,
+// fuzzy, completion nor typo-correction alias.
+bool HasNormalSpelling(Prism& prism, int spelling_id) {
+  for (auto spelling = prism.QuerySpelling(spelling_id); !spelling.exhausted();
+       spelling.Next()) {
+    const auto properties = spelling.properties();
+    if (properties.type == kNormalSpelling && !properties.is_correction)
+      return true;
+  }
+  return false;
+}
+
 // Enumerate all normal lexical spans in the uncut input. Syllabifier's final
 // graph prunes competing paths, so admission reads the same native prism API
 // before that pruning. Delimiters follow Syllabifier's consumption convention.
@@ -135,18 +152,11 @@ Edges NormalEdges(const string& input, Prism& prism, const string& delimiters) {
     vector<Prism::Match> matches;
     prism.CommonPrefixSearch(input.substr(begin), &matches);
     for (const auto& match : matches) {
-      if (match.length == 0) continue;
-      for (auto spelling = prism.QuerySpelling(match.value);
-           !spelling.exhausted(); spelling.Next()) {
-        const auto properties = spelling.properties();
-        if (properties.type != kNormalSpelling || properties.is_correction)
-          continue;
-        size_t end = begin + match.length;
-        while (end < input.size() && delimiters.find(input[end]) != string::npos)
-          ++end;
-        edges[start].push_back(end);
-        break;
-      }
+      if (match.length == 0 || !HasNormalSpelling(prism, match.value)) continue;
+      size_t end = begin + match.length;
+      while (end < input.size() && delimiters.find(input[end]) != string::npos)
+        ++end;
+      edges[start].push_back(end);
     }
   }
   return edges;
@@ -171,6 +181,33 @@ vector<bool> ReachableToEnd(const Edges& edges) {
     }
   }
   return reachable;
+}
+
+// Whether `tail` is an unfinished syllable: the start of some key that has a
+// normal spelling, such as `n` of `ni` or `zh` of `zhong`.
+bool BeginsNormalSpelling(Prism& prism, const string& tail) {
+  vector<Prism::Match> keys;
+  prism.ExpandSearch(tail, &keys, 0);
+  return std::any_of(keys.begin(), keys.end(), [&](const Prism::Match& key) {
+    return HasNormalSpelling(prism, key.value);
+  });
+}
+
+// An input of 4 or more ASCII letters that is not complete normal syllables
+// optionally followed by one unfinished final syllable, as `macos` and
+// `deepseek` are not but `email` (e mai l) and `chin` (chi n) are. The same
+// native normal-spelling evidence as rule 9: abbreviations, fuzzy pairs and
+// typo aliases never make an input look like Pinyin.
+bool IsTechnicalInput(const string& input, Prism& prism, const string& delimiters) {
+  if (input.size() < 4 || !std::all_of(input.begin(), input.end(), IsLetter))
+    return false;
+  const auto reachable = ReachableFromStart(NormalEdges(input, prism, delimiters));
+  if (reachable.back()) return false;
+  for (size_t start = 0; start < input.size(); ++start) {
+    if (reachable[start] && BeginsNormalSpelling(prism, input.substr(start)))
+      return false;
+  }
+  return true;
 }
 
 struct PersonalMatch {
@@ -226,12 +263,14 @@ class MixedPersonalTranslator final : public Translator {
   }
 
   an<Translation> Query(const string& input, const Segment& segment) override {
-    if (!segment.HasAnyTagIn(tags_) || input.empty() || max_input_length_ <= 0 ||
-        input.size() > static_cast<size_t>(max_input_length_) ||
-        input.size() > static_cast<size_t>(std::numeric_limits<int>::max()) ||
-        segment.end < segment.start || input.size() != segment.end - segment.start ||
-        !mixed_ || !mixed_->loaded() || !pinyin_ || !pinyin_->loaded() ||
-        !personal_ || !personal_->loaded())
+    const bool bounded = segment.HasAnyTagIn(tags_) && !input.empty() &&
+        max_input_length_ > 0 && input.size() <= static_cast<size_t>(max_input_length_) &&
+        input.size() <= static_cast<size_t>(std::numeric_limits<int>::max()) &&
+        segment.end >= segment.start && input.size() == segment.end - segment.start &&
+        pinyin_ && pinyin_->loaded();
+    PublishTechnicalInput(bounded && IsTechnicalInput(input, *pinyin_->prism(), delimiters_)
+                              ? input : string());
+    if (!bounded || !mixed_ || !mixed_->loaded() || !personal_ || !personal_->loaded())
       return nullptr;
 
     const auto matches = FindPersonalMatches(input);
@@ -275,6 +314,16 @@ class MixedPersonalTranslator final : public Translator {
   }
 
  private:
+  // The English ranking metadata (inkflow_input_coverage.lua) reads this context
+  // property in the same composition: it holds the input when that input is
+  // technical, otherwise it is empty. Naming the input keeps a stale value from
+  // ever matching another one.
+  void PublishTechnicalInput(const string& value) {
+    Context* context = engine_ ? engine_->context() : nullptr;
+    if (context && context->get_property(kTechnicalInputProperty) != value)
+      context->set_property(kTechnicalInputProperty, value);
+  }
+
   vector<PersonalMatch> FindPersonalMatches(const string& input) {
     vector<PersonalMatch> matches;
     const string lower = Lowercase(input);

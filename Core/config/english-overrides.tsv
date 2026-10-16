@@ -70,6 +70,7 @@ Debian	4.0	Product policy: admit this curated technology spelling at the shared 
 CentOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 macOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 iOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+ios	0	Product policy: exclude the lowercase spelling (issue #105). The case-folding wordfreq snapshot gives it 4.12, which is really the frequency of iOS, and the admitted word is the first candidate for typed ios, ahead of the curated iOS (4.0).
 Python	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 TypeScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 JavaScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.

@@ -97,6 +97,27 @@
     ],
     "parsed" : null
   },
+  "bad-metadata-lead-mixed" : {
+    "order" : [
+      0,
+      1
+    ],
+    "parsed" : null
+  },
+  "bad-metadata-lead-native" : {
+    "order" : [
+      0,
+      1
+    ],
+    "parsed" : null
+  },
+  "bad-metadata-lead-partial" : {
+    "order" : [
+      0,
+      1
+    ],
+    "parsed" : null
+  },
   "boundary-然后" : {
     "order" : [
       2,
@@ -3709,6 +3730,92 @@
       "0,16,n,1,0,n",
       "0,16,m,1,0,m",
       "0,16,m,1,2,m"
+    ]
+  },
+  "technical-english-before-learned-mixed" : {
+    "order" : [
+      1,
+      2,
+      0
+    ],
+    "parsed" : [
+      "0,8,n,1,0,n",
+      "0,8,a,2,0,e",
+      "0,8,m,1,2,m"
+    ]
+  },
+  "technical-english-first-exact-only" : {
+    "order" : [
+      1,
+      0,
+      2,
+      3
+    ],
+    "parsed" : [
+      "0,8,n,1,0,n",
+      "0,8,a,2,0,e",
+      "0,8,a,2,0,e",
+      "0,2,n,0,0,n"
+    ]
+  },
+  "technical-english-keeps-custom-first" : {
+    "order" : [
+      2,
+      1,
+      0
+    ],
+    "parsed" : [
+      "0,5,n,1,0,n",
+      "0,5,a,2,0,e",
+      "0,5,n,1,0,c"
+    ]
+  },
+  "technical-english-leads" : {
+    "order" : [
+      1,
+      0,
+      2
+    ],
+    "parsed" : [
+      "0,5,n,1,0,n",
+      "0,5,a,2,0,e",
+      "0,2,n,0,0,n"
+    ]
+  },
+  "technical-english-needs-equal-coverage" : {
+    "order" : [
+      0,
+      1,
+      2
+    ],
+    "parsed" : [
+      "0,2,n,0,0,n",
+      "0,5,a,2,0,e",
+      "0,5,n,1,0,n"
+    ]
+  },
+  "technical-english-personal-leads" : {
+    "order" : [
+      1,
+      0,
+      2
+    ],
+    "parsed" : [
+      "0,5,n,1,0,n",
+      "0,5,a,2,3,e",
+      "0,2,n,0,0,n"
+    ]
+  },
+  "technical-english-unflagged-stays-behind" : {
+    "order" : [
+      0,
+      1,
+      2
+    ],
+    "parsed" : [
+      "0,5,n,1,0,n",
+      "0,5,a,1,0,e",
+      "0,2,n,0,0,n"
     ]
   },
   "unequal-length" : {
