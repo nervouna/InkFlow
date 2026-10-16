@@ -759,6 +759,7 @@ struct ControllerTests {
                                                     settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
                                                     secureInput: { false })!
             for character in "can" { check(controller.handle(keyEvent(0, String(character)), client: client)) }
+            check(client.requests.count == 1, "Context is read once, at composition start")
             return (controller, client)
         }
         for action in ["space", "digit", "click", "arrow", "panel-highlight", "comma", "return", "shortcut", "toggle", "commit", "deactivate"] {

@@ -14,6 +14,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
     }()
     private var modeModifierArmed: ShortcutBinding?
+    private var selectionKeyCount: Int?
 
     nonisolated override func recognizedEvents(_ sender: Any!) -> Int {
         Int(NSEvent.EventTypeMask(arrayLiteral: .keyDown, .keyUp, .flagsChanged).rawValue)
@@ -87,25 +88,29 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
     override func applySettings() {
         engine?.setConfiguration(candidateCount: settings.candidateCount, customPhrases: settings.customPhrases,
                                  inputPreferences: settings.inputPreferences)
+        applyPresentationSettings()
+        selectionKeyCount = nil
+        syncAppliedSettings()
+    }
+
+    /// The engine applies settings at its next composition boundary; refresh mirrors only what it applied.
+    private func syncAppliedSettings() {
         if settings.inputSettingsError != engine?.configurationError {
             settings.inputSettingsError = engine?.configurationError
         }
-        applyPresentationSettings()
-        applySelectionKeys()
-    }
-
-    private func applySelectionKeys() {
+        let count = engine?.candidateCount ?? 5
+        guard count != selectionKeyCount else { return }
+        selectionKeyCount = count
         if let selectionKeyLayout = Self.selectionKeyLayout { panel?.setSelectionKeysKeylayout(selectionKeyLayout) }
         let keys = [18, 19, 20, 21, 23, 22, 26, 28, 25]
-        panel?.setSelectionKeys(Array(keys.prefix(engine?.candidateCount ?? 5)))
+        panel?.setSelectionKeys(Array(keys.prefix(count)))
     }
 
     override func refresh(_ client: IMKTextInput?) {
-        _ = refreshWithInputDiagnostics(client, secureInput: secureInput)
+        _ = refreshWithInputDiagnostics(client)
     }
 
-    private func refreshWithInputDiagnostics(_ client: IMKTextInput?,
-                                             secureInput: () -> Bool) -> InputDeliveryDiagnostic {
+    private func refreshWithInputDiagnostics(_ client: IMKTextInput?) -> InputDeliveryDiagnostic {
         var delivery = InputDeliveryDiagnostic(clientPresent: client != nil, commitInsertion: false,
                                                markedTextUpdate: false, markedTextClear: false)
         guard !voice.blocksRime else { return delivery }
@@ -132,9 +137,9 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             engine?.qualityRecorder?.commitDrained(commit, insertionIssued: !commit.isEmpty && client != nil,
                                                   clientID: client?.uniqueClientIdentifierString())
         }
-        IFInputRankingContext.refresh(engine, client: client, ownsMarkedText: ownsMarkedText,
-                                      secureInput: secureInput)
         let state = engine?.snapshot() ?? EngineSnapshot()
+        // Settings deferred during the composition take effect once it ends.
+        if state.preedit.isEmpty, previousPreeditCount > 0 { engine?.applyConfigurationIfIdle() }
         if !state.preedit.isEmpty {
             inputDiagnostics.beginComposition()
             ownsMarkedText = true
@@ -161,7 +166,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         }
         deliveredPreedit = state.preedit
         strings = state.candidates
-        applySettings()
+        syncAppliedSettings()
         updating = true
         candidatePresentation?.refreshCandidates(strings, highlight: state.highlight)
         updating = false
@@ -249,8 +254,7 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .rime)
             if !handled && !engine.snapshot().preedit.isEmpty { engine.commit(capturedAt: entered) }
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .commit)
-            let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput,
-                                                       secureInput: self.secureInput)
+            let delivery = refreshWithInputDiagnostics(callbackClient as? IMKTextInput)
             inputDiagnostics.checkpointFirstKey(firstKey, stage: .refresh)
             return finishFirstKey(handled, .rime, delivery: delivery)
         }
