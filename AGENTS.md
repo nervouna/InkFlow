@@ -8,6 +8,10 @@ Solo project. Keep changes small and direct; prefer deleting code over adding gu
 - For dictionary, learning and ranking work, try existing Rime capabilities and configuration before writing custom mechanisms.
 - Quality telemetry exists to iterate ranking and English mixing. It must not change ranking or input, and must not log secrets. AI stays default-off.
 
+## Code style
+
+- One statement per line: don't chain statements with `;` (shell keeps `if …; then` and `do`). Keep code lines at most 120 columns. This applies to code you write or edit; don't reformat untouched code.
+
 ## Task-specific guidance
 
 - For shared-core or platform work, read [the migration design](docs/portable-core-migration.md).
