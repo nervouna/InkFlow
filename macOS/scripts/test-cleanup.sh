@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-cleanup.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
@@ -16,18 +17,18 @@ for index in 1 2 3 4; do mkdir "$repo/build/backups/installation.$index"; touch 
 (
   cd "$repo"
   bash macOS/scripts/cleanup.sh > "$fixture/dry.log"
-  [[ -d build/swiftpm && -d build/SettingsHarness.app && -d build/backups/installation.1 ]]
+  [[ -d build/swiftpm && -d build/SettingsHarness.app && -d build/backups/installation.1 ]] || fail
   grep -Fq '[SwiftPM cache]' "$fixture/dry.log"
   grep -Fq '[test harnesses]' "$fixture/dry.log"
   grep -Fq '[diagnostic logs, preserved]' "$fixture/dry.log"
   grep -Fxq 'build/release-verification-attempts' "$fixture/dry.log"
   grep -Fq '[installation backups, keep 2]' "$fixture/dry.log"
   bash macOS/scripts/cleanup.sh --apply > "$fixture/apply.log"
-  [[ ! -e build/swiftpm && ! -e build/SettingsHarness.app ]]
-  [[ ! -e build/backups/installation.1 && ! -e build/backups/installation.2 ]]
-  [[ -d build/backups/installation.3 && -d build/backups/installation.4 ]]
-  [[ -f build/releases/history/sentinel && -f build/unknown-failure/sentinel && -f build/gui-verification/failed.log ]]
-  [[ -f build/release-verification-attempts/attempt/release.log && -f build/release-verification-attempts/attempt/test-units/quality-store.log ]]
-  [[ $(cat build/build-number/last) == 123 ]]
+  [[ ! -e build/swiftpm && ! -e build/SettingsHarness.app ]] || fail
+  [[ ! -e build/backups/installation.1 && ! -e build/backups/installation.2 ]] || fail
+  [[ -d build/backups/installation.3 && -d build/backups/installation.4 ]] || fail
+  [[ -f build/releases/history/sentinel && -f build/unknown-failure/sentinel && -f build/gui-verification/failed.log ]] || fail
+  [[ -f build/release-verification-attempts/attempt/release.log && -f build/release-verification-attempts/attempt/test-units/quality-store.log ]] || fail
+  [[ $(cat build/build-number/last) == 123 ]] || fail
 )
 echo 'PASS cleanup: dry-run default, scoped apply, two backups retained, releases/failure evidence preserved'

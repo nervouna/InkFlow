@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 # macOS awk collates distinct CJK strings as equal under UTF-8 locales; compare bytes.
 awk() { LC_ALL=C command awk "$@"; }
@@ -172,26 +173,26 @@ expect_failure() {
 configure 4.0 250000 100
 : > "$fixture/Core/config/english-overrides.tsv"
 generate
-[[ -z $(find "$fixture/output" -name '.english.*' -print) ]]
+[[ -z $(find "$fixture/output" -name '.english.*' -print) ]] || fail
 cache_count=$(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ')
 cached_english=$(find "$fixture/build/rime-cache" -path '*/content/easy_en.dict.yaml' -type f)
 touch -t 200001010000 "$cached_english"
 generate
-[[ ! "$fixture/output/easy_en.dict.yaml" -nt "$cached_english" && ! "$cached_english" -nt "$fixture/output/easy_en.dict.yaml" ]]
-[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]]
-[[ ! -e "$fixture/macOS" ]]
+[[ ! "$fixture/output/easy_en.dict.yaml" -nt "$cached_english" && ! "$cached_english" -nt "$fixture/output/easy_en.dict.yaml" ]] || fail
+[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]] || fail
+[[ ! -e "$fixture/macOS" ]] || fail
 mkdir -p "$fixture/macOS/scripts"
 cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
 bash "$fixture/macOS/scripts/prepare-rime.sh" "$fixture/wrapper-output"
 diff -r "$fixture/output" "$fixture/wrapper-output"
-[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]]
+[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]] || fail
 receipt=$(cat "$fixture/output/dictionary-manifest.json")
 for changed in Core/Sources/InkFlowDomain/DictionaryGenerator.swift Core/Tools/DictionaryGeneratorTool/main.swift Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json; do
   cp "$fixture/$changed" "$fixture/source-before"
   printf '\nchanged closure\n' >> "$fixture/$changed"
   generate
-  [[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') -eq $((cache_count + 1)) ]]
-  [[ $(cat "$fixture/output/dictionary-manifest.json") != "$receipt" ]]
+  [[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') -eq $((cache_count + 1)) ]] || fail
+  [[ $(cat "$fixture/output/dictionary-manifest.json") != "$receipt" ]] || fail
   mv "$fixture/source-before" "$fixture/$changed"
   cache_count=$((cache_count + 1))
 done

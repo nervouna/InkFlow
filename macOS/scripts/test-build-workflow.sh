@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-build-workflow.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
@@ -88,16 +89,16 @@ chmod +x "$repo/macOS/scripts/"*.sh
 (
   cd "$repo"
   if FAIL_APP_BUILD=1 bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
-  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]]
+  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]] || fail
   if MUTATE_BUILD_INPUT=1 bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
-  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]]
+  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]] || fail
   printf input > macOS/Sources/input
   cp macOS/scripts/quality-metadata.sh "$fixture/quality-wrapper"
   if MUTATE_METADATA_WRAPPER=1 bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
-  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]]
+  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]] || fail
   cp "$fixture/quality-wrapper" macOS/scripts/quality-metadata.sh
   if SKIP_METADATA=1 bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
-  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]]
+  [[ $(cat build/InkFlow.app/Contents/sentinel) == old ]] || fail
   rm -rf build/dictionary-sources
   source_before=$(shasum -a 256 macOS/Info.plist)
   bash macOS/scripts/build.sh > "$fixture/first-summary"
@@ -107,39 +108,39 @@ chmod +x "$repo/macOS/scripts/"*.sh
   grep -Fxq '| Source dirty | false |' "$fixture/first-summary"
   bash macOS/scripts/build.sh > "$fixture/second-summary"
   second=$(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist)
-  [[ "$second" == "$((first + 1))" && $(shasum -a 256 macOS/Info.plist) == "$source_before" ]]
+  [[ "$second" == "$((first + 1))" && $(shasum -a 256 macOS/Info.plist) == "$source_before" ]] || fail
   grep -Fxq "| Build | $second |" "$fixture/second-summary"
   # Allocation is shared and serialized even when independent callers overlap.
   pids=()
   for ((i=0; i<8; i++)); do bash macOS/scripts/build-number.sh > "$fixture/number.$i" & pids+=("$!"); done
   for pid in "${pids[@]}"; do wait "$pid"; done
-  [[ $(cat "$fixture"/number.* | sort -u | wc -l | tr -d ' ') == 8 ]]
-  [[ $(cat build/build-number/last) == "$((second + 8))" ]]
+  [[ $(cat "$fixture"/number.* | sort -u | wc -l | tr -d ' ') == 8 ]] || fail
+  [[ $(cat build/build-number/last) == "$((second + 8))" ]] || fail
   mkdir -p "$fixture/linked/macOS/scripts"
   cp macOS/scripts/build-number.sh "$fixture/linked/macOS/scripts/"
   cp macOS/Info.plist "$fixture/linked/macOS/Info.plist"
   linked=$(bash "$fixture/linked/macOS/scripts/build-number.sh")
-  [[ "$linked" == "$((second + 9))" && $(cat build/build-number/last) == "$linked" ]]
+  [[ "$linked" == "$((second + 9))" && $(cat build/build-number/last) == "$linked" ]] || fail
   plutil -replace CFBundleVersion -string "$((linked + 20))" "$fixture/linked/macOS/Info.plist"
-  [[ $(bash "$fixture/linked/macOS/scripts/build-number.sh") == "$((linked + 21))" ]]
+  [[ $(bash "$fixture/linked/macOS/scripts/build-number.sh") == "$((linked + 21))" ]] || fail
   # A second app build must fail before touching the previous output.
   mkdir build/app-build.lock
   if bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
-  [[ -d build/app-build.lock ]]
+  [[ -d build/app-build.lock ]] || fail
   rmdir build/app-build.lock
   # Corrupt state cannot reset the counter or damage the last completed bundle.
   printf invalid > build/build-number/last
   if bash macOS/scripts/build.sh > "$fixture/failed-summary" 2>&1; then exit 1; fi
-  ! grep -Fq '| Artifact metadata |' "$fixture/failed-summary"
-  [[ $(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist) == "$second" ]]
-  [[ -s build/dictionary-sources/fresh.yaml ]]
-  [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]]
+  ! grep -Fq '| Artifact metadata |' "$fixture/failed-summary" || fail
+  [[ $(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist) == "$second" ]] || fail
+  [[ -s build/dictionary-sources/fresh.yaml ]] || fail
+  [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]] || fail
   # The source-built librime is the only engine library; Lua is merged into it, not a plugin.
-  [[ $(cat build/InkFlow.app/Contents/Frameworks/librime.1.dylib) == librime && ! -e build/InkFlow.app/Contents/Frameworks/rime-plugins ]]
-  [[ -s build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate ]]
-  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc ]]
-  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc ]]
-  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app ]]
-  [[ -z $(find build -maxdepth 1 -name 'app-stage.*' -print) ]]
+  [[ $(cat build/InkFlow.app/Contents/Frameworks/librime.1.dylib) == librime && ! -e build/InkFlow.app/Contents/Frameworks/rime-plugins ]] || fail
+  [[ -s build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate ]] || fail
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc ]] || fail
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc ]] || fail
+  [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app ]] || fail
+  [[ -z $(find build -maxdepth 1 -name 'app-stage.*' -print) ]] || fail
 )
 echo 'PASS build workflow: cold source bootstrap, staging assembly, drift rejection, old-bundle preservation and fresh replacement'
