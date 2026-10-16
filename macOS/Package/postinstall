@@ -1,11 +1,16 @@
 #!/bin/bash
-# Runs as the logged-in user after the payload is laid down: register, restore the input-source state
+# Runs as the logged-in user after Installer has laid the app down in the state directory: swap it into
+# Input Methods with one rename (the installed path never goes missing), then restore the input-source state
 # (or enable it on a first install), relaunch and check the new build.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-state="$HOME/Library/Caches/io.damao.inkflow.installer/state.json"
-trap 'rm -f "$state"' EXIT
-if ! "$here/register-input-source" "$HOME/Library/Input Methods/InkFlow.app" --finish-update "$state"; then
+state_dir="$HOME/Library/Caches/io.damao.inkflow.installer"
+state="$state_dir/state.json"
+# After a swap this path holds the old app; after a failed swap it holds the staged app. Either way it is removed.
+trap 'rm -rf "$state" "$state_dir/InkFlow.app"' EXIT
+mkdir -p "$HOME/Library/Input Methods"
+if ! "$here/register-input-source" "$HOME/Library/Input Methods/InkFlow.app" --commit-update "$state" \
+  || ! "$here/register-input-source" "$HOME/Library/Input Methods/InkFlow.app" --finish-update "$state"; then
   echo '墨流拼音安装未完成：请再次运行该安装包。' >&2
   exit 1
 fi

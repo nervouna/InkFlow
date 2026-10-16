@@ -66,7 +66,7 @@ grep -Fq "<os-version min=\"$minimum\"/>" "$distribution"
 [[ $(plutil -extract 0.BundleIsRelocatable raw macOS/Package/component.plist) == false ]]
 component=("$fixture/expanded"/*.pkg)
 [[ ${#component[@]} -eq 1 ]]
-grep -Fq 'install-location="Library/Input Methods"' "${component[0]}/PackageInfo"
+grep -Fq 'install-location="Library/Caches/io.damao.inkflow.installer"' "${component[0]}/PackageInfo"
 grep -Fq 'relocatable="false"' "${component[0]}/PackageInfo"
 grep -Fq '<relocate/>' "${component[0]}/PackageInfo"
 
@@ -90,22 +90,31 @@ grep -Fq 'fixture register-input-source' "$scripts/register-input-source"
 [[ $(<"$scripts/build-number") == 42 ]]
 ! grep -Eq 'killall|pkill|kill ' "$scripts/preinstall" "$scripts/postinstall"
 
-# Script behavior: Installer runs both as the user with HOME set.
+# Script behavior: Installer runs both as the user with HOME set. The checks use [ ] because bash 3.2
+# (macOS /bin/bash) does not stop on a failing [[ ]] under set -e.
 export HOME="$fixture/home" EVENTS="$fixture/events"
 target="$HOME/Library/Input Methods/InkFlow.app"
-state="$HOME/Library/Caches/io.damao.inkflow.installer/state.json"
+state_dir="$HOME/Library/Caches/io.damao.inkflow.installer"
+state="$state_dir/state.json"
+staged="$state_dir/InkFlow.app"
 mkdir -p "$HOME/Library/Application Support/InkFlow"
 printf 'personal data\n' > "$HOME/Library/Application Support/InkFlow/dictionary.db"
 
 : > "$EVENTS"
 "$scripts/preinstall" > "$fixture/output" 2>&1
 grep -Fxq "tool:$target --prepare-update $state 42" "$EVENTS"
-[[ -s "$state" ]]
+[ -s "$state" ]
 
+# Installer stages the app in the state directory; postinstall swaps it in before the restore. The parent
+# folder may be missing on a fresh account, so postinstall creates it.
+mkdir -p "$staged/Contents"
+[ ! -e "$HOME/Library/Input Methods" ]
 : > "$EVENTS"
 "$scripts/postinstall" > "$fixture/output" 2>&1
-grep -Fxq "tool:$target --finish-update $state" "$EVENTS"
-[[ ! -e "$state" ]]
+[ "$(<"$EVENTS")" = "tool:$target --commit-update $state"$'\n'"tool:$target --finish-update $state" ]
+[ -d "$HOME/Library/Input Methods" ]
+[ ! -e "$state" ]
+[ ! -e "$staged" ]
 
 # A preinstall failure aborts the install and leaves no state to restore from.
 printf 'stale\n' > "$state"
@@ -113,21 +122,38 @@ if TOOL_FAILURE=--prepare-update "$scripts/preinstall" > "$fixture/output" 2>&1;
   echo 'FAIL: preinstall must fail when InkFlow cannot be stopped' >&2
   exit 1
 fi
-[[ ! -e "$state" ]]
+[ ! -e "$state" ]
 
-# A postinstall failure prints one recovery line, fails the install and still clears the state.
+# A failed swap prints one recovery line, fails the install, never restores, and clears the staged app.
 "$scripts/preinstall" > "$fixture/output" 2>&1
+mkdir -p "$staged/Contents"
+: > "$EVENTS"
+if TOOL_FAILURE=--commit-update "$scripts/postinstall" > "$fixture/output" 2>&1; then
+  echo 'FAIL: postinstall must fail when the staged app cannot be swapped in' >&2
+  exit 1
+fi
+grep -Fxq "tool:$target --commit-update $state" "$EVENTS"
+[ "$(grep -Fc -e '--finish-update' "$EVENTS")" -eq 0 ]
+[ "$(wc -l < "$fixture/output")" -eq 1 ]
+grep -Fq '再次运行' "$fixture/output"
+[ ! -e "$state" ]
+[ ! -e "$staged" ]
+
+# A failed restore after the swap prints one recovery line, fails the install and still clears the state and the old app.
+"$scripts/preinstall" > "$fixture/output" 2>&1
+mkdir -p "$staged/Contents"
 if TOOL_FAILURE=--finish-update "$scripts/postinstall" > "$fixture/output" 2>&1; then
   echo 'FAIL: postinstall must fail when InkFlow cannot be restored' >&2
   exit 1
 fi
-[[ $(wc -l < "$fixture/output") -eq 1 ]]
+[ "$(wc -l < "$fixture/output")" -eq 1 ]
 grep -Fq '再次运行' "$fixture/output"
-[[ ! -e "$state" ]]
+[ ! -e "$state" ]
+[ ! -e "$staged" ]
 
 # Neither script touches personal data.
-[[ $(<"$HOME/Library/Application Support/InkFlow/dictionary.db") == 'personal data' ]]
-[[ -z "$(ls -A "$HOME/Library/Application Support/InkFlow" | grep -v '^dictionary.db$')" ]]
+[ "$(<"$HOME/Library/Application Support/InkFlow/dictionary.db")" = 'personal data' ]
+[ -z "$(ls -A "$HOME/Library/Application Support/InkFlow" | grep -v '^dictionary.db$')" ]
 # Signing (--sign APP_SHA1 INSTALLER_SHA1) is wired with stand-in tools; no keychain is used. The embedded tool
 # is signed with the hardened runtime and a timestamp before it is packaged, and the package with the
 # installer identity's common name, which productbuild takes instead of a hash.
@@ -186,4 +212,4 @@ grep -Fxq '# signed' "$fixture/signed-expanded/InkFlow-component.pkg/Scripts/reg
 PATH="$shims:$PATH" build_pkg "$app" "$fixture/plain.pkg" > "$fixture/output" 2>&1
 grep -Fq ', unsigned;' "$fixture/output"
 [[ ! -s "$EVENTS" ]]
-echo 'PASS installer package: home-only domain, non-relocatable app, app-only payload, executable scripts with the lifecycle tool, preinstall aborts and postinstall recovers without touching personal data, optional signing of the tool and the package'
+echo 'PASS installer package: home-only domain, non-relocatable app, app-only payload, executable scripts with the lifecycle tool, preinstall aborts, postinstall swaps the staged app in and recovers without touching personal data, optional signing of the tool and the package'

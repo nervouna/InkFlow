@@ -33,10 +33,10 @@ bash macOS/scripts/build-pkg.sh build/InkFlow.app build/InkFlow.pkg
 
 The app must be signed before it is packaged: `build.sh` leaves it unsealed, and `build-pkg.sh` refuses an app whose `codesign --verify --deep --strict` fails. Sign it first with `install.sh` or the release flow.
 
-`build-pkg.sh APP OUT` wraps a built app in a `.pkg` that Installer.app installs into `~/Library/Input Methods` without administrator rights (`Package/Distribution.xml` allows only the current user's home folder; the app is not relocatable). The package scripts ship with the `register-input-source` tool and the expected build number, and never touch `~/Library/Application Support/InkFlow`:
+`build-pkg.sh APP OUT` wraps a built app in a `.pkg` that Installer.app stages in `~/Library/Caches/io.damao.inkflow.installer` without administrator rights (`Package/Distribution.xml` allows only the current user's home folder; the app is not relocatable). The package scripts ship with the `register-input-source` tool and the expected build number, and never touch `~/Library/Application Support/InkFlow`:
 
 - `Package/preinstall` records the input-source state and quits the running InkFlow through `--prepare-update`. If that fails the install aborts before any file moves.
-- `Package/postinstall` runs `--finish-update`: register, restore the enabled and selected state (a first install enables and selects InkFlow, or prints the System Settings steps if the system does not confirm), relaunch and check the build number. If it fails, run the package again.
+- `Package/postinstall` swaps the staged app into `~/Library/Input Methods` with `--commit-update` (one rename, so the installed path never goes missing), then runs `--finish-update`: register, restore the enabled and selected state (a first install enables and selects InkFlow, or prints the System Settings steps if the system does not confirm), relaunch and check the build number. If either step fails, run the package again.
 
 The package is unsigned by default and needs no keychain. `build-pkg.sh APP OUT --sign APP_SHA1 INSTALLER_SHA1` signs the embedded `register-input-source` with the Developer ID Application certificate (hardened runtime, secure timestamp) before it is packaged, then signs the package with the Developer ID Installer certificate (`productbuild --sign --timestamp`). Both arguments are certificate SHA-1 hashes, as in `.release.local.plist`; `productbuild` itself takes a common name, so the script looks it up in the keychain. Release packaging passes the identities and notarizes the result.
 
