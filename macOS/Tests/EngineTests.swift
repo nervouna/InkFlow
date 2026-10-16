@@ -59,7 +59,6 @@ struct EngineTests {
         if selected("context") {
             EngineRegression.contextReranking()
             EngineRegression.contextCustomPhrasePriority()
-            try EngineRegression.rankingRules()
         }
         if selected("custom-phrases") {
             do {

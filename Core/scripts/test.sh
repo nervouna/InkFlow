@@ -20,12 +20,12 @@ done
 if ! $skip_covered_units; then bash macOS/scripts/test-dictionary-generator.sh; fi
 # The standalone package owns compilation of all its test products. During the
 # embedded full suite, canonical macOS units own the duplicated expensive
-# behavior runs, while Core-only ranking and voice coordination still execute.
-products=(ranking-tests ai-pronunciation-tests voice-learning-coordinator-tests voice-lexicon-tests dictionary-store-tests)
+# behavior runs, while Core-only voice coordination still executes.
+products=(ai-pronunciation-tests voice-learning-coordinator-tests voice-lexicon-tests dictionary-store-tests)
 stage_started=$(inkflow_test_timing_now)
 for product in "${products[@]}"; do
   build_core_product "$product" "build/core-tests/$product"
-  if ! $skip_covered_units || [[ $product == ranking-tests || $product == voice-learning-coordinator-tests ]]; then
+  if ! $skip_covered_units || [[ $product == voice-learning-coordinator-tests ]]; then
     "build/core-tests/$product"
   fi
 done

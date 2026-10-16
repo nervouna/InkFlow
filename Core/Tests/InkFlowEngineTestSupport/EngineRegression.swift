@@ -2,7 +2,6 @@ import Foundation
 @testable import InkFlowDomain
 @testable import InkFlowRime
 import InkFlowCoreTestSupport
-import InkFlowRankingTestSupport
 
 package enum EngineRegression {
     // Event modifiers: Shift = 1, Command = 2, Control = 4, Option = 8.
@@ -1104,10 +1103,6 @@ package enum EngineRegression {
         check(engine.snapshot().candidates.first == "餐", "Context ranking resumes after the custom code is deleted at idle")
         check(engine.key(32)); check(engine.takeCommit() == "餐")
         print("PASS context integration: exact custom phrase priority, deferred deletion, context resumes at idle")
-    }
-
-    @MainActor package static func rankingRules() throws {
-        try verifyRankingRules(in: URL(fileURLWithPath: CommandLine.arguments[2]))
     }
 
     @MainActor package static func englishCandidates() {

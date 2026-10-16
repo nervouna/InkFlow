@@ -10,8 +10,7 @@ build_core_product() {
   local args=(--package-path "$PWD/Core" --disable-sandbox
     --scratch-path "$scratch" --cache-path "$scratch/cache"
     --config-path "$scratch/config" --security-path "$scratch/security"
-    --triple arm64-apple-macosx26.0 --configuration "$configuration" --product "$product"
-    -Xcc "-I$PWD/build/deps/dist/include")
+    --triple arm64-apple-macosx26.0 --configuration "$configuration" --product "$product")
   export CLANG_MODULE_CACHE_PATH="$scratch/module-cache"
   export SWIFTPM_MODULECACHE_OVERRIDE="$scratch/module-cache"
   xcrun swift build "${args[@]}" || return $?

@@ -2077,8 +2077,8 @@ fn quality_evidence(session: &InputSession, label: &str) -> Value {
 }
 
 /// The quality evidence of `fixtures/quality-evidence-cases.json` against the recording of the
-/// Swift engine's `qualitySnapshot()` for the same steps (`quality-evidence-reference.sh`, at the
-/// revision named in `fixtures/quality-evidence.json`): raw input and caret, selected prefix, native
+/// Swift engine's `qualitySnapshot()` for the same steps (frozen, at the revision named in
+/// `fixtures/quality-evidence.json`): raw input and caret, selected prefix, native
 /// index and rank, and the personal-learning source with its consumed input span, for every
 /// displayed candidate.
 #[test]
