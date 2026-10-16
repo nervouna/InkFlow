@@ -5,7 +5,7 @@ The application, settings interface, registration tool, and test scenarios are w
 ## Source boundaries
 
 - `../Core/Package.swift` builds the shared `InkFlowDomain` and `InkFlowRime` sources used by the root package. Dictionary source validation, generation, storage, preparation and activation policy live in Core; macOS owns worker process/sandbox execution, bundle/path discovery, command-line framing, logging adapters and UI.
-- `../Core/Sources/InkFlowRime/Engine.swift` owns librime sessions and converts C data to `EngineSnapshot` values; `Sources/EngineEvent.swift` adapts macOS events to semantic engine input. Shared schema changes and session calls stay on the main actor.
+- `../Core/Sources/InkFlowRime/Engine.swift` is the `IFEngine` facade over the Rust core's C ABI (`../Core/Portable/include/inkflow_rime.h`, linked as `InkFlowPortable`): sessions, key policy, candidate order, custom phrases and input preferences are the core's (`../Core/Portable/src`); the facade keeps the delivery lease, idle signalling, voice-lexicon gating, quality recording and Settings errors, and converts snapshots to `EngineSnapshot` values. `Sources/EngineEvent.swift` adapts macOS events to semantic engine input. Session calls stay on the main actor.
 - `Context.swift` reads bounded surrounding text through public `IMKTextInput`; `IFContextRanker` reorders Han candidates within their slots from bundled phrase frequencies.
 - `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel.
 - `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (`IFUpdaterAccess`) owns updater preferences.
@@ -22,7 +22,7 @@ bash macOS/scripts/build.sh
 bash macOS/scripts/install.sh --developer-id     # needs INKFLOW_SIGN_IDENTITY (team T7976FL2LP)
 ```
 
-Every `build.sh` reserves a new build number (shared across worktrees via `build/build-number/last`; keep that directory); only the staged app's `CFBundleVersion` changes. Run builds and installs outside the sandbox in the logged-in session. `install.sh` swaps the app atomically, preserves enabled input sources and verifies the new PID; first installs need InkFlow added in System Settings. `check-bundle.sh --fast` checks plist, architecture, library closure and signing; `--deep` also regenerates resources.
+`build.sh` first builds the portable core (`Core/scripts/build-portable.sh`: librime from source with Lua merged in, and the release Rust archive), which needs CMake and Ninja on `PATH`, then ships only `build/portable/prefix/lib/librime.1.dylib`; the first run takes about 4 minutes longer. Every `build.sh` reserves a new build number (shared across worktrees via `build/build-number/last`; keep that directory); only the staged app's `CFBundleVersion` changes. Run builds and installs outside the sandbox in the logged-in session. `install.sh` swaps the app atomically, preserves enabled input sources and verifies the new PID; first installs need InkFlow added in System Settings. `check-bundle.sh --fast` checks plist, architecture, library closure and signing; `--deep` also regenerates resources.
 
 ### Building the installer package
 

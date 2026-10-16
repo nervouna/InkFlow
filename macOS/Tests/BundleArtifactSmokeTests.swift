@@ -18,26 +18,24 @@ struct BundleArtifactSmokeTests {
         let resources = app.appendingPathComponent("Contents/Resources/Rime")
         let frameworks = app.appendingPathComponent("Contents/Frameworks").standardizedFileURL
         let runtime = frameworks.appendingPathComponent("librime.1.dylib")
-        let lua = frameworks.appendingPathComponent("rime-plugins/librime-lua.dylib")
         try require(files.isReadableFile(atPath: runtime.path), "Missing bundled librime")
-        try require(files.isReadableFile(atPath: lua.path), "Missing bundled Lua plugin")
+        try require(!files.fileExists(atPath: frameworks.appendingPathComponent("rime-plugins").path),
+                    "Lua is merged into librime; no external plugin is bundled")
         let libraryPath = ProcessInfo.processInfo.environment["DYLD_LIBRARY_PATH"].map {
             URL(fileURLWithPath: $0).standardizedFileURL
         }
         try require(libraryPath == frameworks, "Smoke must load the app's bundled frameworks")
 
         let descriptor = try IFPackagedCache.descriptor(resources: resources)
-        let ranker = try IFContextRanker(
-            index: resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename).path
-        )
         let configuration = IFEngineConfiguration(
             shared: resources,
             cache: descriptor.cache,
             user: user.path,
-            ranker: ranker
+            contextIndex: resources.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)
         )
         try IFEngine.start(configuration)
         defer { IFEngine.stop() }
+        try require(IFEngine.version == "1.17.0" && IFEngine.contextRankingReady, "Bundled librime version or context index")
         guard let engine = IFEngine() else {
             throw BundleArtifactSmokeFailure(description: "Bundled engine session unavailable")
         }
@@ -47,7 +45,7 @@ struct BundleArtifactSmokeTests {
         type(engine, "hello")
         try select("hello", from: engine, label: "English Lua")
 
-        print("PASS bundle artifact smoke: app resources, packaged cache, bundled librime/Lua, Chinese and English engine")
+        print("PASS bundle artifact smoke: app resources, packaged cache, bundled librime with merged Lua, context index, Chinese and English engine")
     }
 
     @MainActor private static func type(_ engine: IFEngine, _ text: String) {

@@ -1,8 +1,8 @@
--- Test-only executable contract for the pinned librime-lua bundle. Production
--- translators do not load this module in Task 1.
+-- Test-only executable contract for the merged librime-lua. Production translators
+-- do not load this module. It answers the channel operation `learning_contract`
+-- (fields: operation, namespace, code, text, extra), as the engine's `call` delivers it.
+local channel = require("inkflow_channel")
 local M = {}
-
-local result_property = "inkflow_learning_contract_result"
 
 local function valid_code(code)
   return code and code:match("^[a-z]+$") ~= nil
@@ -32,10 +32,6 @@ local function with_memory(env, namespace, operation)
   end)
   if memory then memory:disconnect() end
   return called, result
-end
-
-local function set_result(context, result)
-  context:set_property(result_property, result)
 end
 
 local function exact_rows(memory, code)
@@ -95,49 +91,50 @@ function M.init(env)
       if env.selection_namespace ~= namespace then return false end
       local learned = commits:update(1)
       env.selection_namespace = nil
-      set_result(env.engine.context, learned and "selected" or "failed")
+      env.selection = learned and "selected" or "failed"
       return learned
     end)
   end
-  env.connection = env.engine.context.property_update_notifier:connect(function(context, name)
-    if name ~= "inkflow_learning_contract" then return end
-    local payload = context:get_property(name)
-    if payload == "" then return end
-    local operation, namespace, code, text, extra = payload:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t?([^\t]*)\t?([^\t]*)$")
-    local memory = memory_for(env, namespace)
-    if not memory or not valid_code(code) then set_result(context, "invalid"); return end
-    if operation == "query" then
-      local queried, rows = with_memory(env, namespace, function(fresh) return exact_rows(fresh, code) end)
-      if not queried or not rows then set_result(context, "failed"); return end
-      set_result(context, "ok\t" .. tostring(#rows) .. (#rows > 0 and "\t" .. table.concat(rows, "\t") or ""))
-      return
-    end
-    if operation == "reject" then set_result(context, "rejected"); return end
-    if operation == "ambiguous" then set_result(context, "ambiguous"); return end
-    if not valid_text(text) then set_result(context, "invalid"); return end
-    if operation == "candidate" then
-      env.candidate = { namespace = namespace, code = code, text = text }
-      set_result(context, "ok")
-      return
-    end
-    if operation == "update" then
-      local commits = tonumber(extra)
-      if commits ~= 1 and commits ~= -1 then set_result(context, "invalid"); return end
-      local called, updated = with_memory(env, namespace, function(fresh) return update(fresh, code, text, commits) end)
-      set_result(context, called and updated and "ok" or "failed")
-      return
-    end
-    if operation == "batch" then
-      local count = tonumber(extra) or 512
-      if count ~= 512 and count ~= 4096 then set_result(context, "invalid"); return end
-      local called, updated = with_memory(env, namespace, function(fresh)
-        return seed_overflow(fresh, code, text, count)
-      end)
-      set_result(context, called and updated and "ok" or "failed")
-      return
-    end
-    set_result(context, "invalid")
-  end)
+  env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
+    learning_contract = function(fields)
+      local operation, namespace, code, text, extra = fields[1], fields[2], fields[3], fields[4] or "", fields[5] or ""
+      -- The status of the last Memory.memorize callback, then forgotten.
+      if operation == "selection" then
+        local selection = env.selection or "failed"
+        env.selection = nil
+        return selection
+      end
+      local memory = memory_for(env, namespace)
+      if not memory or not valid_code(code) then return "invalid" end
+      if operation == "query" then
+        local queried, rows = with_memory(env, namespace, function(fresh) return exact_rows(fresh, code) end)
+        if not queried or not rows then return "failed" end
+        return "ok", tostring(#rows) .. (#rows > 0 and "\t" .. table.concat(rows, "\t") or "")
+      end
+      if operation == "reject" then return "rejected" end
+      if operation == "ambiguous" then return "ambiguous" end
+      if not valid_text(text) then return "invalid" end
+      if operation == "candidate" then
+        env.candidate = { namespace = namespace, code = code, text = text }
+        return "ok"
+      end
+      if operation == "update" then
+        local commits = tonumber(extra)
+        if commits ~= 1 and commits ~= -1 then return "invalid" end
+        local called, updated = with_memory(env, namespace, function(fresh) return update(fresh, code, text, commits) end)
+        return called and updated and "ok" or "failed"
+      end
+      if operation == "batch" then
+        local count = tonumber(extra) or 512
+        if count ~= 512 and count ~= 4096 then return "invalid" end
+        local called, updated = with_memory(env, namespace, function(fresh)
+          return seed_overflow(fresh, code, text, count)
+        end)
+        return called and updated and "ok" or "failed"
+      end
+      return "invalid"
+    end,
+  }))
 end
 
 function M.fini(env)

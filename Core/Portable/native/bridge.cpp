@@ -55,12 +55,14 @@ extern "C" int ifp_initialize(const char* shared, const char* user, const char* 
     traits.user_data_dir = user;
     traits.staging_dir = cache;
     traits.prebuilt_data_dir = cache;
-    traits.distribution_name = "InkFlow portable probe";
-    traits.distribution_code_name = "inkflow-portable";
-    traits.distribution_version = "0";
-    traits.app_name = "inkflow.portable";
+    traits.distribution_name = "InkFlow";
+    traits.distribution_code_name = "inkflow";
+    traits.distribution_version = "1.0";
+    traits.app_name = "rime.inkflow";
+    // ERROR and above reach stderr, where the dictionary worker captures compile diagnostics.
     traits.min_log_level = 2;
-    traits.log_dir = user;
+    // An empty log_dir sends glog to stderr, so no log files are written.
+    traits.log_dir = "";
     static const char* modules[] = {"default", "deployer", "lua", nullptr};
     traits.modules = modules;
     api()->setup(&traits);
@@ -192,6 +194,13 @@ extern "C" int ifp_get_input(uintptr_t session, char** result) {
     char* copy = duplicate(text(api()->get_input(session)));
     if (!copy) return -1;
     *result = copy;
+    return 0;
+  } catch (...) { return -3; }
+}
+extern "C" int ifp_get_caret_pos(uintptr_t session, size_t* caret) {
+  try {
+    if (!api()->find_session(session)) return -2;
+    *caret = api()->get_caret_pos(session);
     return 0;
   } catch (...) { return -3; }
 }

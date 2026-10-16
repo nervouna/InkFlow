@@ -17,8 +17,7 @@ if [[ "$mode" == --developer-id ]]; then
   bash macOS/scripts/verify-developer-id.sh "$identity" T7976FL2LP
 fi
 [[ -x "$app/Contents/MacOS/InkFlow" ]] || { echo 'Run macOS/scripts/build.sh first.' >&2; exit 1; }
-[[ -s "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" ]] || { echo 'Missing Lua plugin; rebuild InkFlow first.' >&2; exit 1; }
-codesign --force "${signing[@]}" "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib"
+[[ -s "$app/Contents/Frameworks/librime.1.dylib" ]] || { echo 'Missing librime; rebuild InkFlow first.' >&2; exit 1; }
 codesign --force "${signing[@]}" "$app/Contents/Frameworks/librime.1.dylib"
 [[ -x "$app/Contents/MacOS/InkFlowDictionaryWorker" ]] || { echo "Missing dictionary helper; rebuild InkFlow first." >&2; exit 1; }
 codesign --force "${signing[@]}" "$app/Contents/MacOS/InkFlowDictionaryWorker"

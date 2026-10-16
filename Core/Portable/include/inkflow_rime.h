@@ -74,6 +74,8 @@ enum {
   IFR_UNAVAILABLE = 20,       /* Personal learning management gave no valid answer; refresh and retry. */
   IFR_CONFLICT = 21,          /* The learning changed since the entry was listed or the delete was made. */
   IFR_TOO_LARGE = 22          /* Too many entries or too large a learning count for the operation. */
+  ,
+  IFR_NO_REPLY = 23           /* ifr_session_call: nothing answered; see there. */
 };
 
 typedef struct IFREngine IFREngine;
@@ -83,6 +85,7 @@ typedef struct IFRBackup IFRBackup;
 typedef struct IFRLearning IFRLearning;
 typedef struct IFRLearningUndo IFRLearningUndo;
 typedef struct IFRPersonalExport IFRPersonalExport;
+typedef struct IFRReply IFRReply;
 
 typedef struct {
   const char* shared;        /* Prepared shared resources. */
@@ -175,6 +178,28 @@ int32_t ifr_snapshot_page(const IFRSnapshot* snapshot);
 size_t ifr_snapshot_highlighted(const IFRSnapshot* snapshot);  /* Display index. */
 int ifr_snapshot_last_page(const IFRSnapshot* snapshot);
 
+/* The caret in the raw input: a byte offset into ifr_snapshot_input, on a character boundary.
+ * ifr_snapshot_caret is the caret in the preedit, which shows spaces the input does not have.
+ * An AI request's identity is the raw input, this caret and the preedit before
+ * ifr_snapshot_selection_start. */
+size_t ifr_snapshot_raw_caret(const IFRSnapshot* snapshot);
+
+/* Quality evidence of the displayed candidate `index`, as the macOS quality recorder reads it.
+ * Candidates are in InkFlow's display order. The native position is where Rime put the
+ * candidate on its current page, before ordering; the native rank counts across pages,
+ * starting at 1: page * page size + native index + 1. Both are 0 when index is out of range. */
+size_t ifr_snapshot_candidate_native_index(const IFRSnapshot* snapshot, size_t index);
+size_t ifr_snapshot_candidate_native_rank(const IFRSnapshot* snapshot, size_t index);
+/* The personal-learning source of an exact record the user's own commits strengthened, or
+ * IFR_PERSONAL_NONE (also out of range). */
+enum { IFR_PERSONAL_NONE = 0, IFR_PERSONAL_EXACT_ENGLISH = 1, IFR_PERSONAL_EXACT_MIXED = 2 };
+int ifr_snapshot_candidate_personal_source(const IFRSnapshot* snapshot, size_t index);
+/* Returns 1 and writes the bytes of the raw input the candidate consumes, [*start, *end), for a
+ * candidate with a personal source; otherwise 0 and the outputs stay untouched. Either output
+ * may be NULL. */
+int ifr_snapshot_candidate_consumed_input(const IFRSnapshot* snapshot, size_t index,
+                                          size_t* start, size_t* end);
+
 IFRStatus ifr_session_select(const IFRSession* session, const IFRSnapshot* snapshot,
                              size_t index, int* handled);
 IFRStatus ifr_session_highlight(const IFRSession* session, const IFRSnapshot* snapshot,
@@ -182,6 +207,10 @@ IFRStatus ifr_session_highlight(const IFRSession* session, const IFRSnapshot* sn
 IFRStatus ifr_session_change_page(const IFRSession* session, int backward, int* handled);
 IFRStatus ifr_session_commit(const IFRSession* session, int* handled);
 IFRStatus ifr_session_clear(const IFRSession* session);
+/* Clears like ifr_session_clear but delivers no mutation to the observer: for a composition
+ * that ended because a feature consumed it (an adopted AI suggestion), not because the user
+ * cancelled. */
+IFRStatus ifr_session_clear_unobserved(const IFRSession* session);
 /* *commit receives an owned string, or NULL when nothing completed. */
 IFRStatus ifr_session_take_commit(const IFRSession* session, char** commit);
 void ifr_string_free(char* string);
@@ -280,6 +309,31 @@ void ifr_personal_export_free(IFRPersonalExport* exported);
  * not exist in `user`, which a backup records as explicit absence, or the name is none
  * of them. */
 const char* ifr_personal_export_text(const IFRPersonalExport* exported, const char* name);
+
+/* The Lua channel: one synchronous round trip through this session's schema modules, which the
+ * AI, voice-lexicon and English-learning features use (voice_learning, voice_aliases,
+ * voice_lexicon, ai_learning, ai_readings, clear_english_learning). Never call it from a key
+ * callback: it reads user dictionaries and may write them. `op` is lowercase letters and
+ * underscores and `fields` carry no tab or line break; `capacity` bounds the reply in bytes
+ * (at most 4 MiB) and `field_count` is at most 64.
+ *
+ * IFR_OK: a module answered. *reply holds its status word ("ok", "failed", "unknown" or
+ * "conflict" - a module refusing its fields answers "failed", which is still IFR_OK) and its
+ * body, until ifr_reply_free. IFR_NO_REPLY (*reply untouched): the session is unavailable,
+ * no module answers the operation, the reply does not fit `capacity`, or the request cannot be
+ * framed. IFR_INVALID_ARGUMENT: a NULL or non-UTF-8 argument, or a bound exceeded.
+ *
+ * The caller keeps the gating: it calls only while every session is idle, and delays reads
+ * past Rime's native undo window. A successful (status "ok") voice_learning, ai_learning or
+ * clear_english_learning advances the personal-learning revision, so listings and undo tokens
+ * captured before it return IFR_CONFLICT; clear_english_learning also drops every session's
+ * cached learning view. */
+IFRStatus ifr_session_call(const IFRSession* session, const char* op, const char* const* fields,
+                           size_t field_count, size_t capacity, IFRReply** reply);
+/* Borrowed from the reply; NULL only for a NULL reply. The body may be empty. */
+const char* ifr_reply_status(const IFRReply* reply);
+const char* ifr_reply_body(const IFRReply* reply);
+void ifr_reply_free(IFRReply* reply);
 
 #ifdef __cplusplus
 }

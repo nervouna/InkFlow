@@ -7,6 +7,13 @@ Core/Portable/dictionary/src/lib.rs
 Core/Portable/dictionary/src/model.rs
 Core/Portable/dictionary/src/spelling.rs
 Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp
+Core/Portable/native/bridge.cpp
+Core/Portable/src/lib.rs
+Core/Portable/src/engine.rs
+Core/Portable/src/ranking.rs
+Core/Portable/src/phrases.rs
+Core/Portable/src/preferences.rs
+Core/Portable/src/channel.rs
 Core/Sources/InkFlowRime/Engine.swift
 Core/Sources/InkFlowRime/EngineAI.swift
 Core/Sources/InkFlowDomain/InputPreferences.swift
@@ -14,7 +21,6 @@ macOS/Sources/InputRankingContext.swift
 macOS/Sources/InputControllerCore.swift
 macOS/Sources/InputControllerVoice.swift
 macOS/Sources/VoiceLearning.swift
-Core/Sources/InkFlowDomain/CandidateRanking.swift
 Core/Sources/InkFlowDomain/CustomPhrase.swift
 Core/Sources/InkFlowDomain/VoiceLearning.swift
 Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift

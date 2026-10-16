@@ -62,7 +62,7 @@ if [[ "$phase" == prepare ]]; then
   cp "$receipt" "$release_dir/verified/receipt.plist"
   ditto "$source_app" "$app"
   find "$app" -name '*.dSYM' -type d -prune -exec rm -rf {} +
-  for binary in "$app/Contents/Frameworks/rime-plugins/librime-lua.dylib" "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
+  for binary in "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlowDictionaryWorker"; do
     codesign "${signing[@]}" "$binary"
   done
   sign_sparkle "$app" "${signing[@]}"

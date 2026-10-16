@@ -21,15 +21,20 @@ else
 fi
 [[ -s "$shared/inkflow_pinyin.custom.yaml" ]] || { echo 'Missing active-schema AI patch' >&2; exit 1; }
 inkflow_test_timing_report ai-learning resources "$stage_started"
-manager="$PWD/build/deps/dist/bin/rime_dict_manager"
-export DYLD_LIBRARY_PATH="$PWD/build/deps/dist/lib"
+# One Rime user dictionary of a closed user directory through the core's personal-data export, as
+# "text<TAB>code<TAB>commits" rows with a positive count: USER NAME OUTPUT.
+export_userdb() {
+  build/ai-adoption-learning-tests "$shared" "$1" export "$2" "$3.raw"
+  awk -F '\t' '!/^#/ && NF == 3 { split($3, packed, " "); commits = substr(packed[1], 3) + 0; code = $1
+    sub(/ +$/, "", code); if (commits > 0) print $2 "\t" code "\t" commits }' "$3.raw" > "$3"
+}
 stage_started=$(inkflow_test_timing_now)
 for mode in no-voice-read voice-read; do
 fixture_user="$user_dir/$mode"
 mkdir -p "$fixture_user"
 build/ai-adoption-learning-tests "$shared" "$fixture_user" write "$mode"
 build/ai-adoption-learning-tests "$shared" "$fixture_user" read "$mode"
-(cd "$fixture_user" && "$manager" -e pinyin_simp learned.txt)
+export_userdb "$fixture_user" pinyin_simp "$fixture_user/learned.txt"
 awk -F '\t' '
   $1 == "你好" || $1 == "再见" { exit 1 }
   $1 == "测试" { if ($2 != "ce shi" || $3 != 1) exit 1; ordinary++ }
@@ -56,16 +61,16 @@ cp macOS/scripts/fixtures/rime-learning-contract/inkflow_learning_contract.lua "
 contract_user="$user_dir/contract-user"
 mkdir -p "$contract_user"
 build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-seed
-(cd "$contract_user" && "$manager" -e pinyin_simp pinyin-before.txt)
+export_userdb "$contract_user" pinyin_simp "$contract_user/pinyin-before.txt"
 build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-write
-(cd "$contract_user" && "$manager" -e pinyin_simp pinyin-after.txt)
+export_userdb "$contract_user" pinyin_simp "$contract_user/pinyin-after.txt"
 cmp "$contract_user/pinyin-before.txt" "$contract_user/pinyin-after.txt"
 build/ai-adoption-learning-tests "$contract_shared" "$contract_user" contract-read
 management_limit_user="$user_dir/personal-management-limit-user"
 mkdir -p "$management_limit_user"
 build/ai-adoption-learning-tests "$contract_shared" "$management_limit_user" contract-management-limit
-(cd "$contract_user" && "$manager" -e inkflow_shared_english shared.txt)
-(cd "$contract_user" && "$manager" -e inkflow_voice_alias voice.txt)
+export_userdb "$contract_user" inkflow_shared_english "$contract_user/shared.txt"
+export_userdb "$contract_user" inkflow_voice_alias "$contract_user/voice.txt"
 echo 'PASS bundled Rime contract: two isolated userdb namespaces, selection/update/undo/reopen/query, case, negative learning'
 inkflow_test_timing_report ai-learning rime-contract "$stage_started"
 
@@ -75,13 +80,13 @@ management_user="$user_dir/personal-management-user"
 mkdir -p "$management_user"
 build/ai-adoption-learning-tests "$shared" "$management_user" personal-management
 build/ai-adoption-learning-tests "$shared" "$management_user" personal-management-read
-(cd "$management_user" && "$manager" -e pinyin_simp management-pinyin.txt)
+export_userdb "$management_user" pinyin_simp "$management_user/management-pinyin.txt"
 ! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$management_user/management-pinyin.txt"
 mkdir -p "$voice_user"
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-write
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-read
-(cd "$voice_user" && "$manager" -e inkflow_shared_english voice-shared.txt)
-(cd "$voice_user" && "$manager" -e inkflow_voice_alias voice-alias.txt)
+export_userdb "$voice_user" inkflow_shared_english "$voice_user/voice-shared.txt"
+export_userdb "$voice_user" inkflow_voice_alias "$voice_user/voice-alias.txt"
 awk -F '\t' '$1 == "Codex" && $2 == "codex" && $3 == 1 { found++ } END { if (found != 1) exit 1 }' \
   "$voice_user/voice-shared.txt"
 awk -F '\t' '$1 == "Codex" && $2 == "codux" && $3 == 1 { found++ } END { if (found != 1) exit 1 }' \
@@ -92,9 +97,9 @@ clear_user="$user_dir/voice-correction-clear-user"
 mkdir -p "$clear_user"
 build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-clear
 build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-cleared-read
-(cd "$clear_user" && "$manager" -e inkflow_shared_english cleared-shared.txt)
-(cd "$clear_user" && "$manager" -e inkflow_voice_alias cleared-alias.txt)
-(cd "$clear_user" && "$manager" -e pinyin_simp retained-pinyin.txt)
+export_userdb "$clear_user" inkflow_shared_english "$clear_user/cleared-shared.txt"
+export_userdb "$clear_user" inkflow_voice_alias "$clear_user/cleared-alias.txt"
+export_userdb "$clear_user" pinyin_simp "$clear_user/retained-pinyin.txt"
 ! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-shared.txt"
 ! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-alias.txt"
 awk -F '\t' '$1 == "测试" && $2 == "ce shi" && $3 == 1 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/retained-pinyin.txt"
@@ -113,7 +118,7 @@ build/ai-adoption-learning-tests "$shared" "$english_user" english-write
 build/ai-adoption-learning-tests "$contract_shared" "$english_user" contract-keyboard-read
 build/ai-adoption-learning-tests "$contract_shared" "$english_user" contract-personal-seed
 build/ai-adoption-learning-tests "$shared" "$english_user" english-read
-(cd "$english_user" && "$manager" -e inkflow_shared_english keyboard-english.txt)
+export_userdb "$english_user" inkflow_shared_english "$english_user/keyboard-english.txt"
 IFS= read -r paged < "$english_user/expected-paged-english.txt"
 awk -F '\t' -v paged="$paged" '
   $1 == "hello" { if ($2 != "hello" || $3 != 3) exit 1; hello++ }
@@ -134,7 +139,7 @@ mkdir -p "$letters_user"
 build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-write
 build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-read
 build/ai-adoption-learning-tests "$contract_shared" "$letters_user" contract-mixed-letters-verify
-(cd "$letters_user" && "$manager" -e pinyin_simp letters-pinyin.txt)
+export_userdb "$letters_user" pinyin_simp "$letters_user/letters-pinyin.txt"
 ! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$letters_user/letters-pinyin.txt"
 echo 'PASS learned letters: actual standalone A/I selection, unchanged ordinary Pinyin on every page, source preedit, technical context, restart and undo isolation'
 
@@ -150,13 +155,13 @@ mkdir -p "$ranking_user"
 build/ai-adoption-learning-tests "$contract_shared" "$ranking_user" contract-ranking-seed
 build/ai-adoption-learning-tests "$shared" "$ranking_user" mixed-ranking-read
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-seed
-(cd "$mixed_user" && "$manager" -e pinyin_simp mixed-pinyin-before.txt)
+export_userdb "$mixed_user" pinyin_simp "$mixed_user/mixed-pinyin-before.txt"
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-seed
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" mixed-bounded
 build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-read
 build/ai-adoption-learning-tests "$shared" "$mixed_user" mixed-restart
 build/ai-adoption-learning-tests "$contract_shared" "$mixed_user" contract-mixed-verify
-(cd "$mixed_user" && "$manager" -e pinyin_simp mixed-pinyin-after.txt)
+export_userdb "$mixed_user" pinyin_simp "$mixed_user/mixed-pinyin-after.txt"
 cmp "$mixed_user/mixed-pinyin-before.txt" "$mixed_user/mixed-pinyin-after.txt"
 echo 'PASS mixed personal English: immediate shared exact lookup, initial/internal/final, restart, no completion, source preedit, fidelity, editing, selected prefix, paging, dedup, read-only selection, collisions, custom phrases'
 inkflow_test_timing_report ai-learning mixed-input "$stage_started"

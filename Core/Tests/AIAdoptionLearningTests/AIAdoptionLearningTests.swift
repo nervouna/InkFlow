@@ -14,6 +14,14 @@ struct AIAdoptionLearningTests {
         let scenario = CommandLine.arguments[3]
         let writing = scenario == "write"
         let readsDuringUndo = CommandLine.arguments.count < 5 || CommandLine.arguments[4] != "no-voice-read"
+        if scenario == "export" {
+            // SHARED USER export NAME OUTPUT: the snapshot of one closed Rime user dictionary, empty when absent.
+            let arguments = CommandLine.arguments
+            check(arguments.count == 6 && IFPortablePersonalData.names.contains(arguments[4]), "Usage: export NAME OUTPUT")
+            let text = try IFPortablePersonalData.export(user: user)[arguments[4]] ?? nil
+            try (text ?? "").write(toFile: arguments[5], atomically: true, encoding: .utf8)
+            return
+        }
         let bootstrap = ContinuousClock.now
         try IFEngine.start(shared: shared, user: user)
         print("TRACE AI learning bootstrap: \(bootstrap.duration(to: .now))")
@@ -286,14 +294,14 @@ struct AIAdoptionLearningTests {
 
     @MainActor private static func learningContract(engine: IFEngine, user: String, scenario: String) throws {
         check(IFEngine.version == "1.17.0", "Learning contract is pinned to bundled librime 1.17.0")
-        let api = IFEngine.api.pointee
+        // The test-only Lua module answers the channel operation `learning_contract`.
         func request(_ value: String) -> String {
-            api.set_property(engine.session, "inkflow_learning_contract_result", "")
-            value.withCString { api.set_property(engine.session, "inkflow_learning_contract", $0) }
-            var result = [CChar](repeating: 0, count: 4096)
-            check(api.get_property(engine.session, "inkflow_learning_contract_result", &result, result.count) != 0,
-                  "Learning contract probe must return a result")
-            return IFEngine.string(result)
+            let fields = value.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+            guard let reply = engine.call("learning_contract", fields, capacity: 4096) else {
+                check(false, "Learning contract probe must return a result")
+                return ""
+            }
+            return reply.body.isEmpty ? reply.status : reply.status + "\t" + reply.body
         }
         func query(_ namespace: String, _ code: String) -> String {
             request("query\t\(namespace)\t\(code)")
@@ -325,14 +333,12 @@ struct AIAdoptionLearningTests {
                 return
             }
             if select {
-                api.set_property(engine.session, "inkflow_learning_contract_result", "")
+                _ = request("selection")  // forget an earlier selection
                 engine.select(index)
                 check(engine.takeCommit() == text, "Selected ShadowCandidate keeps display case")
                 // Close Rime's ordinary undo window before querying durable state.
                 engine.key(0xff09)
-                var result = [CChar](repeating: 0, count: 128)
-                let available = api.get_property(engine.session, "inkflow_learning_contract_result", &result, result.count) != 0
-                check(available && IFEngine.string(result) == "selected", "Memory.memorize must learn selected Phrase")
+                check(request("selection") == "selected", "Memory.memorize must learn selected Phrase")
             } else {
                 engine.clear()
             }
