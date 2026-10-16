@@ -225,6 +225,44 @@ local function forget(env, context)
   context:refresh_non_confirmed_composition()
 end
 
+-- Rime's poet makes a Chinese sentence from learned words, so deleting the sentence's own record leaves
+-- it leading: it is made again from the same words. The core calls this while the highlighted sentence
+-- keeps its place; forget the learned word that weighs most in it and remember it, `step` counting the
+-- words this press has forgotten. A Memory hooks every commit, which would end the commit transaction
+-- early, so each use lives for one call and is disconnected at once.
+local function forget_sentence(env, context, text, step)
+  local candidate = context:get_selected_candidate()
+  if not candidate or candidate.text ~= text then return "failed" end
+  local item = candidate:get_genuines()[1]
+  local sentence = item and item:to_sentence()
+  local heaviest
+  for _, entry in ipairs(sentence and sentence.entrys or {}) do
+    if entry.commit_count > 0 and (not heaviest or entry.weight > heaviest.weight) then heaviest = entry end
+  end
+  if not heaviest then return "unknown" end
+  if step == "0" or not env.forgotten then env.forgotten = {} end
+  local memory = Memory(env.engine, env.engine.schema, "translator")
+  local forgotten = memory:update_userdict(heaviest, -1, "")
+  memory:disconnect()
+  if forgotten then env.forgotten[#env.forgotten + 1] = heaviest end
+  context:refresh_non_confirmed_composition()
+  return forgotten and "ok" or "failed"
+end
+
+-- The text kept its place although the words were forgotten, so they were not what led it: one positive
+-- update each revives them (a record forgotten at N commits comes back at N + 1).
+local function unforget_sentence(env, context)
+  local words = env.forgotten or {}
+  env.forgotten = {}
+  if #words == 0 then return "unknown" end
+  local memory = Memory(env.engine, env.engine.schema, "translator")
+  local revived = true
+  for _, entry in ipairs(words) do revived = memory:update_userdict(entry, 1, "") and revived end
+  memory:disconnect()
+  context:refresh_non_confirmed_composition()
+  return revived and "ok" or "failed"
+end
+
 function M.init(env)
   env.memory = Memory(env.engine, env.engine.schema, "english")
   env.memory:memorize(function(commits)
@@ -243,6 +281,8 @@ function M.init(env)
     forget(env, context)
   end)
   env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
+    forget_sentence = function(fields, context) return forget_sentence(env, context, fields[1], fields[2]) end,
+    unforget_sentence = function(_, context) return unforget_sentence(env, context) end,
     learning_invalidate = function()
       env.input, env.entries, env.learnable = nil, nil, {}
       return "ok"

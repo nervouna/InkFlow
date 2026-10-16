@@ -1773,7 +1773,8 @@ package enum EngineRegression {
 
     /// Shift+Backspace forgets the learning of the highlighted candidate and nothing else: Rime's own
     /// delete_candidate for Chinese and standalone English, one negative update per learned ASCII run for
-    /// a mixed sentence. The words are used by no other test, and every record is forgotten again.
+    /// a mixed sentence, the heaviest learned word of a Chinese sentence made of learned words. The words
+    /// are used by no other test, and every record is forgotten again.
     @MainActor package static func forgetCandidate(event: Event = rimeEvent) {
         // A session still composing from an earlier case would keep the custom phrase file from reloading.
         for other in IFEngine.liveSessions { other.clear() }
@@ -1865,6 +1866,76 @@ package enum EngineRegression {
               "forget mixed: the sentence falls back: \(engine.snapshot().candidates) vs \(before)")
         check(personal("youtube").isEmpty, "forget mixed: the run is forgotten for standalone English too")
 
+        // Sentence: Rime's poet makes a sentence from learned words, so deleting the sentence's own record
+        // is not enough, it is made again with the same text. `测试学习奥` for `ceshixuexiao` is learned four
+        // ways, and the unlearned first candidate is `测试学校`. Shift+Backspace ends the lead of the
+        // sentence by forgetting the learned word that weighs most in it, and leaves other learning alone:
+        // words forgotten in vain are given back.
+        let typed = "ceshixuexiao", split = "ceshixuexi'ao", target = "测试学习奥"
+        let unlearnedSentence = candidates(typed)
+        check(unlearnedSentence.first == "测试学校", "forget sentence fixture: \(unlearnedSentence)")
+        let music = candidates("shuiguo")
+        learn("shuiguo", music[1])
+        let learnedMusic = candidates("shuiguo")
+        check(learnedMusic.first == music[1], "forget sentence fixture: another learned entry leads: \(learnedMusic)")
+        func forgetSentence(_ path: String) {
+            compose(typed)
+            check(engine.snapshot().candidates.first == target,
+                  "forget sentence \(path): the learned sentence leads: \(engine.snapshot().candidates)")
+            forgetKeepsComposition("forget sentence \(path)")
+            check(engine.snapshot().candidates.first == "测试学校" && engine.snapshot().highlight == 0,
+                  "forget sentence \(path): the unlearned candidate leads again: \(engine.snapshot())")
+            check(candidates(typed).first == "测试学校", "forget sentence \(path): retyping lists the unlearned candidate first")
+            check(candidates("shuiguo") == learnedMusic, "forget sentence \(path): another learned entry is unchanged")
+        }
+        // Select the candidate with this text, paging forward when it is not on the page.
+        func pick(_ text: String) {
+            for _ in 0..<6 {
+                if let index = engine.snapshot().candidates.firstIndex(of: text) { engine.select(index); return }
+                engine.key(0xff56)
+            }
+            check(false, "forget sentence fixture: \(text) is missing: \(engine.snapshot().candidates)")
+        }
+        // A sentence that leads without learning: 测试 is learned through the abbreviation `cs`, where it is
+        // natively fourth, and is a word of the unlearned `测试学校`. Forgetting it changes nothing there, so
+        // Shift+Backspace gives it back.
+        let abbreviation = candidates("cs")
+        check(abbreviation.first != "测试", "forget sentence fixture: \(abbreviation)")
+        learn("cs", "测试")
+        check(candidates("cs").first == "测试", "forget sentence fixture: the learned word leads: \(engine.snapshot().candidates)")
+        compose(typed)
+        check(engine.snapshot().candidates.first == "测试学校", "forget sentence unlearned lead fixture: \(engine.snapshot().candidates)")
+        forgetKeepsComposition("forget sentence unlearned lead")
+        check(engine.snapshot().candidates.first == "测试学校" && engine.snapshot().highlight == 0,
+              "forget sentence unlearned lead: the sentence still leads: \(engine.snapshot())")
+        check(candidates("cs").first == "测试", "forget sentence unlearned lead: its word keeps its learning: \(engine.snapshot().candidates)")
+        compose("cs")
+        forgetKeepsComposition("forget sentence cleanup abbreviation")
+        check(engine.snapshot().candidates == abbreviation, "forget sentence cleanup: the word is forgotten: \(engine.snapshot().candidates)")
+        // (a) The whole sentence selected as one candidate, twice, after an apostrophe split the input.
+        learn(split, target); learn(split, target)
+        forgetSentence("whole")
+        // (b) Partial selections, twice: 测试, then 学习, then 奥.
+        for _ in 0..<2 {
+            compose(typed)
+            for part in ["测试", "学习", "奥"] { pick(part) }
+            check(engine.takeCommit() == target, "forget sentence fixture: partial selections commit the sentence")
+            engine.key(0xff09)
+        }
+        forgetSentence("partial")
+        // (c) Its words learned on their own: the sentence has no record, the poet makes it from them.
+        learn("ceshixuexi", "测试学习"); learn("ao", "奥")
+        forgetSentence("words")
+        // (d) Both: the record goes first, and the sentence is made again from the words.
+        learn("ao", "奥"); learn(split, target); learn(split, target)
+        forgetSentence("words and whole")
+        // The words left over and the other learned entry are forgotten again.
+        compose("ceshixuexi")
+        forgetKeepsComposition("forget sentence cleanup words")
+        compose("shuiguo")
+        forgetKeepsComposition("forget sentence cleanup")
+        check(engine.snapshot().candidates == music, "forget sentence cleanup: the other learned entry is forgotten")
+
         // A candidate without learning changes nothing, and the highlight, the page and a confirmed
         // prefix survive Rime's recomposition.
         let plain = candidates("zhishi")
@@ -1906,7 +1977,7 @@ package enum EngineRegression {
         engine.setConfiguration(candidateCount: 5, customPhrases: [])
         check(candidates("zhishi") == plain, "forget custom phrase: removing it restores the dictionary list")
         engine.clear()
-        print("PASS forget candidate: idle passthrough, Chinese native delete, personal English, mixed runs, unlearned and custom phrase unchanged, composition kept, highlight kept")
+        print("PASS forget candidate: idle passthrough, Chinese native delete, sentences made of learned words, personal English, mixed runs, unlearned and custom phrase unchanged, composition kept, highlight kept")
     }
 
     /// An English word the user chose leads the next time when the only Chinese rival is a sentence the
