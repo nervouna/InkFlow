@@ -85,7 +85,7 @@ grep -Fq "$sentence" "$fixture/expanded/Resources/conclusion.html"
 
 # The scripts are executable and carry the lifecycle tool and the build they expect.
 scripts="${component[0]}/Scripts"
-for file in preinstall postinstall register-input-source; do [[ -x "$scripts/$file" ]]; done
+for file in preinstall postinstall register-input-source; do [[ -x "$scripts/$file" ]] || fail; done
 [[ $(ls -A "$scripts" | sort | tr '\n' ' ') == 'build-number postinstall preinstall register-input-source ' ]] || fail
 grep -Fq 'fixture register-input-source' "$scripts/register-input-source"
 [[ $(<"$scripts/build-number") == 42 ]] || fail
