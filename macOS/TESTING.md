@@ -30,7 +30,7 @@ Every unit that builds Swift also builds the Rust core and its librime first (`C
 - `ai-*`: credentials (random Keychain service), transport, runtime debounce/invalidation, native learning, headless pipeline. No paid API calls.
 - `dictionary-*`, `preparation`, `deployment`: source validation, transactional store, worker sandbox, activation/recovery.
 - `input-source-lifecycle`: the `Shared/` code behind `register-input-source`: process stop and exit observation, update prepare/finish state (first install, declined or timed-out quit, restored selection) and atomic app replacement. Uses fake input sources and child processes; it never touches the desktop.
-- `workflow`: fixtures for the release receipt and release resume, Developer ID identity checks, `install.sh`, the installer package (including `--sign` wiring), the dependency cache, staged builds and cleanup. Stand-in tools only: no keychain, desktop or notarization.
+- `workflow`: fixtures for the release receipt and release resume, Developer ID identity checks, `install.sh`, the installer package (including `--sign` wiring), staged builds and cleanup. Stand-in tools only: no keychain, desktop or notarization.
 - `portable`: not in `quick`. Runs the Rust tests, old/new parity on freshly prepared production resources, the notices check and a Swift binary linking both Rust staticlibs, on the librime and release Rust core that every unit now uses. The first run builds librime from source (about 4 minutes, then about 2.5 minutes with `build/portable` reused); CI caches that directory.
 - `settings`, `personal-data`, `startup-diagnostics`, `local-diagnostics`, `diagnostic-archive`, `termination`.
 
