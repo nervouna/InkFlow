@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../../../.."
 previous_tag=$2
 fail() { echo "Sparkle appcast stopped: $*" >&2; exit 1; }
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
-build=$(bash macOS/scripts/release-build.sh build/release-verification/installer.plist)
+build=$(bash macOS/scripts/release-build.sh build/release-verification/receipt.plist)
 tag="v$version"
 release_dir="$PWD/build/releases/InkFlow-$version-$build"
 app="$release_dir/payload/InkFlow.app"

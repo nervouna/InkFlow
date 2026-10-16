@@ -118,4 +118,60 @@ grep -Fq '再次运行' "$fixture/output"
 # Neither script touches personal data.
 [[ $(<"$HOME/Library/Application Support/InkFlow/dictionary.db") == 'personal data' ]]
 [[ -z "$(ls -A "$HOME/Library/Application Support/InkFlow" | grep -v '^dictionary.db$')" ]]
-echo 'PASS installer package: home-only domain, non-relocatable app, app-only payload, executable scripts with the lifecycle tool, preinstall aborts and postinstall recovers without touching personal data'
+# Signing (--sign APP_SHA1 INSTALLER_SHA1) is wired with stand-in tools; no keychain is used. The embedded tool
+# is signed with the hardened runtime and a timestamp before it is packaged, and the package with the
+# installer identity's common name, which productbuild takes instead of a hash.
+shims="$fixture/shims"
+mkdir -p "$shims"
+cat > "$shims/security" <<'STUB'
+#!/bin/bash
+[[ "$*" == 'find-identity -v -p basic' ]] || exit 64
+printf '  1) %s "Developer ID Application: Fixture (T7976FL2LP)"\n' "$APP_IDENTITY"
+[[ "${NO_INSTALLER:-}" == 1 ]] || printf '  2) %s "Developer ID Installer: Fixture (T7976FL2LP)"\n' "$INSTALLER_IDENTITY"
+STUB
+cat > "$shims/codesign" <<'STUB'
+#!/bin/bash
+echo "codesign:$*" >> "$EVENTS"
+printf '# signed\n' >> "${!#}"
+STUB
+cat > "$shims/productbuild" <<'STUB'
+#!/bin/bash
+args=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --sign) echo "productbuild-sign:$2" >> "$EVENTS"; shift 2 ;;
+    --timestamp) echo 'productbuild-timestamp' >> "$EVENTS"; shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+exec /usr/bin/productbuild "${args[@]}"
+STUB
+chmod +x "$shims"/*
+export APP_IDENTITY=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA INSTALLER_IDENTITY=BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+signed="$fixture/signed/InkFlow.pkg"
+signed_pkg() { PATH="$shims:$PATH" build_pkg "$@"; }
+for arguments in "--sign" "--sign $APP_IDENTITY" "--sign $APP_IDENTITY $INSTALLER_IDENTITY extra" "--unknown"; do
+  # shellcheck disable=SC2086
+  if signed_pkg "$app" "$signed" $arguments > "$fixture/output" 2>&1; then exit 1; fi
+  grep -Fq 'Usage: build-pkg.sh' "$fixture/output"
+done
+if signed_pkg "$app" "$signed" --sign not-a-hash "$INSTALLER_IDENTITY" > "$fixture/output" 2>&1; then exit 1; fi
+if NO_INSTALLER=1 signed_pkg "$app" "$signed" --sign "$APP_IDENTITY" "$INSTALLER_IDENTITY" > "$fixture/output" 2>&1; then exit 1; fi
+grep -Fq 'Developer ID Installer' "$fixture/output"
+[[ ! -e "$signed" ]]
+: > "$EVENTS"
+signed_pkg "$app" "$signed" --sign "$APP_IDENTITY" "$INSTALLER_IDENTITY" > "$fixture/output" 2>&1
+grep -Fq ', signed;' "$fixture/output"
+grep -Eq "^codesign:--force --options runtime --timestamp --sign $APP_IDENTITY .*/register-input-source$" "$EVENTS"
+[[ $(grep -c '^codesign:' "$EVENTS") -eq 1 ]]
+grep -Fxq 'productbuild-sign:Developer ID Installer: Fixture (T7976FL2LP)' "$EVENTS"
+grep -Fxq 'productbuild-timestamp' "$EVENTS"
+pkgutil --expand-full "$signed" "$fixture/signed-expanded"
+grep -Fxq '# signed' "$fixture/signed-expanded/InkFlow-component.pkg/Scripts/register-input-source"
+[[ -z "$(ls -A "$repo/build")" ]]
+# The unsigned default never reaches codesign or the keychain.
+: > "$EVENTS"
+PATH="$shims:$PATH" build_pkg "$app" "$fixture/plain.pkg" > "$fixture/output" 2>&1
+grep -Fq ', unsigned;' "$fixture/output"
+[[ ! -s "$EVENTS" ]]
+echo 'PASS installer package: home-only domain, non-relocatable app, app-only payload, executable scripts with the lifecycle tool, preinstall aborts and postinstall recovers without touching personal data, optional signing of the tool and the package'

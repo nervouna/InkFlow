@@ -19,14 +19,14 @@ shopt -s nullglob
 harnesses=(ai-adoption-learning-tests ai-credential-tests ai-headless-tests ai-live-tests ai-native-tests
   ai-pronunciation-tests ai-runtime-tests ai-suggestion-tests bundle-engine-tests
   controller-initialization-tests controller-tests deployment-tests dictionary-activation-tests
-  dictionary-generator-tests dictionary-update-tests engine-tests installer-core-tests installer-window-tests
+  dictionary-generator-tests dictionary-update-tests engine-tests input-source-lifecycle-tests
   metadata-tests quality-capture-tests quality-store-tests quality-timing-tests serving-startup-tests settings-tests
   settings-ui-tests startup-diagnostics-tests termination-tests)
 for name in "${harnesses[@]}"; do
   [[ ! -e "build/$name" ]] || remove "build/$name"
   [[ ! -e "build/$name.dSYM" ]] || remove "build/$name.dSYM"
 done
-for item in build/SettingsHarness.app build/installer-task/compiler; do [[ ! -e "$item" ]] || remove "$item"; done
+for item in build/SettingsHarness.app; do [[ ! -e "$item" ]] || remove "$item"; done
 echo '[diagnostic logs, preserved]'
 for item in build/*.log build/*/*.log build/gui-verification build/release-verification-attempts build/ai-native-run.* build/serving-startup-run.* build/quality-evidence build/ai-statistics-evidence; do printf '%s\n' "$item"; done
 echo "[installation backups, keep $keep]"
