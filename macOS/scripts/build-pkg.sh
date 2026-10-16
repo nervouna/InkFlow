@@ -36,8 +36,10 @@ build_swift_product register-input-source "$work/scripts/register-input-source" 
 if [[ -n "$app_identity" ]]; then
   codesign --force --options runtime --timestamp --sign "$app_identity" "$work/scripts/register-input-source"
 fi
+# Installer stages the app in the state directory; postinstall swaps it into Input Methods with one rename.
+# Installing in place leaves the installed path missing for a moment, which the macOS 27 input menu does not survive.
 pkgbuild --root "$work/root" --component-plist macOS/Package/component.plist --scripts "$work/scripts" \
-  --identifier io.damao.inputmethod.inkflow.pkg --version "$version" --install-location 'Library/Input Methods' --compression legacy \
+  --identifier io.damao.inputmethod.inkflow.pkg --version "$version" --install-location 'Library/Caches/io.damao.inkflow.installer' --compression legacy \
   "$work/component.pkg"
 # Every locally created file carries a com.apple.provenance attribute, which pkgbuild archives as ._ entries
 # beside each path. Rewrite the payload, its bill of materials and the scripts without them.
