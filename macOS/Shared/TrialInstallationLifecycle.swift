@@ -70,7 +70,7 @@ struct IFTrialInstallationState: Codable {
 
 struct IFTrialFinish {
     let pid: Int32
-    /// False only for a first install the system did not confirm: the new build runs, but the user must add it.
+    /// False when the system did not confirm enablement or selection: the new build runs, but the user must add it.
     let confirmed: Bool
 }
 
@@ -144,15 +144,13 @@ struct IFTrialFinish {
             if !(try sources.snapshot().isEnabled(id)) { try sources.enable(id) }
             confirmed = try await confirms { $0.isEnabled(id) }
         }
-        // The system may leave a first install for the user to approve; earlier state must be restored.
-        guard confirmed || first else { throw IFInputError.unavailable("input-source enablement not confirmed after bounded retry") }
+        // Unconfirmed enablement or selection is reported, not fatal: the new build still runs and the user adds InkFlow back.
         let pid = try await processes.launchAndVerify(at: target, excluding: state.oldPIDs)
         if confirmed {
             try sources.select(selectedID)
             confirmed = try await confirms { roster in
                 ids.allSatisfy { roster.isEnabled($0) } && roster.selectedID == selectedID
             }
-            guard confirmed || first else { throw IFInputError.unavailable("input-source selection not confirmed after bounded retry") }
         }
         guard try processes.installedPIDs(at: target).contains(pid) else {
             throw IFInputError.unavailable("new process exited before verification")

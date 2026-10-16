@@ -66,8 +66,8 @@ pkgutil --payload-files "$out" > "$fixture/payload"
 grep -Fxq './InkFlow.app/Contents/Info.plist' "$fixture/payload"
 grep -Fxq './InkFlow.app/Contents/MacOS/InkFlow' "$fixture/payload"
 
-# The first-install sentence in install.sh reaches the conclusion page.
-sentence=$(sed -n "s/.*echo '\(首次安装：[^']*\)'.*/\1/p" macOS/scripts/install.sh)
+# The input-source instruction install.sh prints for an unconfirmed update reaches the conclusion page.
+sentence=$(sed -n "s/.*echo '\(请在系统设置[^']*\)'.*/\1/p" macOS/scripts/install.sh)
 [[ -n "$sentence" ]]
 grep -Fq "$sentence" "$fixture/expanded/Resources/conclusion.html"
 [[ -s "$fixture/expanded/Resources/welcome.html" ]]

@@ -38,6 +38,11 @@ elif [[ "$2" == --commit-update ]]; then
 elif [[ "$2" == --finish-update ]]; then
   [[ ! -f "$1/old-marker" ]] || exit 1
   [[ "${LIFECYCLE_FAILURE:-}" != finish ]] || exit 1
+  if [[ "${INPUT_SOURCE_UNCONFIRMED:-}" == 1 ]]; then
+    echo 'input_source_state_restored=unconfirmed'
+  else
+    echo 'input_source_state_restored=1'
+  fi
 fi
 STUB
 cat > "$fixture/bin/ps" <<'STUB'
@@ -226,6 +231,18 @@ if grep -Fxq refresh "$EVENTS"; then
   echo 'FAIL: routine update restarted the input menu agent' >&2
   exit 1
 fi
+grep -Fq '原输入源状态已恢复' "$fixture/output"
+stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
+[[ ${#stages[@]} -eq 0 ]]
+assert_no_persistent_backups
+
+# An unconfirmed upgrade still completes, and the installer shows the instruction instead of the restored message.
+: > "$EVENTS"
+INPUT_SOURCE_UNCONFIRMED=1 install --developer-id > "$fixture/output" 2>&1
+[[ -x "$target/Contents/MacOS/InkFlow" ]]
+grep -Fq 'Installed and verified fresh process' "$fixture/output"
+grep -Fq '编辑中确认已添加墨流拼音' "$fixture/output"
+! grep -Fq '原输入源状态已恢复' "$fixture/output"
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]]
 assert_no_persistent_backups

@@ -57,12 +57,16 @@ build=$(plutil -extract CFBundleVersion raw "$stage/InkFlow.app/Contents/Info.pl
 bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$build"
 bash macOS/scripts/register.sh "$target" --commit-update "$stage/state.json"
 codesign --verify --deep --strict "$target"
-bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json"
+bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json" | tee "$stage/finish.log"
 verified=true
 echo "Installed and verified fresh process: $target ($mode)"
 if [[ "$updating" == true ]]; then
   # Preserve the menu agent: restarting it can make the input menu disappear.
-  echo '更新完成：新进程路径和构建号已核验，原输入源状态已恢复。实际输入及语音仍需手动试用。'
+  if grep -Fxq 'input_source_state_restored=1' "$stage/finish.log"; then
+    echo '更新完成：新进程路径和构建号已核验，原输入源状态已恢复。实际输入及语音仍需手动试用。'
+  else
+    echo '请在系统设置 → 键盘 → 文本输入 → 编辑中确认已添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'
+  fi
 else
   echo '首次安装：在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。'
 fi
