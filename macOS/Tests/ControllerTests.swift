@@ -1040,6 +1040,30 @@ struct ControllerTests {
               "forget composing: nothing is committed: \(client.mutations)")
         check((controller.candidates(nil) as? [String]) == native, "forget composing: the panel lists the refreshed candidates")
 
+        // A keyboard event carries device-dependent bits (left or right Shift), and Caps Lock may be on.
+        // The Backspace character is DEL, and the engine still sees Shift only.
+        for (name, shiftCode, raw, released) in [("left Shift", UInt16(56), UInt(0x20102), UInt(0)),
+                                                  ("right Shift", 60, 0x20104, 0), ("Caps Lock", 56, 0x30102, 0x10000)] {
+            let flags = NSEvent.ModifierFlags(rawValue: raw)
+            engine.clear()
+            controller.refresh(client)
+            typeKeys(controller, client, "tianqi")
+            client.mutations.removeAll()
+            check(controller.handle(keyEvent(0, "3"), client: client) && client.mutations.contains("insert:\(native[2])"),
+                  "forget \(name) fixture: learn \(native[2])")
+            check(controller.handle(keyEvent(48, "\t"), client: client) == false, "forget \(name) fixture: Tab ends the undo window")
+            typeKeys(controller, client, "tianqi")
+            check(engine.snapshot().candidates.first == native[2], "forget \(name) fixture: the learned candidate leads")
+            client.mutations.removeAll()
+            _ = controller.handle(modifierEvent(shiftCode, flags), client: client)
+            check(controller.handle(keyEvent(51, "\u{7f}", flags), client: client), "forget \(name): the key is consumed")
+            check(!controller.handle(modifierEvent(shiftCode, NSEvent.ModifierFlags(rawValue: released)), client: client)
+                  && !engine.requestedASCIIMode, "forget \(name): releasing Shift does not toggle the mode")
+            check(engine.snapshot().candidates == native && engine.qualitySnapshot().rawInput == "tianqi"
+                  && !client.mutations.contains { $0.hasPrefix("insert:") },
+                  "forget \(name): the candidate returns to its native position without a commit: \(engine.snapshot())")
+        }
+
         // Plain Backspace edits as before; Control, Option and Command chords still commit and pass through.
         check(controller.handle(backspace, client: client) && engine.qualitySnapshot().rawInput == "tianq", "forget: plain Backspace deletes a letter")
         for (name, flags) in [("Control", NSEvent.ModifierFlags.control), ("Option", .option), ("Command", .command),

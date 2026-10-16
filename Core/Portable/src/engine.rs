@@ -803,22 +803,59 @@ impl Engine {
     }
 
     /// Rime's own delete_candidate, bound to Control+Delete, acts on the candidate Rime highlights,
-    /// which is the one the user sees highlighted. It then recomposes at the first page and
-    /// candidate, so restore both, the index clamped to the refreshed list.
+    /// which is the one the user sees highlighted. A sentence the poet makes from learned words
+    /// survives deleting its own record, because it is made again from the same words. While the
+    /// highlighted text stays where it was, forget the learned word that weighs most in it (Lua
+    /// `forget_sentence`), up to `WORDS` words.
     fn forget_highlighted(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<bool> {
+        const WORDS: usize = 8;
+        let text = shown.candidates[shown.highlighted].text.as_str();
         let core = state.sessions.get_mut(&id).unwrap();
-        let session = core.session.as_mut().unwrap();
-        session.process_key(0xffff, 4)?;
+        core.session.as_mut().unwrap().process_key(0xffff, 4)?;
+        for _ in 0..WORDS {
+            let Some(index) = self.restore_page(state, id, shown)? else {
+                return Ok(true);
+            };
+            let core = state.sessions.get_mut(&id).unwrap();
+            if Self::display(core)?.candidates[index].text != text {
+                return Ok(true);
+            }
+            let reply = core
+                .session
+                .as_mut()
+                .unwrap()
+                .call("forget_sentence", &[text], 64)?;
+            if !reply.is_some_and(|reply| reply.status == "ok") {
+                return Ok(true);
+            }
+        }
+        self.restore_page(state, id, shown)?;
+        Ok(true)
+    }
+
+    /// Rime recomposes at the first page and candidate after a deletion: page forward again, rank the
+    /// page and highlight the display index `shown` had, clamped to the refreshed list. Returns that
+    /// index, or `None` when nothing is left to show.
+    fn restore_page(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<Option<usize>> {
+        let session = state
+            .sessions
+            .get_mut(&id)
+            .unwrap()
+            .session
+            .as_mut()
+            .unwrap();
         for _ in 0..shown.page {
             session.change_page(false)?;
         }
         state.observe_learning();
         self.update_ordering(state, id, true)?;
         let core = state.sessions.get_mut(&id).unwrap();
-        if let Some(last) = core.order.len().checked_sub(1) {
-            Self::highlight_display(core, shown.highlighted.min(last))?;
-        }
-        Ok(true)
+        let Some(last) = core.order.len().checked_sub(1) else {
+            return Ok(None);
+        };
+        let index = shown.highlighted.min(last);
+        Self::highlight_display(core, index)?;
+        Ok(Some(index))
     }
 
     fn clear_session(&self, state: &mut State, id: u64) -> Result<()> {
