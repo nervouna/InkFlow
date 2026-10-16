@@ -7,10 +7,35 @@ import InkFlowAITestSupport
 import InkFlowTestSupport
 #endif
 
+/// Debounce time that moves only when a test advances it. Sleepers poll it, so a slow host
+/// delays a wakeup but never changes which deadlines have passed.
+@MainActor
+private final class TestClock {
+    private var now = Duration.zero
+    private var deadlines: [Int: Duration] = [:]
+    private(set) var started = 0
+
+    func sleep(for duration: Duration) async throws {
+        let id = started
+        let deadline = now + duration
+        started += 1
+        deadlines[id] = deadline
+        defer { deadlines[id] = nil }
+        while now < deadline { try await Task.sleep(for: .milliseconds(1)) }
+    }
+
+    /// Returns once every sleeper whose deadline has passed has resumed.
+    func advance(by duration: Duration) async {
+        now += duration
+        await AIRuntimeTests.until { !self.deadlines.values.contains { $0 <= self.now } }
+    }
+}
+
 @MainActor
 private final class RuntimeFixture {
     let isolated = IsolatedSettings()
     let service = DelayedAIService()
+    let clock = TestClock()
     let client = NSObject()
     var state: AISuggestionState?
     var content = AISurroundingContext(precedingText: "前文😀", followingText: "后文", precedingAvailable: true, followingAvailable: true)
@@ -21,6 +46,7 @@ private final class RuntimeFixture {
     var contextAvailable = true
     var presentationAvailable = true
     lazy var coordinator = AISuggestionCoordinator(settings: isolated.settings.smart, service: service,
+        sleep: { [clock] in try await clock.sleep(for: $0) },
         current: { [weak self] in self?.stateHook?(); return self?.state }, context: { [weak self] anchor in
             guard let self, self.state?.anchor == anchor else { return nil }
             self.reads += 1; self.readHook?(); return self.contextAvailable ? self.content : nil
@@ -41,13 +67,28 @@ private final class RuntimeFixture {
             anchor: AIClientAnchor(client: ObjectIdentifier(client), mark: NSRange(location: 4, length: count),
                                    selection: NSRange(location: 4 + count, length: 0)))
     }
+    /// Starts a new attempt and returns once its debounce has begun on the test clock.
+    func schedule() async {
+        let started = clock.started
+        coordinator.synchronize()
+        await AIRuntimeTests.until { self.clock.started > started }
+    }
+    func advance(_ milliseconds: Int) async { await clock.advance(by: .milliseconds(milliseconds)) }
     func stop() { coordinator.invalidate(); isolated.cleanup() }
 }
 
 @main
 struct AIRuntimeTests {
     @MainActor static func verify(_ condition: Bool, _ message: String = "", file: StaticString = #filePath, line: UInt = #line) { check(condition, message, file: file, line: line) }
-    @MainActor static func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
+    /// Polls until `condition` holds. The timeout only bounds a failing run.
+    @MainActor static func until(_ condition: () async -> Bool, _ message: String = "",
+                                 file: StaticString = #filePath, line: UInt = #line) async {
+        let timeout = ContinuousClock.now + .seconds(10)
+        while !(await condition()) {
+            verify(ContinuousClock.now < timeout, "Timed out: \(message)", file: file, line: line)
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
 
     @MainActor static func main() async throws {
         _ = NSApplication.shared
@@ -78,7 +119,8 @@ struct AIRuntimeTests {
                "Consuming a coordinator preview alone does not claim delivery to an editor")
         verify(diagnostics.excludes(["example.invalid", "synthetic", "fixture", "nihao", "前文", "后文", "你好"]), "Runtime records omit all content and configuration values")
         print("PASS AI diagnostics runtime pid=\(ProcessInfo.processInfo.processIdentifier)")
-        print("PASS AI runtime: bounded Unicode context captured once, actual 0.5s debounce, navigation, stale results, errors, repeat sessions and reentrant reads")
+        print("PASS AI runtime: bounded Unicode context captured once, 0.5s debounce on a test clock, navigation, " +
+              "stale results, errors, repeat sessions and reentrant reads")
     }
 
     @MainActor static func contextChecks() {
@@ -145,73 +187,99 @@ struct AIRuntimeTests {
     @MainActor static func configuredDelayChecks() async throws {
         let fixture = try RuntimeFixture(); defer { fixture.stop() }
         fixture.isolated.settings.smart.triggerDelayMS = 1000
-        fixture.coordinator.synchronize()
-        await wait(0.60)
+        await fixture.schedule()
+        await fixture.advance(600)
         verify(await fixture.service.count() == 0 && fixture.reads == 0,
                "Configured delay defers requests and context capture beyond the old 500ms deadline")
-        await wait(0.50)
-        verify(await fixture.service.count() == 1, "Request starts after the configured delay")
+        await fixture.advance(500)
+        await until({ await fixture.service.count() == 1 }, "Request starts after the configured delay")
         await fixture.service.resolve(0)
         fixture.isolated.settings.smart.triggerDelayMS = 100
         fixture.coordinator.invalidate(reason: .settingsChanged)
-        fixture.coordinator.synchronize()
-        await wait(0.25)
-        verify(await fixture.service.count() == 2, "Existing coordinator reads updated delay for its next attempt")
+        await fixture.schedule()
+        await fixture.advance(250)
+        await until({ await fixture.service.count() == 2 },
+                    "Existing coordinator reads updated delay for its next attempt")
         await fixture.service.resolve(1)
     }
 
     @MainActor static func debounceChecks() async throws {
         let fixture = try RuntimeFixture(); defer { fixture.stop() }
-        fixture.coordinator.synchronize()
-        await wait(0.27)
+        await fixture.schedule()
+        let request = fixture.coordinator.request
+        await fixture.advance(270)
         verify(await fixture.service.count() == 0, "No paid request before 0.5s")
         fixture.coordinator.validate()
         fixture.setInput("nihao", length: 6) // Rime's display mark changes while raw input is identical.
         fixture.coordinator.synchronize(ownedRefresh: true)
-        await wait(0.30)
-        verify(await fixture.service.count() == 1, "Navigation mark update must retain original deadline")
+        await fixture.advance(300)
+        await until({ await fixture.service.count() == 1 }, "Navigation mark update must retain original deadline")
         verify(fixture.reads == 1, "Position tracking reads no document context")
         fixture.coordinator.validate(); fixture.setInput("nihao", length: 7)
         fixture.coordinator.synchronize(ownedRefresh: true)
-        await fixture.service.resolve(0); await wait(0.05)
+        await fixture.service.resolve(0)
+        await request?.value
         verify(fixture.shown == "你好", "In-flight result binds to the latest owned display mark")
         fixture.coordinator.validate(); fixture.setInput("nihao", length: 5)
         fixture.coordinator.synchronize(ownedRefresh: true)
-        await wait(0.55)
+        await fixture.advance(550)
         verify(await fixture.service.count() == 1 && fixture.shown != nil, "Paging a visible suggestion never repeats inference")
         let adoption = fixture.coordinator.takeSuggestion()
         verify(adoption?.text == "你好" && adoption?.attempt != nil, "Adoption retains request identity after coordinator invalidation")
         verify(fixture.coordinator.takeSuggestion() == nil, "Acceptance consumes eligibility exactly once")
         verify(fixture.reads == 1, "Response, navigation and Tab do not recapture request context")
 
-        fixture.setInput("ni"); fixture.coordinator.synchronize(); await wait(0.30)
-        fixture.setInput("nihao"); fixture.coordinator.synchronize(); await wait(0.26)
+        fixture.setInput("ni")
+        await fixture.schedule()
+        await fixture.advance(300)
+        fixture.setInput("nihao")
+        await fixture.schedule()
+        let retyped = fixture.coordinator.request
+        await fixture.advance(260)
         verify(await fixture.service.count() == 1, "Actual input edits reset the deadline")
-        await wait(0.28); verify(await fixture.service.count() == 2)
-        fixture.coordinator.invalidate(); fixture.coordinator.synchronize(); await wait(0.54)
-        verify(await fixture.service.count() == 3, "Identical retyping after a ended composition gets a fresh request")
-        await fixture.service.resolve(1); await wait(0.03); verify(fixture.shown == nil)
-        await fixture.service.resolve(2); await wait(0.03); verify(fixture.shown != nil)
+        await fixture.advance(280)
+        await until { await fixture.service.count() == 2 }
+        fixture.coordinator.invalidate()
+        await fixture.schedule()
+        let fresh = fixture.coordinator.request
+        await fixture.advance(540)
+        await until({ await fixture.service.count() == 3 },
+                    "Identical retyping after a ended composition gets a fresh request")
+        await fixture.service.resolve(1)
+        await retyped?.value
+        verify(fixture.shown == nil)
+        await fixture.service.resolve(2)
+        await fresh?.value
+        verify(fixture.shown != nil)
 
         let nested = try RuntimeFixture(); defer { nested.stop() }
-        nested.coordinator.synchronize(); await wait(0.28)
-        nested.coordinator.beginRefresh(); nested.setInput("nihao", length: 6)
-        await wait(0.28)
+        await nested.schedule()
+        await nested.advance(280)
+        nested.coordinator.beginRefresh()
+        nested.setInput("nihao", length: 6)
+        await nested.advance(280)
         verify(await nested.service.count() == 0, "Nested client run loop cannot dispatch from a transient owned mark")
-        nested.coordinator.endRefresh(); await wait(0.03)
-        verify(await nested.service.count() == 1, "Expired deadline resumes immediately after the owned refresh")
-        nested.coordinator.beginRefresh(); nested.setInput("nihao", length: 7)
-        await nested.service.resolve(0); await wait(0.03)
+        nested.coordinator.endRefresh()
+        await until({ await nested.service.count() == 1 },
+                    "Expired deadline resumes immediately after the owned refresh")
+        let response = nested.coordinator.request
+        nested.coordinator.beginRefresh()
+        nested.setInput("nihao", length: 7)
+        await nested.service.resolve(0)
+        await until { !nested.coordinator.refreshWaiters.isEmpty }
         verify(nested.shown == nil, "Response waits for an in-progress owned refresh")
-        nested.coordinator.endRefresh(); await wait(0.03)
+        nested.coordinator.endRefresh()
+        await response?.value
         verify(nested.shown != nil)
     }
 
     @MainActor static func invalidationChecks() async throws {
         for action in ["input", "client", "selection", "configuration", "off", "lifecycle", "hidden", "secure"] {
             let fixture = try RuntimeFixture(); defer { fixture.stop() }
-            fixture.coordinator.synchronize(); await wait(0.54)
-            verify(await fixture.service.count() == 1)
+            await fixture.schedule()
+            await fixture.advance(540)
+            await until { await fixture.service.count() == 1 }
+            let request = fixture.coordinator.request
             switch action {
             case "input": fixture.setInput("nihaoma")
             case "client":
@@ -225,38 +293,56 @@ struct AIRuntimeTests {
             case "lifecycle": fixture.coordinator.invalidate()
             default: fixture.state = nil
             }
-            await fixture.service.resolve(0); await wait(0.03)
+            await fixture.service.resolve(0)
+            await request?.value
             verify(fixture.shown == nil && fixture.coordinator.takeSuggestion() == nil, "Late result rejected after \(action)")
         }
         let failure = try RuntimeFixture(); defer { failure.stop() }
-        failure.coordinator.synchronize(); await wait(0.54)
-        await failure.service.resolve(0, .failure(AIServiceError.httpStatus(401))); await wait(0.03)
+        await failure.schedule()
+        await failure.advance(540)
+        await until { await failure.service.count() == 1 }
+        let request = failure.coordinator.request
+        await failure.service.resolve(0, .failure(AIServiceError.httpStatus(401)))
+        await request?.value
         verify(failure.isolated.settings.smart.requestError?.contains("401") == true && failure.shown == nil)
-        failure.coordinator.synchronize(); await wait(0.54)
-        verify(await failure.service.count() == 1, "Failure has no automatic paid retry")
+        failure.coordinator.synchronize()
+        await failure.advance(540)
+        // A retry would replace the request synchronously; its own debounce starts after this advance.
+        verify(await failure.service.count() == 1 && failure.coordinator.request == request,
+               "Failure has no automatic paid retry")
     }
 
     @MainActor static func reentrantChecks() async throws {
         let dispatch = try RuntimeFixture(); defer { dispatch.stop() }
         dispatch.readHook = { dispatch.isolated.settings.smart.isEnabled = false }
-        dispatch.coordinator.synchronize(); await wait(0.55)
+        await dispatch.schedule()
+        await dispatch.advance(550)
         verify(await dispatch.service.count() == 0, "A context read disabling AI must not dispatch")
         let acceptance = try RuntimeFixture(); defer { acceptance.stop() }
-        acceptance.coordinator.synchronize(); await wait(0.54)
-        await acceptance.service.resolve(0); await wait(0.03)
+        await acceptance.schedule()
+        await acceptance.advance(540)
+        await until { await acceptance.service.count() == 1 }
+        let request = acceptance.coordinator.request
+        await acceptance.service.resolve(0)
+        await request?.value
         verify(acceptance.shown != nil)
         acceptance.stateHook = { acceptance.coordinator.invalidate() }
         verify(acceptance.coordinator.takeSuggestion() == nil, "Reentrant state getter invalidation prevents acceptance")
 
         let missingContext = try RuntimeFixture(); defer { missingContext.stop() }
         missingContext.contextAvailable = false
-        missingContext.coordinator.synchronize(); await wait(0.55)
+        await missingContext.schedule()
+        await missingContext.advance(550)
         verify(await missingContext.service.count() == 0, "Unreadable anchor prevents dispatch with a terminal diagnostic")
 
         let missingPanel = try RuntimeFixture(); defer { missingPanel.stop() }
         missingPanel.presentationAvailable = false
-        missingPanel.coordinator.synchronize(); await wait(0.54)
-        await missingPanel.service.resolve(0); await wait(0.03)
+        await missingPanel.schedule()
+        await missingPanel.advance(540)
+        await until { await missingPanel.service.count() == 1 }
+        let presentation = missingPanel.coordinator.request
+        await missingPanel.service.resolve(0)
+        await presentation?.value
         verify(missingPanel.shown == nil, "Presentation failure remains a safe fallback with a diagnostic")
     }
 }
