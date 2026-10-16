@@ -19,28 +19,31 @@ final class AISuggestionCoordinator {
     private let allows: (AIInputIdentity, String) -> Bool
     private let visible: () -> Bool
     private let hide: () -> Void
-    private let delay: Duration?
+    private let sleep: @MainActor (Duration) async throws -> Void
     private let diagnosticSession: UUID
     private var attemptID: UUID?
     private var settingsGate: AIDiagnosticReason?
     private var state: AISuggestionState?
     private var configuration: AISuggestionConfiguration?
     private var revision: UInt64 = 0
-    private var request: Task<Void, Never>?
+    private(set) var request: Task<Void, Never>?
     private var tracker: Timer?
     private var preview: String?
     private var requiresVisibleCandidates = false
     private var refreshDepth = 0
-    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
+    private(set) var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(settings: IFSmartSettings, service: any AISuggestionServing,
-         delay: Duration? = nil, diagnosticSession: UUID = UUID(),
+         sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+         diagnosticSession: UUID = UUID(),
          current: @escaping () -> AISuggestionState?,
          candidatesVisible: @escaping () -> Bool = { true },
          context: @escaping (AIClientAnchor) -> AISurroundingContext?,
          allows: @escaping (AIInputIdentity, String) -> Bool = { _, _ in true },
          present: @escaping (String) -> Bool, visible: @escaping () -> Bool, hide: @escaping () -> Void) {
-        self.settings = settings; self.service = service; self.delay = delay
+        self.settings = settings
+        self.service = service
+        self.sleep = sleep
         self.diagnosticSession = diagnosticSession
         self.current = current; self.candidatesVisible = candidatesVisible; self.context = context
         self.present = present; self.visible = visible; self.hide = hide
@@ -118,12 +121,12 @@ final class AISuggestionCoordinator {
             }
         }
         tracker = timer; RunLoop.main.add(timer, forMode: .common)
-        let service = service, delay = delay ?? .milliseconds(settings.triggerDelayMS)
+        let service = service, sleep = sleep, delay = Duration.milliseconds(settings.triggerDelayMS)
         request = Task { [weak self] in
           await AIDiagnostics.$session.withValue(diagnosticSession) {
            await AIDiagnostics.$attempt.withValue(attempt) {
             do {
-                try await Task.sleep(for: delay)
+                try await sleep(delay)
                 await self?.waitForRefresh()
                 // show() is asynchronous for some native clients. Keep the original
                 // input deadline and wait without capturing document text. A weak
@@ -133,7 +136,7 @@ final class AISuggestionCoordinator {
                         AIDiagnostics.emit(.discarded, reason: .staleState); return
                     }
                     if self?.candidatesVisible() == true { break }
-                    try await Task.sleep(for: .milliseconds(100))
+                    try await sleep(.milliseconds(100))
                     await self?.waitForRefresh()
                 }
                 self?.requiresVisibleCandidates = true

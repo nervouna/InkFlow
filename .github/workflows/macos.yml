@@ -51,14 +51,11 @@ jobs:
           restore-keys: portable-${{ runner.os }}-macos-26-
       - name: Build the portable core
         run: bash Core/scripts/build-portable.sh
-      # The `quick` group minus `ai-runtime`: AIRuntimeTests asserts debounce deadlines
-      # with 40 ms margins (500 ms sleep, checked at 540 ms), which shared macOS runners
-      # do not hold. Keep this list in step with `quick` in macOS/scripts/test.sh.
       - name: Run the quick units
         run: |
           set -o pipefail
           mkdir -p build
-          bash macOS/scripts/test.sh engine-basic engine-options engine-english engine-context controller settings quality-store 2>&1 | tee build/test-quick.log
+          bash macOS/scripts/test.sh quick 2>&1 | tee build/test-quick.log
       - name: Record unit timings and name the failed unit
         if: always()
         run: |
