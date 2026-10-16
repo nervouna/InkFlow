@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-quality-metadata.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
@@ -110,7 +111,7 @@ build/quality-build-metadata "$repo" "$app"
 for field in sourceRevision sourceTreeSHA256 sourceDirty bundledResourcesSHA256 \
   rankingSourceSHA256 rankingResourcesSHA256 appVersion appBuild; do
   [[ "$(plutil -extract "$field" raw "$fixture/first.json")" == \
-     "$(plutil -extract "$field" raw "$app/Contents/Resources/QualityBuild.json")" ]]
+     "$(plutil -extract "$field" raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 done
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/current-layout.json"
 build/quality-build-metadata "$repo" "$app"
@@ -130,35 +131,35 @@ source_hash=$(plutil -extract sourceTreeSHA256 raw "$fixture/first.json")
 ranking_source=$(plutil -extract rankingSourceSHA256 raw "$fixture/first.json")
 ranking_resources=$(plutil -extract rankingResourcesSHA256 raw "$fixture/first.json")
 bundle_hash=$(plutil -extract bundleSHA256 raw "$fixture/first.json")
-[[ ${#source_hash} -eq 64 && ${#ranking_source} -eq 64 && ${#ranking_resources} -eq 64 && ${#bundle_hash} -eq 64 ]]
-[[ "$(plutil -extract sourceRevision raw "$fixture/first.json")" == "$(git -C "$repo" rev-parse HEAD)" ]]
+[[ ${#source_hash} -eq 64 && ${#ranking_source} -eq 64 && ${#ranking_resources} -eq 64 && ${#bundle_hash} -eq 64 ]] || fail
+[[ "$(plutil -extract sourceRevision raw "$fixture/first.json")" == "$(git -C "$repo" rev-parse HEAD)" ]] || fail
 
 printf 'modified AI-only controller behavior\n' > "$repo/macOS/Sources/InputControllerAI.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$source_hash" != "$(plutil -extract sourceTreeSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-[[ "$ranking_resources" == "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$source_hash" != "$(plutil -extract sourceTreeSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
+[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
+[[ "$ranking_resources" == "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf '\n// modified AI suggestion-only presentation\n' >> "$repo/macOS/Sources/AIInputPresentation.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf 'font size 20, horizontal presentation\n' > "$repo/macOS/Sources/InputController.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf 'font size 20, vertical presentation\n' > "$repo/macOS/Sources/InputController.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf 'controller calls offline context glue; selection keys 9-1; presents candidate strings with engine highlight\n' > "$repo/macOS/Sources/InputControllerCore.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 printf '%s\n' "$core_source" > "$repo/macOS/Sources/InputControllerCore.swift"
 
 printf 'controller calls offline context glue; selection keys 1-9; presents highlight as candidate index zero\n' > "$repo/macOS/Sources/InputControllerCore.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 printf '%s\n' "$core_source" > "$repo/macOS/Sources/InputControllerCore.swift"
 
 cp "$repo/macOS/Sources/CandidatePresentation.swift" "$fixture/CandidatePresentation.swift"
@@ -168,33 +169,33 @@ if cmp -s "$fixture/CandidatePresentation.swift" "$repo/macOS/Sources/CandidateP
   exit 1
 fi
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 cp "$fixture/CandidatePresentation.swift" "$repo/macOS/Sources/CandidatePresentation.swift"
 
 printf 'modified offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 printf 'offline context glue\n' > "$repo/macOS/Sources/InputRankingContext.swift"
 
 printf 'modified voice correction learning lifecycle\n' > "$repo/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 printf 'voice correction learning lifecycle\n' > "$repo/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift"
 
 printf 'modified executable bytes\n' > "$app/Contents/MacOS/InkFlow"
 build/quality-build-metadata "$repo" "$app"
-[[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-[[ "$ranking_resources" == "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
+[[ "$ranking_source" == "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
+[[ "$ranking_resources" == "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf 'modified offline candidate behavior\n' > "$repo/Core/Sources/InkFlowRime/Engine.swift"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_source" != "$(plutil -extract rankingSourceSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 printf 'modified actual bundled ranking content\n' > "$app/Contents/Resources/Rime/ranking.yaml"
 build/quality-build-metadata "$repo" "$app"
-[[ "$ranking_resources" != "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
-[[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$ranking_resources" != "$(plutil -extract rankingResourcesSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
+[[ "$bundle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 
 cp "$repo/macOS/Quality/ranking-sources.txt" "$fixture/sources.manifest"
 for invalid in missing duplicate nonexistent; do
@@ -244,7 +245,7 @@ sparkle_hash=$(plutil -extract bundleSHA256 raw "$fixture/sparkle-symlinks.json"
 rm "$sparkle_fixture/Sparkle"
 ln -s Versions/B/Sparkle "$sparkle_fixture/Sparkle"
 build/quality-build-metadata "$repo" "$app"
-[[ "$sparkle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]]
+[[ "$sparkle_hash" != "$(plutil -extract bundleSHA256 raw "$app/Contents/Resources/QualityBuild.json")" ]] || fail
 rm "$sparkle_fixture/Sparkle"
 ln -s ../../../../../../outside "$sparkle_fixture/Sparkle"
 if build/quality-build-metadata "$repo" "$app" > "$fixture/escaping-sparkle-link.log" 2>&1; then
@@ -270,9 +271,9 @@ if ! git -C "$identity_repo" diff --cached --quiet; then
 fi
 tool="$PWD/build/quality-build-metadata"
 before=$("$tool" "$identity_repo" --build-snapshot)
-[[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]]
+[[ "$before" == "$(git -C "$identity_repo" rev-parse HEAD) clean "* ]] || fail
 printf 'documentation only\n' >> "$identity_repo/README.md"
-[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]] || fail
 for resource in Core/Data/english-wordfreq.tsv Core/config/english.conf Core/scripts/prepare-rime.sh \
   Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs \
   Core/Portable/dictionary/Cargo.lock Core/config/chinese-sources.json rust-toolchain.toml \
@@ -281,9 +282,9 @@ for resource in Core/Data/english-wordfreq.tsv Core/config/english.conf Core/scr
   cp "$identity_repo/$resource" "$fixture/resource-before"
   printf '\n# changed shared resource input\n' >> "$identity_repo/$resource"
   snapshot=$("$tool" "$identity_repo" --build-snapshot)
-  [[ "$snapshot" != "$before" && "$snapshot" == "$(git -C "$identity_repo" rev-parse HEAD) dirty "* ]]
+  [[ "$snapshot" != "$before" && "$snapshot" == "$(git -C "$identity_repo" rev-parse HEAD) dirty "* ]] || fail
   cp "$fixture/resource-before" "$identity_repo/$resource"
-  [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]] || fail
 done
 cp "$identity_repo/Package.resolved" "$fixture/Package.resolved"
 python3 - "$identity_repo/Package.resolved" <<'PY'
@@ -296,32 +297,32 @@ lock = json.loads(path.read_text())
 lock["pins"][0]["state"]["revision"] = "0" * 40
 path.write_text(json.dumps(lock, indent=2) + "\n")
 PY
-[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
 cp "$fixture/Package.resolved" "$identity_repo/Package.resolved"
-[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" == "$before" ]] || fail
 mkdir "$fixture/originals"
 cp "$identity_repo/Core/Sources/InkFlowRime/Engine.swift" "$fixture/originals/Engine.swift"
 cp "$identity_repo/macOS/scripts/quality-metadata.sh" "$fixture/originals/quality-metadata.sh"
 cp "$identity_repo/macOS/scripts/build-dictionary-generator.sh" "$fixture/originals/build-dictionary-generator.sh"
 cp "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift" "$fixture/originals/main.swift"
 printf 'build input\n' >> "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
-[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
 for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh Core/Tools/DictionaryGeneratorTool/main.swift; do
   cp "$fixture/originals/Engine.swift" "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
   cp "$fixture/originals/quality-metadata.sh" "$identity_repo/macOS/scripts/quality-metadata.sh"
   cp "$fixture/originals/build-dictionary-generator.sh" "$identity_repo/macOS/scripts/build-dictionary-generator.sh"
   cp "$fixture/originals/main.swift" "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift"
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
-  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]]
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
 done
 # Newly introduced helpers are untracked before the delivery commit, but still
 # must participate in the build closure and dirty-state calculation.
 for helper in build-number build-summary; do
   snapshot=$("$tool" "$identity_repo" --build-snapshot)
   printf 'fixture build helper\n' > "$identity_repo/macOS/scripts/$helper.sh"
-  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]]
+  [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]] || fail
 done
 snapshot=$("$tool" "$identity_repo" --build-snapshot)
 printf 'fixture shared helper\n' > "$identity_repo/Core/Sources/InkFlowDomain/UntrackedFixture.swift"
-[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]]
+[[ "$("$tool" "$identity_repo" --build-snapshot)" != "$snapshot" ]] || fail
 echo 'PASS quality build metadata: deterministic build-input/resources hashes, clean/dirty revision, docs excluded'

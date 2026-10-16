@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 # macOS awk collates distinct CJK strings as equal under UTF-8 locales; compare bytes.
 awk() { LC_ALL=C command awk "$@"; }
@@ -81,7 +82,7 @@ mkdir -p "$management_user"
 build/ai-adoption-learning-tests "$shared" "$management_user" personal-management
 build/ai-adoption-learning-tests "$shared" "$management_user" personal-management-read
 export_userdb "$management_user" pinyin_simp "$management_user/management-pinyin.txt"
-! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$management_user/management-pinyin.txt"
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$management_user/management-pinyin.txt" || fail
 mkdir -p "$voice_user"
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-write
 build/ai-adoption-learning-tests "$shared" "$voice_user" voice-correction-read
@@ -100,8 +101,8 @@ build/ai-adoption-learning-tests "$shared" "$clear_user" voice-correction-cleare
 export_userdb "$clear_user" inkflow_shared_english "$clear_user/cleared-shared.txt"
 export_userdb "$clear_user" inkflow_voice_alias "$clear_user/cleared-alias.txt"
 export_userdb "$clear_user" pinyin_simp "$clear_user/retained-pinyin.txt"
-! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-shared.txt"
-! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-alias.txt"
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-shared.txt" || fail
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/cleared-alias.txt" || fail
 awk -F '\t' '$1 == "测试" && $2 == "ce shi" && $3 == 1 { found=1 } END { exit found ? 0 : 1 }' "$clear_user/retained-pinyin.txt"
 echo 'PASS English learning reset: both named namespaces clear across restart; pinyin userdb remains'
 inkflow_test_timing_report ai-learning voice-correction "$stage_started"
@@ -140,7 +141,7 @@ build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-write
 build/ai-adoption-learning-tests "$shared" "$letters_user" mixed-letter-read
 build/ai-adoption-learning-tests "$contract_shared" "$letters_user" contract-mixed-letters-verify
 export_userdb "$letters_user" pinyin_simp "$letters_user/letters-pinyin.txt"
-! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$letters_user/letters-pinyin.txt"
+! awk -F '\t' '!/^#/ && $3 > 0 { found=1 } END { exit found ? 0 : 1 }' "$letters_user/letters-pinyin.txt" || fail
 echo 'PASS learned letters: actual standalone A/I selection, unchanged ordinary Pinyin on every page, source preedit, technical context, restart and undo isolation'
 
 immediate_user="$user_dir/mixed-immediate-user"

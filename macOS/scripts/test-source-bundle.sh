@@ -1,12 +1,13 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-source-bundle-test.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 bash macOS/scripts/dictionary-source-bundle.sh "$scratch/bundle.tar.gz" 123 >/dev/null
 tar -xzf "$scratch/bundle.tar.gz" -C "$scratch"
 root=$(printf '%s\n' "$scratch"/InkFlow-*-dictionary-source)
-[[ -d "$root" ]]
+[[ -d "$root" ]] || fail
 (cd "$root" && shasum -a 256 -c SHA256SUMS >/dev/null)
 # Every pinned Chinese catalog input is present with its catalog digest.
 build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; do
@@ -24,7 +25,7 @@ for file in upstream/deps/pinyin.tar.gz upstream/deps/english.tar.gz upstream/de
 done
 grep -q "$(git rev-parse HEAD)" "$root/README.md"
 grep -q 'build 123' "$root/README.md"
-! grep -qi 'sogou\|rime-selected' "$root/SOURCES.tsv"
+! grep -qi 'sogou\|rime-selected' "$root/SOURCES.tsv" || fail
 # The recorded manifest is the one the current recipe generates.
 bash Core/scripts/prepare-chinese.sh "$scratch/chinese" >/dev/null
 cmp "$scratch/chinese/dictionary-manifest.json" "$root/generated/dictionary-manifest.json"

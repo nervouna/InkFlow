@@ -17,6 +17,7 @@ Solo project. Keep changes small and direct; prefer deleting code over adding gu
 
 - Build: `bash macOS/scripts/build.sh`. Build numbers increase on every build by design; don't comment on them.
 - Test only what you touched: `bash macOS/scripts/test.sh quick` for logic changes, or name units (`test.sh engine controller`). UI-only changes (SwiftUI views, layout, copy): build and stop — the user checks them in the app.
+- Shell test assertions are `[[ ... ]] || fail` and `! cmd || fail` (each script defines `fail`): under `set -e`, bash 3.2 (macOS `/bin/bash`) ignores a bare failing `[[ ]]`, and no bash stops on `! cmd`.
 - Run `test.sh all` only for releases or when explicitly asked. If one unit fails, fix it and rerun that unit.
 - Typing, focus and Settings behavior are checked by the user. List what they should try in one or two lines; don't track it further.
 - `iconutil` fails inside the sandbox; run builds outside it from the first attempt.

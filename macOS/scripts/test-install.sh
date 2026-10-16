@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-install-tests.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
@@ -47,7 +48,7 @@ fi
 STUB
 cat > "$fixture/bin/ps" <<'STUB'
 #!/bin/bash
-[[ "${DESKTOP_DENIED:-0}" != 1 ]]
+[[ "${DESKTOP_DENIED:-0}" != 1 ]] || exit 1
 STUB
 cat > "$repo/macOS/scripts/refresh-menu.sh" <<'STUB'
 echo refresh >> "$EVENTS"
@@ -119,57 +120,57 @@ grep -Fq 'Usage: install.sh --developer-id | --debug (development debugging only
 : > "$EVENTS"
 if IDENTITY_KIND=development install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 grep -Fq 'not an available valid Developer ID Application' "$fixture/output"
-[[ ! -s "$EVENTS" && ! -e "$HOME/Library/Input Methods/InkFlow.app" ]]
+[[ ! -s "$EVENTS" && ! -e "$HOME/Library/Input Methods/InkFlow.app" ]] || fail
 
 : > "$EVENTS"
 if CERT_TEAM=WRONGTEAM install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 grep -Fq 'OU does not match the InkFlow team.' "$fixture/output"
-[[ ! -s "$EVENTS" && ! -e "$HOME/Library/Input Methods/InkFlow.app" ]]
+[[ ! -s "$EVENTS" && ! -e "$HOME/Library/Input Methods/InkFlow.app" ]] || fail
 
 : > "$EVENTS"
 if SIGNED_AUTHORITY='Apple Development' install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 grep -Fq 'Expected Developer ID Application signature.' "$fixture/output"
-[[ ! -e "$HOME/Library/Input Methods/InkFlow.app" ]]
-! grep -q '^register:' "$EVENTS"
+[[ ! -e "$HOME/Library/Input Methods/InkFlow.app" ]] || fail
+! grep -q '^register:' "$EVENTS" || fail
 
 : > "$EVENTS"
 if VERIFY_FAILURE=installed install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 target="$HOME/Library/Input Methods/InkFlow.app"
 shopt -s nullglob
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ -e "$target" && ${#stages[@]} -eq 1 ]]
-[[ -s "${stages[0]}/state.json" && ! -e "${stages[0]}/previous" ]]
+[[ -e "$target" && ${#stages[@]} -eq 1 ]] || fail
+[[ -s "${stages[0]}/state.json" && ! -e "${stages[0]}/previous" ]] || fail
 grep -Fq 'staged state retained' "$fixture/output"
 assert_no_persistent_backups
 rm -rf "$target" "${stages[0]}"
 
 : > "$EVENTS"
 install --developer-id > "$fixture/output" 2>&1
-[[ -x "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow" ]]
+[[ -x "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow" ]] || fail
 grep -Fq "register:$HOME/Library/Input Methods/InkFlow.app" "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
 # The lifecycle helper is told the staged app's build number, not a path.
 grep -Fxq 'expected-build:7' "$EVENTS"
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow"
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 0 ]]
+[[ ${#stages[@]} -eq 0 ]] || fail
 
 # Verify each integrity gate independently, before any existing failure leaves
 # a retained recovery directory. These fixtures never touch the real installation.
 printf old > "$target/old-marker"
 if DITTO_FAILURE=before-stage-copy install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
-[[ -f "$target/old-marker" ]]
+[[ -f "$target/old-marker" ]] || fail
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 0 ]]
-! grep -Fq 'staged state retained' "$fixture/output"
+[[ ${#stages[@]} -eq 0 ]] || fail
+! grep -Fq 'staged state retained' "$fixture/output" || fail
 assert_no_persistent_backups
 
 printf old > "$target/old-marker"
 if REPLACE_FAILURE=before-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
-[[ -f "$target/old-marker" ]]
+[[ -f "$target/old-marker" ]] || fail
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 0 ]]
-! grep -Fq 'staged state retained' "$fixture/output"
+[[ ${#stages[@]} -eq 0 ]] || fail
+! grep -Fq 'staged state retained' "$fixture/output" || fail
 assert_no_persistent_backups
 
 for phase in source staged installed; do
@@ -180,49 +181,49 @@ for phase in source staged installed; do
     exit 1
   fi
   grep -Fxq "verification-rejected:$phase" "$EVENTS"
-  ! grep -Fq 'Installed' "$fixture/output"
-  ! grep -Fq ':--finish-update' "$EVENTS"
-  ! grep -Fxq refresh "$EVENTS"
+  ! grep -Fq 'Installed' "$fixture/output" || fail
+  ! grep -Fq ':--finish-update' "$EVENTS" || fail
+  ! grep -Fxq refresh "$EVENTS" || fail
   stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
   if [[ "$phase" == installed ]]; then
-    [[ ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]]
-    [[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]]
+    [[ ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]] || fail
+    [[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]] || fail
     grep -Fxq old-intact-before-stop "$EVENTS"
     grep -Fq ':--prepare-update' "$EVENTS"
     # Remove only this test-owned recovery fixture before the next scenario.
     rm -rf "${stages[0]}"
   else
-    [[ -f "$target/old-marker" && ${#stages[@]} -eq 0 ]]
-    ! grep -q '^register:' "$EVENTS"
+    [[ -f "$target/old-marker" && ${#stages[@]} -eq 0 ]] || fail
+    ! grep -q '^register:' "$EVENTS" || fail
   fi
 done
 printf old > "$target/old-marker"
 if REPLACE_FAILURE=after-candidate install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ -e "$target" && ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]]
-[[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]]
+[[ -e "$target" && ! -e "$target/old-marker" && ${#stages[@]} -eq 1 ]] || fail
+[[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]] || fail
 grep -Fq 'staged state retained' "$fixture/output"
 rm -rf "${stages[0]}"
 printf old > "$HOME/Library/Input Methods/InkFlow.app/old-marker"
 if LIFECYCLE_FAILURE=prepare install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
-[[ -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]]
-! grep -Fq 'Installed and verified' "$fixture/output"
+[[ -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]] || fail
+! grep -Fq 'Installed and verified' "$fixture/output" || fail
 assert_no_persistent_backups
 : > "$EVENTS"
 if DESKTOP_DENIED=1 install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
-[[ ! -s "$EVENTS" && -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]]
+[[ ! -s "$EVENTS" && -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]] || fail
 grep -Fq 'state is unknown' "$fixture/output"
 if LIFECYCLE_FAILURE=finish install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
-[[ ! -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]]
+[[ ! -f "$HOME/Library/Input Methods/InkFlow.app/old-marker" ]] || fail
 grep -Fq 'old-intact-before-stop' "$EVENTS"
 grep -Fq 'staged state retained' "$fixture/output"
-! grep -Fq 'Installed and verified' "$fixture/output"
+! grep -Fq 'Installed and verified' "$fixture/output" || fail
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 1 && -s "${stages[0]}/state.json" ]]
+[[ ${#stages[@]} -eq 1 && -s "${stages[0]}/state.json" ]] || fail
 rm -rf "${stages[0]}"
 : > "$EVENTS"
 install --developer-id > "$fixture/output" 2>&1
-[[ -x "$target/Contents/MacOS/InkFlow" && ! -e "$target/old-marker" ]]
+[[ -x "$target/Contents/MacOS/InkFlow" && ! -e "$target/old-marker" ]] || fail
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$target/Contents/MacOS/InkFlow"
 grep -Fq ':--prepare-update' "$EVENTS"
 grep -Fq ':--commit-update' "$EVENTS"
@@ -233,18 +234,18 @@ if grep -Fxq refresh "$EVENTS"; then
 fi
 grep -Fq '原输入源状态已恢复' "$fixture/output"
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 0 ]]
+[[ ${#stages[@]} -eq 0 ]] || fail
 assert_no_persistent_backups
 
 # An unconfirmed upgrade still completes, and the installer shows the instruction instead of the restored message.
 : > "$EVENTS"
 INPUT_SOURCE_UNCONFIRMED=1 install --developer-id > "$fixture/output" 2>&1
-[[ -x "$target/Contents/MacOS/InkFlow" ]]
+[[ -x "$target/Contents/MacOS/InkFlow" ]] || fail
 grep -Fq 'Installed and verified fresh process' "$fixture/output"
 grep -Fq '编辑中确认已添加墨流拼音' "$fixture/output"
-! grep -Fq '原输入源状态已恢复' "$fixture/output"
+! grep -Fq '原输入源状态已恢复' "$fixture/output" || fail
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
-[[ ${#stages[@]} -eq 0 ]]
+[[ ${#stages[@]} -eq 0 ]] || fail
 assert_no_persistent_backups
 
 # Exercise the actual read-only wrapper with fake compiler and service diagnostics.
@@ -263,7 +264,7 @@ STUB
 chmod +x "$repo/build/register-input-source"
 : > "$EVENTS"
 if DESKTOP_DENIED=1 bash "$repo/macOS/scripts/register.sh" ignored --verify-enabled > "$fixture/output" 2>&1; then exit 1; fi
-[[ ! -s "$EVENTS" ]]
+[[ ! -s "$EVENTS" ]] || fail
 if bash "$repo/macOS/scripts/register.sh" ignored --verify-enabled > "$fixture/output" 2>&1; then exit 1; fi
 grep -Fq 'enabled state is unknown' "$fixture/output"
 grep -Fq readonly-query "$EVENTS"

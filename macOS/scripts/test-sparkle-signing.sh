@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 source macOS/scripts/sparkle-signing.sh
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-sparkle-signing.XXXXXX")
@@ -44,6 +45,6 @@ rmdir "$missing"
 : > "$EVENTS"
 if sign_sparkle "$app" --sign fixture > "$fixture/error" 2>&1; then exit 1; fi
 grep -Fq 'Missing Sparkle signing component:' "$fixture/error"
-[[ ! -s "$EVENTS" ]]
+[[ ! -s "$EVENTS" ]] || fail
 if verify_sparkle_developer_id "$app" T7976FL2LP > "$fixture/error" 2>&1; then exit 1; fi
 echo 'PASS Sparkle signing: inside-out order, Downloader entitlements, all nested teams/authorities, missing component fails before signing'

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 source macOS/scripts/swift-test.sh
 build_swift_test termination-tests build/termination-tests
@@ -30,10 +31,10 @@ for mode in success dictionary-failure store-failure disabled quality-stall; do
   esac > "$termination_root/expected"
   diff -u "$termination_root/expected" "$termination_root/$mode/trace"
   if [[ "$mode" != disabled && "$mode" != store-failure && "$mode" != quality-stall ]]; then
-    [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select status from recording_runs') == closed ]]
+    [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select status from recording_runs') == closed ]] || fail
   fi
   if [[ "$mode" == success ]]; then
-    [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select count(*) from compositions') == 1 ]]
+    [[ $(sqlite3 "$termination_root/$mode/quality.sqlite3" 'select count(*) from compositions') == 1 ]] || fail
   fi
   echo "PASS native termination: $mode (15s subprocess timeout)"
 done

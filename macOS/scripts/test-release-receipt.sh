@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-receipt.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
@@ -18,10 +19,10 @@ cp macOS/scripts/{release-receipt,release-build}.sh "$fixture/repo/macOS/scripts
   bash macOS/scripts/release-receipt.sh create "$receipt"
   bash macOS/scripts/release-receipt.sh verify "$receipt" >/dev/null
   # The receipt records the verified commit and the allocated build, nothing else.
-  [[ $(plutil -p "$receipt" | grep -c '=>') == 2 ]]
-  [[ $(plutil -extract sourceCommit raw "$receipt") == $(git rev-parse HEAD) ]]
-  [[ $(plutil -extract appBuild raw "$receipt") == "$((baseline + 1))" ]]
-  [[ $(bash macOS/scripts/release-build.sh "$receipt" build/InkFlow.app/Contents/Info.plist) == "$((baseline + 1))" ]]
+  [[ $(plutil -p "$receipt" | grep -c '=>') == 2 ]] || fail
+  [[ $(plutil -extract sourceCommit raw "$receipt") == $(git rev-parse HEAD) ]] || fail
+  [[ $(plutil -extract appBuild raw "$receipt") == "$((baseline + 1))" ]] || fail
+  [[ $(bash macOS/scripts/release-build.sh "$receipt" build/InkFlow.app/Contents/Info.plist) == "$((baseline + 1))" ]] || fail
   plutil -replace CFBundleVersion -string "$((baseline + 2))" build/InkFlow.app/Contents/Info.plist
   if bash macOS/scripts/release-build.sh "$receipt" build/InkFlow.app/Contents/Info.plist >/dev/null 2>&1; then exit 1; fi
   plutil -replace CFBundleVersion -string "$((baseline + 1))" build/InkFlow.app/Contents/Info.plist
