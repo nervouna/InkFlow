@@ -54,6 +54,8 @@ struct AIHeadlessPipelineTests {
             smartService: service, secureInput: secure, presentation: endpoint,
             thunderPresentation: thunderPresentation)!
         check(controller.panel == nil, "Headless mode allocates no IMK candidate windows")
+        // Desktop focus and Space changes belong to the host session, not to this fake client.
+        NSWorkspace.shared.notificationCenter.removeObserver(controller)
         return (controller, client, endpoint)
     }
 
