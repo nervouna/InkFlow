@@ -2,6 +2,7 @@ import Foundation
 
 package enum IFRegisterInputSourceBootstrap {
     static let firstInstallInstruction = "首次安装：在系统设置 → 键盘 → 文本输入 → 编辑中添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。"
+    static let unconfirmedInstruction = "请在系统设置 → 键盘 → 文本输入 → 编辑中确认已添加墨流拼音（英文系统显示 InkFlow Pinyin），然后从输入菜单选择。"
 
     @MainActor package static func run(arguments: [String]) async {
         func fail(_ message: String, _ code: Int32) -> Never {
@@ -82,12 +83,16 @@ package enum IFRegisterInputSourceBootstrap {
             }
             let result = try await lifecycle.finish(target: target, state: state, installedBuild: build)
             print("running_pid=\(result.pid)\nrunning_executable=\(target.path)/Contents/MacOS/InkFlow\ninstalled_build=\(build)")
-            if !state.firstInstall {
-                print("input_source_state_restored=1")
+            if state.firstInstall {
+                if result.confirmed {
+                    print("first_install=1\nmode_enabled_and_selected=1")
+                } else {
+                    print("first_install=1\nmode_enabled_and_selected=unconfirmed\n\(firstInstallInstruction)")
+                }
             } else if result.confirmed {
-                print("first_install=1\nmode_enabled_and_selected=1")
+                print("input_source_state_restored=1")
             } else {
-                print("first_install=1\nmode_enabled_and_selected=unconfirmed\n\(firstInstallInstruction)")
+                print("input_source_state_restored=unconfirmed\n\(unconfirmedInstruction)")
             }
         }
     }

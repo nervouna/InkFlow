@@ -296,6 +296,16 @@ private func check(_ value: Bool, _ message: String) throws {
         let deniedResult = try await denied.finish(target: target, state: deniedState, installedBuild: "12")
         try check(!deniedResult.confirmed && deniedProcesses.launches == 1 && deniedSources.selected == "ascii",
                   "unconfirmed first-install enablement reports it, still launches the new build and leaves the selection alone")
+        // Upgrade: InkFlow was enabled before the update, then the system drops it and never confirms it again.
+        let upgradeSources = TrialSources(), upgradeProcesses = TrialProcesses()
+        let upgrade = IFTrialInstallation(sources: upgradeSources, processes: upgradeProcesses)
+        let upgradeState = try await upgrade.prepare(target: target, build: "12")
+        try check(!upgradeState.firstInstall && upgradeState.enabledIDs == [IFInputIdentity.bundleID, IFInputIdentity.modeID],
+                  "upgrade state records the enabled InkFlow sources")
+        upgradeSources.enabled = ["ascii"]; upgradeSources.ignoreEnable = true
+        let upgradeResult = try await upgrade.finish(target: target, state: upgradeState, installedBuild: "12")
+        try check(!upgradeResult.confirmed && upgradeResult.pid == 99 && upgradeProcesses.launches == 1 && upgradeSources.selected == "ascii",
+                  "unconfirmed upgrade enablement does not throw, launches and verifies the new build, and leaves the selection alone")
         let runningSources = TrialSources(), runningProcesses = TrialProcesses()
         runningSources.registered = false
         let running = IFTrialInstallation(sources: runningSources, processes: runningProcesses)
@@ -309,7 +319,7 @@ private func check(_ value: Bool, _ message: String) throws {
         try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: "/tmp/other.app/Contents/MacOS/other", cachedPath: target.path, target: target) == false, "current executable identity overrides stale cached target URL")
         try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: nil, cachedPath: target.path, target: target) == true, "target-bound cached URL remains the missing-image fallback")
         try check(IFTrialSystemProcesses.ownsRunningProcess(executablePath: nil, cachedPath: nil, target: target) == nil, "unknown process identity fails closed")
-        print("PASS trial lifecycle: stale AppKit exit observation; declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; scoped ownership (fake backends, no desktop mutation)")
+        print("PASS trial lifecycle: stale AppKit exit observation; declined/timeout/restarted block prepare; fresh process/state; postfailure; first install; unconfirmed upgrade; scoped ownership (fake backends, no desktop mutation)")
     }
     static func atomicReplacementTests() throws {
         let fm = FileManager.default
