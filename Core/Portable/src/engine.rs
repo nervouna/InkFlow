@@ -806,13 +806,15 @@ impl Engine {
     /// which is the one the user sees highlighted. A sentence the poet makes from learned words
     /// survives deleting its own record, because it is made again from the same words. While the
     /// highlighted text stays where it was, forget the learned word that weighs most in it (Lua
-    /// `forget_sentence`), up to `WORDS` words.
+    /// `forget_sentence`), up to `WORDS` words. If the text still stays after all of them, they were
+    /// not what led it: revive them (`unforget_sentence`).
     fn forget_highlighted(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<bool> {
         const WORDS: usize = 8;
         let text = shown.candidates[shown.highlighted].text.as_str();
         let core = state.sessions.get_mut(&id).unwrap();
         core.session.as_mut().unwrap().process_key(0xffff, 4)?;
-        for _ in 0..WORDS {
+        let mut forgotten = 0;
+        loop {
             let Some(index) = self.restore_page(state, id, shown)? else {
                 return Ok(true);
             };
@@ -820,16 +822,26 @@ impl Engine {
             if Self::display(core)?.candidates[index].text != text {
                 return Ok(true);
             }
-            let reply = core
-                .session
+            let session = core.session.as_mut().unwrap();
+            let step = forgotten.to_string();
+            let reply = if forgotten < WORDS {
+                session.call("forget_sentence", &[text, &step], 64)?
+            } else {
+                None
+            };
+            if !reply.is_some_and(|reply| reply.status == "ok") {
+                break;
+            }
+            forgotten += 1;
+        }
+        if forgotten > 0 {
+            let core = state.sessions.get_mut(&id).unwrap();
+            core.session
                 .as_mut()
                 .unwrap()
-                .call("forget_sentence", &[text], 64)?;
-            if !reply.is_some_and(|reply| reply.status == "ok") {
-                return Ok(true);
-            }
+                .call("unforget_sentence", &[], 64)?;
+            self.restore_page(state, id, shown)?;
         }
-        self.restore_page(state, id, shown)?;
         Ok(true)
     }
 

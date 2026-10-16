@@ -1868,7 +1868,8 @@ package enum EngineRegression {
         // Sentence: Rime's poet makes a sentence from learned words, so deleting the sentence's own record
         // is not enough, it is made again with the same text. `测试学习奥` for `ceshixuexiao` is learned four
         // ways, and the unlearned first candidate is `测试学校`. Shift+Backspace ends the lead of the
-        // sentence by forgetting the learned word that weighs most in it, and leaves other learning alone.
+        // sentence by forgetting the learned word that weighs most in it, and leaves other learning alone:
+        // words forgotten in vain are given back.
         let typed = "ceshixuexiao", split = "ceshixuexi'ao", target = "测试学习奥"
         let unlearnedSentence = candidates(typed)
         check(unlearnedSentence.first == "测试学校", "forget sentence fixture: \(unlearnedSentence)")
@@ -1894,6 +1895,22 @@ package enum EngineRegression {
             }
             check(false, "forget sentence fixture: \(text) is missing: \(engine.snapshot().candidates)")
         }
+        // A sentence that leads without learning: 测试 is learned through the abbreviation `cs`, where it is
+        // natively fourth, and is a word of the unlearned `测试学校`. Forgetting it changes nothing there, so
+        // Shift+Backspace gives it back.
+        let abbreviation = candidates("cs")
+        check(abbreviation.first != "测试", "forget sentence fixture: \(abbreviation)")
+        learn("cs", "测试")
+        check(candidates("cs").first == "测试", "forget sentence fixture: the learned word leads: \(engine.snapshot().candidates)")
+        compose(typed)
+        check(engine.snapshot().candidates.first == "测试学校", "forget sentence unlearned lead fixture: \(engine.snapshot().candidates)")
+        forgetKeepsComposition("forget sentence unlearned lead")
+        check(engine.snapshot().candidates.first == "测试学校" && engine.snapshot().highlight == 0,
+              "forget sentence unlearned lead: the sentence still leads: \(engine.snapshot())")
+        check(candidates("cs").first == "测试", "forget sentence unlearned lead: its word keeps its learning: \(engine.snapshot().candidates)")
+        compose("cs")
+        forgetKeepsComposition("forget sentence cleanup abbreviation")
+        check(engine.snapshot().candidates == abbreviation, "forget sentence cleanup: the word is forgotten: \(engine.snapshot().candidates)")
         // (a) The whole sentence selected as one candidate, twice, after an apostrophe split the input.
         learn(split, target); learn(split, target)
         forgetSentence("whole")
