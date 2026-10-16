@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <tuple>
 #include <rime/algo/syllabifier.h>
 #include <rime/dict/dictionary.h>
 #include <rime/dict/user_dictionary.h>
@@ -60,16 +61,30 @@ class MixedSyllabifier final : public PhraseSyllabifier {
   vector<size_t> vertices_;
 };
 
+// An ASCII run of a mixed sentence and its lowercase code in the English user
+// dictionary. `commits` is the run's confirmation count there, 0 when it has none.
+struct AsciiRun {
+  string display;
+  string code;
+  int commits;
+};
+
 class MixedPhrase final : public Phrase {
  public:
+  // `learned` is the bucket 0-3 of the sentence's weakest ASCII run, 0 as soon as
+  // one run has no personal confirmation. `runs` is every ASCII run of the text.
   MixedPhrase(size_t start, size_t end, const string& text,
-              const string& preedit, int commits,
+              const string& preedit, int learned, const vector<AsciiRun>& runs,
               vector<ComponentSpan> components, vector<size_t> vertices)
-      : Phrase(ReadOnlyLanguage(), "mixed_personal_" + std::to_string(std::min(3, commits)),
+      : Phrase(ReadOnlyLanguage(), "mixed_personal_" + std::to_string(learned),
                start, end, New<DictEntry>()),
         components_(std::move(components)) {
     entry_->text = text;
     entry_->preedit = preedit;
+    // The English learner reads the runs of a committed sentence from here, as
+    // "display<TAB>code" lines; the entry has no dictionary code of its own.
+    for (const auto& run : runs)
+      entry_->custom_code += run.display + '\t' + run.code + '\n';
     // A multilingual sentence has no shared native syllable-code namespace.
     // This language has no Memory/store. Keep it non-null because librime-lua's
     // Phrase.lang_name binding dereferences the language pointer.
@@ -164,6 +179,10 @@ struct PersonalMatch {
   an<DictEntry> entry;
 };
 
+// Confirmation counts of the personal edges that can carry a sentence, keyed by
+// input span and exact display.
+using Learned = map<std::tuple<size_t, size_t, string>, int>;
+
 struct StaticSlice {
   size_t start = 0;
   size_t end = 0;
@@ -225,9 +244,18 @@ class MixedPersonalTranslator final : public Translator {
     const auto right = ReachableToEnd(context);
     map<pair<size_t, size_t>, an<StaticSlice>> slices;
     set<string> emitted;
-    auto result = New<FifoTranslation>();
+    // Only edges that can carry a sentence count as personal evidence for runs
+    // another edge's sentence passes through.
+    vector<PersonalMatch> usable;
+    Learned learned;
     for (const auto& match : matches) {
       if (CutsNormalSpelling(match, normal, left, right)) continue;
+      usable.push_back(match);
+      learned.emplace(std::make_tuple(match.start, match.end, match.entry->text),
+                      match.entry->commit_count);
+    }
+    auto result = New<FifoTranslation>();
+    for (const auto& match : usable) {
       auto prefix = Slice(input, 0, match.start, &slices);
       auto suffix = Slice(input, match.end, input.size(), &slices);
       if (!prefix->covered || !suffix->covered) continue;
@@ -239,7 +267,7 @@ class MixedPersonalTranslator final : public Translator {
       auto sentence = poet_->MakeSentence(words, input.size(), "");
       if (!sentence || sentence->end() != input.size()) continue;
       auto candidate = MakeCandidate(input, segment.start, match, *sentence,
-                                     *prefix, *suffix, &admitted_runs);
+                                     *prefix, *suffix, learned, &admitted_runs);
       if (candidate && emitted.insert(candidate->text()).second)
         result->Append(candidate);
     }
@@ -375,11 +403,25 @@ class MixedPersonalTranslator final : public Translator {
   an<Candidate> MakeCandidate(const string& input, size_t offset,
                                const PersonalMatch& match, const Sentence& sentence,
                                const StaticSlice& prefix, const StaticSlice& suffix,
-                               map<string, bool>* admitted) {
+                               const Learned& learned, map<string, bool>* admitted) {
     vector<ComponentSpan> components;
     vector<size_t> all_vertices{offset};
     string preedit;
     string public_run;
+    // A public run is as personal as its span: it counts only when it is whole
+    // public English entries on an edge with a confirmation.
+    size_t run_start = 0, run_end = 0;
+    bool run_whole = true;
+    vector<AsciiRun> runs;
+    const auto finish_run = [&]() {
+      if (!PublicRun(public_run, admitted)) return false;
+      int commits = 0;
+      const auto found = learned.find(std::make_tuple(run_start, run_end, public_run));
+      if (run_whole && found != learned.end()) commits = found->second;
+      runs.push_back({public_run, Lowercase(public_run), commits});
+      public_run.clear();
+      return true;
+    };
     bool has_chinese = false;
     bool has_personal = false;
     size_t cursor = 0;
@@ -398,13 +440,18 @@ class MixedPersonalTranslator final : public Translator {
              IsLetter(entries[index + 1].text.front())))
           return nullptr;
         has_personal = true;
+        runs.push_back({entry.text, Lowercase(input.substr(cursor, end - cursor)),
+                        match.entry->commit_count});
       }
       // Validate complete public ASCII runs, including adjacent native entries.
       for (char c : personal ? string() : entry.text) {
-        if (IsLetter(c)) public_run.push_back(c);
-        else if (!public_run.empty()) {
-          if (!PublicRun(public_run, admitted)) return nullptr;
-          public_run.clear();
+        if (IsLetter(c)) {
+          if (public_run.empty()) { run_start = cursor; run_whole = true; }
+          if (origin != Origin::PublicEnglish) run_whole = false;
+          public_run.push_back(c);
+          run_end = end;
+        } else if (!public_run.empty() && !finish_run()) {
+          return nullptr;
         }
         if (static_cast<unsigned char>(c) >= 128) has_chinese = true;
       }
@@ -432,10 +479,13 @@ class MixedPersonalTranslator final : public Translator {
                             std::move(vertices)});
       cursor = end;
     }
-    if (!public_run.empty() && !PublicRun(public_run, admitted)) return nullptr;
+    if (!public_run.empty() && !finish_run()) return nullptr;
     if (!has_personal || !has_chinese || cursor != input.size()) return nullptr;
+    int learned_bucket = 3;
+    for (const auto& run : runs)
+      learned_bucket = std::min(learned_bucket, run.commits);
     return New<MixedPhrase>(offset, offset + cursor, sentence.text(), preedit,
-                            match.entry->commit_count, std::move(components),
+                            learned_bucket, runs, std::move(components),
                             std::move(all_vertices));
   }
 

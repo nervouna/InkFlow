@@ -453,11 +453,13 @@ struct AIAdoptionLearningTests {
             check(codex.hasPrefix("ok\t2\t") && codex.contains("\tCodex\tcodex\t1")
                     && codex.contains("\tCODEX\tcodex\t1"),
                   "All exact display variants remain unchanged: \(codex)")
-            for (code, text) in [("swiftui", "SwiftUI"), ("cpp", "C++"),
-                                 ("offline", "offline"), ("can", "can")] {
+            // Display never learns. Selecting a mixed candidate confirms its run once: the C++
+            // sentence is selected once in each of the mixed-read and mixed-restart scenarios.
+            for (code, text, commits) in [("swiftui", "SwiftUI", 1), ("cpp", "C++", 3),
+                                          ("offline", "offline", 1), ("can", "can", 1)] {
                 let result = query("shared", code)
-                check(result == "ok\t1\t\(text)\t\(code)\t1",
-                      "Mixed display and selection must not update shared learning: \(result)")
+                check(result == "ok\t1\t\(text)\t\(code)\t\(commits)",
+                      "Mixed display must not update shared learning, a mixed selection confirms its run once: \(result)")
             }
             expectEntry("shared", "zzoverflow", "Overflow", "Mixed lookup has no first-512 admission cutoff")
             expectAbsent("shared", "offli", "Mixed personal lookup never creates a completion record")

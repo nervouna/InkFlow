@@ -30,6 +30,7 @@ import InkFlowEngineTestSupport
             EngineRegression.englishAdmission()
             EngineRegression.conservativeChinesePrefixes()
             EngineRegression.mixedEnglishCandidates()
+            EngineRegression.mixedSelectionLearning()
             EngineRegression.shortConflictBounds()
             EngineRegression.englishCandidates()
             EngineRegression.englishFeatureCoexistence()

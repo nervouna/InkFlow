@@ -16,7 +16,7 @@ local function candidate_metadata(candidate, input_length)
     source, exact, personal = "e", 1, tonumber(candidate_type:sub(-1))
   elseif candidate_type == "mixed_exact" then
     source, exact = "m", 1
-  elseif candidate_type:match("^mixed_personal_[123]$") then
+  elseif candidate_type:match("^mixed_personal_[0-3]$") then
     source, exact, personal = "m", 1, tonumber(candidate_type:sub(-1))
   end
   if candidate_type == "uniquified" then
@@ -31,7 +31,7 @@ local function candidate_metadata(candidate, input_length)
           local kind = item.type or ""
           if kind == "user_table" then
             source, personal = "c", 0
-          elseif source ~= "c" and kind:match("^mixed_personal_[123]$") then
+          elseif source ~= "c" and kind:match("^mixed_personal_[0-3]$") then
             source, exact, personal = "m", 1, math.max(personal, tonumber(kind:sub(-1)))
           end
         end

@@ -400,6 +400,29 @@ package enum EngineRegression {
 
     @MainActor package static func mixedEnglishCandidates(event: Event = rimeEvent) {
         let engine = IFEngine()!
+        // Before any mixed selection: selecting a mixed sentence teaches its words (see
+        // mixedSelectionLearning). A learned sentence would lead its input, and a learned
+        // spelling would lead its standalone English.
+        for input in ["Hello", "email"] {
+            type(engine, input)
+            let english = engine.snapshot().candidates.filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+            check(english.first == input, "Prefer an exact case match among English with equal source weights")
+            engine.clear()
+        }
+        engine.clear()
+        type(engine, "wofaleemail")
+        let mixedCollision = engine.snapshot().candidates
+        check(mixedCollision.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
+              "Complete Chinese coverage leads mixed English: \(mixedCollision)")
+        engine.select(0)
+        check(engine.takeCommit() == mixedCollision.first && engine.snapshot().preedit.isEmpty,
+              "The leading Chinese candidate must consume the complete mixed input")
+        type(engine, "wofaleemail")
+        guard let emailIndex = engine.snapshot().candidates.firstIndex(of: "我发了email") else {
+            check(false, "Keep colliding mixed email selectable: \(engine.snapshot().candidates)"); return
+        }
+        engine.select(emailIndex)
+        check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
         for (input, expected) in [
             ("niruguoxiangyaozhefenoffer", "你如果想要这份offer"),
             ("niruguoxiangyaozhefenofferkeyihuifuwo", "你如果想要这份offer可以回复我"),
@@ -436,19 +459,6 @@ package enum EngineRegression {
             }
         }
         engine.clear()
-        type(engine, "wofaleemail")
-        let mixedCollision = engine.snapshot().candidates
-        check(mixedCollision.first?.unicodeScalars.allSatisfy { $0.value > 127 } == true,
-              "Complete Chinese coverage leads mixed English: \(mixedCollision)")
-        engine.select(0)
-        check(engine.takeCommit() == mixedCollision.first && engine.snapshot().preedit.isEmpty,
-              "The leading Chinese candidate must consume the complete mixed input")
-        type(engine, "wofaleemail")
-        guard let emailIndex = engine.snapshot().candidates.firstIndex(of: "我发了email") else {
-            check(false, "Keep colliding mixed email selectable: \(engine.snapshot().candidates)"); return
-        }
-        engine.select(emailIndex)
-        check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
         for (input, expected) in [("compute", "computer"), ("comm", "community"),
                                   ("actual", "actual"), ("cpp", "C++"), ("macos", "macOS"), ("deepseek", "DeepSeek")] {
             type(engine, input)
@@ -486,12 +496,6 @@ package enum EngineRegression {
         check(engine.snapshot().candidates.contains("这份offer"), "Move the cursor and edit inside mixed composition")
         engine.key(0xff1b)
         check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
-        for input in ["Hello", "email"] {
-            type(engine, input)
-            let english = engine.snapshot().candidates.filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
-            check(english.first == input, "Prefer an exact case match among English with equal source weights")
-            engine.clear()
-        }
         for input in ["can", "you", "she", "he", "man", "bug"] {
             type(engine, input)
             let snapshot = engine.snapshot()
@@ -521,6 +525,83 @@ package enum EngineRegression {
         check(engine.snapshot().candidates.first == "D", "Keep intentional uppercase letter input")
         engine.clear()
         print("PASS mixed English: initial/internal/final words, adjacent boundaries, source-frequency completion ranking, exact retention, deduplication, edit/select")
+    }
+
+    /// Selecting a mixed candidate confirms each of its ASCII runs in the English user dictionary,
+    /// like selecting the same words alone, and a sentence whose every run is confirmed then
+    /// leads. Return, cancel and an immediate undo confirm nothing; one unconfirmed run, a complete
+    /// Pinyin word and a custom phrase keep their places. The words are used by no other test.
+    @MainActor package static func mixedSelectionLearning() {
+        let engine = IFEngine()!
+        // Where the sentence sits on the first page, and whether its evidence says every run is learned.
+        func state(_ input: String, _ expected: String) -> (index: Int, learned: Bool)? {
+            engine.clear(); type(engine, input)
+            let candidates = engine.qualitySnapshot().candidates
+            guard let index = candidates.firstIndex(where: { $0.text == expected }) else { return nil }
+            return (index, candidates[index].source == "personal_exact_mixed")
+        }
+        // Select the sentence, then undo the commit with Backspace or end the undo window with Tab.
+        func choose(_ input: String, _ expected: String, undo: Bool = false) {
+            engine.clear(); type(engine, input)
+            guard let index = engine.snapshot().candidates.firstIndex(of: expected) else {
+                check(false, "Missing mixed candidate \(input) -> \(expected): \(engine.snapshot().candidates)"); return
+            }
+            engine.select(index)
+            check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty, "Select the mixed candidate \(expected)")
+            engine.key(undo ? 0xff08 : 0xff09)
+        }
+        // The first candidate of standalone `google` in a technical context.
+        func standaloneFirst() -> String? {
+            engine.clear(); engine.setPrecedingText("代码"); type(engine, "google")
+            return engine.snapshot().candidates.first
+        }
+        let (google, sentence) = ("wofalegoogle", "我发了google")
+        var current = state(google, sentence)
+        check(current?.index == 1 && current?.learned == false, "An unlearned sentence stays behind the Chinese reading: \(engine.snapshot().candidates)")
+        check(standaloneFirst() != "google", "Standalone google has no personal evidence yet")
+
+        // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
+        engine.clear(); type(engine, google)
+        check(engine.key(0xff0d) && engine.takeCommit() == google, "Return commits the raw input")
+        engine.key(0xff09)
+        engine.clear(); type(engine, google)
+        check(engine.key(0xff1b) && engine.takeCommit().isEmpty, "Cancel commits nothing")
+        engine.key(0xff09)
+        choose(google, sentence, undo: true)
+        current = state(google, sentence)
+        check(current?.index == 1 && current?.learned == false, "Return, cancel and an immediate undo learn nothing")
+        check(standaloneFirst() != "google", "Standalone google is still unlearned")
+
+        // A regular selection learns the run with its display and lowercase code.
+        choose(google, sentence)
+        current = state(google, sentence)
+        check(current?.index == 0 && current?.learned == true, "The learned sentence leads: \(engine.snapshot().candidates)")
+        check(standaloneFirst() == "google", "The same record serves standalone English")
+
+        // A sentence with one unlearned run keeps its place until every run is learned.
+        let (both, bothSentence) = ("wofalegoogleheamazon", "我发了google和amazon")
+        current = state(both, bothSentence)
+        check(current?.index == 1 && current?.learned == false, "amazon has no personal evidence yet: \(engine.snapshot().candidates)")
+        choose("wokanamazon", "我看amazon")
+        current = state(both, bothSentence)
+        check(current?.index == 0 && current?.learned == true, "Every run is learned: \(engine.snapshot().candidates)")
+
+        // A custom phrase keeps its explicit priority over a learned sentence.
+        engine.setConfiguration(candidateCount: 5, customPhrases: [CustomPhrase(id: UUID(), code: google, text: "自定义词")])
+        engine.clear(); type(engine, google)
+        check(engine.snapshot().candidates.first == "自定义词", "Custom phrase keeps priority over a learned sentence")
+        engine.clear()
+        engine.setConfiguration(candidateCount: 5, customPhrases: [])
+
+        // A complete Pinyin word is never a personal token, however often it is selected.
+        let (banana, bananaSentence) = ("wokanbanana", "我看banana")
+        current = state(banana, bananaSentence)
+        check(current?.index == 1 && current?.learned == false, "banana is a mixed candidate behind the Chinese reading")
+        choose(banana, bananaSentence); choose(banana, bananaSentence)
+        current = state(banana, bananaSentence)
+        check(current?.index == 1 && current?.learned == false, "Complete Pinyin sequences never promote a mixed sentence")
+        engine.clear()
+        print("PASS mixed selection learning: regular selection learns, Return/cancel/undo do not, every run must be learned, custom phrases and complete Pinyin words keep their places")
     }
 
     @MainActor package static func englishFeatureCoexistence() {

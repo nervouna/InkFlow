@@ -164,6 +164,44 @@ local function normalized_code(memory, entry, fallback)
   return code and code:lower() or nil
 end
 
+-- Selecting a mixed candidate confirms each of its ASCII runs like selecting the same
+-- words on their own. The native personal-mixed translator lists its runs as
+-- "display<TAB>code" lines in the entry's custom code. The public mixed translator
+-- yields only admitted letter runs, whose code is their lowercase spelling.
+-- A custom phrase that shares the text is the user's own and learns nothing.
+local function mixed_runs(candidate)
+  local runs, public = {}, candidate.type == "mixed_exact"
+  for _, item in ipairs(candidate:get_genuines()) do
+    local kind = item.type
+    if kind == "user_table" then return {} end
+    public = public or kind == "mixed_exact"
+    local phrase = kind:match("^mixed_personal_[0-3]$") and item:to_phrase()
+    if phrase then
+      for display, code in phrase.entry.custom_code:gmatch("([^\t\n]+)\t([^\t\n]+)") do
+        runs[#runs + 1] = { display = display, code = code }
+      end
+    end
+  end
+  if #runs == 0 and public then
+    for run in candidate.text:gmatch("[A-Za-z]+") do runs[#runs + 1] = { display = run, code = run:lower() } end
+  end
+  return runs
+end
+
+-- Rime's Memory has already opened the commit transaction when this runs, so Backspace
+-- undoes these updates and Return or cancel never reach them, as with standalone words.
+local function learn_mixed(env, context)
+  for _, segment in ipairs(context.composition:toSegmentation():get_segments()) do
+    local candidate = segment:get_selected_candidate()
+    for _, run in ipairs(candidate and mixed_runs(candidate) or {}) do
+      local entry = DictEntry()
+      entry.text = run.display
+      entry.custom_code = run.code .. " "
+      env.memory:update_userdict(entry, 1, "")
+    end
+  end
+end
+
 function M.init(env)
   env.memory = Memory(env.engine, env.engine.schema, "english")
   env.memory:memorize(function(commits)
@@ -174,6 +212,9 @@ function M.init(env)
       if env.learnable and env.learnable[entry.text] then return commits:update(1) end
     end
     return false
+  end)
+  env.commit_connection = env.engine.context.commit_notifier:connect(function(context)
+    learn_mixed(env, context)
   end)
   env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
     learning_invalidate = function()
@@ -209,6 +250,7 @@ function M.init(env)
 end
 
 function M.fini(env)
+  env.commit_connection:disconnect()
   env.connection:disconnect()
   env.memory:disconnect()
 end

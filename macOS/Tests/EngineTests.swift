@@ -51,6 +51,7 @@ struct EngineTests {
             EngineRegression.englishAdmission()
             EngineRegression.conservativeChinesePrefixes()
             EngineRegression.mixedEnglishCandidates(event: nativeEvent)
+            EngineRegression.mixedSelectionLearning()
             EngineRegression.shortConflictBounds()
             EngineRegression.englishCandidates()
             EngineRegression.englishFeatureCoexistence()
