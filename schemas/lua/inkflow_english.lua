@@ -219,6 +219,7 @@ function M.func(input, segment, env)
     return
   end
   if env.input ~= input then
+    local lower = input:lower()
     local entries, seen = {}, {}
     local function row(text)
       local previous = seen[text]
@@ -229,12 +230,12 @@ function M.func(input, segment, env)
       end
       return previous
     end
-    local function collect_static(completion)
-      env.memory:dict_lookup(input, completion, 0)
+    local function collect_static(query, completion)
+      env.memory:dict_lookup(query, completion, 0)
       for entry in env.memory:iter_dict() do
         local previous = row(entry.text)
         if not previous.weight or entry.weight > previous.weight then previous.weight = entry.weight end
-        local fallback = not completion and input or (entry.text:match("^[A-Za-z]+$") and entry.text or nil)
+        local fallback = not completion and query or (entry.text:match("^[A-Za-z]+$") and entry.text or nil)
         local code = normalized_code(env.memory, entry, fallback)
         if not completion then
           previous.exact = true
@@ -248,10 +249,10 @@ function M.func(input, segment, env)
     end
     local function collect_personal_exact()
       if not env.memory.user_dict or not env.memory.user_dict.loaded then return end
-      if not env.memory:user_lookup(input, false) then return end
+      if not env.memory:user_lookup(lower, false) then return end
       for entry in env.memory:iter_user() do
         local code = entry.custom_code and entry.custom_code:gsub(" +$", "")
-        if code == input and entry.commit_count > 0 then
+        if code == lower and entry.commit_count > 0 then
           local previous = row(entry.text)
           previous.exact = true
           previous.personal = true
@@ -263,11 +264,18 @@ function M.func(input, segment, env)
     end
     -- Exact code lookup is separate from completion lookup so aliases such as
     -- cpp -> C++ rank with exact words. One- and two-letter inputs stay exact-only.
-    collect_static(false)
+    -- Source aliases keep their case (Api) while technology codes and personal
+    -- records are lowercase (api, swiftui), so a Shift-typed query reaches both.
+    local queries = lower == input and { input } or { input, lower }
+    for _, query in ipairs(queries) do collect_static(query, false) end
     collect_personal_exact()
-    if #input >= 3 then collect_static(true) end
+    if #input >= 3 then
+      for _, query in ipairs(queries) do collect_static(query, true) end
+    end
     table.sort(entries, function(a, b)
       if a.exact ~= b.exact then return a.exact end
+      -- A deliberately cased query offers its exact spelling first.
+      if lower ~= input and (a.text == input) ~= (b.text == input) then return a.text == input end
       if a.personal ~= b.personal then return a.personal end
       if a.commits ~= b.commits then return a.commits > b.commits end
       local a_weight, b_weight = a.weight or 0, b.weight or 0

@@ -43,7 +43,7 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 `tests/parity.rs` compares the Rust engine with the recorded behavior of the Swift engine on prepared production resources and isolated user directories (`parity.sh`; the tests skip without `INKFLOW_PORTABLE_RESOURCES`):
 
-- The 21 samples of [the quality baseline](../Fixtures/QualityBaseline/README.md) reproduce `baseline.json` exactly: first page, target rank, paging, selection, one-shot commits, five learning commits, and the learned state after the runtime restarts on the same user directory.
+- The 24 samples of [the quality baseline](../Fixtures/QualityBaseline/README.md) reproduce `baseline.json` exactly: first page, target rank, paging, selection, one-shot commits, five learning commits, and the learned state after the runtime restarts on the same user directory.
 - `swift_engine_regressions` carries the expectations of the Swift engine regressions for basic cases, context ranking, custom phrases, input settings and ASCII boundaries, plus the stale-selection and observer contracts.
 - `swift_personal_learning_and_data` covers learning management at the idle boundary, export/import between isolated user directories, a macOS-format document with disclosed unsupported preferences, and rejected snapshots rolling back.
 
@@ -53,7 +53,7 @@ Quality recording stays outside the engine. `Engine::set_observer` installs a ca
 
 ## Performance
 
-`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 21-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
+`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 24-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
 
 Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on freshly prepared production resources, at faee8df. The Swift column ran `performance-baseline` in release from this checkout; the recorded M5 Pro baseline is not comparable to either.
 
