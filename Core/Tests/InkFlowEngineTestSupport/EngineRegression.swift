@@ -450,7 +450,7 @@ package enum EngineRegression {
         engine.select(emailIndex)
         check(engine.takeCommit() == "我发了email" && engine.snapshot().preedit.isEmpty)
         for (input, expected) in [("compute", "computer"), ("comm", "community"),
-                                  ("actual", "actual"), ("cpp", "C++"), ("macos", "macOS")] {
+                                  ("actual", "actual"), ("cpp", "C++"), ("macos", "macOS"), ("deepseek", "DeepSeek")] {
             type(engine, input)
             let english = allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
             check(english.first == expected, "Exact English code before completions for \(input): \(english)")
@@ -460,6 +460,20 @@ package enum EngineRegression {
             }
             check(Set(english).count == english.count, "No duplicate English candidates across pages")
             engine.clear()
+        }
+        // Standalone words typed with real Shift events reach the admitted lowercase code;
+        // the entry spelled exactly as typed leads.
+        let keyCodes: [Character: UInt16] = ["A": 0, "P": 35, "I": 34, "S": 1, "w": 13, "i": 34, "f": 3, "t": 17, "U": 32]
+        for word in ["API", "SwiftUI"] {
+            for letter in word {
+                check(event(engine, Int32(letter.asciiValue!), keyCodes[letter]!, String(letter), letter.isUppercase ? 1 : 0),
+                      "Handle Shift-typed standalone letter: \(word)")
+            }
+            check(engine.snapshot().candidates.first == word,
+                  "Shift-typed technical word leads standalone: \(word) -> \(engine.snapshot().candidates)")
+            engine.select(0)
+            check(engine.takeCommit() == word && engine.snapshot().preedit.isEmpty,
+                  "Select the Shift-typed technical word: \(word)")
         }
         type(engine, "zhefenoffes")
         engine.key(0xff08); type(engine, "r")
