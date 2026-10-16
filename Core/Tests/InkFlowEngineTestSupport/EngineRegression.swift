@@ -988,6 +988,7 @@ package enum EngineRegression {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation(event: event)
         compositionKeys(event: event)
+        forgetCandidate(event: event)
         emojiCandidates()
     }
 
@@ -1643,5 +1644,143 @@ package enum EngineRegression {
             check(press(raw, right) && raw.snapshot().cursor == url.count, "arrows-horizontal match: Right moves it back")
         }
         print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal")
+    }
+
+    /// Shift+Backspace forgets the learning of the highlighted candidate and nothing else: Rime's own
+    /// delete_candidate for Chinese and standalone English, one negative update per learned ASCII run for
+    /// a mixed sentence. The words are used by no other test, and every record is forgotten again.
+    @MainActor package static func forgetCandidate(event: Event = rimeEvent) {
+        // A session still composing from an earlier case would keep the custom phrase file from reloading.
+        for other in IFEngine.liveSessions { other.clear() }
+        let engine = IFEngine()!
+        @discardableResult func forget() -> Bool { event(engine, 0xff08, 51, "\u{8}", 1) }
+        func compose(_ input: String) { engine.clear(); type(engine, input) }
+        func candidates(_ input: String) -> [String] { compose(input); return engine.snapshot().candidates }
+        // The texts of the first page that carry the user's own confirmations.
+        func personal(_ input: String) -> [String] {
+            compose(input)
+            return engine.qualitySnapshot().candidates.filter { $0.source != nil }.map(\.text)
+        }
+        // Select a candidate, then end the undo window as the next key of a user typing on does.
+        func learn(_ input: String, _ text: String) {
+            guard let index = candidates(input).firstIndex(of: text) else {
+                check(false, "forget fixture: \(text) is missing for \(input): \(engine.snapshot().candidates)"); return
+            }
+            engine.select(index)
+            check(engine.takeCommit() == text && engine.snapshot().preedit.isEmpty, "forget fixture: select \(text)")
+            engine.key(0xff09)
+        }
+        // Shift+Backspace on the highlighted candidate consumes the key and leaves the composition open.
+        func forgetKeepsComposition(_ row: String) {
+            let input = engine.qualitySnapshot().rawInput
+            check(forget(), "\(row): the key is consumed")
+            check(engine.takeCommit().isEmpty && !engine.snapshot().preedit.isEmpty
+                  && engine.qualitySnapshot().rawInput == input, "\(row): nothing is committed, the composition stays open")
+        }
+
+        // Idle: the key passes through to the application and never enters Rime.
+        check(!forget() && engine.takeCommit().isEmpty && engine.snapshot().preedit.isEmpty, "forget idle: passes through")
+        compose("ni")
+        check(event(engine, 0xff08, 51, "\u{8}", 0) && engine.snapshot().preedit == "n", "forget: plain Backspace still edits")
+
+        // A recognizer match has no candidates: nothing to forget, the key edits like Backspace.
+        compose("www.example")
+        check(forget() && engine.snapshot().preedit == "www.exampl" && engine.takeCommit().isEmpty,
+              "forget match: deletes the last character: \(engine.snapshot())")
+
+        // Chinese: a candidate learned to first place returns to its native position, other learning stays.
+        let native = candidates("yuyan"), nativeOther = candidates("wenti")
+        check(native.count == 5 && nativeOther.count == 5, "forget Chinese fixture: \(native) \(nativeOther)")
+        learn("yuyan", native[2]); learn("wenti", nativeOther[1])
+        check(candidates("yuyan").first == native[2], "forget Chinese: the learned candidate leads: \(engine.snapshot().candidates)")
+        let learnedOther = candidates("wenti")
+        check(learnedOther.first == nativeOther[1], "forget Chinese: the other candidate leads: \(learnedOther)")
+        compose("yuyan")
+        forgetKeepsComposition("forget Chinese")
+        check(engine.snapshot().candidates == native && engine.snapshot().highlight == 0,
+              "forget Chinese: the candidate returns to its native position: \(engine.snapshot().candidates) vs \(native)")
+        check(candidates("wenti") == learnedOther, "forget Chinese: another learned entry is unchanged")
+        // Only the highlighted candidate is forgotten, and the highlight stays at its index.
+        engine.key(0xff54)
+        check(engine.snapshot().highlight == 1)
+        forgetKeepsComposition("forget Chinese highlighted")
+        check(engine.snapshot().candidates == learnedOther && engine.snapshot().highlight == 1,
+              "forget Chinese: a candidate without learning changes nothing and the highlight stays: \(engine.snapshot())")
+        engine.key(0xff52)
+        forgetKeepsComposition("forget Chinese cleanup")
+        check(engine.snapshot().candidates == nativeOther, "forget Chinese: the second learned candidate is forgotten too")
+
+        // Standalone English: the personal record is forgotten, the dictionary candidate stays where it is.
+        check(personal("docker").isEmpty, "forget English fixture: no personal Docker yet")
+        learn("docker", "Docker")
+        check(personal("docker") == ["Docker"], "forget English: the learned word carries evidence: \(personal("docker"))")
+        let docker = engine.snapshot().candidates, index = docker.firstIndex(of: "Docker")!
+        engine.highlight(index)
+        forgetKeepsComposition("forget English")
+        check(engine.snapshot().candidates.contains("Docker") && engine.qualitySnapshot().candidates.allSatisfy { $0.source == nil }
+              && engine.snapshot().highlight == index, "forget English: the record is forgotten: \(engine.qualitySnapshot().candidates)")
+        check(personal("docker").isEmpty, "forget English: the next composition has no evidence")
+
+        // Mixed: the sentence loses its personal bucket and falls back behind the Chinese reading.
+        let mixed = "wofaleyoutube", sentence = "我发了youtube"
+        check(personal(mixed).isEmpty && personal("youtube").isEmpty, "forget mixed fixture: nothing learned yet")
+        let before = candidates(mixed)
+        check(before.firstIndex(of: sentence) == 1, "forget mixed fixture: \(before)")
+        learn(mixed, sentence)
+        compose(mixed)
+        let learned = engine.qualitySnapshot().candidates
+        check(learned[0].text == sentence && learned[0].source == "personal_exact_mixed",
+              "forget mixed: the learned sentence leads: \(learned)")
+        check(learned[0].nativeIndex != learned[0].displayIndex,
+              "forget mixed: the highlighted display slot is not its native slot: \(learned)")
+        check(personal("youtube") == ["youtube"], "forget mixed: the run serves standalone English")
+        compose(mixed)
+        forgetKeepsComposition("forget mixed")
+        check(engine.snapshot().candidates == before && engine.qualitySnapshot().candidates.allSatisfy { $0.source == nil },
+              "forget mixed: the sentence falls back: \(engine.snapshot().candidates) vs \(before)")
+        check(personal("youtube").isEmpty, "forget mixed: the run is forgotten for standalone English too")
+
+        // A candidate without learning changes nothing, and the highlight, the page and a confirmed
+        // prefix survive Rime's recomposition.
+        let plain = candidates("zhishi")
+        engine.key(0xff54); engine.key(0xff54)
+        forgetKeepsComposition("forget unlearned")
+        check(engine.snapshot().candidates == plain && engine.snapshot().highlight == 2,
+              "forget unlearned: the list and the highlight stay: \(engine.snapshot())")
+        compose("zhishi")
+        engine.key(0xff56); engine.key(0xff54); engine.key(0xff54)
+        let later = engine.snapshot()
+        check(later.page == 1 && later.highlight == 2, "forget page fixture: \(later)")
+        forgetKeepsComposition("forget page")
+        check(engine.snapshot() == later, "forget page: the page and the highlight stay: \(engine.snapshot()) vs \(later)")
+        compose("yuyanwenti")
+        guard let prefix = engine.snapshot().candidates.firstIndex(of: native[0]) else {
+            check(false, "forget prefix fixture: \(engine.snapshot().candidates)"); return
+        }
+        engine.select(prefix)
+        let rest = engine.snapshot()
+        check(rest.hasSelectedPrefix && engine.takeCommit().isEmpty, "forget prefix fixture: partial selection \(rest)")
+        forgetKeepsComposition("forget prefix")
+        check(engine.snapshot().hasSelectedPrefix && engine.snapshot().candidates == rest.candidates,
+              "forget prefix: the confirmed prefix and the list stay: \(engine.snapshot()) vs \(rest)")
+        // A mixed sentence whose runs have no record writes nothing and keeps its place.
+        compose(mixed)
+        forgetKeepsComposition("forget unlearned mixed")
+        check(engine.snapshot().candidates == before && personal(mixed).isEmpty && personal("youtube").isEmpty,
+              "forget unlearned mixed: the list and the evidence stay: \(engine.snapshot().candidates)")
+        // A custom phrase keeps its place.
+        let phrase = CustomPhrase(id: UUID(), code: "zhishi", text: "自定义知识")
+        engine.clear()
+        engine.setConfiguration(candidateCount: 5, customPhrases: [phrase])
+        let withPhrase = candidates("zhishi")
+        check(withPhrase.first == phrase.text, "forget custom phrase fixture: \(withPhrase)")
+        forgetKeepsComposition("forget custom phrase")
+        check(engine.snapshot().candidates == withPhrase && engine.snapshot().highlight == 0,
+              "forget custom phrase: the phrase keeps its place: \(engine.snapshot().candidates)")
+        engine.clear()
+        engine.setConfiguration(candidateCount: 5, customPhrases: [])
+        check(candidates("zhishi") == plain, "forget custom phrase: removing it restores the dictionary list")
+        engine.clear()
+        print("PASS forget candidate: idle passthrough, Chinese native delete, personal English, mixed runs, unlearned and custom phrase unchanged, composition kept, highlight kept")
     }
 }

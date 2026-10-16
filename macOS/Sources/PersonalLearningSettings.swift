@@ -25,6 +25,8 @@ struct PersonalLearningSettingsView: View {
                 Text("个人英文").tag(IFEngine.PersonalLearningEntry.Source.english)
                 Text("语音纠正别名").tag(IFEngine.PersonalLearningEntry.Source.voice)
             }.pickerStyle(.segmented)
+            Text("输入时按 Shift+⌫，可让墨流忘记当前高亮候选的学习记录。")
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 TextField("搜索词条或编码", text: $query)
                     .accessibilityIdentifier("learning.search")
