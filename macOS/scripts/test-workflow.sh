@@ -7,7 +7,6 @@ bash macOS/scripts/test-sparkle-signing.sh
 bash macOS/scripts/test-developer-id.sh
 bash macOS/scripts/test-install.sh
 bash macOS/scripts/test-pkg.sh
-bash macOS/scripts/test-dependencies-cache.sh
 bash macOS/scripts/test-build-workflow.sh
 bash macOS/scripts/test-cleanup.sh
-echo 'PASS workflow fixtures: receipt/install signing, Developer ID identities, installer package, dependency cache, staged build and cleanup boundaries'
+echo 'PASS workflow fixtures: receipt/install signing, Developer ID identities, installer package, staged build and cleanup boundaries'

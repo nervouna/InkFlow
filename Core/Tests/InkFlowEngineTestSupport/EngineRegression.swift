@@ -987,6 +987,7 @@ package enum EngineRegression {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation(event: event)
+        compositionKeys(event: event)
         emojiCandidates()
     }
 
@@ -1332,4 +1333,315 @@ package enum EngineRegression {
             check(document == input && numbers.snapshot().preedit.isEmpty)
         }
         print("PASS punctuation: exact mappings, Shift, independent quotes, apostrophe delimiter, bracket paging, ASCII/shortcut passthrough, decimal/time input")
-    }}
+    }
+
+    /// One block per row of the key table in rules.md ("Keys during composition"). The block's
+    /// first comment is the row id, and every failure message starts with that id. Each block
+    /// covers the idle, composing and recognizer-match columns of its row.
+    @MainActor package static func compositionKeys(event: Event = rimeEvent) {
+        struct Key { let symbol: Int32, code: UInt16, text: String, modifiers: Int32 }
+        let space = Key(symbol: 32, code: 49, text: " ", modifiers: 0)
+        let enter = Key(symbol: 0xff0d, code: 36, text: "\r", modifiers: 0)
+        let backspace = Key(symbol: 0xff08, code: 51, text: "\u{8}", modifiers: 0)
+        let escape = Key(symbol: 0xff1b, code: 53, text: "\u{1b}", modifiers: 0)
+        let left = Key(symbol: 0xff51, code: 123, text: "", modifiers: 0)
+        let right = Key(symbol: 0xff53, code: 124, text: "", modifiers: 0)
+        let up = Key(symbol: 0xff52, code: 126, text: "", modifiers: 0)
+        let down = Key(symbol: 0xff54, code: 125, text: "", modifiers: 0)
+        let pageUp = Key(symbol: 0xff55, code: 116, text: "", modifiers: 0)
+        let pageDown = Key(symbol: 0xff56, code: 121, text: "", modifiers: 0)
+        func char(_ character: Character) -> Key {
+            let shifted = character.isUppercase || "~!@#$%^&*()_+{}|:\"<>?".contains(character)
+            return Key(symbol: Int32(character.asciiValue!), code: 0, text: String(character), modifiers: shifted ? 1 : 0)
+        }
+        @discardableResult func press(_ engine: IFEngine, _ key: Key) -> Bool {
+            event(engine, key.symbol, key.code, key.text, key.modifiers)
+        }
+        func send(_ engine: IFEngine, _ text: String) { for character in text { press(engine, char(character)) } }
+        func spelled(_ engine: IFEngine) -> String { engine.snapshot().preedit.filter { $0 != " " } }
+        func fresh(_ preferences: InputPreferences? = nil) -> IFEngine {
+            let engine = IFEngine()!
+            if let preferences { engine.setConfiguration(candidateCount: 5, customPhrases: [], inputPreferences: preferences) }
+            return engine
+        }
+        func composing(_ text: String, _ preferences: InputPreferences? = nil) -> IFEngine {
+            let engine = fresh(preferences)
+            send(engine, text)
+            return engine
+        }
+        // An engine whose composition the recognizer has taken: the raw text, no menu.
+        func matched(_ text: String = "www.example", _ preferences: InputPreferences? = nil) -> IFEngine {
+            let engine = composing(text, preferences), state = engine.snapshot()
+            check(state.preedit == text && state.candidates.isEmpty && engine.takeCommit().isEmpty,
+                  "recognizer: \(text) must stay raw ASCII without a menu: \(state)")
+            return engine
+        }
+        func idleIgnores(_ key: Key, _ row: String) {
+            let engine = IFEngine()!
+            check(!press(engine, key) && engine.takeCommit().isEmpty && engine.snapshot().preedit.isEmpty,
+                  "\(row) idle: passes through")
+        }
+        func unchanged(_ engine: IFEngine, _ before: EngineSnapshot) -> Bool {
+            engine.snapshot() == before && engine.takeCommit().isEmpty
+        }
+        let url = "www.example", mail = "name@example"
+        let chinese: [(Character, String)] = [
+            (",", "，"), (".", "。"), (";", "；"), (":", "："), ("!", "！"), ("?", "？"), ("(", "（"), (")", "）"),
+            ("{", "「"), ("}", "」"), ("<", "《"), (">", "》"), ("\\", "、"), ("|", "｜"), ("`", "·"), ("~", "～"),
+            ("$", "¥"), ("^", "……"), ("_", "——"), ("\"", "“")
+        ]
+
+        // letter-lower
+        do {
+            let idle = IFEngine()!
+            check(press(idle, char("n")) && idle.snapshot().preedit == "n", "letter-lower idle: starts a composition")
+            let engine = composing("ni")
+            check(press(engine, char("h")) && spelled(engine) == "nih", "letter-lower composing: appended")
+            let raw = matched(url)
+            check(press(raw, char("x")) && raw.snapshot().preedit == url + "x", "letter-lower match: appended raw")
+        }
+        // letter-upper
+        do {
+            let idle = IFEngine()!
+            check(press(idle, char("A")) && idle.snapshot().preedit == "A", "letter-upper idle: starts a composition")
+            let engine = composing("ni")
+            check(press(engine, char("H")) && spelled(engine) == "niH", "letter-upper composing: appended with its case")
+            let raw = matched(url)
+            check(press(raw, char("X")) && raw.snapshot().preedit == url + "X", "letter-upper match: appended raw")
+        }
+        // digit-page
+        do {
+            idleIgnores(char("2"), "digit-page")
+            let engine = composing("shi"), page = engine.snapshot().candidates
+            check(page.count == 5 && press(engine, char("2")) && engine.takeCommit() == page[1]
+                  && engine.snapshot().preedit.isEmpty, "digit-page composing: selects the displayed candidate")
+            let raw = matched(url)
+            check(press(raw, char("2")) && raw.snapshot().preedit == url + "2", "digit-page match: appended raw")
+        }
+        // digit-zero
+        do {
+            idleIgnores(char("0"), "digit-zero")
+            let engine = composing("shi"), before = engine.snapshot()
+            check(press(engine, char("0")) && unchanged(engine, before), "digit-zero composing: swallowed, no effect")
+            let raw = matched(url)
+            check(press(raw, char("0")) && raw.snapshot().preedit == url + "0", "digit-zero match: appended raw")
+        }
+        // digit-beyond-page
+        do {
+            for digit in "6789" {
+                idleIgnores(char(digit), "digit-beyond-page")
+                let engine = composing("shi"), before = engine.snapshot()
+                check(before.candidates.count == 5 && press(engine, char(digit)) && unchanged(engine, before),
+                      "digit-beyond-page composing: \(digit) swallowed, no effect")
+                let raw = matched(url)
+                check(press(raw, char(digit)) && raw.snapshot().preedit == url + String(digit),
+                      "digit-beyond-page match: appended raw")
+            }
+        }
+        // space
+        do {
+            idleIgnores(space, "space")
+            let engine = composing("nihao")
+            check(press(engine, space) && engine.takeCommit() == "你好", "space composing: commits the highlighted candidate")
+            for text in [url + ".com", mail + ".com"] {
+                let raw = matched(text)
+                check(press(raw, space) && raw.takeCommit() == text && raw.snapshot().preedit.isEmpty,
+                      "space match: commits \(text) literally")
+            }
+        }
+        // return
+        do {
+            idleIgnores(enter, "return")
+            let engine = composing("nihao")
+            check(press(engine, enter) && engine.takeCommit() == "nihao" && engine.snapshot().preedit.isEmpty,
+                  "return composing: commits the raw input")
+            for text in [url + ".com", mail + ".com"] {
+                let raw = matched(text)
+                check(press(raw, enter) && raw.takeCommit() == text && raw.snapshot().preedit.isEmpty,
+                      "return match: commits \(text) literally")
+            }
+        }
+        // backspace
+        do {
+            idleIgnores(backspace, "backspace")
+            let engine = composing("ni")
+            check(press(engine, backspace) && spelled(engine) == "n", "backspace composing: deletes the last letter")
+            let partial = composing("nihao"), all = partial.snapshot().candidates
+            let index = all.firstIndex(of: "你")!
+            check(index < 5 && press(partial, char(Character(String(index + 1)))) && partial.takeCommit().isEmpty
+                  && partial.snapshot().hasSelectedPrefix, "backspace fixture: a partial selection")
+            check(press(partial, backspace) && !partial.snapshot().hasSelectedPrefix && partial.snapshot().candidates == all
+                  && partial.takeCommit().isEmpty, "backspace composing: reverts the last partial selection first")
+            let raw = matched(url)
+            check(press(raw, backspace) && raw.snapshot().preedit == "www.exampl", "backspace match: deletes the last character")
+            let leaving = matched("www.")
+            check(press(leaving, backspace) && spelled(leaving) == "www" && !leaving.snapshot().candidates.isEmpty,
+                  "backspace match: input that stops matching composes as usual")
+        }
+        // escape
+        do {
+            idleIgnores(escape, "escape")
+            let engine = composing("nihao")
+            check(press(engine, escape) && engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty,
+                  "escape composing: cancels without committing")
+            for text in [url, mail] {
+                let raw = matched(text)
+                check(press(raw, escape) && raw.snapshot().preedit.isEmpty && raw.takeCommit().isEmpty,
+                      "escape match: cancels \(text) without committing")
+            }
+        }
+        // punctuation-chinese
+        do {
+            for (character, output) in chinese {
+                let key = char(character)
+                let alone = IFEngine()!
+                check(press(alone, key) && alone.takeCommit() == output, "punctuation-chinese idle: \(character) → \(output)")
+                let engine = composing("nihao")
+                check(press(engine, key) && engine.takeCommit() == "你好" + output && engine.snapshot().preedit.isEmpty,
+                      "punctuation-chinese composing: \(character) commits the highlighted candidate and \(output)")
+            }
+            let quote = IFEngine()!
+            check(press(quote, char("'")) && quote.takeCommit() == "‘", "punctuation-chinese idle: ' → ‘")
+            let delimiter = composing("xi")
+            check(press(delimiter, char("'")) && delimiter.snapshot().preedit.contains("'") && delimiter.takeCommit().isEmpty,
+                  "punctuation-chinese composing: ' is the syllable delimiter")
+            for character in "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~" {
+                let raw = matched(url)
+                check(press(raw, char(character)) && raw.snapshot().preedit == url + String(character) && raw.takeCommit().isEmpty,
+                      "punctuation-chinese match: \(character) appended raw")
+            }
+        }
+        // punctuation-ascii
+        do {
+            let ascii = InputPreferences().setting(.englishPunctuation, to: true)
+            for (character, _) in chinese {
+                let idle = fresh(ascii)
+                check(!press(idle, char(character)) && idle.takeCommit().isEmpty && idle.snapshot().preedit.isEmpty,
+                      "punctuation-ascii idle: \(character) passes through")
+                let engine = composing("nihao", ascii)
+                check(!press(engine, char(character)) && engine.takeCommit() == "你好" && engine.snapshot().preedit.isEmpty,
+                      "punctuation-ascii composing: \(character) commits the highlighted candidate and passes through")
+            }
+            for character in "@.:/-_" {
+                let raw = matched(url, ascii)
+                check(press(raw, char(character)) && raw.snapshot().preedit == url + String(character),
+                      "punctuation-ascii match: \(character) appended raw")
+            }
+        }
+        // at
+        do {
+            idleIgnores(char("@"), "at")
+            // Letters followed by @ are an email start; an apostrophe keeps the input out of the pattern.
+            let engine = composing("xi'an")
+            check(!press(engine, char("@")) && engine.takeCommit() == "西安" && engine.snapshot().preedit.isEmpty,
+                  "at composing: commits the highlighted candidate and passes through")
+            for letters in ["name", "nihao"] {
+                let start = composing(letters)
+                check(press(start, char("@")) && start.snapshot().preedit == letters + "@" && start.snapshot().candidates.isEmpty
+                      && start.takeCommit().isEmpty, "at match: \(letters)@ starts an email")
+            }
+            let raw = matched(mail)
+            check(press(raw, char("@")) && raw.snapshot().preedit == mail + "@", "at match: appended raw")
+        }
+        // dot
+        do {
+            let idle = IFEngine()!
+            check(press(idle, char(".")) && idle.takeCommit() == "。", "dot idle: Chinese full stop")
+            let engine = composing("nihao")
+            check(press(engine, char(".")) && engine.takeCommit() == "你好。", "dot composing: highlighted candidate and 。")
+            for prefix in ["www", "ftp"] {
+                let start = composing(prefix)
+                check(press(start, char(".")) && start.snapshot().preedit == prefix + "." && start.snapshot().candidates.isEmpty
+                      && start.takeCommit().isEmpty, "dot match: \(prefix). starts a URL")
+            }
+            let later = matched("www.example")
+            check(press(later, char(".")) && later.snapshot().preedit == "www.example.", "dot match: appended raw")
+            let longer = composing("wwww")
+            check(press(longer, char(".")) && longer.takeCommit().hasSuffix("。"), "dot composing: wwww. is not a URL")
+        }
+        // colon
+        do {
+            let idle = IFEngine()!
+            check(press(idle, char(":")) && idle.takeCommit() == "：", "colon idle: Chinese colon")
+            let engine = composing("nihao")
+            check(press(engine, char(":")) && engine.takeCommit() == "你好：", "colon composing: highlighted candidate and ：")
+            for prefix in ["http", "https", "ftp", "mailto", "file"] {
+                let start = composing(prefix)
+                check(press(start, char(":")) && start.snapshot().preedit == prefix + ":" && start.snapshot().candidates.isEmpty
+                      && start.takeCommit().isEmpty, "colon match: \(prefix): starts a URL")
+            }
+            let later = matched("https://example.com")
+            check(press(later, char(":")) && later.snapshot().preedit == "https://example.com:", "colon match: appended raw")
+        }
+        // slash
+        do {
+            idleIgnores(char("/"), "slash")
+            let engine = composing("nihao")
+            check(!press(engine, char("/")) && engine.takeCommit() == "你好" && engine.snapshot().preedit.isEmpty,
+                  "slash composing: commits the highlighted candidate and passes through")
+            let start = composing("https")
+            send(start, ":")
+            for character in "//example.com/a/b" { check(press(start, char(character)), "slash match: \(character) accepted") }
+            check(start.snapshot().preedit == "https://example.com/a/b", "slash match: appended raw")
+            check(press(start, space) && start.takeCommit() == "https://example.com/a/b", "slash match: commits literally")
+        }
+        // paging-keys
+        do {
+            idleIgnores(pageUp, "paging-keys"); idleIgnores(pageDown, "paging-keys")
+            let engine = composing("shi"), first = engine.snapshot().candidates
+            check(press(engine, pageDown) && engine.snapshot().page == 1 && engine.takeCommit().isEmpty,
+                  "paging-keys composing: Page Down")
+            check(press(engine, pageUp) && engine.snapshot().page == 0 && engine.snapshot().candidates == first,
+                  "paging-keys composing: Page Up")
+            for key in [pageDown, pageUp] {
+                let raw = matched(url), before = raw.snapshot(), handled = press(raw, key)
+                check(handled && unchanged(raw, before), "paging-keys match: swallowed, no menu: \(handled) \(raw.snapshot())")
+            }
+        }
+        // paging-bound-keys
+        do {
+            let idle = IFEngine()!
+            check(press(idle, char("[")) && idle.takeCommit() == "【" && press(idle, char("]")) && idle.takeCommit() == "】",
+                  "paging-bound-keys idle: brackets are Chinese punctuation")
+            idleIgnores(char("-"), "paging-bound-keys"); idleIgnores(char("="), "paging-bound-keys")
+            for (next, previous) in [("]", "["), ("=", "-")] {
+                let engine = composing("shi"), first = engine.snapshot().candidates
+                check(press(engine, char(Character(next))) && engine.snapshot().page == 1 && engine.takeCommit().isEmpty,
+                      "paging-bound-keys composing: \(next) pages forward")
+                check(press(engine, char(Character(previous))) && engine.snapshot().page == 0
+                      && engine.snapshot().candidates == first, "paging-bound-keys composing: \(previous) pages back")
+            }
+            for character in "[]-=" {
+                let raw = matched(url)
+                check(press(raw, char(character)) && raw.snapshot().preedit == url + String(character),
+                      "paging-bound-keys match: \(character) appended raw")
+            }
+        }
+        // arrows-vertical
+        do {
+            idleIgnores(up, "arrows-vertical"); idleIgnores(down, "arrows-vertical")
+            let engine = composing("shi"), first = engine.snapshot().candidates
+            check(press(engine, down) && engine.snapshot().highlight == 1, "arrows-vertical composing: Down moves the highlight")
+            check(press(engine, up) && engine.snapshot().highlight == 0, "arrows-vertical composing: Up moves it back")
+            press(engine, down)
+            check(press(engine, space) && engine.takeCommit() == first[1], "arrows-vertical composing: Space commits the highlight")
+            for key in [down, up] {
+                let raw = matched(url), before = raw.snapshot(), handled = press(raw, key)
+                check(handled && unchanged(raw, before), "arrows-vertical match: swallowed, no menu: \(handled) \(raw.snapshot())")
+            }
+        }
+        // arrows-horizontal
+        do {
+            idleIgnores(left, "arrows-horizontal"); idleIgnores(right, "arrows-horizontal")
+            let engine = composing("nihao"), end = engine.snapshot().cursor
+            check(press(engine, left) && engine.snapshot().cursor < end && engine.takeCommit().isEmpty,
+                  "arrows-horizontal composing: Left moves the caret")
+            check(press(engine, right) && engine.snapshot().cursor == end, "arrows-horizontal composing: Right moves it back")
+            let raw = matched(url)
+            check(press(raw, left) && raw.snapshot().cursor == url.count - 1 && raw.snapshot().preedit == url,
+                  "arrows-horizontal match: Left moves the caret in the raw text")
+            check(press(raw, right) && raw.snapshot().cursor == url.count, "arrows-horizontal match: Right moves it back")
+        }
+        print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal")
+    }
+}

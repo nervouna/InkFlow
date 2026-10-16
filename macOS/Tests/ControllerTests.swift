@@ -72,6 +72,7 @@ struct ControllerTests {
         try customPhrases(settings: isolated.settings)
         try customPhraseFailure(settings: isolated.settings, user: CommandLine.arguments[2])
         contextReranking(settings: isolated.settings)
+        compositionKeys()
         try deliveryAndRecovery(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         try inputLifecycleDiagnostics(settings: isolated.settings, shared: CommandLine.arguments[1], user: CommandLine.arguments[2])
         IFEngine.stop()
@@ -911,5 +912,85 @@ struct ControllerTests {
             check(client.mutations == ["insert:\(expected)"])
         }
         print("PASS controller spelling correction: preedit-only updates, corrected candidates, single digit-key commit")
+    }
+
+    /// Controller rows of the key table in rules.md ("Keys during composition"). The engine rows are
+    /// `EngineRegression.compositionKeys`. Every failure message starts with the row id.
+    @MainActor static func compositionKeys() {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        func session() -> (controller: InkFlowInputController, client: RecordingClient) {
+            let client = RecordingClient(document: "")
+            let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
+                settings: settings, settingsWindow: IFSettingsWindowController(settings: settings))!
+            return (controller, client)
+        }
+        func typeKeys(_ controller: InkFlowInputController, _ client: RecordingClient, _ text: String, row: String) {
+            for character in text {
+                let shifted = character.isUppercase || "~!@#$%^&*()_+{}|:\"<>?".contains(character)
+                check(controller.handle(keyEvent(0, String(character), shifted ? .shift : []), client: client),
+                      "\(row): \(character) of \(text) is consumed by the input method")
+            }
+        }
+        func tapLeftShift(_ controller: InkFlowInputController, _ client: RecordingClient, row: String) {
+            check(controller.handle(modifierEvent(56, .shift), client: client) && controller.handle(modifierEvent(56), client: client),
+                  "\(row): a standalone left Shift tap is consumed")
+        }
+        let space = keyEvent(49, " "), enter = keyEvent(36, "\r"), escape = keyEvent(53, "\u{1b}")
+        let url = "www.example.com", mail = "name@example.com"
+
+        // shift-tap
+        do {
+            let (idle, idleClient) = session()
+            tapLeftShift(idle, idleClient, row: "shift-tap idle")
+            check(idle.engine!.asciiMode && idleClient.mutations.isEmpty, "shift-tap idle: toggles the mode at once")
+            for (label, text, committed) in [("composing", "nihao", "你好"), ("match", url, url)] {
+                let (controller, client) = session()
+                typeKeys(controller, client, text, row: "shift-tap \(label)")
+                let before = controller.engine!.snapshot(), marks = client.mutations
+                tapLeftShift(controller, client, row: "shift-tap \(label)")
+                check(controller.engine!.requestedASCIIMode && !controller.engine!.asciiMode
+                      && controller.engine!.snapshot() == before && client.mutations == marks,
+                      "shift-tap \(label): the mode waits and the composition is untouched")
+                check(controller.handle(space, client: client) && client.document == committed && controller.engine!.asciiMode,
+                      "shift-tap \(label): the composition commits \(committed), then the mode switches")
+            }
+        }
+        // chords
+        do {
+            for (name, flags) in [("Command", NSEvent.ModifierFlags.command), ("Control", .control), ("Option", .option)] {
+                let (idle, idleClient) = session()
+                check(!idle.handle(keyEvent(0, "a", flags), client: idleClient) && idleClient.mutations.isEmpty,
+                      "chords idle: \(name) chord passes through")
+                for (label, text, committed) in [("composing", "nihao", "你好"), ("match", url, url)] {
+                    let (controller, client) = session()
+                    typeKeys(controller, client, text, row: "chords \(label)")
+                    client.mutations.removeAll()
+                    check(!controller.handle(keyEvent(0, "a", flags), client: client)
+                          && client.mutations == ["insert:\(committed)"] && controller.engine!.snapshot().preedit.isEmpty,
+                          "chords \(label): \(name) chord commits \(committed) and passes through")
+                }
+            }
+        }
+        // recognizer-url-email
+        do {
+            for (text, key, label) in [(url, space, "space"), (mail, enter, "return")] {
+                let (controller, client) = session()
+                typeKeys(controller, client, text, row: "recognizer-url-email")
+                check(client.mutations.last == "mark:\(text)" && (controller.candidates(nil) as? [String])?.isEmpty == true,
+                      "recognizer-url-email: \(text) shows as raw marked text without candidates")
+                client.mutations.removeAll()
+                check(controller.handle(key, client: client) && client.mutations == ["insert:\(text)"] && client.document == text,
+                      "recognizer-url-email: \(label) inserts \(text) literally once")
+                controller.commitComposition(client)
+                check(client.mutations == ["insert:\(text)"], "recognizer-url-email: nothing is committed twice")
+            }
+            let (controller, client) = session()
+            typeKeys(controller, client, mail, row: "recognizer-url-email")
+            check(controller.handle(escape, client: client) && client.document == "" && controller.engine!.snapshot().preedit.isEmpty,
+                  "recognizer-url-email: Escape cancels the address")
+        }
+        print("PASS controller composition keys: shift-tap, chords, recognizer-url-email")
     }
 }

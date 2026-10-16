@@ -23,9 +23,9 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      # dependencies.sh verifies every archive by SHA-256, so a stale cache only
+      # resource-dependencies.sh verifies every archive by SHA-256, so a stale cache only
       # costs a re-download. rime-cache is keyed by prepare-rime.sh's own input digest.
-      - name: Cache librime, dictionaries and prepared Rime data
+      - name: Cache dictionaries and prepared Rime data
         uses: actions/cache@v5
         with:
           path: |
