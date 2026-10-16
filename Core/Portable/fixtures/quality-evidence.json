@@ -105,34 +105,34 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : 13,
-            "consumedInputStart" : 0,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 1,
-            "nativeRank" : 2,
-            "source" : "personal_exact_mixed",
-            "text" : "我用Codex卡"
-          },
-          {
-            "consumedInputEnd" : 13,
-            "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
-            "nativeIndex" : 2,
-            "nativeRank" : 3,
-            "source" : "personal_exact_mixed",
-            "text" : "我用CODEX卡"
-          },
-          {
             "consumedInputEnd" : null,
             "consumedInputStart" : null,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 0,
             "nativeRank" : 1,
             "source" : null,
-            "text" : "我用从偶得显卡"
+            "text" : "我用从偶得新开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
+            "source" : "personal_exact_mixed",
+            "text" : "我用Codex开发"
+          },
+          {
+            "consumedInputEnd" : 16,
+            "consumedInputStart" : 0,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 2,
+            "nativeRank" : 3,
+            "source" : "personal_exact_mixed",
+            "text" : "我用CODEX开发"
           },
           {
             "consumedInputEnd" : null,
@@ -195,7 +195,7 @@
             "text" : "我要"
           }
         ],
-        "caret" : 13,
+        "caret" : 0,
         "highlightedDisplayIndex" : 0,
         "label" : "home",
         "page" : 0,

@@ -737,6 +737,10 @@ impl Engine {
         // Use the applied snapshot so deferred settings cannot change a live composition.
         let input = core.session.as_mut().unwrap().input()?;
         let has_custom_code = loaded_phrases.iter().any(|phrase| phrase.code == input);
+        // Rime rebuilds its composition while the caret is at the start of the input, which resets the
+        // highlight to its first candidate. A reordered page there could not keep its displayed first
+        // candidate highlighted, so the page keeps Rime's order until the caret moves on.
+        let at_start = core.session.as_mut().unwrap().input_caret()? == 0;
         // Once a segment is selected, the immediate prefix is inside the mark.
         // Leave these remaining candidates to Rime instead of applying older document text.
         core.order = (0..raw.candidates.len()).collect();
@@ -744,7 +748,7 @@ impl Engine {
         if raw.selection_bytes.start == 0 && !has_custom_code {
             let metadata =
                 Self::input_ranking_metadata(core, raw.page, raw.candidates.len(), input.len())?;
-            if let Some(ranker) = &self.ranker {
+            if let Some(ranker) = self.ranker.as_ref().filter(|_| !at_start) {
                 let texts: Vec<String> = raw.candidates.iter().map(|c| c.text.clone()).collect();
                 core.order = ranker.order(&texts, &core.preceding, metadata.as_deref());
             }
@@ -780,12 +784,21 @@ impl Engine {
         if modifiers == 1 && key == 0xff08 && !displayed.candidates.is_empty() {
             return self.forget_highlighted(state, id, &displayed);
         }
+        // Rime's selector takes Home, and End at the end of the input, while its highlight is not its
+        // first candidate, which is where a reordered page keeps it. Highlight that candidate so the
+        // navigator moves the caret, then rank the new page again: the highlight moved even when the
+        // caret did not.
+        let caret_key =
+            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !displayed.candidates.is_empty();
+        if caret_key {
+            core.session.as_mut().unwrap().highlight(0)?;
+        }
         let handled = core.session.as_mut().unwrap().process_key(key, modifiers)?;
         // Rime can undo learning while leaving Backspace unhandled for the client.
         if key == 0xff08 || key == 0xffff {
             state.observe_learning();
         }
-        self.update_ordering(state, id, false)?;
+        self.update_ordering(state, id, caret_key)?;
         Ok(handled)
     }
 

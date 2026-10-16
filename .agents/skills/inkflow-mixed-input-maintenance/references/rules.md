@@ -118,6 +118,8 @@ Patterns are case-sensitive and anchored at the start of the unconfirmed input (
 | `[` `]` `-` `=` (`paging-bound-keys`) | `[` `]` commit 【 】; `-` `=` pass through | Page up and down (both pairs are on by default) | Appended raw |
 | Up, Down (`arrows-vertical`) | Pass through | Move the highlight, across pages | Swallowed, no effect |
 | Left, Right (`arrows-horizontal`) | Pass through | Move the caret in the preedit | Move the caret in the raw text |
+| Home (`home`) | Passes through | Moves the caret to the start of the input in one press, whatever the highlight or the page order, and highlights the page's first candidate. Rime rebuilds the composition at the start and cannot keep a later candidate highlighted there, so that page keeps Rime's order, also when Left reaches the start | Moves the caret to the start of the raw text |
+| End (`end`) | Passes through | Moves the caret to the end of the input, ranks the page again and highlights its first displayed candidate. At the end that highlight is all it changes | Moves the caret to the end of the raw text |
 | Left Shift tap (`shift-tap`) | Toggles the mode at once | Waits; the mode switches after the composition is committed or cancelled | Waits the same way; the raw text commits first |
 | Command, Control or Option with a key (`chords`) | Pass through | The composition is committed, then the chord passes to the application | Same, committing the raw text |
 | Shift+Backspace (`forget`) | Passes through | Forgets the highlighted candidate's learning (rule 18); nothing is committed, and the input, page and highlight index stay | Deletes the last character, as Backspace does |

@@ -1353,6 +1353,8 @@ package enum EngineRegression {
         let down = Key(symbol: 0xff54, code: 125, text: "", modifiers: 0)
         let pageUp = Key(symbol: 0xff55, code: 116, text: "", modifiers: 0)
         let pageDown = Key(symbol: 0xff56, code: 121, text: "", modifiers: 0)
+        let home = Key(symbol: 0xff50, code: 115, text: "", modifiers: 0)
+        let end = Key(symbol: 0xff57, code: 119, text: "", modifiers: 0)
         func char(_ character: Character) -> Key {
             let shifted = character.isUppercase || "~!@#$%^&*()_+{}|:\"<>?".contains(character)
             return Key(symbol: Int32(character.asciiValue!), code: 0, text: String(character), modifiers: shifted ? 1 : 0)
@@ -1644,8 +1646,91 @@ package enum EngineRegression {
             check(press(raw, left) && raw.snapshot().cursor == url.count - 1 && raw.snapshot().preedit == url,
                   "arrows-horizontal match: Left moves the caret in the raw text")
             check(press(raw, right) && raw.snapshot().cursor == url.count, "arrows-horizontal match: Right moves it back")
+            // Rime rebuilds the composition at the start of the input and cannot keep a later candidate
+            // highlighted there, so the page at the start keeps Rime's order (see `home`).
+            let reordered = fresh()
+            reordered.setPrecedingText("准备午")
+            send(reordered, "can")
+            for _ in 0..<3 { press(reordered, left) }
+            check(reordered.snapshot().cursor == 0 && reordered.snapshot().highlight == 0,
+                  "arrows-horizontal composing: Left onto the start of a reordered page highlights the first candidate: \(reordered.snapshot())")
         }
-        print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal")
+        // Three pages for the Home and End rows: Rime's own order, a page the context reordered, and a page
+        // led by a learned mixed sentence. The last two show a first candidate that is not Rime's first.
+        var learned = false
+        func pages() -> [(name: String, engine: IFEngine, reordered: Bool)] {
+            if !learned {
+                let teacher = composing("wokannetflix")
+                guard let index = teacher.snapshot().candidates.firstIndex(of: "我看netflix") else {
+                    check(false, "home fixture: the mixed sentence is missing: \(teacher.snapshot().candidates)"); return []
+                }
+                teacher.select(index)
+                check(teacher.takeCommit() == "我看netflix", "home fixture: select the mixed sentence")
+                teacher.key(0xff09)
+                learned = true
+            }
+            let context = fresh()
+            context.setPrecedingText("准备午")
+            send(context, "can")
+            return [("native", composing("nihao"), false), ("context", context, true), ("learned mixed", composing("wokannetflix"), true)]
+        }
+        // home
+        do {
+            idleIgnores(home, "home")
+            for (name, engine, reordered) in pages() {
+                let before = engine.snapshot(), led = engine.qualitySnapshot()
+                check(before.highlight == 0 && (led.candidates.first?.nativeIndex != 0) == reordered,
+                      "home \(name) fixture: \(led.candidates)")
+                let handled = press(engine, home), committed = engine.takeCommit()
+                let state = engine.snapshot(), quality = engine.qualitySnapshot()
+                check(handled && committed.isEmpty && state.cursor == 0 && quality.caret == 0 && quality.rawInput == led.rawInput,
+                      "home \(name): the caret moves to the start: \(state)")
+                check(state.highlight == 0 && quality.highlightedDisplayIndex == 0 && Set(state.candidates) == Set(before.candidates),
+                      "home \(name): the first candidate of the page is highlighted: \(state) vs \(before)")
+                check(quality.candidates.allSatisfy { $0.nativeIndex == $0.displayIndex },
+                      "home \(name): the page at the start keeps Rime's order: \(quality.candidates)")
+                let again = press(engine, home), repeated = engine.snapshot()
+                check(again && repeated == state && engine.takeCommit().isEmpty,
+                      "home \(name): a second press at the start changes nothing: \(repeated)")
+            }
+            // The key moves the caret in one press, whatever the highlight was.
+            let moved = composing("shi")
+            press(moved, down); press(moved, down)
+            check(moved.snapshot().highlight == 2, "home fixture: the highlight is on the third candidate")
+            let handled = press(moved, home), state = moved.snapshot()
+            check(handled && state.cursor == 0 && state.highlight == 0,
+                  "home composing: a moved highlight does not take the first press: \(state)")
+            let raw = matched(url), rawHandled = press(raw, home)
+            check(rawHandled && raw.snapshot().cursor == 0 && raw.snapshot().preedit == url,
+                  "home match: moves the caret to the start of the raw text: \(raw.snapshot())")
+        }
+        // end
+        do {
+            idleIgnores(end, "end")
+            for (name, engine, _) in pages() {
+                // At the end of the input the key changes nothing, even where the first candidate is not Rime's first.
+                let before = engine.snapshot(), atEnd = press(engine, end)
+                check(atEnd && unchanged(engine, before), "end \(name): at the end nothing changes: \(engine.snapshot()) vs \(before)")
+                // From the start the caret returns to the end and the page is ranked again.
+                press(engine, home)
+                check(engine.snapshot().cursor == 0, "end \(name) fixture: the caret is at the start")
+                let handled = press(engine, end), committed = engine.takeCommit(), state = engine.snapshot()
+                check(handled && committed.isEmpty && state == before,
+                      "end \(name): from the start the caret returns to the end and the page is ranked again: \(state) vs \(before)")
+            }
+            let moved = composing("shi"), last = moved.snapshot().cursor
+            press(moved, down)
+            check(moved.snapshot().highlight == 1, "end fixture: the highlight is on the second candidate")
+            let handled = press(moved, end), state = moved.snapshot()
+            check(handled && state.highlight == 0 && state.cursor == last,
+                  "end composing: at the end the highlight returns to the first candidate: \(state)")
+            let raw = matched(url)
+            press(raw, left)
+            let rawHandled = press(raw, end)
+            check(rawHandled && raw.snapshot().cursor == url.count && raw.snapshot().preedit == url,
+                  "end match: moves the caret to the end of the raw text: \(raw.snapshot())")
+        }
+        print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal, home, end")
     }
 
     /// An exact technical English word leads the page when its input is 4 or more letters that are
