@@ -22,6 +22,8 @@ pub struct Metadata {
     pub coverage: Range<usize>,
     pub class: CandidateClass,
     pub exact: bool,
+    /// Commits of the user's own, capped at three. For a mixed sentence this is its weakest
+    /// ASCII run, so any unconfirmed run makes it 0.
     pub personal: u8,
     pub source: Source,
 }
@@ -385,15 +387,18 @@ impl ContextRanker {
             } else if is_technical && row.exact && row.personal > 0 && row.source == Source::English
             {
                 1
-            } else if Some(i) == leading_han || Some(i) == native_han {
-                // A demoted native first choice stays second, ahead of exact English.
+            } else if row.exact && row.personal > 0 && row.source == Source::Mixed {
+                // Every ASCII run of the sentence has personal evidence: it leads the best Han.
                 2
-            } else if row.exact && matches!(row.source, Source::English | Source::Mixed) {
+            } else if Some(i) == leading_han || Some(i) == native_han {
+                // A demoted native first choice stays next, ahead of exact English.
                 3
-            } else if row.exact {
+            } else if row.exact && matches!(row.source, Source::English | Source::Mixed) {
                 4
-            } else {
+            } else if row.exact {
                 5
+            } else {
+                6
             }
         };
         let mut ranked = eligible.clone();

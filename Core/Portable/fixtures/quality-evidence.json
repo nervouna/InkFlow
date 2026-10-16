@@ -4,20 +4,10 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "我用从偶得显卡"
-          },
-          {
             "consumedInputEnd" : 13,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
@@ -26,12 +16,22 @@
           {
             "consumedInputEnd" : 13,
             "consumedInputStart" : 0,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 1,
+            "displayRank" : 2,
             "nativeIndex" : 2,
             "nativeRank" : 3,
             "source" : "personal_exact_mixed",
             "text" : "我用CODEX卡"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得显卡"
           },
           {
             "consumedInputEnd" : null,
@@ -105,34 +105,34 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
+            "consumedInputEnd" : 13,
+            "consumedInputStart" : 0,
             "displayIndex" : 0,
             "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "我用从偶得新开发"
-          },
-          {
-            "consumedInputEnd" : 16,
-            "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
-            "text" : "我用Codex开发"
+            "text" : "我用Codex卡"
           },
           {
-            "consumedInputEnd" : 16,
+            "consumedInputEnd" : 13,
             "consumedInputStart" : 0,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 1,
+            "displayRank" : 2,
             "nativeIndex" : 2,
             "nativeRank" : 3,
             "source" : "personal_exact_mixed",
-            "text" : "我用CODEX开发"
+            "text" : "我用CODEX卡"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得显卡"
           },
           {
             "consumedInputEnd" : null,
@@ -195,7 +195,7 @@
             "text" : "我要"
           }
         ],
-        "caret" : 0,
+        "caret" : 13,
         "highlightedDisplayIndex" : 0,
         "label" : "home",
         "page" : 0,
@@ -206,20 +206,10 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "我用从偶得新开发"
-          },
-          {
             "consumedInputEnd" : 16,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
@@ -228,12 +218,22 @@
           {
             "consumedInputEnd" : 16,
             "consumedInputStart" : 0,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 1,
+            "displayRank" : 2,
             "nativeIndex" : 2,
             "nativeRank" : 3,
             "source" : "personal_exact_mixed",
             "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得新开发"
           },
           {
             "consumedInputEnd" : null,
@@ -1131,20 +1131,10 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "从哦的新很好"
-          },
-          {
             "consumedInputEnd" : 11,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
@@ -1153,12 +1143,22 @@
           {
             "consumedInputEnd" : 11,
             "consumedInputStart" : 0,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 1,
+            "displayRank" : 2,
             "nativeIndex" : 2,
             "nativeRank" : 3,
             "source" : "personal_exact_mixed",
             "text" : "CODEX很好"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新很好"
           },
           {
             "consumedInputEnd" : null,
@@ -1232,20 +1232,10 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "我用从偶得新开发"
-          },
-          {
             "consumedInputEnd" : 16,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
@@ -1254,12 +1244,22 @@
           {
             "consumedInputEnd" : 16,
             "consumedInputStart" : 0,
-            "displayIndex" : 2,
-            "displayRank" : 3,
+            "displayIndex" : 1,
+            "displayRank" : 2,
             "nativeIndex" : 2,
             "nativeRank" : 3,
             "source" : "personal_exact_mixed",
             "text" : "我用CODEX开发"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 2,
+            "displayRank" : 3,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用从偶得新开发"
           },
           {
             "consumedInputEnd" : null,
@@ -1333,24 +1333,24 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "我用欧防风麟儿"
-          },
-          {
             "consumedInputEnd" : 13,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_mixed",
             "text" : "我用offline"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "我用欧防风麟儿"
           },
           {
             "consumedInputEnd" : null,

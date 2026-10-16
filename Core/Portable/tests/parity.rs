@@ -2212,3 +2212,134 @@ fn copy_tree(from: &Path, to: &Path) {
         fs::copy(entry.path(), to.join(entry.file_name())).unwrap();
     }
 }
+
+/// Selecting a mixed Chinese/English candidate confirms each of its ASCII runs in the English
+/// user dictionary, like selecting the same words alone, and a sentence whose every run is
+/// confirmed then leads. Return, cancel and an immediate undo confirm nothing; one unconfirmed
+/// run, a complete Pinyin word and a custom phrase keep their places.
+#[test]
+fn mixed_selection_learning() {
+    use inkflow_rime::{phrases::CustomPhrase, ranking::PersonalSource};
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP mixed selection learning: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let user = scratch("mixed-learning");
+    let engine = engine(&resources, &user);
+    let session = configured(&engine);
+    // Where the sentence sits on the first page, and whether its evidence says every run is learned.
+    let state = |input: &str, target: &str| {
+        session.clear().unwrap();
+        type_keys(&session, input);
+        let page = session.snapshot().unwrap();
+        let index = page
+            .texts()
+            .iter()
+            .position(|c| *c == target)
+            .unwrap_or_else(|| panic!("missing {target} for {input}: {:?}", page.texts()));
+        let learned = page.candidates[index].personal_source() == Some(PersonalSource::ExactMixed);
+        (index, learned)
+    };
+    // The first candidate of standalone `google` in a technical context.
+    let standalone_first = || {
+        session.clear().unwrap();
+        session.set_preceding_text("代码").unwrap();
+        type_keys(&session, "google");
+        texts(&session).remove(0)
+    };
+    let end_undo_window = || {
+        session.key(0xff09, 0).unwrap();
+    };
+
+    let (google, google_sentence) = ("wofalegoogle", "我发了google");
+    assert_eq!(
+        state(google, google_sentence),
+        (1, false),
+        "an unlearned sentence stays behind the Chinese reading"
+    );
+    assert_ne!(standalone_first(), "google");
+
+    // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
+    session.clear().unwrap();
+    type_keys(&session, google);
+    session.key(0xff0d, 0).unwrap();
+    assert_eq!(
+        session.take_commit().unwrap(),
+        google,
+        "Return commits the raw input"
+    );
+    end_undo_window();
+    session.clear().unwrap();
+    type_keys(&session, google);
+    session.key(0xff1b, 0).unwrap();
+    assert!(session.take_commit().unwrap().is_empty());
+    end_undo_window();
+    choose(&session, google, google_sentence);
+    session.key(0xff08, 0).unwrap();
+    assert_eq!(
+        state(google, google_sentence),
+        (1, false),
+        "Return, cancel and an immediate undo learn nothing"
+    );
+    assert_ne!(standalone_first(), "google");
+
+    // A regular selection learns the run with its display and lowercase code.
+    choose(&session, google, google_sentence);
+    end_undo_window();
+    assert_eq!(
+        state(google, google_sentence),
+        (0, true),
+        "the learned sentence leads"
+    );
+    assert_eq!(
+        standalone_first(),
+        "google",
+        "the same record serves standalone English"
+    );
+
+    // A sentence with one unlearned run keeps its place until every run is learned.
+    let (both, both_sentence) = ("wofalegoogleheamazon", "我发了google和amazon");
+    assert_eq!(
+        state(both, both_sentence),
+        (1, false),
+        "amazon has no personal evidence yet"
+    );
+    choose(&session, "wokanamazon", "我看amazon");
+    end_undo_window();
+    assert_eq!(
+        state(both, both_sentence),
+        (0, true),
+        "every run is learned"
+    );
+
+    // A custom phrase keeps its explicit priority over a learned sentence.
+    let phrase = CustomPhrase::validated("phrase-0", google, "自定义词").unwrap();
+    session
+        .set_configuration(9, &[phrase], Some(&InputPreferences::default()))
+        .unwrap();
+    session.clear().unwrap();
+    type_keys(&session, google);
+    assert_eq!(texts(&session)[0], "自定义词");
+    session
+        .set_configuration(9, &[], Some(&InputPreferences::default()))
+        .unwrap();
+
+    // A complete Pinyin word is never a personal token, however often it is selected.
+    let (banana, banana_sentence) = ("wokanbanana", "我看banana");
+    assert_eq!(state(banana, banana_sentence), (1, false));
+    for _ in 0..2 {
+        choose(&session, banana, banana_sentence);
+        end_undo_window();
+    }
+    assert_eq!(
+        state(banana, banana_sentence),
+        (1, false),
+        "complete Pinyin sequences never promote a mixed sentence"
+    );
+    drop(session);
+    drop(engine);
+    fs::remove_dir_all(&user).unwrap();
+    println!(
+        "PASS mixed selection learning: regular selection learns, Return/cancel/undo do not, every run must be learned, custom phrases and complete Pinyin words keep their places"
+    );
+}

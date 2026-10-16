@@ -4328,5 +4328,108 @@
     "metadata": null,
     "offset": 0,
     "inputLength": 8
+  },
+  {
+    "name": "learned-mixed-leads",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我发了email",
+      "我发了"
+    ],
+    "context": "",
+    "metadata": "0,3;0,11,n,1,0,n;0,11,m,1,1,m;0,6,n,0,0,n",
+    "offset": 0,
+    "inputLength": 11
+  },
+  {
+    "name": "unlearned-mixed-stays-behind",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我发了email",
+      "我发了"
+    ],
+    "context": "",
+    "metadata": "0,3;0,11,n,1,0,n;0,11,m,1,0,m;0,6,n,0,0,n",
+    "offset": 0,
+    "inputLength": 11
+  },
+  {
+    "name": "single-unlearned-run-stays-behind",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我用API发email",
+      "我发了email"
+    ],
+    "context": "",
+    "metadata": "0,3;0,16,n,1,0,n;0,16,m,1,0,m;0,16,m,1,2,m",
+    "offset": 0,
+    "inputLength": 16
+  },
+  {
+    "name": "custom-phrase-keeps-tier-zero",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我发了email",
+      "自定义词"
+    ],
+    "context": "",
+    "metadata": "0,3;0,11,n,1,0,n;0,11,m,1,2,m;0,11,n,1,0,c",
+    "offset": 0,
+    "inputLength": 11
+  },
+  {
+    "name": "learned-mixed-leads-context-han",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "惨",
+      "餐",
+      "我用Codex"
+    ],
+    "context": "午",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,n,1,0,n;0,5,m,1,1,m",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "learned-mixed-after-technical-english",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "从哦的新",
+      "Codex",
+      "我用Codex"
+    ],
+    "context": "代码",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,a,1,1,e;0,5,m,1,2,m",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "learned-mixed-stronger-evidence-first",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我发了email",
+      "我发了Email"
+    ],
+    "context": "",
+    "metadata": "0,3;0,11,n,1,0,n;0,11,m,1,1,m;0,11,m,1,3,m",
+    "offset": 0,
+    "inputLength": 11
+  },
+  {
+    "name": "learned-mixed-needs-equal-coverage",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "我发了而买了",
+      "我发了email"
+    ],
+    "context": "",
+    "metadata": "0,2;0,11,n,1,0,n;0,6,m,1,2,m",
+    "offset": 0,
+    "inputLength": 11
   }
 ]
