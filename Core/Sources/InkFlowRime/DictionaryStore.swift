@@ -282,6 +282,15 @@ package struct IFDictionaryStore: Sendable {
     package func storedDictionary(_ version: IFDictionaryVersion) throws -> URL {
         try version.validate()
         let directory = try IFDictionaryFiles.child(version.directory + "/shared", in: root)
+        let stored = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: IFDictionaryFiles.child(IFDictionaryManifest.filename, in: directory))
+        if stored.recipeVersion != IFDictionaryCatalog.recipeVersion {
+            // An older recipe regenerates only from retained raw sources of the current catalog. Anything
+            // else can never rebuild, so recovery drops it instead of retrying forever.
+            let raw = try IFDictionaryFiles.child(version.directory + "/raw", in: root)
+            guard stored.contentVersion == version.contentVersion, stored.sources.map(\.id) == IFDictionaryCatalog.sources.map(\.id),
+                  FileManager.default.fileExists(atPath: raw.path) else { throw IFDictionaryUpdateError(.recovery, "artifact-obsolete") }
+            return directory
+        }
         let manifest = try validatedManifest(at: directory)
         guard manifest.contentVersion == version.contentVersion else { throw IFDictionaryUpdateError(.recovery, "manifest-version") }
         return directory

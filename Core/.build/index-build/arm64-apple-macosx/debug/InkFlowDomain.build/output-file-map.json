@@ -1,0 +1,71 @@
+{
+  "": {
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/primary.swiftdeps"
+  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/AIInputIdentity.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIInputIdentity.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIInputIdentity.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIInputIdentity~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIInputIdentity.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIInputIdentity.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/AIPronunciation.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIPronunciation.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIPronunciation.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIPronunciation~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIPronunciation.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/AIPronunciation.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/CandidateRanking.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CandidateRanking.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CandidateRanking.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CandidateRanking~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CandidateRanking.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CandidateRanking.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/CustomPhrase.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CustomPhrase.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CustomPhrase.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CustomPhrase~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CustomPhrase.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/CustomPhrase.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/DictionaryError.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryError.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryError.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryError~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryError.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryError.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/DictionaryGenerator.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryGenerator.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryGenerator.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryGenerator~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryGenerator.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryGenerator.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/DictionaryModels.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryModels.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryModels.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryModels~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryModels.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryModels.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/DictionaryToolBootstrap.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryToolBootstrap.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryToolBootstrap.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryToolBootstrap~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryToolBootstrap.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/DictionaryToolBootstrap.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/InputPreferences.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/InputPreferences.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/InputPreferences.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/InputPreferences~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/InputPreferences.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/InputPreferences.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/VoiceLearning.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearning.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearning.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearning~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearning.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearning.dia"  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearningCoordinator.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearningCoordinator.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearningCoordinator~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearningCoordinator.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/InkFlowDomain.build/VoiceLearningCoordinator.dia"  }
+}

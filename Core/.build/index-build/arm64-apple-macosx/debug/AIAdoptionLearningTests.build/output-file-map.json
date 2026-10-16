@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/primary.swiftdeps"
+  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Tests/AIAdoptionLearningTests/AIAdoptionLearningTests.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/AIAdoptionLearningTests.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/AIAdoptionLearningTests.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/AIAdoptionLearningTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/AIAdoptionLearningTests.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/AIAdoptionLearningTests.build/AIAdoptionLearningTests.dia"  }
+}

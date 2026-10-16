@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/primary.swiftdeps"
+  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Tools/DictionaryGeneratorTool/main.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/main.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/main.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/main~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/main.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/DictionaryGeneratorTool.build/main.dia"  }
+}

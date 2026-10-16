@@ -115,6 +115,16 @@ private enum DictionaryStoreRegression {
         let replacement = try fixture(store: store, resources: resources, fingerprint: fingerprint, versionCharacter: "2")
         check(replacement.directory != second.directory, "Fresh artifact cannot collide with corrupt same-content cache")
         _ = try store.resolve(replacement, fingerprint: fingerprint)
+        let older = try fixture(store: store, resources: resources, fingerprint: fingerprint, versionCharacter: "4")
+        let olderShared = store.root.appendingPathComponent(older.directory + "/shared")
+        let current = try store.resolve(older, fingerprint: fingerprint).manifest
+        try IFDictionaryManifest(formatVersion: 1, recipeVersion: current.recipeVersion - 1, contentVersion: current.contentVersion,
+            entryCount: current.entryCount, contentSHA256: current.contentSHA256, dictionarySHA256: current.dictionarySHA256,
+            correctionsSHA256: current.correctionsSHA256, sources: current.sources, calibrations: current.calibrations)
+            .encoded().write(to: olderShared.appendingPathComponent(IFDictionaryManifest.filename))
+        fails("artifact-obsolete") { _ = try store.storedDictionary(older) }
+        try FileManager.default.createDirectory(at: store.root.appendingPathComponent(older.directory + "/raw"), withIntermediateDirectories: false)
+        check(try store.storedDictionary(older).lastPathComponent == "shared", "Older recipe with retained raw sources stays rebuildable")
         print("PASS store: begin/confirm/failure/interruption/fallback, same-content observations, safe paths, cache/fingerprint integrity, diagnostic-free atomic state")
     }
     static func validationHashCounts(root: URL, resources: URL, fingerprint: String) throws {

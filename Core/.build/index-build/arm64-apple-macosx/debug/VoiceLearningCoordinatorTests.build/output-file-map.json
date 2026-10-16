@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/primary.swiftdeps"
+  },
+  "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/Tests/VoiceLearningCoordinatorTests/VoiceLearningCoordinatorTests.swift": {
+    "dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/VoiceLearningCoordinatorTests.d",
+    "object": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/VoiceLearningCoordinatorTests.swift.o",
+    "swiftmodule": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/VoiceLearningCoordinatorTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/VoiceLearningCoordinatorTests.swiftdeps",
+    "diagnostics": "/Users/damao/Develop/Projects/InkFlow/.worktrees/95-rebuild-old-recipe/Core/.build/index-build/arm64-apple-macosx/debug/VoiceLearningCoordinatorTests.build/VoiceLearningCoordinatorTests.dia"  }
+}
