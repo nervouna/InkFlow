@@ -6,7 +6,9 @@ local M = {}
 -- `technical` is set when the native translator found the whole input to be 4 or more
 -- letters that are not Pinyin up to an unfinished final syllable. An exact standalone
 -- English candidate spanning that input is then marked 2 in the exact field, which the
--- ranker reads as the lead of the page.
+-- ranker reads as the lead of the page. A Rime `sentence`, which the poet assembled from
+-- separate words, that covers the whole input is marked 3 in the same field; the ranker lets
+-- a learned English word lead it when it is the page's first candidate.
 local function candidate_metadata(candidate, input_length, technical)
   local candidate_type = candidate.type or ""
   local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
@@ -45,6 +47,9 @@ local function candidate_metadata(candidate, input_length, technical)
   if technical and source == "e" and exact == 1
       and candidate.start == 0 and candidate._end == input_length then
     exact = 2
+  end
+  if candidate_type == "sentence" and exact == 1 and candidate.start == 0 then
+    exact = 3
   end
   local has_letter = candidate.text:find("[A-Za-z]") ~= nil
   local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
