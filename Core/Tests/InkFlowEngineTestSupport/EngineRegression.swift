@@ -550,15 +550,16 @@ package enum EngineRegression {
             check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty, "Select the mixed candidate \(expected)")
             engine.key(undo ? 0xff08 : 0xff09)
         }
-        // The first candidate of standalone `google` in a technical context.
-        func standaloneFirst() -> String? {
+        // Whether standalone `google` carries personal evidence in a technical context. Its place no
+        // longer shows that: `google` is not Pinyin-shaped, so it leads either way (rule 14).
+        func standaloneLearned() -> Bool {
             engine.clear(); engine.setPrecedingText("代码"); type(engine, "google")
-            return engine.snapshot().candidates.first
+            return engine.qualitySnapshot().candidates.first { $0.text == "google" }?.source == "personal_exact_english"
         }
         let (google, sentence) = ("wofalegoogle", "我发了google")
         var current = state(google, sentence)
         check(current?.index == 1 && current?.learned == false, "An unlearned sentence stays behind the Chinese reading: \(engine.snapshot().candidates)")
-        check(standaloneFirst() != "google", "Standalone google has no personal evidence yet")
+        check(!standaloneLearned(), "Standalone google has no personal evidence yet")
 
         // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
         engine.clear(); type(engine, google)
@@ -570,13 +571,13 @@ package enum EngineRegression {
         choose(google, sentence, undo: true)
         current = state(google, sentence)
         check(current?.index == 1 && current?.learned == false, "Return, cancel and an immediate undo learn nothing")
-        check(standaloneFirst() != "google", "Standalone google is still unlearned")
+        check(!standaloneLearned(), "Standalone google is still unlearned")
 
         // A regular selection learns the run with its display and lowercase code.
         choose(google, sentence)
         current = state(google, sentence)
         check(current?.index == 0 && current?.learned == true, "The learned sentence leads: \(engine.snapshot().candidates)")
-        check(standaloneFirst() == "google", "The same record serves standalone English")
+        check(standaloneLearned(), "The same record serves standalone English")
 
         // A sentence with one unlearned run keeps its place until every run is learned.
         let (both, bothSentence) = ("wofalegoogleheamazon", "我发了google和amazon")
@@ -987,6 +988,7 @@ package enum EngineRegression {
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: -1) == 0)
         check(IFEngine.utf16Cursor(in: "你😀a", byteOffset: 4) == 0)
         punctuation(event: event)
+        technicalEnglishLead(event: event)
         compositionKeys(event: event)
         forgetCandidate(event: event)
         emojiCandidates()
@@ -1644,6 +1646,43 @@ package enum EngineRegression {
             check(press(raw, right) && raw.snapshot().cursor == url.count, "arrows-horizontal match: Right moves it back")
         }
         print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal")
+    }
+
+    /// An exact technical English word leads the page when its input is 4 or more letters that are
+    /// not complete Pinyin syllables optionally followed by one unfinished final syllable (rule 14).
+    /// Every guard input kept the first candidate recorded on `main` before this rule existed.
+    @MainActor package static func technicalEnglishLead(event: Event = rimeEvent) {
+        let engine = IFEngine()!
+        func first(_ input: String) -> String? {
+            engine.clear()
+            for character in input {
+                _ = event(engine, Int32(character.asciiValue!), 0, String(character), character.isUppercase ? 1 : 0)
+            }
+            return engine.snapshot().candidates.first
+        }
+        // technical-guard: complete Pinyin, an unfinished final syllable, abbreviations and inputs of
+        // three letters or fewer keep the first candidate recorded before the rule.
+        let guards = [("tin", "题嗯"), ("chin", "吃嗯"), ("women", "我们"), ("can", "惨"), ("hen", "很"),
+                      ("bs", "不是"), ("hlw", "互联网"), ("zhguo", "中国"), ("nihao", "你好"),
+                      ("xianzaiwomenlai", "现在我们来"), ("shanghai", "伤害"),
+                      ("email", "而买了"), ("banana", "芭娜娜")]
+        for (input, expected) in guards {
+            let candidate = first(input)
+            check(candidate == expected, "technical-guard \(input): first candidate stays \(expected), got \(candidate ?? "none")")
+        }
+        // technical-lead: the English word beats the reading built from abbreviations and typos.
+        for (input, expected) in [("macos", "macOS"), ("deepseek", "DeepSeek"), ("ios", "iOS")] {
+            let candidate = first(input)
+            check(candidate == expected, "technical-lead \(input): \(expected) leads the page, got \(candidate ?? "none"): \(engine.snapshot().candidates)")
+        }
+        // technical-lead: the Chinese reading stays selectable behind it.
+        _ = first("macos")
+        check(engine.snapshot().candidates.contains("马刺欧式"), "technical-lead macos: the Chinese reading stays on the page")
+        engine.key(0xff54)
+        engine.key(32)
+        check(engine.takeCommit() == "马刺欧式", "technical-lead macos: the displayed second candidate commits the Chinese reading")
+        engine.clear()
+        print("PASS technical English lead: macos/deepseek/ios lead, the Chinese reading stays behind, Pinyin-shaped and short inputs keep their first candidate")
     }
 
     /// Shift+Backspace forgets the learning of the highlighted candidate and nothing else: Rime's own

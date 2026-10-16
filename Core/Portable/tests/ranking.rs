@@ -38,7 +38,7 @@ fn swift_ranking_reference() {
                         row.coverage.start,
                         row.coverage.end,
                         class,
-                        u8::from(row.exact),
+                        if row.lead { 2 } else { u8::from(row.exact) },
                         row.personal,
                         source
                     )

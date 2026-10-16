@@ -4431,5 +4431,133 @@
     "metadata": "0,2;0,11,n,1,0,n;0,6,m,1,2,m",
     "offset": 0,
     "inputLength": 11
+  },
+  {
+    "name": "technical-english-leads",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "macOS",
+      "马刺"
+    ],
+    "context": "",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,a,2,0,e;0,2,n,0,0,n",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "technical-english-personal-leads",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "macOS",
+      "马刺"
+    ],
+    "context": "",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,a,2,3,e;0,2,n,0,0,n",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "technical-english-first-exact-only",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "德尔配色儿科",
+      "DeepSeek",
+      "Deepseek",
+      "德尔"
+    ],
+    "context": "",
+    "metadata": "0,4;0,8,n,1,0,n;0,8,a,2,0,e;0,8,a,2,0,e;0,2,n,0,0,n",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "technical-english-unflagged-stays-behind",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "macOS",
+      "马刺"
+    ],
+    "context": "",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,a,1,0,e;0,2,n,0,0,n",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "technical-english-keeps-custom-first",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "macOS",
+      "自定义词"
+    ],
+    "context": "",
+    "metadata": "0,3;0,5,n,1,0,n;0,5,a,2,0,e;0,5,n,1,0,c",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "technical-english-before-learned-mixed",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "德尔配色儿科",
+      "DeepSeek",
+      "德DeepSeek"
+    ],
+    "context": "",
+    "metadata": "0,3;0,8,n,1,0,n;0,8,a,2,0,e;0,8,m,1,2,m",
+    "offset": 0,
+    "inputLength": 8
+  },
+  {
+    "name": "technical-english-needs-equal-coverage",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺",
+      "macOS",
+      "马刺欧式"
+    ],
+    "context": "",
+    "metadata": "0,3;0,2,n,0,0,n;0,5,a,2,0,e;0,5,n,1,0,n",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "bad-metadata-lead-native",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "马刺"
+    ],
+    "context": "",
+    "metadata": "0,2;0,5,n,2,0,n;0,2,n,0,0,n",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "bad-metadata-lead-partial",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "马刺欧式",
+      "macOS"
+    ],
+    "context": "",
+    "metadata": "0,2;0,5,n,1,0,n;0,3,a,2,0,e",
+    "offset": 0,
+    "inputLength": 5
+  },
+  {
+    "name": "bad-metadata-lead-mixed",
+    "dictionary": "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n准备午参\tzhun bei wu can\t1\n迷你\tmi ni\t70\n",
+    "candidates": [
+      "德尔配色儿科",
+      "我用DeepSeek"
+    ],
+    "context": "",
+    "metadata": "0,2;0,8,n,1,0,n;0,8,m,2,1,m",
+    "offset": 0,
+    "inputLength": 8
   }
 ]

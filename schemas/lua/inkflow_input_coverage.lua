@@ -3,7 +3,11 @@
 local channel = require("inkflow_channel")
 local M = {}
 
-local function candidate_metadata(candidate, input_length)
+-- `technical` is set when the native translator found the whole input to be 4 or more
+-- letters that are not Pinyin up to an unfinished final syllable. An exact standalone
+-- English candidate spanning that input is then marked 2 in the exact field, which the
+-- ranker reads as the lead of the page.
+local function candidate_metadata(candidate, input_length, technical)
   local candidate_type = candidate.type or ""
   local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
   if candidate_type == "user_table" then
@@ -38,6 +42,10 @@ local function candidate_metadata(candidate, input_length)
       end
     end
   end
+  if technical and source == "e" and exact == 1
+      and candidate.start == 0 and candidate._end == input_length then
+    exact = 2
+  end
   local has_letter = candidate.text:find("[A-Za-z]") ~= nil
   local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
   local class = has_letter and (has_non_ascii and "m" or "a") or (has_non_ascii and "n" or "o")
@@ -54,10 +62,13 @@ local function input_coverage(fields, context)
   -- get_candidate_at can prepare more translations; never request unmaterialized rows.
   if offset + count > menu:candidate_count() then return "failed" end
   local rows = {fields[1] .. "," .. fields[2]}
+  -- The native translator names the input it judged technical; any other value is stale.
+  local technical = context:get_property("inkflow_technical_input")
+  technical = technical ~= "" and technical == context.input
   for index = offset, offset + count - 1 do
     local candidate = menu:get_candidate_at(index)
     if not candidate then return "failed" end
-    rows[#rows + 1] = candidate_metadata(candidate, #context.input)
+    rows[#rows + 1] = candidate_metadata(candidate, #context.input, technical)
   end
   return "ok", table.concat(rows, ";")
 end

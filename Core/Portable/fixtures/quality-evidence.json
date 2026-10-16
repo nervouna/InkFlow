@@ -618,24 +618,24 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "从哦的新"
-          },
-          {
             "consumedInputEnd" : 5,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_english",
             "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
           },
           {
             "consumedInputEnd" : 5,
@@ -721,24 +721,24 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "从哦的新"
-          },
-          {
             "consumedInputEnd" : 5,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_english",
             "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
           },
           {
             "consumedInputEnd" : 5,
@@ -822,24 +822,24 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "从哦的新"
-          },
-          {
             "consumedInputEnd" : 5,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_english",
             "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
           },
           {
             "consumedInputEnd" : 5,
@@ -925,24 +925,24 @@
       {
         "candidates" : [
           {
-            "consumedInputEnd" : null,
-            "consumedInputStart" : null,
-            "displayIndex" : 0,
-            "displayRank" : 1,
-            "nativeIndex" : 0,
-            "nativeRank" : 1,
-            "source" : null,
-            "text" : "从哦的新"
-          },
-          {
             "consumedInputEnd" : 5,
             "consumedInputStart" : 0,
-            "displayIndex" : 1,
-            "displayRank" : 2,
+            "displayIndex" : 0,
+            "displayRank" : 1,
             "nativeIndex" : 1,
             "nativeRank" : 2,
             "source" : "personal_exact_english",
             "text" : "Codex"
+          },
+          {
+            "consumedInputEnd" : null,
+            "consumedInputStart" : null,
+            "displayIndex" : 1,
+            "displayRank" : 2,
+            "nativeIndex" : 0,
+            "nativeRank" : 1,
+            "source" : null,
+            "text" : "从哦的新"
           },
           {
             "consumedInputEnd" : 5,

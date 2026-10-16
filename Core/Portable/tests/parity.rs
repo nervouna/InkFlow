@@ -2240,12 +2240,15 @@ fn mixed_selection_learning() {
         let learned = page.candidates[index].personal_source() == Some(PersonalSource::ExactMixed);
         (index, learned)
     };
-    // The first candidate of standalone `google` in a technical context.
-    let standalone_first = || {
+    // Whether standalone `google` carries personal evidence in a technical context. Its place no
+    // longer shows that: `google` is not Pinyin-shaped, so it leads either way.
+    let standalone_learned = || {
         session.clear().unwrap();
         session.set_preceding_text("代码").unwrap();
         type_keys(&session, "google");
-        texts(&session).remove(0)
+        let page = session.snapshot().unwrap();
+        let index = page.texts().iter().position(|c| *c == "google").unwrap();
+        page.candidates[index].personal_source() == Some(PersonalSource::ExactEnglish)
     };
     let end_undo_window = || {
         session.key(0xff09, 0).unwrap();
@@ -2257,7 +2260,7 @@ fn mixed_selection_learning() {
         (1, false),
         "an unlearned sentence stays behind the Chinese reading"
     );
-    assert_ne!(standalone_first(), "google");
+    assert!(!standalone_learned());
 
     // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
     session.clear().unwrap();
@@ -2281,7 +2284,7 @@ fn mixed_selection_learning() {
         (1, false),
         "Return, cancel and an immediate undo learn nothing"
     );
-    assert_ne!(standalone_first(), "google");
+    assert!(!standalone_learned());
 
     // A regular selection learns the run with its display and lowercase code.
     choose(&session, google, google_sentence);
@@ -2291,9 +2294,8 @@ fn mixed_selection_learning() {
         (0, true),
         "the learned sentence leads"
     );
-    assert_eq!(
-        standalone_first(),
-        "google",
+    assert!(
+        standalone_learned(),
         "the same record serves standalone English"
     );
 
