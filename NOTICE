@@ -25,3 +25,10 @@ modifications and generation recipe, license texts) as
 InkFlow-<version>-<build>-dictionary-source.tar.gz, built by
 macOS/scripts/dictionary-source-bundle.sh. InkFlow's license does not grant
 rights held by third parties.
+
+The Rime grammar model zh-hans-t-essay-bgc.gram (lotem/rime-octagram-data,
+LGPL-3.0) ships unmodified beside the dictionaries; its provenance, license and
+replacement instructions are in macOS/Licenses/octagram-grammar-LGPL-3.0.txt, and
+the dictionary source bundle carries the unmodified file. The librime-octagram
+plugin (BSD-3-Clause) is merged into the shipped librime;
+see macOS/Licenses/librime-octagram.txt.

@@ -14,6 +14,7 @@ build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; d
   printf '%s  %s\n' "$sha" "$root/upstream/dictionary-sources/$id.yaml" | shasum -a 256 -c - >/dev/null
 done
 for file in upstream/deps/pinyin.tar.gz upstream/deps/english.tar.gz upstream/deps/emoji.txt \
+  upstream/deps/zh-hans-t-essay-bgc.gram LICENSES/octagram-grammar-LGPL-3.0.txt LICENSES/librime-octagram.txt \
   LICENSES/rime-frost.txt LICENSES/rime-ice.txt LICENSES/easy-en-LGPL-3.0.txt LICENSES/easy-en-GPL-3.0.txt \
   LICENSES/wordfreq.txt LICENSES/pinyin-simp.txt LICENSES/opencc.txt LICENSES/chinese-dictionaries-NOTICE.txt \
   inkflow/LICENSE inkflow/NOTICE inkflow/Core/Package.swift inkflow/Core/Sources/InkFlowDomain/DictionaryGenerator.swift \
@@ -23,6 +24,12 @@ for file in upstream/deps/pinyin.tar.gz upstream/deps/english.tar.gz upstream/de
   generated/dictionary-manifest.json SOURCES.tsv README.md; do
   [[ -s "$root/$file" ]] || { echo "Missing $file" >&2; exit 1; }
 done
+# The grammar model is the unmodified pinned file, recorded with its license.
+model=$(sed -nE 's/^fetch zh-hans-t-essay-bgc.gram ([0-9a-f]{64}) .*/\1/p' Core/scripts/resource-dependencies.sh)
+[[ -n "$model" ]] || fail
+printf '%s  %s\n' "$model" "$root/upstream/deps/zh-hans-t-essay-bgc.gram" | shasum -a 256 -c - >/dev/null
+grep -q "^Octagram grammar model, unmodified.*LGPL-3.0" "$root/SOURCES.tsv" || fail
+grep -q "$model" "$root/LICENSES/octagram-grammar-LGPL-3.0.txt" || fail
 grep -q "$(git rev-parse HEAD)" "$root/README.md"
 grep -q 'build 123' "$root/README.md"
 ! grep -qi 'sogou\|rime-selected' "$root/SOURCES.tsv" || fail

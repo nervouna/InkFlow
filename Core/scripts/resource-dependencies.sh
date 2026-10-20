@@ -15,6 +15,8 @@ fetch() {
 }
 fetch pinyin.tar.gz 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf https://codeload.github.com/rime/rime-pinyin-simp/tar.gz/0c6861ef7420ee780270ca6d993d18d4101049d0
 fetch english.tar.gz 59226ae1bb6da00d8808a0094439271225ac4f533d30cf9150ac482383895461 https://codeload.github.com/BlindingDark/rime-easy-en/tar.gz/54a4a07289412efc54134092c0d945f895a71ed3
+# lotem/rime-octagram-data (LGPL-3.0), branch hans: the grammar model librime-octagram loads, 10,397,740 bytes.
+fetch zh-hans-t-essay-bgc.gram c52deb56b1642e4f56a18926fffcb4b70385828f921bfac92c5ff4055cce5377 https://raw.githubusercontent.com/lotem/rime-octagram-data/f8ce3b534733e489a8470a7c2adf5a154e8ea069/zh-hans-t-essay-bgc.gram
 fetch emoji.txt 09e29b83ad367ea273e9ab438e572a7621649d93b36924ead28852762d2898b1 https://raw.githubusercontent.com/iDvel/rime-ice/fbb516b2786e4d5444383706d13c31c2e4d10c08/opencc/emoji.txt
 # Restore source files from verified archives if extraction is missing or changed.
 for entry in \

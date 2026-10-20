@@ -51,6 +51,9 @@ package struct DictionaryPreparationRegression: Sendable {
         let version = try store.adopt(candidate, fingerprint: fingerprint)
         let descriptor = try store.resolve(version, fingerprint: fingerprint)
         check(descriptor.manifest.entryCount == IFDictionaryCatalog.initialEntryCount, "Full union entry count")
+        let model = descriptor.sharedData.appendingPathComponent("zh-hans-t-essay-bgc.gram")
+        check(FileManager.default.fileExists(atPath: model.path),
+              "The worker's copy of the bundled resources carries the grammar model")
         check(FileManager.default.fileExists(atPath: descriptor.sharedData.deletingLastPathComponent().appendingPathComponent("raw/frost-8105.dict.yaml").path), "Retain verified inert sources for offline correction changes")
         try store.beginActivation(version)
         try store.confirmActivation(version)

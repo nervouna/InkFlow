@@ -95,6 +95,7 @@ cp -R schemas/. "$fixture/schemas/"
 printf '%s\n' '---' 'name: pinyin_simp' '...' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '中文\tzhong wen\t1000\n' >> "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '微笑\t微笑 😊\n' > "$fixture/build/deps/emoji.txt"
+printf 'fixture grammar model\n' > "$fixture/build/deps/zh-hans-t-essay-bgc.gram"
 cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'DATA'
 ---
 name: easy_en
@@ -154,6 +155,7 @@ generate() {
   records "$fixture/output/inkflow_mixed.dict.yaml" > "$fixture/mixed.tsv"
   cmp "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml" "$fixture/output/pinyin_simp.dict.yaml"
   cmp "$fixture/build/deps/emoji.txt" "$fixture/output/opencc/emoji.txt"
+  cmp "$fixture/build/deps/zh-hans-t-essay-bgc.gram" "$fixture/output/zh-hans-t-essay-bgc.gram"
   cmp "$fixture/schemas/opencc/inkflow_emoji.json" "$fixture/output/opencc/inkflow_emoji.json"
 }
 expect_failure() {

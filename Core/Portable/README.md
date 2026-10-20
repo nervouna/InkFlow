@@ -27,7 +27,7 @@ bash macOS/scripts/test.sh portable
 
 The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. On macOS the native libraries and the release Rust archive target the app's minimum system version, read from `LSMinimumSystemVersion` in `macOS/Info.plist` (`deploymentTarget` in `native-build.json`), so they load wherever the app does. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture or that version.
 
-`native-sources.lock.json` pins source commits, URLs, and SHA-256 hashes. librime is the shipping 1.17.0 revision. Its glog, LevelDB, marisa, OpenCC, and yaml-cpp pins follow that revision's submodules; Boost remains 1.89.0. The Lua plugin is pinned to its last upstream commit before the 1.17.0 release, with Lua 5.4.8 from its pinned thirdparty tree.
+`native-sources.lock.json` pins source commits, URLs, and SHA-256 hashes. librime is the shipping 1.17.0 revision. Its glog, LevelDB, marisa, OpenCC, and yaml-cpp pins follow that revision's submodules; Boost remains 1.89.0. The Lua plugin is pinned to its last upstream commit before the 1.17.0 release, with Lua 5.4.8 from its pinned thirdparty tree. librime-octagram (BSD-3-Clause; its `master` head of 2026-08-31, because it has no tags or releases) is merged beside it with its `build_grammar` tool off: it registers Rime's `grammar` component, and the bridge loads its `octagram` module group and refuses to start without that component. A merged plugin without `grammar/language` is not a no-op: `Poet` gets a non-null grammar, so sentence assembly runs a beam search with a constant −12 per query instead of the dynamic program with −13.8155. `build-native.py --without-octagram` leaves the plugin and the module out; it exists only to build the replay `off` arm in a second worktree. The model `zh-hans-t-essay-bgc.gram` is a pinned build input (`Core/scripts/resource-dependencies.sh`) that ships beside the schema; Rime reads it only when the schema has a `grammar` node, which stays commented out until the replay arms below meet the exit criteria of [#131](https://github.com/nervouna/InkFlow/issues/131).
 
 Both desktops build the same source graph. The build links static dependencies and the Lua plugin into a shared librime, then compiles both existing `InkFlowRimeNative` source files against that build's installed headers and generated configuration. External plugin discovery is disabled. The narrow C++ bridge registers `inkflow_mixed_personal` after every initialization and checks its presence. No host librime or Homebrew C++ headers are used for the native extension.
 
@@ -94,6 +94,54 @@ Without `--context-index` the `ranked` arm is not run. The checked-in fixture ra
 - **Ship rule.** Any ranking change ships when paired `fixed - broken > 0` and the McNemar `p < 0.05` on distinct `(raw_input, selected_text)` pairs, in list or engine replay. Report it with the distinct count and the per-class and per-bucket breakdown, never as a comparison of two unpaired windows.
 - **Sample size.** About 2.4k, 6.3k and 13k decisions are needed to see +1, +0.5 and +0.3 percentage points at disagreement rates of 3%, 2% and 1.5%. This is `n = d * (2.8 / delta)^2` for 80% power at two-sided 0.05, with `d` the share of decisions on which the two arms differ in outcome and `delta` the net gain.
 - **Replay files** stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off.
+
+## Engine-mode replay and the octagram arms
+
+`replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--record NAME=FILE ...] [--json]` runs the real engine on the same case files as list mode and compares **arms with each other**. A live arm (`NAME=RESOURCES`, a `prepare-resources.sh` output) starts one `Engine` on those resources with an absent user directory and `set_configuration(9, &[], Some(&InputPreferences::default()))`. Per case it clears the session, sets `preceding_context`, types `raw_input` and snapshots the first page; it never selects or commits, so nothing is learned. The user directory is a scratch directory removed afterwards, and one arm finishes before the next engine starts (Rime is process-global).
+
+Each arm is scored on the first candidate against `selected_text` (a hit), and, for `segmentation` cases, on the longest candidate whose evidence covers the whole input against `committed_text`. The report gives, per arm, its first-candidate hits, how often its first candidate equals the recorded `displayed` leader (below 100%: the records came from a trained user dictionary, which a fresh engine does not have), the whole-input hits and the hits per class; then, for every pair of arms in the order given (the earlier one is the base), fixed, broken, distinct counts and the McNemar p-value in list mode's table, plus a `whole_input` row on the segmentation cases. Counts of two arms are only comparable with each other.
+
+`--record NAME=FILE` writes a live arm's outcomes as JSON Lines (a header with `generated_at`, then `id` (the `decision_id`), `first`, `longest`, `first_hit` and `longest_hit` per case), and `--arm NAME=@FILE` loads such a file as an arm. That is how an arm from another binary joins the comparison. Record files hold typed text and follow the case files' rules: they are created new and owner-only, refused inside the repository, refused after the 28 days the header allows (it carries the case file's `generated_at`), and deleted after the run.
+
+The arms of [#131](https://github.com/nervouna/InkFlow/issues/131) differ only in the grammar:
+
+| Arm | What it is | How it is made |
+| --- | --- | --- |
+| `off` | librime built without the octagram module | a second worktree built with `build-native.py --without-octagram`, recorded with `--record` |
+| `plugin` | module loaded, no `grammar` node | `replay-arms.sh` |
+| `bgc` | `grammar: {language: zh-hans-t-essay-bgc, collocation_max_length: 5, collocation_min_length: 2}` | `replay-arms.sh` |
+| `bgw` | the same node with the larger `zh-hans-t-essay-bgw.gram` (40,925,228 bytes, fetched only by `replay-arms.sh`, SHA-256 pinned there, never bundled) | `replay-arms.sh` |
+| `bgc-lotem` | `bgc` without `max_homophones: 7` and `max_homographs: 7` | `replay-arms.sh lotem` records it |
+
+`replay-arms.sh PREPARED_RESOURCES ARMS_DIRECTORY` copies the prepared `shared/` once per arm, replaces only the schema's `grammar` node and the `.gram` file, compiles the cache again with `prepare-resources`, and prints the `--arm` arguments. `bgc-lotem` cannot be a resource arm: the two limits are in the engine's runtime patch of the `translator` node (`engine.rs`, which replaces the node whole), and the engine gets no replay-only switch. `replay-arms.sh lotem ARMS_DIRECTORY CASES RECORD_FILE` builds the same sources without those two lines in a scratch tree against the same native prefix, replays the `bgc` arm with that binary and records it; the repository is not touched.
+
+```sh
+export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
+query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
+python3 "$query" replay-cases --since 2026-10-15 --until 2026-10-21 --output "$TMPDIR/cases.jsonl"
+# This checkout (octagram build): prepared resources with the committed schema, then the live arms.
+bash Core/Portable/prepare-resources.sh          # prints "PASS production resources: build/portable/resources.XXXXXX"
+bash Core/Portable/replay-arms.sh build/portable/resources.XXXXXX build/portable/replay-arms
+bash Core/Portable/replay-arms.sh lotem build/portable/replay-arms "$TMPDIR/cases.jsonl" "$TMPDIR/lotem.jsonl"
+# The off arm: a second worktree without the module, replayed on the plugin arm's resources.
+git worktree add --detach .worktrees/off-arm HEAD
+cp build/portable/*.tar.* .worktrees/off-arm/build/portable/    # create build/portable there first
+(cd .worktrees/off-arm &&
+  python3 Core/Portable/build-native.py --without-octagram &&
+  CARGO_TARGET_DIR="$PWD/build/portable/cargo" cargo build --locked --release \
+    --manifest-path Core/Portable/Cargo.toml --bin replay &&
+  build/portable/cargo/release/replay engine "$TMPDIR/cases.jsonl" \
+    --arm off="$OLDPWD/build/portable/replay-arms/plugin" --record off="$TMPDIR/off.jsonl")
+# Compare, off first so that every row reads against it.
+arms="$PWD/build/portable/replay-arms"
+cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin replay -- \
+  engine "$TMPDIR/cases.jsonl" --arm off=@"$TMPDIR/off.jsonl" --arm plugin="$arms/plugin" \
+  --arm bgc="$arms/bgc" --arm bgw="$arms/bgw" --arm bgc-lotem=@"$TMPDIR/lotem.jsonl"
+rm "$TMPDIR"/cases.jsonl "$TMPDIR"/off.jsonl "$TMPDIR"/lotem.jsonl
+git worktree remove .worktrees/off-arm
+```
+
+`tests/replay.rs` replays `fixtures/replay-cases.json` this way: recorded arms reproduce list mode's pairwise counts without Rime, and with `INKFLOW_PORTABLE_RESOURCES` set two live arms on the prepared resources must agree, record, and reload as the same arm. `performance.sh` on an arm's directory measures it against the approved limits (`bgc` against the same limits as the shipped engine).
 
 ## Personal learning and portable personal data
 

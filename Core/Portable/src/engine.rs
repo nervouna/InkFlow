@@ -647,7 +647,9 @@ impl Engine {
             return Ok(Err(ConfigurationError::MissingPrism));
         }
         let yaml = format!(
-            "{}\nmenu:\n  page_size: {}\ntranslator:\n  dictionary: pinyin_simp\n  prism: {profile}\n  preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']",
+            "{}\nmenu:\n  page_size: {}\ntranslator:\n  dictionary: pinyin_simp\n  prism: {profile}\
+             \n  preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']\
+             \n  max_homophones: 7\n  max_homographs: 7",
             core.requested_input.schema_patch(),
             core.requested_count
         );

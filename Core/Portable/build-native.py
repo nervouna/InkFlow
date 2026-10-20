@@ -29,6 +29,10 @@ def run(*args, cwd=None):
 def main():
     if sys.platform not in ('linux', 'darwin'):
         raise SystemExit('Only Linux and macOS are supported by this probe')
+    if sys.argv[1:] not in ([], ['--without-octagram']):
+        raise SystemExit('Usage: build-native.py [--without-octagram]')
+    # Only the replay "off" arm is built this way; the product always merges octagram.
+    octagram = not sys.argv[1:]
     target = deployment_target()
     if target:
         # clang, b2 and rustc read this variable; CMake also gets it explicitly below.
@@ -37,6 +41,8 @@ def main():
     sources = BUILD / 'sources'
     sources.mkdir(parents=True, exist_ok=True)
     for name, item in lock.items():
+        if name == 'rime-octagram' and not octagram:
+            continue
         archive = BUILD / (name + ('.tar.bz2' if name == 'boost' else '.tar.gz'))
         if not archive.exists():
             part = archive.with_suffix('.part')
@@ -56,6 +62,9 @@ def main():
     plugin = sources / 'rime/plugins/lua'
     if not plugin.exists():
         plugin.symlink_to(sources / 'rime-lua', target_is_directory=True)
+    plugin = sources / 'rime/plugins/octagram'
+    if octagram and not plugin.exists():
+        plugin.symlink_to(sources / 'rime-octagram', target_is_directory=True)
     thirdparty = sources / 'rime-lua/thirdparty'
     if not thirdparty.exists():
         thirdparty.symlink_to(sources / 'lua', target_is_directory=True)
@@ -93,18 +102,20 @@ def main():
         '--layout=system', f'--prefix={PREFIX}', 'install', cwd=boost)
     cmake('rime', '-DBUILD_SHARED_LIBS=ON', '-DBUILD_STATIC=ON', '-DBUILD_TEST=OFF',
           '-DBUILD_MERGED_PLUGINS=ON', '-DENABLE_EXTERNAL_PLUGINS=OFF',
+          # The merged plugin's build_grammar tool is neither built nor installed.
+          '-DBUILD_TOOLS=OFF',
           '-DINSTALL_PRIVATE_HEADERS=ON', '-DENABLE_TIMESTAMP=OFF',
           '-DCMAKE_DISABLE_FIND_PACKAGE_Gflags=ON',
           f'-DBOOST_ROOT={PREFIX}', f'-DBoost_INCLUDE_DIR={PREFIX}/include',
           # Shared librime and prefix/bin tools both need relocatable lookup.
           f'-DCMAKE_INSTALL_RPATH={PREFIX / "lib" if sys.platform == "darwin" else "$ORIGIN;$ORIGIN/../lib"}')
-    cmake('bridge', source=HERE / 'native')
+    cmake('bridge', f'-DINKFLOW_OCTAGRAM={"ON" if octagram else "OFF"}', source=HERE / 'native')
     cache = (BUILD / 'cmake-bridge/CMakeCache.txt').read_text().splitlines()
     compiler = next(line.split('=', 1)[1] for line in cache
                     if line.startswith('CMAKE_CXX_COMPILER:FILEPATH='))
     (BUILD / 'native-build.json').write_text(json.dumps({
         'platform': sys.platform, 'machine': os.uname().machine, 'deploymentTarget': target,
-        'sources': lock,
+        'sources': lock, 'octagram': octagram,
         'cmake': subprocess.check_output(['cmake', '--version'], text=True).splitlines()[0],
         'compiler': subprocess.check_output([compiler, '--version'], text=True).strip(),
         'rust': subprocess.check_output(['rustc', '--version'], cwd=ROOT, text=True).strip(),

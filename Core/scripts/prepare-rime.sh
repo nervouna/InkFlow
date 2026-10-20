@@ -21,7 +21,9 @@ for input_root in rust-toolchain.toml Core/Package.swift Core/Sources Core/Tools
   [[ -e "$input_root" ]] || continue
   find "$input_root" -type f -print
 done | LC_ALL=C sort | while IFS= read -r file; do "${sha256[@]}" "$file"; done > "$manifest"
-[[ ! -f build/deps/emoji.txt ]] || "${sha256[@]}" build/deps/emoji.txt >> "$manifest"
+for file in build/deps/emoji.txt build/deps/zh-hans-t-essay-bgc.gram; do
+  [[ ! -f "$file" ]] || "${sha256[@]}" "$file" >> "$manifest"
+done
 input_digest=$("${sha256[@]}" "$manifest" | awk '{print $1}')
 cache="$PWD/build/rime-cache/$input_digest"
 if [[ ! -f "$cache/complete" || ! -d "$cache/content" ]]; then
@@ -128,6 +130,7 @@ cp schemas/*.yaml "$destination/"
 cp schemas/lua/*.lua "$destination/lua/"
 mkdir -p "$destination/opencc"
 cp schemas/opencc/* build/deps/emoji.txt "$destination/opencc/"
+cp build/deps/zh-hans-t-essay-bgc.gram "$destination/"
 bash Core/scripts/prepare-chinese.sh "$staging/chinese"
 cp "$staging/chinese/"* "$destination/"
 bash Core/scripts/prepare-spelling.sh "$destination"

@@ -89,7 +89,8 @@ def main():
         copy(ROOT / name, notices / ('InkFlow-' + name))
     for name in ('chinese-dictionaries-NOTICE.txt', 'easy-en-GPL-3.0.txt',
                  'easy-en-LGPL-3.0.txt', 'pinyin-simp.txt', 'rime-frost.txt',
-                 'rime-ice.txt', 'technology-english-NOTICE.txt', 'wordfreq.txt', 'opencc.txt'):
+                 'rime-ice.txt', 'technology-english-NOTICE.txt', 'wordfreq.txt', 'opencc.txt',
+                 'octagram-grammar-LGPL-3.0.txt'):
         copy(ROOT / 'macOS/Licenses' / name, notices / 'dictionary' / name)
 
     lock = json.loads((ROOT / 'Core/Portable/native-sources.lock.json').read_text())
@@ -98,7 +99,7 @@ def main():
         copy(BUILD / archive, source / 'native' / archive, item['sha256'])
     native = BUILD / 'sources'
     required = ['rime/LICENSE', 'rime/include/COPYING.darts-clone', 'rime/include/utf8.h',
-                'rime-lua/LICENSE', 'rime-lua/src/lib/lauxlib-compat.c',
+                'rime-lua/LICENSE', 'rime-octagram/LICENSE', 'rime-lua/src/lib/lauxlib-compat.c',
                 'lua/lua5.4/lua.h', 'boost/LICENSE_1_0.txt', 'glog/COPYING',
                 'leveldb/LICENSE', 'marisa/COPYING.md', 'yaml/LICENSE', 'opencc/LICENSE']
     utf8 = 'rime-lua/src/lib/lutf8lib-compat.c'
@@ -116,7 +117,7 @@ def main():
 
     recipe = (ROOT / 'Core/scripts/resource-dependencies.sh').read_text()
     inputs = re.findall(r'^fetch (\S+) ([0-9a-f]{64}) (https:\S+)$', recipe, re.M)
-    if len(inputs) != 3:
+    if len(inputs) != 4:
         raise SystemExit('Review changed dictionary download recipe')
     for name, sha, _ in inputs:
         copy(ROOT / 'build/deps' / name, source / 'deps' / name, sha)

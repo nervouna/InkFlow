@@ -15,6 +15,7 @@ destination = root / 'macOS/Licenses'
 sources = root / 'build/portable/sources'
 # marisa offers BSD-2-Clause or LGPL-2.1-or-later; COPYING.md carries both texts.
 native = {'glog.txt': 'glog/COPYING', 'leveldb.txt': 'leveldb/LICENSE',
+          'librime-octagram.txt': 'rime-octagram/LICENSE',
           'marisa.txt': 'marisa/COPYING.md', 'yaml-cpp.txt': 'yaml/LICENSE'}
 
 manifest = str(root / 'Core/Portable/Cargo.toml')

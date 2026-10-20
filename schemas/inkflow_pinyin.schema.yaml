@@ -52,6 +52,11 @@ translator:
   preedit_format:
     - xform/([nl])v/$1ü/
     - xform/([jqxy])v/$1u/
+# #131 enables the grammar once the engine-mode replay arms meet its exit criteria.
+# grammar:
+#   language: zh-hans-t-essay-bgc
+#   collocation_max_length: 5
+#   collocation_min_length: 2
 english:
   dictionary: easy_en
   user_dict: inkflow_shared_english

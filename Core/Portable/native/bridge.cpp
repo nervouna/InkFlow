@@ -43,6 +43,14 @@ struct Commit {
   ~Commit() { api()->free_commit(&value); }
 };
 const char* text(const char* value) { return value ? value : ""; }
+// The merged octagram module group loads "grammar", whose component exists only once it has loaded.
+bool octagram_ready() {
+#ifdef INKFLOW_OCTAGRAM
+  return api()->find_module("octagram") && rime::Registry::instance().Find("grammar");
+#else
+  return true;
+#endif
+}
 }
 
 extern "C" const char* ifp_version() { return api()->get_version(); }
@@ -63,12 +71,16 @@ extern "C" int ifp_initialize(const char* shared, const char* user, const char* 
     traits.min_log_level = 2;
     // An empty log_dir sends glog to stderr, so no log files are written.
     traits.log_dir = "";
+#ifdef INKFLOW_OCTAGRAM
+    static const char* modules[] = {"default", "deployer", "lua", "octagram", nullptr};
+#else
     static const char* modules[] = {"default", "deployer", "lua", nullptr};
+#endif
     traits.modules = modules;
     api()->setup(&traits);
     api()->initialize(&traits);
     IFRegisterRimeNativeComponents();
-    if (!api()->find_module("lua") ||
+    if (!api()->find_module("lua") || !octagram_ready() ||
         !rime::Registry::instance().Find("inkflow_mixed_personal")) {
       api()->finalize();
       return -1;

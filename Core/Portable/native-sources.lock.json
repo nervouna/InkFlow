@@ -39,6 +39,11 @@
     "sha256": "70f43164aaec58a22cb92774d61b19d206563cc62a08954832c2dfd416cf8fd8",
     "revision": "fa40fadd8af1e5b1fbd55703ccbd54476956d74c"
   },
+  "rime-octagram": {
+    "url": "https://codeload.github.com/lotem/librime-octagram/tar.gz/57d18b9f58e5284bd891d559f6bdd16cf60341e9",
+    "sha256": "7b9c77bcf17566b64204791b72cdb1b4471e22efec5eef9b79ca764ab99a1576",
+    "revision": "57d18b9f58e5284bd891d559f6bdd16cf60341e9"
+  },
   "boost": {
     "url": "https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.bz2",
     "sha256": "85a33fa22621b4f314f8e85e1a5e2a9363d22e4f4992925d4bb3bc631b5a0c7a",

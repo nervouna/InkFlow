@@ -1,8 +1,9 @@
 #!/bin/bash
 # Corresponding-source bundle for the compiled dictionary resources: the verified
 # pinned upstream inputs (GPL-3.0 rime-frost, rime-ice and emoji data, LGPL-3.0
-# rime-easy-en, Apache-2.0 rime-pinyin-simp), InkFlow's generation recipe as
-# committed at HEAD, the license texts and the manifest of the generated dictionary.
+# rime-easy-en and octagram grammar model, Apache-2.0 rime-pinyin-simp), InkFlow's
+# generation recipe as committed at HEAD, the license texts and the manifest of the
+# generated dictionary.
 #   dictionary-source-bundle.sh OUTPUT.tar.gz [BUILD]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -57,13 +58,16 @@ build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; d
 done
 # Pinned archives and files that dependencies.sh downloads and verifies.
 deps=$(sed -nE 's/^fetch ([^ ]+) ([0-9a-f]{64}) (https:[^ ]+)$/\1 \2 \3/p' Core/scripts/resource-dependencies.sh)
-for file in pinyin.tar.gz english.tar.gz emoji.txt; do
+for file in pinyin.tar.gz english.tar.gz zh-hans-t-essay-bgc.gram emoji.txt; do
   url=$(printf '%s\n' "$deps" | awk -v f="$file" '$1 == f {print $3}')
   [[ -n "$url" ]] || { echo "resource-dependencies.sh no longer fetches $file." >&2; exit 1; }
   cp "build/deps/$file" "$root/upstream/deps/$file"
   case "$file" in
     pinyin.tar.gz) record 'Legacy compatibility dictionary (rime/rime-pinyin-simp repository archive)' 'Apache-2.0 (LICENSES/pinyin-simp.txt)' "$url" "upstream/deps/$file" ;;
     english.tar.gz) record 'English dictionary input (BlindingDark/rime-easy-en repository archive)' 'LGPL-3.0 with GPL-3.0 (LICENSES/easy-en-LGPL-3.0.txt, easy-en-GPL-3.0.txt)' "$url" "upstream/deps/$file" ;;
+    zh-hans-t-essay-bgc.gram)
+      record 'Octagram grammar model, unmodified (lotem/rime-octagram-data zh-hans-t-essay-bgc.gram)' \
+        'LGPL-3.0 (LICENSES/octagram-grammar-LGPL-3.0.txt, easy-en-GPL-3.0.txt)' "$url" "upstream/deps/$file" ;;
     emoji.txt) record 'Emoji conversion table (iDvel/rime-ice opencc/emoji.txt)' 'GPL-3.0 (LICENSES/rime-ice.txt)' "$url" "upstream/deps/$file" ;;
   esac
 done
@@ -97,8 +101,9 @@ does not change those obligations.
 
 - \`upstream/dictionary-sources/\`: the pinned Rime Frost, Rime Ice and compatibility
   dictionary files the Chinese generator reads, byte-identical to the verified downloads.
-- \`upstream/deps/\`: the pinned rime-pinyin-simp and rime-easy-en repository archives and
-  the Rime Ice emoji table, as fetched by \`inkflow/Core/scripts/resource-dependencies.sh\`.
+- \`upstream/deps/\`: the pinned rime-pinyin-simp and rime-easy-en repository archives, the
+  unmodified octagram grammar model and the Rime Ice emoji table, as fetched by
+  \`inkflow/Core/scripts/resource-dependencies.sh\`.
 - \`inkflow/\`: the generation recipe at the commit above: the Rust generator
   (\`Core/Portable/dictionary\`), its Swift wrapper (\`Core/Sources/InkFlowDomain\`), the source
   catalog, corrections and admission policy (\`Core/config\`), the wordfreq snapshot and technical-English selection (\`Core/Data\`),

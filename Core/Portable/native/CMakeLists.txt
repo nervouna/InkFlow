@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(inkflow_rime_bridge LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
+# Load the merged librime-octagram module; build-native.py --without-octagram turns it off.
+option(INKFLOW_OCTAGRAM "Load the merged librime-octagram module" ON)
 find_library(RIME_LIBRARY rime REQUIRED PATHS "${CMAKE_INSTALL_PREFIX}/lib" NO_DEFAULT_PATH)
 find_path(RIME_INCLUDE rime_api.h REQUIRED PATHS "${CMAKE_INSTALL_PREFIX}/include" NO_DEFAULT_PATH)
 add_library(inkflow_rime_bridge STATIC bridge.cpp
@@ -12,6 +14,9 @@ target_include_directories(inkflow_rime_bridge SYSTEM PRIVATE "${RIME_INCLUDE}"
 target_compile_definitions(inkflow_rime_bridge PRIVATE BOOST_DLL_USE_STD_FS
   GLOG_EXPORT= GLOG_NO_EXPORT= "GLOG_DEPRECATED=__attribute__((deprecated))")
 target_compile_options(inkflow_rime_bridge PRIVATE -Wall -Wextra -Werror)
+if(INKFLOW_OCTAGRAM)
+  target_compile_definitions(inkflow_rime_bridge PRIVATE INKFLOW_OCTAGRAM)
+endif()
 target_link_libraries(inkflow_rime_bridge PRIVATE "${RIME_LIBRARY}")
 install(TARGETS inkflow_rime_bridge ARCHIVE DESTINATION lib)
 install(FILES bridge.h DESTINATION include)

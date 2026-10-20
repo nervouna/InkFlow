@@ -49,6 +49,8 @@ private enum DictionaryStoreRegression {
         try validationFailures(root: root, resources: resources, fingerprint: fingerprint)
         try cleanupTests(root: root, fingerprint: fingerprint)
     }
+    /// The grammar model every prepared version carries beside its schema (the receipt names it `shared/...`).
+    static let grammarModelPath = "zh-hans-t-essay-bgc.gram"
     static func fixture(store: IFDictionaryStore, resources: URL, fingerprint: String, versionCharacter: String) throws -> IFDictionaryVersion {
         let candidate = try store.candidate()
         let dictionary = Data("---\nname: pinyin_simp\n...\n你好\tni hao\t1\n".utf8)
@@ -62,6 +64,7 @@ private enum DictionaryStoreRegression {
         try dictionary.write(to: shared.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
         try manifest.encoded().write(to: shared.appendingPathComponent(IFDictionaryManifest.filename))
         try IFContextRanker.buildIndex(dictionary: dictionary).write(to: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
+        try Data("grammar fixture".utf8).write(to: shared.appendingPathComponent(grammarModelPath))
         for name in ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles {
             try Data("compiled fixture".utf8).write(to: cache.appendingPathComponent(name))
         }
@@ -162,6 +165,7 @@ private enum DictionaryStoreRegression {
             ("corrupt", "prepared-checksum"), ("missing", "prepared-extra-files"),
             ("extra-shared", "prepared-extra-files"), ("extra-cache", "prepared-extra-files"), ("extra-raw", "prepared-extra-files"),
             ("same-count-replacement", "prepared-extra-files"), ("missing-required-receipt", "prepared-file-missing"),
+            ("missing-grammar-model", "prepared-file-missing"),
             ("invalid-hash", "prepared-checksum"), ("outside-prefix", "prepared-path"),
             ("parent-path", "unsafe-path"), ("empty-component", "unsafe-path"), ("dot-component", "unsafe-path"),
             ("backslash", "unsafe-path"), ("receipt-symlink", "symlink-path"), ("extra-symlink", "symlink-resource"),
@@ -185,6 +189,7 @@ private enum DictionaryStoreRegression {
             case "same-count-replacement":
                 try manager.moveItem(at: directory.appendingPathComponent(cachePath), to: directory.appendingPathComponent("cache/substitute.bin"))
             case "missing-required-receipt": files.removeValue(forKey: cachePath)
+            case "missing-grammar-model": files.removeValue(forKey: "shared/\(grammarModelPath)")
             case "invalid-hash": files[cachePath] = "not-a-sha256"
             case "outside-prefix": files["outside/file"] = files[cachePath]
             case "parent-path": files["cache/../cache/pinyin_simp.table.bin"] = files[cachePath]

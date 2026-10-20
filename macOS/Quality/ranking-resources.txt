@@ -15,6 +15,7 @@ Rime/opencc/emoji.txt
 Rime/opencc/inkflow_emoji.json
 Rime/opencc/inkflow_s2t.json
 Rime/pinyin_simp.dict.yaml
+Rime/zh-hans-t-essay-bgc.gram
 Rime/chinese-overrides.tsv
 Rime/dictionary-manifest.json
 RimePrebuilt/easy_en.table.bin
