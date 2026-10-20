@@ -646,10 +646,17 @@ impl Engine {
         if !self.compiled.join(format!("{profile}.prism.bin")).is_file() {
             return Ok(Err(ConfigurationError::MissingPrism));
         }
+        // spelling_hints makes Rime write a candidate's dictionary spelling into its comment when that
+        // differs from the typed letters; input_coverage reads it to tell corrected spellings apart.
         let yaml = format!(
-            "{}\nmenu:\n  page_size: {}\ntranslator:\n  dictionary: pinyin_simp\n  prism: {profile}\n  preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']",
+            concat!(
+                "{}\nmenu:\n  page_size: {}\n",
+                "translator:\n  dictionary: pinyin_simp\n  prism: {}\n  spelling_hints: 16\n",
+                "  preedit_format: ['xform/([nl])v/$1ü/', 'xform/([jqxy])v/$1u/']",
+            ),
             core.requested_input.schema_patch(),
-            core.requested_count
+            core.requested_count,
+            profile
         );
         // select_schema resets the commit buffer as well as the schema. Preserve completed text
         // even if settings arrive before the frontend has drained the previous key's commit.

@@ -320,6 +320,7 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   assert(ifr_snapshot_candidate_native_index(NULL, 0) == 0 && ifr_snapshot_candidate_native_rank(NULL, 0) == 0);
   assert(ifr_snapshot_candidate_personal_source(NULL, 0) == IFR_PERSONAL_NONE);
   assert(ifr_snapshot_candidate_consumed_input(NULL, 0, &start, &end) == 0 && start == 7 && end == 9);
+  assert(ifr_snapshot_candidate_evidence(NULL, 0) == NULL);
   assert(IFR_NO_REPLY == 23 && "appended to the status enum, never renumbered");
   puts("PASS C ABI: argument validation, fixture runtime lifetime and resource checks");
 }
@@ -801,6 +802,13 @@ static void hooks_checks(const char* resources, const char* scratch) {
   assert(ifr_snapshot_candidate_native_index(shown, count) == 0 && ifr_snapshot_candidate_native_rank(shown, count) == 0);
   assert(ifr_snapshot_candidate_personal_source(shown, count) == IFR_PERSONAL_NONE);
   assert(ifr_snapshot_candidate_consumed_input(shown, count, &start, &end) == 0 && start == 7 && end == 9);
+  for (size_t n = 0; n < count; ++n) {
+    const char* row = ifr_snapshot_candidate_evidence(shown, n);
+    size_t commas = 0;
+    for (const char* c = row; row != NULL && *c; ++c) commas += *c == ',';
+    assert(row != NULL && commas == 7 && "start,end,class,exact,personal,source,type,corrected");
+  }
+  assert(ifr_snapshot_candidate_evidence(shown, count) == NULL);
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 

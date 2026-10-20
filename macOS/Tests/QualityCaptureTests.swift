@@ -67,6 +67,7 @@ struct QualityCaptureTests {
         classification()
         pureSnapshots()
         try await engineAndController(store, db, isolated.settings)
+        try await candidateFacts(store, db)
         try await phraseMatrix(store, db)
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
@@ -87,6 +88,54 @@ struct QualityCaptureTests {
         try await equivalence(shared: shared, scratch: scratch)
         try await stalledWriter(shared: shared, scratch: scratch)
         print("PASS quality capture: actual engine/controller SQLite evidence at \(db.url.path)")
+    }
+
+    /// Every shown candidate carries the engine's own provenance: the Rime translator type and whether a fuzzy or
+    /// algebra rule reached its spelling, with the evidence row they come from. They are stored content-free.
+    @MainActor static func candidateFacts(_ store: QualityStore, _ db: CaptureDatabase) async throws {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        settings.candidateCount = 9
+        /// Selects `text` on the first page of `raw` and returns the stored page-0 decision and its selected candidate.
+        func decide(_ raw: String, _ text: String) async -> (page: QualityPageSnapshot, selected: QualityCandidate) {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            input(raw, control, client)
+            let shown = control.engine!.snapshot().candidates
+            check(shown.count == 9 && shown.contains(text), "\(text) is on the first page of \(raw): \(shown)")
+            digit(shown.firstIndex(of: text)!, control, client)
+            check(client.document == text)
+            await store.flush()
+            let row = db.decisions().last!
+            let page = db.page(row)
+            check(page.page == 0 && page.candidates.count == 9 && row["selected_text"] == text)
+            for candidate in page.candidates {
+                let fields = (candidate.evidence ?? "").split(separator: ",", omittingEmptySubsequences: false)
+                let consistent = fields.count == 8
+                    && candidate.type == String(fields[6])
+                    && candidate.corrected == (fields[7] == "1")
+                check(consistent, "Every page-0 candidate records type, corrected and its evidence row: \(candidate)")
+            }
+            return (page, page.candidates[Int(row["selected_display_index"]!)!])
+        }
+        let native = await decide("pengyou", "朋友")
+        check(native.selected.type == "phrase" && native.selected.corrected == false, "\(native.selected)")
+        let learned = await decide("pengyou", "朋友")
+        check(learned.selected.type == "user_phrase" && learned.selected.corrected == false, "\(learned.selected)")
+        // z/zh, c/ch and s/sh are one setting; zongguo reaches 中国 (zhong guo) only through it.
+        settings.fuzzyEnabled = true
+        let fuzzy = await decide("zongguo", "中国")
+        check(fuzzy.selected.corrected == true && fuzzy.selected.type == "phrase", "\(fuzzy.selected)")
+        settings.fuzzyEnabled = false
+        let green = await decide("lv", "绿")
+        check(green.selected.corrected == false && green.selected.type == "phrase", "\(green.selected)")
+        let redacted = green.page.redactingText()
+        check(redacted.candidates.allSatisfy { $0.text.isEmpty && $0.comment == nil })
+        check(redacted.candidates.map(\.type) == green.page.candidates.map(\.type))
+        check(redacted.candidates.map(\.corrected) == green.page.candidates.map(\.corrected))
+        check(redacted.candidates.map(\.evidence) == green.page.candidates.map(\.evidence))
+        print("PASS candidate facts: phrase, user_phrase, corrected via z/zh (zongguo), lv not corrected, text-free")
     }
 
     @MainActor static func phraseMatrix(_ store: QualityStore, _ db: CaptureDatabase) async throws {

@@ -9,7 +9,18 @@ local M = {}
 -- ranker reads as the lead of the page. A Rime `sentence`, which the poet assembled from
 -- separate words, that covers the whole input is marked 3 in the same field; the ranker lets
 -- a learned English word lead it when it is the page's first candidate.
-local function candidate_metadata(candidate, input_length, technical)
+--
+-- The row ends with two facts the engine records and never ranks on: the Rime `type` of the genuine
+-- candidate (empty unless it is lowercase letters and underscores, at most 32 bytes) and `corrected`,
+-- 1 when the candidate's spelling was reached through a fuzzy or algebra rule. The patched translator
+-- sets `spelling_hints`, so Rime writes the dictionary spelling of a candidate into its comment when
+-- that differs from the typed letters; only the verdict leaves this module, never the comment text.
+local function spelling(text)
+  return (text:gsub("[ ']", ""):gsub("ü", "v"))
+end
+
+local function candidate_metadata(candidate, input, technical)
+  local input_length = #input
   local candidate_type = candidate.type or ""
   local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
   if candidate_type == "user_table" then
@@ -25,11 +36,18 @@ local function candidate_metadata(candidate, input_length, technical)
   elseif candidate_type:match("^mixed_personal_[0-3]$") then
     source, exact, personal = "m", 1, tonumber(candidate_type:sub(-1))
   end
+  -- The type and comment facts come from the genuine candidate: the first one a `uniquified` candidate
+  -- merged, or the original a `simplified` candidate converted. Any other candidate is its own genuine.
+  local genuine = candidate
+  if candidate_type == "simplified" then
+    genuine = candidate:get_genuine()
+  end
   if candidate_type == "uniquified" then
     -- Native deduplication preserves genuine candidates. Read existing evidence
     -- only when it describes this exact displayed text and input span. Do not
     -- prepare translations or reinterpret a merged phrase as learnable input.
     local items = candidate:get_genuines()
+    genuine = items[1]
     if #items <= 256 then
       for _, item in ipairs(items) do
         if item.start == candidate.start and item._end == candidate._end
@@ -51,10 +69,16 @@ local function candidate_metadata(candidate, input_length, technical)
   if candidate_type == "sentence" and exact == 1 and candidate.start == 0 then
     exact = 3
   end
+  local kind = genuine.type or ""
+  if #kind > 32 or not kind:match("^[a-z_]+$") then kind = "" end
+  local comment = genuine.comment or ""
+  local corrected = kind ~= "completion" and comment ~= ""
+      and spelling(comment) ~= spelling(input:sub(candidate.start + 1, candidate._end))
   local has_letter = candidate.text:find("[A-Za-z]") ~= nil
   local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
   local class = has_letter and (has_non_ascii and "m" or "a") or (has_non_ascii and "n" or "o")
-  return table.concat({candidate.start, candidate._end, class, exact, personal, source}, ",")
+  return table.concat({candidate.start, candidate._end, class, exact, personal, source, kind,
+    corrected and 1 or 0}, ",")
 end
 
 local function input_coverage(fields, context)
@@ -73,7 +97,7 @@ local function input_coverage(fields, context)
   for index = offset, offset + count - 1 do
     local candidate = menu:get_candidate_at(index)
     if not candidate then return "failed" end
-    rows[#rows + 1] = candidate_metadata(candidate, #context.input, technical)
+    rows[#rows + 1] = candidate_metadata(candidate, context.input, technical)
   end
   return "ok", table.concat(rows, ";")
 end

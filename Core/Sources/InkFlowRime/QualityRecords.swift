@@ -206,6 +206,14 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
     package var source: String? = nil
     package var consumedInputStart: Int? = nil
     package var consumedInputEnd: Int? = nil
+    /// Rime's candidate type of the genuine candidate (`phrase`, `user_phrase`, `sentence`, `completion`, ...),
+    /// empty when unknown. Content-free; present only with `evidence`.
+    package var type: String? = nil
+    /// A fuzzy or algebra rule reached the candidate's spelling. Content-free; present only with `evidence`.
+    package var corrected: Bool? = nil
+    /// The engine's ranking evidence row, `start,end,class,exact,personal,source,type,corrected`, which
+    /// `parse_metadata` reads. Content-free; present on a candidate only when the engine computed it.
+    package var evidence: String? = nil
     package init(text: String,
         comment: String? = nil,
         displayIndex: Int,
@@ -214,7 +222,10 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
         nativeRank: Int,
         source: String? = nil,
         consumedInputStart: Int? = nil,
-        consumedInputEnd: Int? = nil) {
+        consumedInputEnd: Int? = nil,
+        type: String? = nil,
+        corrected: Bool? = nil,
+        evidence: String? = nil) {
         self.text = text
         self.comment = comment
         self.displayIndex = displayIndex
@@ -224,6 +235,9 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
         self.source = source
         self.consumedInputStart = consumedInputStart
         self.consumedInputEnd = consumedInputEnd
+        self.type = type
+        self.corrected = corrected
+        self.evidence = evidence
     }
 
 }

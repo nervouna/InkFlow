@@ -34,6 +34,12 @@ pub struct Metadata {
     /// input. When it is the page's first candidate, the user's own exact standalone English word
     /// leads it. Transported as `exact` = 3.
     pub sentence: bool,
+    /// Rime's own `candidate.type` of the genuine candidate (`phrase`, `user_phrase`, `sentence`,
+    /// `completion`, `user_table`, ...); empty when the row did not say. Recorded, never ranked on.
+    pub candidate_type: String,
+    /// The candidate's spelling was reached through a fuzzy or algebra rule: Rime's dictionary spelling
+    /// of it differs from the typed letters. Recorded, never ranked on.
+    pub corrected: bool,
 }
 
 /// Where a personal-learning candidate comes from, as quality records keep it.
@@ -54,6 +60,38 @@ impl Metadata {
             Source::Mixed => Some(PersonalSource::ExactMixed),
             Source::Native | Source::Custom => None,
         }
+    }
+
+    /// The row `input_coverage` sends for this candidate: `start,end,class,exact,personal,source,type,corrected`.
+    /// A six-field row parses with an empty type and `corrected` false, so it renders as that.
+    pub fn row(&self) -> String {
+        let class = match self.class {
+            CandidateClass::NonAscii => "n",
+            CandidateClass::Ascii => "a",
+            CandidateClass::Mixed => "m",
+            CandidateClass::Other => "o",
+        };
+        let exact = if self.sentence {
+            3
+        } else if self.lead {
+            2
+        } else {
+            u8::from(self.exact)
+        };
+        let source = match self.source {
+            Source::Native => "n",
+            Source::English => "e",
+            Source::Mixed => "m",
+            Source::Custom => "c",
+        };
+        format!(
+            "{},{},{class},{exact},{},{source},{},{}",
+            self.coverage.start,
+            self.coverage.end,
+            self.personal,
+            self.candidate_type,
+            u8::from(self.corrected),
+        )
     }
 }
 
@@ -76,7 +114,7 @@ pub fn parse_metadata(
             return None;
         }
         let fields: Vec<_> = row.split(',').collect();
-        if fields.len() != 6
+        if !matches!(fields.len(), 6 | 8)
             || fields[..2]
                 .iter()
                 .any(|v| v.is_empty() || !v.bytes().all(|b| b.is_ascii_digit()))
@@ -135,6 +173,21 @@ pub fn parse_metadata(
         {
             return None;
         }
+        // Rows from before the type and corrected fields carry neither.
+        let (candidate_type, corrected) = if fields.len() == 8 {
+            let kind = fields[6];
+            if kind.len() > 32 || !kind.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+                return None;
+            }
+            let corrected = match fields[7] {
+                "0" => false,
+                "1" => true,
+                _ => return None,
+            };
+            (kind.to_string(), corrected)
+        } else {
+            (String::new(), false)
+        };
         result.push(Metadata {
             coverage: start as usize..end as usize,
             class,
@@ -143,6 +196,8 @@ pub fn parse_metadata(
             source,
             lead,
             sentence,
+            candidate_type,
+            corrected,
         });
     }
     (result.len() == count).then_some(result)
@@ -472,6 +527,8 @@ mod tests {
             source,
             lead: false,
             sentence: false,
+            candidate_type: String::new(),
+            corrected: false,
         }
     }
 

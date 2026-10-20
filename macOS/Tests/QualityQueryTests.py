@@ -82,7 +82,8 @@ def fixture(path):
                     page=0 if rank == 1 else 1, pageSize=3, highlightedDisplayIndex=0,
                     presentation=presentation, capturedAt=STAMP,
                     candidates=[dict(text=chosen, displayIndex=0, displayRank=rank,
-                                     nativeIndex=0 if rank == 1 else 1, nativeRank=1 if rank == 1 else 5)])
+                                     nativeIndex=0 if rank == 1 else 1, nativeRank=1 if rank == 1 else 5,
+                                     type='phrase', corrected=False, evidence='0,3,n,1,0,n,phrase,0')])
         first_page = dict(page, page=0, candidates=[dict(text='是', displayIndex=0, displayRank=1, nativeIndex=0, nativeRank=1)])
         insert(db, 'candidate_decisions', id=f'decision-{cid}', composition_id=cid, config_revision_id=revision,
                commit_id=commit_id, occurred_at=STAMP, sequence=0, trigger='space' if regular else 'punctuation',
@@ -280,6 +281,17 @@ class QueryTests(unittest.TestCase):
             visited['configurationRevisionID'] = 'missing'
             db.execute("UPDATE candidate_decisions SET visited_pages_json=? WHERE composition_id='a'", (json.dumps([visited]),))
         self.assertIn('missing configuration', self.run_cli('inspect', 'a', success=False))
+
+    def test_inspect_shows_candidate_ranking_facts(self):
+        candidate = self.result('inspect', 'a')['decisions'][0]['snapshot']['candidates'][0]
+        self.assertEqual((candidate['type'], candidate['corrected'], candidate['evidence']),
+                         ('phrase', False, '0,3,n,1,0,n,phrase,0'))
+        table = self.run_cli('inspect', 'a')
+        for field, value in [('type', '"phrase"'), ('corrected', 'false'), ('evidence', '"0,3,n,1,0,n,phrase,0"')]:
+            self.assertIn(f'$.decisions[0].snapshot.candidates[0].{field} | {value}', table)
+        # Pages recorded without the facts, such as the first page here, still inspect.
+        older = self.result('inspect', 'a')['decisions'][0]['first_page']['candidates'][0]
+        self.assertNotIn('type', older)
 
     def test_summary_exact_denominators_and_ranks(self):
         result = self.result()
@@ -713,12 +725,30 @@ class QueryTests(unittest.TestCase):
 
     def test_timing_actual_controller_writer(self):
         result = self.result('timing', db=ENGINE_DB)
-        self.assertEqual(result['coverage']['compositions'], 45)
+        self.assertEqual(result['coverage']['compositions'], 49)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
         # This engine/controller fixture does not observe native panel visibility.
         self.assertIsNone(result['visibility_observation_interval']['p50'])
         self.assertEqual(result['visibility_observation_interval']['count'], 0)
+
+    def test_actual_engine_candidates_carry_ranking_facts(self):
+        with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as db:
+            facts = set(db.execute('''SELECT json_extract(c.value,'$.type'), json_extract(c.value,'$.corrected')
+                FROM candidate_decisions d, json_each(d.snapshot_json,'$.candidates') c
+                WHERE json_extract(d.snapshot_json,'$.page')=0'''))
+            composition, decision = db.execute('''SELECT composition_id, id FROM candidate_decisions
+                WHERE json_extract(snapshot_json,'$.page')=0 AND json_array_length(snapshot_json,'$.candidates')=9
+                  AND json_extract(snapshot_json,'$.candidates[0].evidence') IS NOT NULL
+                ORDER BY rowid DESC LIMIT 1''').fetchone()
+        self.assertTrue({('phrase', 0), ('phrase', 1), ('user_phrase', 0)} <= facts, facts)
+        inspected = self.result('inspect', composition, db=ENGINE_DB)
+        candidates = next(d for d in inspected['decisions'] if d['id'] == decision)['snapshot']['candidates']
+        self.assertEqual(len(candidates), 9)
+        for candidate in candidates:
+            fields = candidate['evidence'].split(',')
+            self.assertEqual(len(fields), 8)
+            self.assertEqual((candidate['type'], candidate['corrected']), (fields[6], fields[7] == '1'))
 
     def test_actual_engine_schema_and_controller_cohort(self):
         db=sqlite3.connect(ENGINE_DB.as_uri()+'?mode=ro',uri=True)
@@ -727,9 +757,10 @@ class QueryTests(unittest.TestCase):
         # The deferred-toggle then panel-selection fixture adds one valid composition,
         # decision and issued candidate commit; the toggle itself adds no decision.
         # The five custom-phrase matrix cases each add one valid decision/commit.
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[45,41,42])
-        self.assertEqual(result['coverage']['valid'],33)
-        self.assertEqual(result['coverage']['regular_issued'],34)
+        # The four candidate-fact cases (phrase, user_phrase, fuzzy, lv) add one each as well.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[49,45,46])
+        self.assertEqual(result['coverage']['valid'],37)
+        self.assertEqual(result['coverage']['regular_issued'],38)
         self.assertEqual(result['coverage']['regular_not_issued'],1)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)
