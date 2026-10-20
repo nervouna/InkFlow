@@ -1,0 +1,2709 @@
+{
+  "description": "Synthetic replay cases: made-up inputs, no records from any quality database. Each case notes what the three arms are expected to do. The binary reads dictionary and cases; expected holds the list-mode counts the Rust test compares.",
+  "dictionary": "午餐\twu can\t100\n午参\twu can\t60\n午惨\twu can\t50\n吃饭\tchi fan\t90\n吃反\tchi fan\t3\n开会\tkai hui\t120\n开汇\tkai hui\t8\n回家\thui jia\t130\n回佳\thui jia\t2\n看书\tkan shu\t80\n看输\tkan shu\t4\n学习\txue xi\t150\n学洗\txue xi\t2\n上班\tshang ban\t200\n上般\tshang ban\t5\n今天\tjin tian\t300\n今田\tjin tian\t4\n一再\tyi zai\t70\n跑得\tpao de\t60\n跑的\tpao de\t5\n好吧\thao ba\t50\n好把\thao ba\t3\n其他\tqi ta\t200\n吃午餐\tchi wu can\t90\n想回家\txiang hui jia\t80\n",
+  "cases": [
+    {
+      "composition_id": "c01",
+      "decision_id": "d01",
+      "occurred_at": "2026-10-17T09:01:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "准备午",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "餐",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "惨",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "餐",
+      "committed_text": "餐",
+      "note": "display and ranker both promote 餐"
+    },
+    {
+      "composition_id": "c02",
+      "decision_id": "d02",
+      "occurred_at": "2026-10-17T09:02:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "准备午",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "惨",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "餐",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "餐",
+      "committed_text": "餐",
+      "note": "recorded page kept native order; the ranker would fix it"
+    },
+    {
+      "composition_id": "c03",
+      "decision_id": "d03",
+      "occurred_at": "2026-10-17T09:03:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "餐",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "惨",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "餐",
+      "committed_text": "餐",
+      "note": "recorded page promoted 餐 without any context to replay"
+    },
+    {
+      "composition_id": "c04",
+      "decision_id": "d04",
+      "occurred_at": "2026-10-17T09:04:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "准备午",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "惨",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "餐",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "惨",
+      "committed_text": "惨",
+      "note": "user kept the native leader; the ranker would break it"
+    },
+    {
+      "composition_id": "c05",
+      "decision_id": "d05",
+      "occurred_at": "2026-10-17T09:05:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "准备午",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "餐",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "惨",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "参",
+      "committed_text": "参",
+      "note": "third candidate chosen; every arm misses"
+    },
+    {
+      "composition_id": "c06",
+      "decision_id": "d06",
+      "occurred_at": "2026-10-17T09:06:00.000Z",
+      "raw_input": "fan",
+      "preceding_context": "去吃",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "饭",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "反",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "范",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "饭",
+      "committed_text": "饭",
+      "note": "display and ranker both promote 饭 with two characters of context"
+    },
+    {
+      "composition_id": "c07",
+      "decision_id": "d07",
+      "occurred_at": "2026-10-17T09:07:00.000Z",
+      "raw_input": "fan",
+      "preceding_context": "去吃",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "饭",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "反",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "范",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "反",
+      "committed_text": "反",
+      "note": "recorded display promoted 饭 but the user wanted the native leader"
+    },
+    {
+      "composition_id": "c08",
+      "decision_id": "d08",
+      "occurred_at": "2026-10-17T09:08:00.000Z",
+      "raw_input": "fan",
+      "preceding_context": "去吃",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "饭",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "反",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "范",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "范",
+      "committed_text": "范",
+      "note": "every arm misses"
+    },
+    {
+      "composition_id": "c09",
+      "decision_id": "d09",
+      "occurred_at": "2026-10-17T09:09:00.000Z",
+      "raw_input": "hui",
+      "preceding_context": "开",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "汇",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "会",
+      "committed_text": "会",
+      "note": "ranker fixes what the recorded native-order page missed"
+    },
+    {
+      "composition_id": "c10",
+      "decision_id": "d10",
+      "occurred_at": "2026-10-17T09:10:00.000Z",
+      "raw_input": "hui",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "汇",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "汇",
+      "committed_text": "汇",
+      "note": "no context; every arm keeps the native leader and hits"
+    },
+    {
+      "composition_id": "c11",
+      "decision_id": "d11",
+      "occurred_at": "2026-10-17T09:11:00.000Z",
+      "raw_input": "hui",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "汇",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "灰",
+      "committed_text": "灰",
+      "note": "no context; every arm misses"
+    },
+    {
+      "composition_id": "c12",
+      "decision_id": "d12",
+      "occurred_at": "2026-10-17T09:12:00.000Z",
+      "raw_input": "jia",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "家",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "佳",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "加",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "家",
+      "committed_text": "家",
+      "note": "recorded page promoted 家 without context; the ranker keeps 佳"
+    },
+    {
+      "composition_id": "c13",
+      "decision_id": "d13",
+      "occurred_at": "2026-10-17T09:13:00.000Z",
+      "raw_input": "jia",
+      "preceding_context": "想回",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "佳",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "家",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "加",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "佳",
+      "committed_text": "佳",
+      "note": "user kept the native leader; the ranker promotes 家"
+    },
+    {
+      "composition_id": "c14",
+      "decision_id": "d14",
+      "occurred_at": "2026-10-17T09:14:00.000Z",
+      "raw_input": "jia",
+      "preceding_context": "想回",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "家",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "佳",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "加",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "加",
+      "committed_text": "加",
+      "note": "every arm misses"
+    },
+    {
+      "composition_id": "c15",
+      "decision_id": "d15",
+      "occurred_at": "2026-10-17T09:15:00.000Z",
+      "raw_input": "shu",
+      "preceding_context": "看",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "书",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "输",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "树",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "书",
+      "committed_text": "书",
+      "note": "display and ranker both promote 书"
+    },
+    {
+      "composition_id": "c16",
+      "decision_id": "d16",
+      "occurred_at": "2026-10-17T09:16:00.000Z",
+      "raw_input": "shu",
+      "preceding_context": "看",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "书",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "输",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "树",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "输",
+      "committed_text": "输",
+      "note": "recorded display promoted 书 but the user wanted 输"
+    },
+    {
+      "composition_id": "c17",
+      "decision_id": "d17",
+      "occurred_at": "2026-10-17T09:17:00.000Z",
+      "raw_input": "shu",
+      "preceding_context": "看",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "输",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "书",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "树",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "树",
+      "committed_text": "树",
+      "note": "every arm misses"
+    },
+    {
+      "composition_id": "c18",
+      "decision_id": "d18",
+      "occurred_at": "2026-10-17T09:18:00.000Z",
+      "raw_input": "xi",
+      "preceding_context": "学",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "洗",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "习",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "喜",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "习",
+      "committed_text": "习",
+      "note": "ranker fixes what the recorded native-order page missed"
+    },
+    {
+      "composition_id": "c19",
+      "decision_id": "d19",
+      "occurred_at": "2026-10-17T09:19:00.000Z",
+      "raw_input": "xi",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "洗",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "习",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "喜",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "洗",
+      "committed_text": "洗",
+      "note": "no context; every arm hits"
+    },
+    {
+      "composition_id": "c20",
+      "decision_id": "d20",
+      "occurred_at": "2026-10-17T09:20:00.000Z",
+      "raw_input": "ban",
+      "preceding_context": "上",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "班",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "般",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "搬",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "班",
+      "committed_text": "班",
+      "note": "display and ranker both promote 班"
+    },
+    {
+      "composition_id": "c21",
+      "decision_id": "d21",
+      "occurred_at": "2026-10-17T09:21:00.000Z",
+      "raw_input": "ban",
+      "preceding_context": "上",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "般",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "班",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "搬",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "般",
+      "committed_text": "般",
+      "note": "user kept the native leader; the ranker promotes 班"
+    },
+    {
+      "composition_id": "c22",
+      "decision_id": "d22",
+      "occurred_at": "2026-10-17T09:22:00.000Z",
+      "raw_input": "tian",
+      "preceding_context": "今",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "田",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "天",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "甜",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "天",
+      "committed_text": "天",
+      "note": "ranker fixes what the recorded native-order page missed"
+    },
+    {
+      "composition_id": "c23",
+      "decision_id": "d23",
+      "occurred_at": "2026-10-17T09:23:00.000Z",
+      "raw_input": "tian",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "田",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "天",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "甜",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "田",
+      "committed_text": "田",
+      "note": "no context; every arm hits"
+    },
+    {
+      "composition_id": "c24",
+      "decision_id": "d24",
+      "occurred_at": "2026-10-17T09:24:00.000Z",
+      "raw_input": "zai",
+      "preceding_context": "一",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "再",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "在",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "再",
+      "committed_text": "再",
+      "note": "function word 再 promoted by display and ranker"
+    },
+    {
+      "composition_id": "c25",
+      "decision_id": "d25",
+      "occurred_at": "2026-10-17T09:25:00.000Z",
+      "raw_input": "zai",
+      "preceding_context": "一",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "在",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "再",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "在",
+      "committed_text": "在",
+      "note": "function word 在 kept by the user; the ranker promotes 再"
+    },
+    {
+      "composition_id": "c26",
+      "decision_id": "d26",
+      "occurred_at": "2026-10-17T09:26:00.000Z",
+      "raw_input": "de",
+      "preceding_context": "跑",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "的",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "得",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "地",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "得",
+      "committed_text": "得",
+      "note": "ranker fixes 得 after 跑; the recorded page kept 的"
+    },
+    {
+      "composition_id": "c27",
+      "decision_id": "d27",
+      "occurred_at": "2026-10-17T09:27:00.000Z",
+      "raw_input": "de",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "的",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "得",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "地",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "的",
+      "committed_text": "的",
+      "note": "function word 的 leads and is chosen; every arm hits"
+    },
+    {
+      "composition_id": "c28",
+      "decision_id": "d28",
+      "occurred_at": "2026-10-17T09:28:00.000Z",
+      "raw_input": "de",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "的",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "得",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "地",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 2,
+      "selected_text": "地",
+      "committed_text": "地",
+      "note": "function word 地 chosen; every arm misses"
+    },
+    {
+      "composition_id": "c29",
+      "decision_id": "d29",
+      "occurred_at": "2026-10-17T09:29:00.000Z",
+      "raw_input": "ba",
+      "preceding_context": "好",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "吧",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "把",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "爸",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "吧",
+      "committed_text": "吧",
+      "note": "function word 吧: the ranker keeps the native leader"
+    },
+    {
+      "composition_id": "c30",
+      "decision_id": "d30",
+      "occurred_at": "2026-10-17T09:30:00.000Z",
+      "raw_input": "ba",
+      "preceding_context": "好",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "吧",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "把",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "爸",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "把",
+      "committed_text": "把",
+      "note": "function word 把: every arm misses"
+    },
+    {
+      "composition_id": "c31",
+      "decision_id": "d31",
+      "occurred_at": "2026-10-17T09:31:00.000Z",
+      "raw_input": "ta",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "她",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "他",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "它",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "她",
+      "committed_text": "她",
+      "note": "recorded page promoted 她 without context; the ranker keeps 他"
+    },
+    {
+      "composition_id": "c32",
+      "decision_id": "d32",
+      "occurred_at": "2026-10-17T09:32:00.000Z",
+      "raw_input": "can",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "餐",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "惨",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "参",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "餐",
+      "committed_text": "餐",
+      "note": "pair (can, 餐) again with no context"
+    },
+    {
+      "composition_id": "c33",
+      "decision_id": "d33",
+      "occurred_at": "2026-10-17T09:33:00.000Z",
+      "raw_input": "zai",
+      "preceding_context": "一",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "再",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "在",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "再",
+      "committed_text": "再",
+      "note": "pair (zai, 再) repeated with the same outcomes"
+    },
+    {
+      "composition_id": "c34",
+      "decision_id": "d34",
+      "occurred_at": "2026-10-17T09:34:00.000Z",
+      "raw_input": "de",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "的",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "得",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "地",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "得",
+      "committed_text": "得",
+      "note": "pair (de, 得) repeated; the first case differs in its context"
+    },
+    {
+      "composition_id": "c35",
+      "decision_id": "d35",
+      "occurred_at": "2026-10-17T09:35:00.000Z",
+      "raw_input": "hui",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "汇",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,3,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "会",
+      "committed_text": "会",
+      "note": "pair (hui, 会) repeated without context"
+    },
+    {
+      "composition_id": "c36",
+      "decision_id": "d36",
+      "occurred_at": "2026-10-17T09:36:00.000Z",
+      "raw_input": "kaihui",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "开会",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "开汇",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "凯会",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "开会",
+      "committed_text": "开会",
+      "note": "dictionary phrase leads and is chosen"
+    },
+    {
+      "composition_id": "c37",
+      "decision_id": "d37",
+      "occurred_at": "2026-10-17T09:37:00.000Z",
+      "raw_input": "chifan",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "吃饭",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "吃反",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "迟饭",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "吃反",
+      "committed_text": "吃反",
+      "note": "user picked the second phrase; every arm misses"
+    },
+    {
+      "composition_id": "c38",
+      "decision_id": "d38",
+      "occurred_at": "2026-10-17T09:38:00.000Z",
+      "raw_input": "huijia",
+      "preceding_context": "他想",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "回家",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "回佳",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰家",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "回家",
+      "committed_text": "回家",
+      "note": "context favours 回家 over the native 回佳"
+    },
+    {
+      "composition_id": "c39",
+      "decision_id": "d39",
+      "occurred_at": "2026-10-17T09:39:00.000Z",
+      "raw_input": "tianqi",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "天气",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "天启",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "田七",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "天启",
+      "committed_text": "天启",
+      "note": "native leader is a phrase and is chosen"
+    },
+    {
+      "composition_id": "c40",
+      "decision_id": "d40",
+      "occurred_at": "2026-10-17T09:40:00.000Z",
+      "raw_input": "shangbna",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "上班",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": true,
+          "evidence": "0,8,n,1,0,n,phrase,1",
+          "source": null
+        },
+        {
+          "text": "上般",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": true,
+          "evidence": "0,8,n,1,0,n,phrase,1",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "上班",
+      "committed_text": "上班",
+      "note": "two-character phrase with a corrected spelling"
+    },
+    {
+      "composition_id": "c41",
+      "decision_id": "d41",
+      "occurred_at": "2026-10-17T09:41:00.000Z",
+      "raw_input": "zhunbeiwucan",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "准备午餐",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "sentence",
+          "corrected": false,
+          "evidence": "0,12,n,3,0,n,sentence,0",
+          "source": null
+        },
+        {
+          "text": "准备",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "准被",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "准备午餐",
+      "committed_text": "准备午餐",
+      "note": "decoder sentence leads and is chosen"
+    },
+    {
+      "composition_id": "c42",
+      "decision_id": "d42",
+      "occurred_at": "2026-10-17T09:42:00.000Z",
+      "raw_input": "zhunbeiwucan",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "准备午餐",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "sentence",
+          "corrected": false,
+          "evidence": "0,12,n,3,0,n,sentence,0",
+          "source": null
+        },
+        {
+          "text": "准备",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "准被",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "准备",
+      "committed_text": "准备午餐",
+      "note": "user took the first segment of a decoder sentence"
+    },
+    {
+      "composition_id": "c43",
+      "decision_id": "d43",
+      "occurred_at": "2026-10-17T09:43:00.000Z",
+      "raw_input": "womenqukaihui",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "我们去开会",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "sentence",
+          "corrected": false,
+          "evidence": "0,13,n,3,0,n,sentence,0",
+          "source": null
+        },
+        {
+          "text": "我们去",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,7,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "我们",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,5,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "我们去",
+      "committed_text": "我们去开会",
+      "note": "first segment of a longer decoder sentence"
+    },
+    {
+      "composition_id": "c44",
+      "decision_id": "d44",
+      "occurred_at": "2026-10-17T09:44:00.000Z",
+      "raw_input": "kaihuile",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "开会了",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "sentence",
+          "corrected": false,
+          "evidence": "0,8,n,3,0,n,sentence,0",
+          "source": null
+        },
+        {
+          "text": "开会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "开汇了",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,8,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "开会",
+      "committed_text": "开会了",
+      "note": "phrase taken from the head of a sentence"
+    },
+    {
+      "composition_id": "c45",
+      "decision_id": "d45",
+      "occurred_at": "2026-10-17T09:45:00.000Z",
+      "raw_input": "tianqihenhao",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "天气很好",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "sentence",
+          "corrected": false,
+          "evidence": "0,12,n,3,0,n,sentence,0",
+          "source": null
+        },
+        {
+          "text": "天气",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "田七",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "天气很好",
+      "committed_text": "天气很好",
+      "note": "sentence chosen as a whole"
+    },
+    {
+      "composition_id": "c46",
+      "decision_id": "d46",
+      "occurred_at": "2026-10-17T09:46:00.000Z",
+      "raw_input": "xiaoming",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "小明",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "user_phrase",
+          "corrected": false,
+          "evidence": "0,8,n,1,0,n,user_phrase,0",
+          "source": null
+        },
+        {
+          "text": "晓明",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,8,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "小明",
+      "committed_text": "小明",
+      "note": "user dictionary phrase leads and is chosen"
+    },
+    {
+      "composition_id": "c47",
+      "decision_id": "d47",
+      "occurred_at": "2026-10-17T09:47:00.000Z",
+      "raw_input": "zhuti",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "主题",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "user_table",
+          "corrected": false,
+          "evidence": "0,5,n,1,0,n,user_table,0",
+          "source": null
+        },
+        {
+          "text": "主体",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,5,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "主体",
+      "committed_text": "主体",
+      "note": "user table entry leads and misses"
+    },
+    {
+      "composition_id": "c48",
+      "decision_id": "d48",
+      "occurred_at": "2026-10-17T09:48:00.000Z",
+      "raw_input": "huix",
+      "preceding_context": "",
+      "page": 1,
+      "candidates_from": "first_page",
+      "candidates": [
+        {
+          "text": "汇",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "会",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "灰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,4,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "辉",
+      "committed_text": "辉",
+      "note": "paged selection of a single character; the page-1 index is 1"
+    },
+    {
+      "composition_id": "c49",
+      "decision_id": "d49",
+      "occurred_at": "2026-10-17T09:49:00.000Z",
+      "raw_input": "shangbanx",
+      "preceding_context": "",
+      "page": 2,
+      "candidates_from": "first_page",
+      "candidates": [
+        {
+          "text": "上班",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,9,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "上般",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,9,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "尚班",
+      "committed_text": "尚班",
+      "note": "paged selection of a phrase"
+    },
+    {
+      "composition_id": "c50",
+      "decision_id": "d50",
+      "occurred_at": "2026-10-17T09:50:00.000Z",
+      "raw_input": "bing",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "并",
+          "display_index": 0,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        },
+        {
+          "text": "病",
+          "display_index": 1,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        },
+        {
+          "text": "冰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "并",
+      "committed_text": "并",
+      "note": "page recorded without evidence; the display promoted 并"
+    },
+    {
+      "composition_id": "c51",
+      "decision_id": "d51",
+      "occurred_at": "2026-10-17T09:51:00.000Z",
+      "raw_input": "bingx",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "病",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        },
+        {
+          "text": "并",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        },
+        {
+          "text": "冰",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "病",
+      "committed_text": "病",
+      "note": "page recorded without evidence; the user kept the native leader"
+    },
+    {
+      "composition_id": "c52",
+      "decision_id": "d52",
+      "occurred_at": "2026-10-17T09:52:00.000Z",
+      "raw_input": "yi",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "一",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,2,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "以",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": null,
+          "corrected": null,
+          "evidence": null,
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "以",
+      "committed_text": "以",
+      "note": "one candidate lacks its evidence row, so the page is skipped"
+    },
+    {
+      "composition_id": "c53",
+      "decision_id": "d53",
+      "occurred_at": "2026-10-17T09:53:00.000Z",
+      "raw_input": "ke",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "可",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,5,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "课",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,5,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 1,
+      "selected_text": "课",
+      "committed_text": "课",
+      "note": "evidence coverage ends past the input; the ranked arm skips the case"
+    },
+    {
+      "composition_id": "c54",
+      "decision_id": "d54",
+      "occurred_at": "2026-10-17T09:54:00.000Z",
+      "raw_input": "kaihuixx",
+      "preceding_context": "",
+      "page": 0,
+      "candidates_from": "snapshot",
+      "candidates": [
+        {
+          "text": "开会",
+          "display_index": 0,
+          "native_index": 0,
+          "native_rank": 1,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "开汇",
+          "display_index": 1,
+          "native_index": 1,
+          "native_rank": 2,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,6,n,1,0,n,phrase,0",
+          "source": null
+        },
+        {
+          "text": "开会吗",
+          "display_index": 2,
+          "native_index": 2,
+          "native_rank": 3,
+          "type": "phrase",
+          "corrected": false,
+          "evidence": "0,8,n,1,0,n,phrase,0",
+          "source": null
+        }
+      ],
+      "selected_display_index": 0,
+      "selected_text": "开会",
+      "committed_text": "开会",
+      "note": "segment shorter than the input is chosen and hit by every arm"
+    }
+  ],
+  "expected": {
+    "cases": 54,
+    "arms": {
+      "displayed": {
+        "scored": 54,
+        "skipped": {
+          "without_evidence": 0,
+          "unparsable": 0
+        },
+        "scopes": {
+          "all": {
+            "cases": {
+              "cases": 54,
+              "native_hits": 18,
+              "hits": 28,
+              "fixed": 12,
+              "broken": 2
+            },
+            "distinct": {
+              "cases": 48,
+              "native_hits": 18,
+              "hits": 25,
+              "fixed": 9,
+              "broken": 2
+            },
+            "p": 0.0654296875
+          },
+          "dictionary_leader": {
+            "cases": {
+              "cases": 47,
+              "native_hits": 15,
+              "hits": 24,
+              "fixed": 11,
+              "broken": 2
+            },
+            "distinct": {
+              "cases": 41,
+              "native_hits": 15,
+              "hits": 21,
+              "fixed": 8,
+              "broken": 2
+            },
+            "p": 0.109375
+          },
+          "decoder_leader": {
+            "cases": {
+              "cases": 5,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 5,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "segmentation": {
+            "cases": {
+              "cases": 4,
+              "native_hits": 1,
+              "hits": 1,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 4,
+              "native_hits": 1,
+              "hits": 1,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "single_char": {
+            "cases": {
+              "cases": 40,
+              "native_hits": 12,
+              "hits": 21,
+              "fixed": 11,
+              "broken": 2
+            },
+            "distinct": {
+              "cases": 34,
+              "native_hits": 12,
+              "hits": 18,
+              "fixed": 8,
+              "broken": 2
+            },
+            "p": 0.109375
+          },
+          "off_page": {
+            "cases": {
+              "cases": 2,
+              "native_hits": 0,
+              "hits": 0,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 2,
+              "native_hits": 0,
+              "hits": 0,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "function_word": {
+            "cases": {
+              "cases": 10,
+              "native_hits": 3,
+              "hits": 6,
+              "fixed": 3,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 8,
+              "native_hits": 3,
+              "hits": 5,
+              "fixed": 2,
+              "broken": 0
+            },
+            "p": 0.5
+          },
+          "length_1": {
+            "cases": {
+              "cases": 40,
+              "native_hits": 12,
+              "hits": 21,
+              "fixed": 11,
+              "broken": 2
+            },
+            "distinct": {
+              "cases": 34,
+              "native_hits": 12,
+              "hits": 18,
+              "fixed": 8,
+              "broken": 2
+            },
+            "p": 0.109375
+          },
+          "length_2": {
+            "cases": {
+              "cases": 11,
+              "native_hits": 4,
+              "hits": 5,
+              "fixed": 1,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 11,
+              "native_hits": 4,
+              "hits": 5,
+              "fixed": 1,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "length_3_plus": {
+            "cases": {
+              "cases": 3,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 3,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          }
+        }
+      },
+      "ranked": {
+        "scored": 50,
+        "skipped": {
+          "without_evidence": 3,
+          "unparsable": 1
+        },
+        "scopes": {
+          "all": {
+            "cases": {
+              "cases": 50,
+              "native_hits": 17,
+              "hits": 23,
+              "fixed": 12,
+              "broken": 6
+            },
+            "distinct": {
+              "cases": 44,
+              "native_hits": 17,
+              "hits": 21,
+              "fixed": 10,
+              "broken": 6
+            },
+            "p": 0.454498291015625
+          },
+          "dictionary_leader": {
+            "cases": {
+              "cases": 45,
+              "native_hits": 15,
+              "hits": 21,
+              "fixed": 12,
+              "broken": 6
+            },
+            "distinct": {
+              "cases": 39,
+              "native_hits": 15,
+              "hits": 19,
+              "fixed": 10,
+              "broken": 6
+            },
+            "p": 0.454498291015625
+          },
+          "decoder_leader": {
+            "cases": {
+              "cases": 5,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 5,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "segmentation": {
+            "cases": {
+              "cases": 4,
+              "native_hits": 1,
+              "hits": 1,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 4,
+              "native_hits": 1,
+              "hits": 1,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "single_char": {
+            "cases": {
+              "cases": 36,
+              "native_hits": 11,
+              "hits": 16,
+              "fixed": 11,
+              "broken": 6
+            },
+            "distinct": {
+              "cases": 30,
+              "native_hits": 11,
+              "hits": 14,
+              "fixed": 9,
+              "broken": 6
+            },
+            "p": 0.60723876953125
+          },
+          "off_page": {
+            "cases": {
+              "cases": 2,
+              "native_hits": 0,
+              "hits": 0,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 2,
+              "native_hits": 0,
+              "hits": 0,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "function_word": {
+            "cases": {
+              "cases": 10,
+              "native_hits": 3,
+              "hits": 5,
+              "fixed": 3,
+              "broken": 1
+            },
+            "distinct": {
+              "cases": 8,
+              "native_hits": 3,
+              "hits": 4,
+              "fixed": 2,
+              "broken": 1
+            },
+            "p": 1.0
+          },
+          "length_1": {
+            "cases": {
+              "cases": 36,
+              "native_hits": 11,
+              "hits": 16,
+              "fixed": 11,
+              "broken": 6
+            },
+            "distinct": {
+              "cases": 30,
+              "native_hits": 11,
+              "hits": 14,
+              "fixed": 9,
+              "broken": 6
+            },
+            "p": 0.60723876953125
+          },
+          "length_2": {
+            "cases": {
+              "cases": 11,
+              "native_hits": 4,
+              "hits": 5,
+              "fixed": 1,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 11,
+              "native_hits": 4,
+              "hits": 5,
+              "fixed": 1,
+              "broken": 0
+            },
+            "p": 1.0
+          },
+          "length_3_plus": {
+            "cases": {
+              "cases": 3,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "distinct": {
+              "cases": 3,
+              "native_hits": 2,
+              "hits": 2,
+              "fixed": 0,
+              "broken": 0
+            },
+            "p": 1.0
+          }
+        }
+      }
+    }
+  }
+}

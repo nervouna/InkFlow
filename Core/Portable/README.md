@@ -67,6 +67,34 @@ Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on f
 
 Key latency is the same Rime work in both engines; the Rust engine's lower startup and RSS come from mapping no Swift runtime and reading only the prepared index. The one 20 ms first key was the first process after a rebuild (cold file cache); the other four match Swift. Recapture both columns on the same machine after toolchain or OS changes.
 
+## Replay and the first-choice target
+
+[#130](https://github.com/nervouna/InkFlow/issues/130) adds the instrument that scores a ranking change on real decisions before it ships, and fixes what "good enough" and "shipped" mean.
+
+`quality.py replay-cases` exports the regular committed decisions of a window as replay cases (JSON Lines: a header with `generated_at`, the window and the counts `cases`, `text_free_excluded`, `without_evidence` and `without_first_page`, then one case per line). A case carries the raw input, the preceding context, the candidates in displayed order with `native_index`, `native_rank`, `type`, `corrected`, `evidence` and `source`, the `selected_text` (the gold for the segment, conditioned on the list the user saw) and the `committed_text` (the gold for the whole input). The candidates are the commit-time list on page 0 and the first page when the user paged, so a paged choice is normally a miss for every arm. Records from before the candidate facts (#129) have no `evidence`: the header counts them, the `ranked` arm skips them, and the classes that need a type leave them out. Text-free records and paged decisions without a first page of the same input are counted and left out.
+
+`replay list` (`src/bin/replay.rs`) scores each case against `selected_text` in three arms: `native` (the candidate with `native_rank` 1), `displayed` (display index 0) and `ranked` (`ContextRanker::order` run again on the case's texts in Rime's order, its `preceding_context` and the `parse_metadata` of its `evidence` rows; a case with a missing or unreadable row is skipped and counted). Each arm is reported against `native`: hits, `fixed` (the arm is right where native is wrong) and `broken` (the reverse), on every case and on distinct `(raw_input, selected_text)` pairs (the first case of a pair stands for it), with the exact two-sided McNemar p-value of the distinct pairs. The breakdown covers `all`, six classes decided from the case alone (`dictionary_leader`: Rime's first candidate is a `phrase`, `user_phrase` or `user_table`; `decoder_leader`: it is a `sentence`; `segmentation`: the selected candidate's evidence ends before the input does; `single_char`: the selected text is one Han character; `off_page`: the user paged; `function_word`: the selected text is one of 的 地 得 在 再 吧 把 他 她 它, an instrument constant, not a product rule) and the three selected-text length buckets the target is judged on. A case can belong to several scopes. `--json` prints the same counts as JSON. `fixtures/replay-cases.json` holds 54 synthetic cases with the expected counts, which `tests/replay.rs` compares.
+
+```sh
+query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
+python3 "$query" replay-cases --since 2026-10-15 --until 2026-10-21 --output "$TMPDIR/cases.jsonl"
+cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin replay -- \
+  list "$TMPDIR/cases.jsonl" --context-index PATH/TO/pinyin_simp.context.bin
+rm "$TMPDIR/cases.jsonl"
+```
+
+Without `--context-index` the `ranked` arm is not run. The checked-in fixture ranks with its own small dictionary.
+
+### The first-choice target
+
+- **Metric.** Top-1 is the selection-time first-choice rate over regular committed, known-rank Chinese decisions, as `trend` computes it (`top1_selected / known_rank`, read from the `chinese` series of `trend --days 28`). Top-3 and the paged rate (`paged_selected / known_rank`, decisions whose snapshot is not on the first page) use the same denominator. A wrong first choice accepted with Space is invisible to it. Every rate is reported with its 95% Wilson score interval over the 28-day rolling window.
+- **Target band (adopted 2026-10-20).** 28-day rolling Chinese top-1 at least 95.5% with the Wilson lower bound at least 95.0%; top-3 at least 99.0%; paged selections at most 0.4% of known-rank decisions; by selected length, 1-char at least 93%, 2-char at least 96.5%, 3+ chars at least 99%. The target and PR acceptance are judged per bucket, not on the aggregate: a change that lifts the aggregate while a bucket stays below its line does not meet the target. Reference point when adopted: 94.37% [93.89, 94.82] aggregate, 1-char 90.61%, 2-char 95.02%, 3-char 97.92%.
+- **Stable** means two non-overlapping 28-day windows whose Wilson 95% lower bound is at or above the target line, for the aggregate and for every bucket. That needs text recording on continuously for at least 56 days.
+- **Raising the bar.** The aggregate target moves to 96.5% only after two non-overlapping 28-day windows with the lower bound at least 96.0% and the 1-char bucket at least 94%. 97% is the long-term goal, not a near-term acceptance line. It is adopted only after a paired replay arm (list or engine mode) holds at least 97% across two such windows.
+- **Ship rule.** Any ranking change ships when paired `fixed - broken > 0` and the McNemar `p < 0.05` on distinct `(raw_input, selected_text)` pairs, in list or engine replay. Report it with the distinct count and the per-class and per-bucket breakdown, never as a comparison of two unpaired windows.
+- **Sample size.** About 2.4k, 6.3k and 13k decisions are needed to see +1, +0.5 and +0.3 percentage points at disagreement rates of 3%, 2% and 1.5%. This is `n = d * (2.8 / delta)^2` for 80% power at two-sided 0.05, with `d` the share of decisions on which the two arms differ in outcome and `delta` the net gain.
+- **Replay files** stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off.
+
 ## Personal learning and portable personal data
 
 `Engine::personal_learning_entries`, `delete_personal_learning` and `undo_personal_learning` port `EnginePersonalLearning.swift` over the same Lua `learning_manage` channel: they run only when every session is idle and Rime's native undo window (4 s after the last commit) has passed, otherwise `Busy`; entries and undo tokens carry a learning revision that any commit, Backspace/Delete, new session or invalidation supersedes (`Conflict`). As on macOS, the newest commit may still be in Rime's pending transaction until the next transaction or teardown, and a native restore revives a deleted count with one confirmation. Never call this API from a key callback.

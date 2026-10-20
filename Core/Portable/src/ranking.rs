@@ -212,7 +212,8 @@ pub fn parse_metadata(
     (result.len() == count).then_some(result)
 }
 
-fn is_han(grapheme: &str) -> bool {
+/// One Han character, as the ranker and the replay instrument read it.
+pub fn is_han(grapheme: &str) -> bool {
     let mut chars = grapheme.chars();
     matches!(
         chars.next(),
