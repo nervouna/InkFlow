@@ -17,7 +17,13 @@ database or empty filter result, exits 0. Help is available at each command.
 - `trend`: the primary routine-report command. It returns a continuous local-calendar
   series, recomputed 7-day and 28-day rolling metrics, output-kind series, version
   markers and identity coverage. `--days` defaults to 28. `--chart PATH` writes a
-  self-contained SVG without modifying the database.
+  self-contained SVG without modifying the database. Every daily and rolling point also carries
+  the 95% Wilson score interval of its top-1, top-3 and paged rates (`top1_wilson_low`,
+  `top1_wilson_high` and so on; null when the rate is null), `paged_selected` and `paged_rate`
+  (known-rank decisions whose snapshot `page` is above 0, over `known_rank`), and
+  `by_selection_length`: the same counters, rates and intervals for selected texts of 1, 2 and
+  3 or more characters. Text-free decisions have no length; `text_free` counts the known-rank
+  ones beside the buckets.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
 - `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, and
@@ -27,6 +33,17 @@ database or empty filter result, exits 0. Help is available at each command.
   first/visited page, even when that page uses a different configuration. Stored `*_json` fields
   become decoded objects without that suffix. Candidate source and consumed spans
   remain absent/null when unavailable. It does not infer them.
+- `replay-cases --output FILE`: one JSON Lines case per regular committed decision (the `regular_committed` cohort
+  of `observations`) in the filter window, `--kind` defaulting to `chinese`, with the shared filters and `--input`.
+  The first line is a header with `generated_at`, `window`, `kind` and the counts `cases`, `text_free_excluded`
+  (decisions recorded without text), `without_evidence` (cases with a candidate that lacks its `evidence` row, as
+  every record from before the candidate facts) and `without_first_page` (paged decisions whose first page is
+  missing or of another generation, which have no list to replay). A case takes its candidates from
+  `snapshot_json` when the snapshot `page` is 0 and from the same-generation `first_page_json` when the user
+  paged (`candidates_from`); `selected_display_index` always indexes the snapshot. `selected_text` is the segment
+  gold and `committed_text` the text of the decision's linked commit. The file holds typed text: the path must be
+  outside the repository and new, and the file is owner-only. The `replay` binary scores it; see
+  [Replay and the first-choice target](../../../../Core/Portable/README.md#replay-and-the-first-choice-target).
 - `timing`: composition-level timing coverage, retained adjacent-key intervals,
   ended/unfinished wait and visible-duration distributions, plus identity coverage,
   without raw typed text.

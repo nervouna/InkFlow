@@ -1,6 +1,7 @@
 """Query fixtures use the schema of the database created by the Swift capture test."""
 import contextlib
 import csv
+from datetime import datetime, timedelta, timezone
 import hashlib
 import importlib.util
 import io
@@ -107,6 +108,82 @@ def fixture(path):
            page_history_truncated=0, dropped_page_count=0)
     insert(db, 'commits', id='raw-commit', composition_id='raw-only', issued_at=STAMP, text='raw',
            kind='raw_return', insertion_issued=1)
+    db.commit()
+    db.close()
+
+
+EARLIER = '2026-08-01T16:00:00.000Z'
+
+
+def replay_fixture(path):
+    """Decisions for `replay-cases` and the trend buckets, apart from `fixture` so its counts stay put."""
+    db = empty_db(path)
+    insert(db, 'recording_runs', id='run', started_at=STAMP, status='closed', engine_version='1.17.0',
+           build_metadata_json='{}', metric_rule_version=1, stats_json='{}')
+    insert(db, 'config_revisions', id='rev1', fingerprint='fingerprint-A', created_at=STAMP,
+           applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1,
+           ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
+           measurement_fingerprint='measurement-A', build_identity='build-A')
+
+    def page(raw, texts, *, number=0, context='', generation=7, facts=None, natives=None, text=True):
+        """`facts` is how many leading candidates carry type, corrected and evidence (all by default)."""
+        candidates = []
+        for index, shown in enumerate(texts):
+            native = index if natives is None else natives[index]
+            item = dict(text=shown, displayIndex=index, displayRank=number * 9 + index + 1,
+                        nativeIndex=native, nativeRank=number * 9 + native + 1)
+            if index < (len(texts) if facts is None else facts):
+                item.update(type='phrase', corrected=False, evidence=f'0,{len(raw)},n,1,0,n,phrase,0')
+            candidates.append(item)
+        result = dict(generation=generation, rawInput=raw, caret=len(raw), selectedPrefix='',
+                      selectedPrefixValid=True, precedingContext=context, configurationRevisionID='rev1',
+                      configuration={}, page=number, pageSize=9, highlightedDisplayIndex=0,
+                      presentation='candidates_requested', capturedAt=STAMP, candidates=candidates)
+        if not text:
+            result.update(rawInput='', precedingContext='', textCaptured=False)
+            for item in candidates:
+                item['text'] = ''
+        return result
+
+    def add(cid, raw, texts, chosen, *, committed=None, number=0, index=None, first=None, first_generation=7,
+            kind='chinese', started=STAMP, trigger='space', outcome='committed', regular=1, text=True, **options):
+        insert(db, 'compositions', id=cid, run_id='run', started_at=started, ended_at=started, app_bundle_id='app',
+               outcome='committed', operations_json=json.dumps(OPS), page_history_truncated=0,
+               dropped_page_count=0)
+        insert(db, 'commits', id=f'commit-{cid}', composition_id=cid, issued_at=started, kind='candidate',
+               text=(committed or chosen) if text else '', insertion_issued=1)
+        snapshot = page(raw, texts, number=number, text=text, **options)
+        first_page = None
+        if first is not None:
+            first_page = json.dumps(page(raw, first, generation=first_generation, text=text, **options),
+                                    ensure_ascii=False)
+        insert(db, 'candidate_decisions', id=f'decision-{cid}', composition_id=cid, config_revision_id='rev1',
+               commit_id=f'commit-{cid}', occurred_at=started, sequence=0, trigger=trigger, outcome=outcome,
+               selected_display_index=texts.index(chosen) if index is None else index,
+               selected_text=chosen if text else None, text_kind=kind,
+               snapshot_json=json.dumps(snapshot, ensure_ascii=False), first_page_json=first_page,
+               visited_pages_json='[]', page_history_truncated=0, dropped_page_count=0,
+               operations_json=json.dumps(OPS), regular_ranked_selection=regular, matches_custom_phrase=0)
+
+    # Page 0: the snapshot list is the case, whatever the first page held.
+    add('r1', 'kaihui', ['凯会', '开会', '开汇'], '开会', natives=[1, 0, 2], first=['开会', '开汇', '凯会'],
+        context='他说')
+    # Paged: the first page is the case.
+    add('r2', 'hui', ['辉', '晖'], '辉', number=1, first=['汇', '会', '灰'])
+    # Paged without a usable first page: no list to replay.
+    add('r3', 'zhunbeiwu', ['准备午', '准备五'], '准备午', number=1)
+    add('r4', 'womenqukaihui', ['我们去开会', '我们去开汇'], '我们去开会', number=1, first=['我们去开会'],
+        first_generation=99)
+    # Records from before the facts existed: all or some candidates lack them.
+    add('r5', 'tianqi', ['天气', '田七'], '天气', facts=0)
+    add('r6', 'de', ['的', '得'], '的', facts=1)
+    # Text-free, another kind, not regular, not committed.
+    add('r7', 'ke', ['课', '可'], '课', text=False)
+    add('r8', 'xiao', ['😀'], '😀', kind='emoji')
+    add('r9', 'pu', ['，'], '，', trigger='punctuation', regular=0)
+    add('r10', 'shi', ['是'], '是', outcome='reverted')
+    # Before the 28-day window of the trend and the --since of the replay tests.
+    add('w1', 'shi', ['使', '是'], '使', started=EARLIER)
     db.commit()
     db.close()
 
@@ -292,6 +369,155 @@ class QueryTests(unittest.TestCase):
         # Pages recorded without the facts, such as the first page here, still inspect.
         older = self.result('inspect', 'a')['decisions'][0]['first_page']['candidates'][0]
         self.assertNotIn('type', older)
+
+    def replay_cases(self, *args, db=None, name='cases.jsonl'):
+        """Run replay-cases into the temporary directory; returns the header and the cases."""
+        out = Path(self.temp.name) / name
+        self.run_cli('replay-cases', '--output', str(out), *args, '--format', 'json', db=db)
+        lines = out.read_text(encoding='utf-8').splitlines()
+        return json.loads(lines[0]), [json.loads(line) for line in lines[1:]]
+
+    def test_replay_cases_take_candidates_from_the_snapshot_or_the_first_page(self):
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        header, cases = self.replay_cases('--since', '2026-09-01', '--until', '2026-09-08', db=db)
+        self.assertEqual({key: header[key] for key in ('cases', 'text_free_excluded', 'without_evidence',
+                                                       'without_first_page')},
+                         dict(cases=4, text_free_excluded=1, without_evidence=2, without_first_page=2))
+        self.assertEqual(header['window'], dict(since=self.quality.timestamp('2026-09-01'),
+                                                until=self.quality.timestamp('2026-09-08')))
+        self.assertLess(abs(datetime.now(timezone.utc) - datetime.fromisoformat(
+            header['generated_at'].replace('Z', '+00:00'))), timedelta(minutes=5))
+        self.assertEqual([case['composition_id'] for case in cases], ['r1', 'r2', 'r5', 'r6'])
+        listed, first_page = cases[0], cases[1]
+        # Page 0 keeps the commit-time list even though the first page differs.
+        self.assertEqual(listed['candidates_from'], 'snapshot')
+        self.assertEqual([c['text'] for c in listed['candidates']], ['凯会', '开会', '开汇'])
+        self.assertEqual(listed['candidates'][1], dict(
+            text='开会', display_index=1, native_index=0, native_rank=1, type='phrase', corrected=False,
+            evidence='0,6,n,1,0,n,phrase,0', source=None))
+        self.assertEqual([c['native_rank'] for c in listed['candidates']], [2, 1, 3])
+        self.assertEqual((listed['decision_id'], listed['raw_input'], listed['preceding_context'], listed['page']),
+                         ('decision-r1', 'kaihui', '他说', 0))
+        self.assertEqual((listed['selected_display_index'], listed['selected_text'], listed['committed_text']),
+                         (1, '开会', '开会'))
+        self.assertEqual(listed['occurred_at'], STAMP)
+        # A paged decision replays the first page; its selection index belongs to the snapshot page.
+        self.assertEqual(first_page['candidates_from'], 'first_page')
+        self.assertEqual(first_page['page'], 1)
+        self.assertEqual([c['text'] for c in first_page['candidates']], ['汇', '会', '灰'])
+        self.assertEqual((first_page['selected_display_index'], first_page['selected_text']), (0, '辉'))
+        # Records without the facts keep null fields instead of guesses.
+        before_facts, partial = cases[2], cases[3]
+        self.assertTrue(all(c['type'] is None and c['corrected'] is None and c['evidence'] is None
+                            for c in before_facts['candidates']))
+        self.assertEqual([c['evidence'] is None for c in partial['candidates']], [False, True])
+        # Without a window the earlier decision is a case too.
+        header, cases = self.replay_cases(db=db, name='all.jsonl')
+        self.assertEqual((header['cases'], header['window']), (5, dict(since=None, until=None)))
+        self.assertEqual(cases[0]['composition_id'], 'w1')
+
+    def test_replay_cases_default_to_chinese_and_skip_text_free_records(self):
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        header, cases = self.replay_cases(db=db)
+        self.assertNotIn('r7', [case['composition_id'] for case in cases])
+        self.assertNotIn('r8', [case['composition_id'] for case in cases])
+        self.assertEqual(header['text_free_excluded'], 1)
+        header, cases = self.replay_cases('--kind', 'emoji', db=db, name='emoji.jsonl')
+        self.assertEqual([case['composition_id'] for case in cases], ['r8'])
+        self.assertEqual(header['text_free_excluded'], 0)
+
+    def test_replay_cases_read_exports_too(self):
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        exported = Path(self.temp.name) / 'replay-export.json'
+        self.run_cli('export', '--output', str(exported), db=db)
+        header, cases = self.replay_cases('--exports-only', '--input', str(exported), db=db, name='exchange.jsonl')
+        expected, _ = self.replay_cases(db=db, name='local.jsonl')
+        self.assertEqual(header['cases'], expected['cases'])
+        self.assertEqual(len({case['composition_id'].split(':')[0] for case in cases}), 1)
+
+    def test_replay_cases_refuse_an_output_inside_the_repository_or_an_existing_file(self):
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        for inside in (ROOT / 'replay-cases-refused.jsonl', ROOT / 'macOS/Tests/no-such-directory/cases.jsonl'):
+            self.assertIn('outside the repository', self.run_cli('replay-cases', '--output', str(inside),
+                                                                  db=db, success=False))
+            self.assertFalse(inside.exists())
+        out = Path(self.temp.name) / 'once.jsonl'
+        self.run_cli('replay-cases', '--output', str(out), db=db)
+        before = out.read_bytes()
+        self.run_cli('replay-cases', '--output', str(out), db=db, success=False)
+        self.assertEqual(out.read_bytes(), before)
+        self.assertEqual(out.stat().st_mode & 0o077, 0, 'replay files hold typed text')
+        self.run_cli('replay-cases', db=db, success=False)
+
+    def test_wilson_interval_matches_published_values(self):
+        low, high = self.quality.wilson(8, 10)
+        self.assertAlmostEqual(low, 0.4902, places=4)
+        self.assertAlmostEqual(high, 0.9433, places=4)
+        self.assertEqual(self.quality.wilson(0, 0), (None, None))
+        self.assertEqual(self.quality.wilson(0, 20)[0], 0.0)
+        self.assertEqual(self.quality.wilson(20, 20)[1], 1.0)
+
+    def test_trend_reports_wilson_paging_and_selection_length(self):
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        trend = self.result('trend', '--days', '28', '--until', '2026-09-08', db=db)
+        for name, series in trend['series'].items():
+            for point in series:
+                for window in ('daily', 'rolling_7d', 'rolling_28d'):
+                    metric = point[window]
+                    for key in ('top1_wilson_low', 'top1_wilson_high', 'paged_selected', 'paged_rate',
+                                'by_selection_length', 'text_free'):
+                        self.assertIn(key, metric, f'{name} {point["date"]} {window}')
+                    self.assertEqual(list(metric['by_selection_length']), ['1', '2', '3+'])
+                    if metric['top1_rate'] is None:
+                        self.assertEqual((metric['top1_wilson_low'], metric['top1_wilson_high']), (None, None))
+                        self.assertIsNone(metric['paged_rate'])
+                    else:
+                        self.assertLessEqual(metric['top1_wilson_low'], metric['top1_rate'])
+                        self.assertLessEqual(metric['top1_rate'], metric['top1_wilson_high'])
+        month = trend['series']['chinese'][-1]['rolling_28d']
+        self.assertEqual((month['known_rank'], month['top1_selected'], month['top3_selected']), (7, 3, 4))
+        self.assertEqual((month['paged_selected'], month['text_free']), (3, 1))
+        self.assertAlmostEqual(month['paged_rate'], 3 / 7)
+        self.assertAlmostEqual(month['top1_wilson_low'], 0.1582, places=4)
+        self.assertAlmostEqual(month['top1_wilson_high'], 0.7495, places=4)
+        buckets = month['by_selection_length']
+        counts = {key: (b['known_rank'], b['top1_selected'], b['top3_selected'], b['paged_selected'])
+                  for key, b in buckets.items()}
+        self.assertEqual(counts, {'1': (2, 1, 1, 1), '2': (2, 1, 2, 0), '3+': (2, 0, 0, 2)})
+        self.assertEqual(sum(b['known_rank'] for b in buckets.values()) + month['text_free'], month['known_rank'])
+        self.assertAlmostEqual(buckets['2']['top3_rate'], 1.0)
+        self.assertAlmostEqual(buckets['1']['top1_wilson_low'], self.quality.wilson(1, 2)[0])
+        self.assertEqual((buckets['3+']['top1_rate'], buckets['3+']['top1_wilson_low']), (0.0, 0.0))
+        self.assertNotIn('by_selection_length', buckets['1'])
+        self.assertNotIn('text_free', buckets['1'])
+        # The decision outside the window and the emoji one stay out of the Chinese series.
+        self.assertEqual(trend['series']['overall'][-1]['rolling_28d']['known_rank'], 8)
+        # Table and CSV list every leaf, so the interval, paged rate and buckets appear in both.
+        for output in (self.run_cli('trend', '--days', '28', '--until', '2026-09-08', db=db),
+                       self.run_cli('trend', '--days', '28', '--until', '2026-09-08', '--format', 'csv', db=db)):
+            for field in ('rolling_28d.top1_wilson_low', 'rolling_28d.paged_rate',
+                          'rolling_28d.by_selection_length.1.top1_rate',
+                          'rolling_28d.by_selection_length.2.top1_rate',
+                          'rolling_28d.by_selection_length.3+.top1_rate'):
+                self.assertIn(field, output)
+
+    def test_trend_fields_exist_on_the_base_fixture(self):
+        trend = self.result('trend', '--days', '7', '--until', '2026-09-08')
+        month = trend['series']['overall'][-1]['rolling_28d']
+        # Eleven known-rank decisions: 使 or 是 or 😀 chosen at rank 4 on page 1, except 是 at rank 1.
+        self.assertEqual((month['known_rank'], month['top1_selected'], month['paged_selected']), (11, 1, 10))
+        self.assertAlmostEqual(month['paged_rate'], 10 / 11)
+        buckets = month['by_selection_length']
+        self.assertEqual((buckets['1']['known_rank'], buckets['1']['top1_selected']), (11, 1))
+        self.assertEqual((buckets['2']['known_rank'], buckets['2']['top1_rate'], buckets['3+']['top1_wilson_low']),
+                         (0, None, None))
+        self.assertEqual(self.result('trend', '--days', '7')['series']['overall'][0]['daily']['top1_wilson_low'],
+                         None)
 
     def test_summary_exact_denominators_and_ranks(self):
         result = self.result()

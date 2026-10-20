@@ -6,9 +6,12 @@ import csv
 from copy import copy
 from datetime import date, datetime, time, timedelta, timezone
 from html import escape
+from math import sqrt
 import json
+import os
 from pathlib import Path
 import sqlite3
+from statistics import NormalDist
 import sys
 
 sys.dont_write_bytecode = True
@@ -16,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4] / 'macOS/Tools'))
 import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
+REPOSITORY = Path(__file__).resolve().parents[4]
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
 TABLE_COLUMNS = {
     'recording_runs': 'id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code',
@@ -27,6 +31,9 @@ TABLE_COLUMNS = {
     'candidate_decisions': 'id composition_id config_revision_id commit_id occurred_at sequence trigger outcome selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json page_history_truncated dropped_page_count operations_json regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason',
     'effectiveness_events': 'id run_id occurred_at source event reason count milliseconds',
 }
+# A first page belongs to a snapshot when these agree.
+SAME_GENERATION_FIELDS = ('generation', 'rawInput', 'caret', 'selectedPrefix', 'selectedPrefixValid',
+                          'precedingContext', 'configurationRevisionID', 'pageSize')
 GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'text_kind', 'presentation')
 ISSUE_GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
                'preceding_context', 'first_page_top1', 'selected_text', 'text_kind', 'matches_custom_phrase')
@@ -138,8 +145,7 @@ def ctes(args):
     composition_filter, decision_filter, parameters = filters(args)
     same_generation = ' AND '.join(
         f"json_extract(first_page_json,'$.{field}') = json_extract(snapshot_json,'$.{field}')"
-        for field in ('generation', 'rawInput', 'caret', 'selectedPrefix', 'selectedPrefixValid',
-                      'precedingContext', 'configurationRevisionID', 'pageSize'))
+        for field in SAME_GENERATION_FIELDS)
     sql = f"""
     WITH selected_compositions AS (
         SELECT c.* FROM compositions c WHERE {composition_filter}
@@ -148,7 +154,7 @@ def ctes(args):
           COALESCE(r.ranking_fingerprint,'unknown') AS ranking_fingerprint,
           r.settings_fingerprint,
           COALESCE(r.measurement_fingerprint,'unknown') AS measurement_fingerprint,
-          r.build_identity, m.insertion_issued,
+          r.build_identity, m.insertion_issued, m.text AS commit_text,
           json_extract(r.build_metadata_json,'$.appVersion') AS app_version,
           json_extract(r.build_metadata_json,'$.appBuild') AS app_build,
           json_extract(r.build_metadata_json,'$.sourceRevision') AS source_revision,
@@ -355,10 +361,27 @@ def effectiveness(db, args):
 
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',
-                  'first_page_unavailable', 'top1_selected', 'top3_selected', 'top1_matches')
+                  'first_page_unavailable', 'top1_selected', 'top3_selected', 'top1_matches',
+                  'paged_selected', 'text_free')
+SELECTION_LENGTHS = ('1', '2', '3+')
+Z95 = NormalDist().inv_cdf(0.975)
 
 
-def trend_metric(items):
+def wilson(successes, total):
+    """95% Wilson score interval of a proportion, or (None, None) without observations."""
+    if not total:
+        return None, None
+    rate = successes / total
+    squared = Z95 * Z95
+    center = rate + squared / (2 * total)
+    margin = Z95 * sqrt(rate * (1 - rate) / total + squared / (4 * total * total))
+    scale = 1 + squared / total
+    low = 0.0 if not successes else max(0.0, (center - margin) / scale)
+    high = 1.0 if successes == total else min(1.0, (center + margin) / scale)
+    return low, high
+
+
+def trend_metric(items, lengths=True):
     result = {key: sum(item.get(key, 0) for item in items) for key in TREND_COUNTERS}
     measurements = {}
     for item in items:
@@ -380,9 +403,25 @@ def trend_metric(items):
                            if result['known_rank'] and status == 'available_within_measurement_fingerprint' else None)
     result['top1_match_rate'] = (result['top1_matches'] / result['comparable']
                                  if result['comparable'] and status == 'available_within_measurement_fingerprint' else None)
+    result['paged_rate'] = (result['paged_selected'] / result['known_rank']
+                            if result['known_rank'] and status == 'available_within_measurement_fingerprint' else None)
+    for name in ('top1', 'top3', 'paged'):
+        if result[f'{name}_rate'] is None:
+            result[f'{name}_wilson_low'] = None
+            result[f'{name}_wilson_high'] = None
+        else:
+            result[f'{name}_wilson_low'], result[f'{name}_wilson_high'] = wilson(
+                result[f'{name}_selected'], result['known_rank'])
     result['quality_rate_status'] = status
     result['measurement_fingerprints'] = sorted(known)
     result['unknown_measurement_decisions'] = unknown
+    if lengths:
+        # Text-free decisions have no length; their known-rank count (`text_free`) sits beside the buckets.
+        result['by_selection_length'] = {}
+        for length in SELECTION_LENGTHS:
+            bucket = trend_metric([item.get('_lengths', {}).get(length, {}) for item in items], lengths=False)
+            del bucket['text_free']
+            result['by_selection_length'][length] = bucket
     return result
 
 
@@ -415,10 +454,15 @@ def trend(db, args):
         "COALESCE(SUM(valid AND display_rank=1),0) AS top1_selected",
         "COALESCE(SUM(valid AND display_rank BETWEEN 1 AND 3),0) AS top3_selected",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND top1_match),0) AS top1_matches",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND page>0),0) AS paged_selected",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND text_captured=0),0) AS text_free",
     ])
+    length = """CASE WHEN text_captured=0 THEN NULL WHEN length(selected_text)=1 THEN '1'
+        WHEN length(selected_text)=2 THEN '2' WHEN length(selected_text)>=3 THEN '3+' END"""
     grouped = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,
-        text_kind,measurement_fingerprint,{fields} FROM observations
-        GROUP BY local_day,text_kind,measurement_fingerprint ORDER BY local_day,text_kind,measurement_fingerprint""", parameters)
+        text_kind,measurement_fingerprint,{length} AS selection_length,{fields} FROM observations
+        GROUP BY local_day,text_kind,measurement_fingerprint,selection_length
+        ORDER BY local_day,text_kind,measurement_fingerprint,selection_length""", parameters)
     latest_measurement = db.execute(sql + """SELECT measurement_fingerprint FROM observations
         WHERE measurement_fingerprint!='unknown'
         ORDER BY composition_started_at DESC,occurred_at DESC,id DESC LIMIT 1""", parameters).fetchone()
@@ -432,10 +476,16 @@ def trend(db, args):
             continue
         for series in ('overall', row['text_kind']):
             day = raw[series].setdefault(row['local_day'], {key: 0 for key in TREND_COUNTERS})
-            for key in TREND_COUNTERS:
-                day[key] += row[key]
-            measurements = day.setdefault('_measurements', {})
-            measurements[row['measurement_fingerprint']] = measurements.get(row['measurement_fingerprint'], 0) + row['decisions']
+            targets = [day]
+            if row['selection_length'] is not None:
+                lengths = day.setdefault('_lengths', {})
+                targets.append(lengths.setdefault(row['selection_length'], {key: 0 for key in TREND_COUNTERS}))
+            for target in targets:
+                for key in TREND_COUNTERS:
+                    target[key] += row[key]
+                measurements = target.setdefault('_measurements', {})
+                measurements[row['measurement_fingerprint']] = (
+                    measurements.get(row['measurement_fingerprint'], 0) + row['decisions'])
     days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(args.days)]
     series = {}
     for name, values in raw.items():
@@ -687,6 +737,72 @@ def inspect(db, args):
                 commit_scope='all commits of the matching composition; decisions honor config/kind filters')
 
 
+def replay_output(path):
+    path = path.expanduser().resolve()
+    if path == REPOSITORY or REPOSITORY in path.parents:
+        raise QueryError(f'Replay files hold typed text; choose a path outside the repository: {path}')
+    return path
+
+
+def replay_page(row):
+    """The page a case replays and where it came from: the commit-time list on page 0, else the first page."""
+    snapshot = json.loads(row['snapshot_json'])
+    if snapshot['page'] == 0:
+        return snapshot, 'snapshot'
+    first = json.loads(row['first_page_json']) if row['first_page_json'] is not None else None
+    if (first and first['candidates'] and first['page'] == 0
+            and all(first.get(field) == snapshot.get(field) for field in SAME_GENERATION_FIELDS)):
+        return first, 'first_page'
+    return None, 'first_page'
+
+
+def replay_candidate(candidate):
+    return dict(text=candidate['text'], display_index=candidate['displayIndex'],
+                native_index=candidate['nativeIndex'], native_rank=candidate['nativeRank'],
+                type=candidate.get('type'), corrected=candidate.get('corrected'),
+                evidence=candidate.get('evidence'), source=candidate.get('source'))
+
+
+def replay_cases(db, args):
+    sql, parameters = ctes(args)
+    decisions = db.execute(sql + """SELECT composition_id, id AS decision_id, occurred_at, text_captured,
+        raw_input, preceding_context, page, selected_display_index, selected_text, commit_text,
+        snapshot_json, first_page_json FROM observations WHERE regular_committed
+        ORDER BY composition_started_at, occurred_at, sequence, id""", parameters)
+    counts = dict(cases=0, text_free_excluded=0, without_evidence=0, without_first_page=0)
+    cases = []
+    for row in decisions:
+        if not row['text_captured']:
+            counts['text_free_excluded'] += 1
+            continue
+        page, source = replay_page(row)
+        if page is None:
+            counts['without_first_page'] += 1
+            continue
+        candidates = [replay_candidate(candidate) for candidate in page['candidates']]
+        if any(candidate['evidence'] is None for candidate in candidates):
+            counts['without_evidence'] += 1
+        counts['cases'] += 1
+        cases.append(dict(composition_id=row['composition_id'], decision_id=row['decision_id'],
+                          occurred_at=row['occurred_at'], raw_input=row['raw_input'],
+                          preceding_context=row['preceding_context'], page=row['page'], candidates_from=source,
+                          candidates=candidates, selected_display_index=row['selected_display_index'],
+                          selected_text=row['selected_text'], committed_text=row['commit_text']))
+    generated_at = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+    header = dict(generated_at=generated_at, window=dict(since=args.since, until=args.until), kind=args.kind,
+                  **counts)
+    # Typed text: owner-only, never over an existing file, and not left half written.
+    descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+        try:
+            for line in [header] + cases:
+                stream.write(json.dumps(line, ensure_ascii=False, separators=(',', ':')) + '\n')
+        except BaseException:
+            args.output.unlink(missing_ok=True)
+            raise
+    return dict(output=str(args.output), header=header)
+
+
 def leaves(value, path='$'):
     if isinstance(value, dict) and value:
         for key, child in value.items():
@@ -717,11 +833,15 @@ def render(result, output_format):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest='command', required=True)
-    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'export'):
+    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'replay-cases', 'export'):
         sub = commands.add_parser(command)
         if command == 'export':
             sub.add_argument('--output', type=Path, required=True, help='New JSON file; records saved with text recording on contain input text, candidates and preceding context. Never uploaded.')
-        else:
+        if command == 'replay-cases':
+            sub.add_argument('--output', type=Path, required=True,
+                             help='New JSON Lines file outside the repository: one case per regular committed '
+                                  'decision, with typed text. Delete it after the run. Never uploaded.')
+        if command != 'export':
             sub.add_argument('--input', type=Path, action='append', default=[], help='Quality export JSON; repeat for multiple files')
             sub.add_argument('--exports-only', action='store_true', help='Analyze files without the local database')
             sub.add_argument('--source', help='Exact source UUID from the export; isolates one device')
@@ -741,6 +861,8 @@ def parser():
         sub.add_argument('--config', help='Exact legacy full fingerprint (not revision UUID or prefix)')
         sub.add_argument('--ranking-config', help='Exact ranking fingerprint (not revision UUID or prefix)')
         sub.add_argument('--kind', choices=KINDS, help='Decision text kind, not translator source')
+        if command == 'replay-cases':
+            sub.set_defaults(kind='chinese')
         sub.add_argument('--format', choices=('table', 'json', 'csv'), default='table')
     return result
 
@@ -757,7 +879,9 @@ def main(argv=None):
             render(quality_exchange.export(args.db, args.output, connect, TABLE_COLUMNS), args.format)
             return 0
         handler = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues,
-                   'inspect': inspect, 'timing': timing}[args.command]
+                   'inspect': inspect, 'timing': timing, 'replay-cases': replay_cases}[args.command]
+        if args.command == 'replay-cases':
+            args.output = replay_output(args.output)
         if args.input or args.exports_only or args.source:
             if args.exports_only and not args.input:
                 raise QueryError('--exports-only requires at least one --input file.')
@@ -774,7 +898,7 @@ def main(argv=None):
                 result = handler(db, args)
                 result['sources'] = list(sources.values())
                 result['analysis_storage'] = 'memory_only; external records never written to local quality database'
-                if args.command != 'inspect' and not args.source:
+                if args.command not in ('inspect', 'replay-cases') and not args.source:
                     result['by_source'] = {}
                     for sid in sources:
                         device_args = copy(original_args); device_args.source = sid
