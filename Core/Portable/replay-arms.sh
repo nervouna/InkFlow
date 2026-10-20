@@ -75,6 +75,10 @@ then
   cases=${3:?Usage: replay-arms.sh lotem ARMS_DIRECTORY CASES RECORD_FILE}
   record=${4:?Usage: replay-arms.sh lotem ARMS_DIRECTORY CASES RECORD_FILE}
   [[ -f "$arms/bgc/prepared/complete" ]] || fail "No bgc arm in $arms; run replay-arms.sh first."
+  # The scratch binary cannot tell where this repository is, so refuse a record inside it here.
+  case "$(cd "$(dirname "$record")" && pwd -P)/" in
+    "$PWD"/*) fail "Record files hold typed text; choose a path outside the repository: $record" ;;
+  esac
   # The same engine sources minus the two limits, built against the same native prefix in a scratch
   # tree, so the repository stays untouched and the engine gets no replay-only switch.
   tree=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-replay-lotem.XXXXXX")

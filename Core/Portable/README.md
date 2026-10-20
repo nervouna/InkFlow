@@ -116,7 +116,8 @@ The arms of [#131](https://github.com/nervouna/InkFlow/issues/131) differ only i
 `replay-arms.sh PREPARED_RESOURCES ARMS_DIRECTORY` copies the prepared `shared/` once per arm, replaces only the schema's `grammar` node and the `.gram` file, compiles the cache again with `prepare-resources`, and prints the `--arm` arguments. `bgc-lotem` cannot be a resource arm: the two limits are in the engine's runtime patch of the `translator` node (`engine.rs`, which replaces the node whole), and the engine gets no replay-only switch. `replay-arms.sh lotem ARMS_DIRECTORY CASES RECORD_FILE` builds the same sources without those two lines in a scratch tree against the same native prefix, replays the `bgc` arm with that binary and records it; the repository is not touched.
 
 ```sh
-export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
+root=$PWD
+export CARGO_TARGET_DIR="$root/build/portable/cargo"
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
 python3 "$query" replay-cases --since 2026-10-15 --until 2026-10-21 --output "$TMPDIR/cases.jsonl"
 # This checkout (octagram build): prepared resources with the committed schema, then the live arms.
@@ -125,20 +126,21 @@ bash Core/Portable/replay-arms.sh build/portable/resources.XXXXXX build/portable
 bash Core/Portable/replay-arms.sh lotem build/portable/replay-arms "$TMPDIR/cases.jsonl" "$TMPDIR/lotem.jsonl"
 # The off arm: a second worktree without the module, replayed on the plugin arm's resources.
 git worktree add --detach .worktrees/off-arm HEAD
-cp build/portable/*.tar.* .worktrees/off-arm/build/portable/    # create build/portable there first
+mkdir -p .worktrees/off-arm/build/portable
+cp build/portable/*.tar.* .worktrees/off-arm/build/portable/
 (cd .worktrees/off-arm &&
   python3 Core/Portable/build-native.py --without-octagram &&
   CARGO_TARGET_DIR="$PWD/build/portable/cargo" cargo build --locked --release \
     --manifest-path Core/Portable/Cargo.toml --bin replay &&
   build/portable/cargo/release/replay engine "$TMPDIR/cases.jsonl" \
-    --arm off="$OLDPWD/build/portable/replay-arms/plugin" --record off="$TMPDIR/off.jsonl")
-# Compare, off first so that every row reads against it.
-arms="$PWD/build/portable/replay-arms"
+    --arm off="$root/build/portable/replay-arms/plugin" --record off="$TMPDIR/off.jsonl")
+# Compare, off first so that every pair reads against it.
+arms="$root/build/portable/replay-arms"
 cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin replay -- \
   engine "$TMPDIR/cases.jsonl" --arm off=@"$TMPDIR/off.jsonl" --arm plugin="$arms/plugin" \
   --arm bgc="$arms/bgc" --arm bgw="$arms/bgw" --arm bgc-lotem=@"$TMPDIR/lotem.jsonl"
-rm "$TMPDIR"/cases.jsonl "$TMPDIR"/off.jsonl "$TMPDIR"/lotem.jsonl
-git worktree remove .worktrees/off-arm
+rm "$TMPDIR/cases.jsonl" "$TMPDIR/off.jsonl" "$TMPDIR/lotem.jsonl"
+git worktree remove --force .worktrees/off-arm
 ```
 
 `tests/replay.rs` replays `fixtures/replay-cases.json` this way: recorded arms reproduce list mode's pairwise counts without Rime, and with `INKFLOW_PORTABLE_RESOURCES` set two live arms on the prepared resources must agree, record, and reload as the same arm. `performance.sh` on an arm's directory measures it against the approved limits (`bgc` against the same limits as the shipped engine).
