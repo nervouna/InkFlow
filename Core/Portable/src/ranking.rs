@@ -37,8 +37,8 @@ pub struct Metadata {
     /// Rime's own `candidate.type` of the genuine candidate (`phrase`, `user_phrase`, `sentence`,
     /// `completion`, `user_table`, ...); empty when the row did not say. Recorded, never ranked on.
     pub candidate_type: String,
-    /// The candidate's spelling was reached through a fuzzy or algebra rule: Rime's dictionary spelling
-    /// of it differs from the typed letters. Recorded, never ranked on.
+    /// The candidate's spelling was reached through a fuzzy or algebra rule: the dictionary syllables of its
+    /// code differ from the typed letters (an abbreviation included). Recorded, never ranked on.
     pub corrected: bool,
 }
 
@@ -93,6 +93,15 @@ impl Metadata {
             u8::from(self.corrected),
         )
     }
+}
+
+/// Rime's candidate types as the row carries them: empty, or at most 32 bytes of lowercase letters, digits
+/// and underscores that do not start with a digit (`phrase`, `english_personal_2`).
+fn is_candidate_type(kind: &str) -> bool {
+    let mut bytes = kind.bytes();
+    kind.len() <= 32
+        && bytes.next().is_none_or(|b| b.is_ascii_lowercase() || b == b'_')
+        && bytes.all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
 }
 
 pub fn parse_metadata(
@@ -176,7 +185,7 @@ pub fn parse_metadata(
         // Rows from before the type and corrected fields carry neither.
         let (candidate_type, corrected) = if fields.len() == 8 {
             let kind = fields[6];
-            if kind.len() > 32 || !kind.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') {
+            if !is_candidate_type(kind) {
                 return None;
             }
             let corrected = match fields[7] {

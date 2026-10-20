@@ -3,6 +3,27 @@
 local channel = require("inkflow_channel")
 local M = {}
 
+-- 1 when a fuzzy or algebra rule (an abbreviation included) reached the candidate's spelling: the
+-- dictionary syllables of the genuine candidate's own code, joined, differ from the letters typed for
+-- its span, spaces and apostrophes removed. A candidate that is not a Rime Phrase of this dictionary
+-- (the English and mixed modules' own candidates) and a `completion` are 0, as is every row when the
+-- dictionary cannot be read. No candidate text or comment is read.
+--
+-- The Memory only decodes: its schema node `inkflow_input_coverage` names the `pinyin_simp`
+-- dictionary and sets `enable_user_dict: false`, so Rime gives it no user dictionary and its commit,
+-- delete and key callbacks do nothing. That makes one long-lived instance safe, unlike the
+-- `translator` Memory of inkflow_ai_learning.lua. Do not disconnect() it: that drops the dictionary
+-- and decode() then returns nothing.
+local function corrected_spelling(memory, genuine, kind, candidate, input)
+  if not memory or kind == "completion" then return 0 end
+  local phrase = genuine:to_phrase()
+  if not phrase or phrase.lang_name ~= memory.lang_name then return 0 end
+  local syllables = memory:decode(phrase.code)
+  if #syllables == 0 then return 0 end
+  local typed = input:sub(candidate.start + 1, candidate._end):gsub("[ ']", "")
+  return table.concat(syllables) ~= typed and 1 or 0
+end
+
 -- `technical` is set when the native translator found the whole input to be 4 or more
 -- letters that are not Pinyin up to an unfinished final syllable. An exact standalone
 -- English candidate spanning that input is then marked 2 in the exact field, which the
@@ -11,15 +32,9 @@ local M = {}
 -- a learned English word lead it when it is the page's first candidate.
 --
 -- The row ends with two facts the engine records and never ranks on: the Rime `type` of the genuine
--- candidate (empty unless it is lowercase letters and underscores, at most 32 bytes) and `corrected`,
--- 1 when the candidate's spelling was reached through a fuzzy or algebra rule. The patched translator
--- sets `spelling_hints`, so Rime writes the dictionary spelling of a candidate into its comment when
--- that differs from the typed letters; only the verdict leaves this module, never the comment text.
-local function spelling(text)
-  return (text:gsub("[ ']", ""):gsub("ü", "v"))
-end
-
-local function candidate_metadata(candidate, input, technical)
+-- candidate (empty unless it starts with a lowercase letter or underscore and continues with lowercase
+-- letters, digits and underscores, at most 32 bytes) and `corrected`.
+local function candidate_metadata(env, candidate, input, technical)
   local input_length = #input
   local candidate_type = candidate.type or ""
   local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
@@ -36,7 +51,7 @@ local function candidate_metadata(candidate, input, technical)
   elseif candidate_type:match("^mixed_personal_[0-3]$") then
     source, exact, personal = "m", 1, tonumber(candidate_type:sub(-1))
   end
-  -- The type and comment facts come from the genuine candidate: the first one a `uniquified` candidate
+  -- The type and code facts come from the genuine candidate: the first one a `uniquified` candidate
   -- merged, or the original a `simplified` candidate converted. Any other candidate is its own genuine.
   local genuine = candidate
   if candidate_type == "simplified" then
@@ -70,18 +85,16 @@ local function candidate_metadata(candidate, input, technical)
     exact = 3
   end
   local kind = genuine.type or ""
-  if #kind > 32 or not kind:match("^[a-z_]+$") then kind = "" end
-  local comment = genuine.comment or ""
-  local corrected = kind ~= "completion" and comment ~= ""
-      and spelling(comment) ~= spelling(input:sub(candidate.start + 1, candidate._end))
+  if #kind > 32 or not kind:match("^[a-z_][a-z0-9_]*$") then kind = "" end
+  local called, corrected = pcall(corrected_spelling, env.memory, genuine, kind, candidate, input)
   local has_letter = candidate.text:find("[A-Za-z]") ~= nil
   local has_non_ascii = candidate.text:find("[\128-\255]") ~= nil
   local class = has_letter and (has_non_ascii and "m" or "a") or (has_non_ascii and "n" or "o")
   return table.concat({candidate.start, candidate._end, class, exact, personal, source, kind,
-    corrected and 1 or 0}, ",")
+    called and corrected or 0}, ",")
 end
 
-local function input_coverage(fields, context)
+local function input_coverage(env, fields, context)
   if #fields ~= 2 or not fields[1]:match("^%d+$") or not fields[2]:match("^%d+$") then return "failed" end
   local offset, count = tonumber(fields[1]), tonumber(fields[2])
   if count < 1 or count > 9 then return "failed" end
@@ -97,18 +110,23 @@ local function input_coverage(fields, context)
   for index = offset, offset + count - 1 do
     local candidate = menu:get_candidate_at(index)
     if not candidate then return "failed" end
-    rows[#rows + 1] = candidate_metadata(candidate, context.input, technical)
+    rows[#rows + 1] = candidate_metadata(env, candidate, context.input, technical)
   end
   return "ok", table.concat(rows, ";")
 end
 
 function M.init(env)
-  env.connection = env.engine.context.property_update_notifier:connect(
-    channel.observer({ input_coverage = input_coverage }))
+  -- Created once: key events only decode. A failed creation leaves env.memory unset and every row corrected 0.
+  local created, memory = pcall(Memory, env.engine, env.engine.schema, "inkflow_input_coverage")
+  env.memory = created and memory or nil
+  env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
+    input_coverage = function(fields, context) return input_coverage(env, fields, context) end,
+  }))
 end
 
 function M.fini(env)
   if env.connection then env.connection:disconnect() end
+  env.memory = nil
 end
 
 -- This translator only hosts the property observer; native translators own candidates.

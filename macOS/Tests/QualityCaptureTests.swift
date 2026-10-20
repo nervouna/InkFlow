@@ -130,12 +130,17 @@ struct QualityCaptureTests {
         settings.fuzzyEnabled = false
         let green = await decide("lv", "绿")
         check(green.selected.corrected == false && green.selected.type == "phrase", "\(green.selected)")
+        // The English module's own candidates are not Rime phrases: no dictionary spelling to compare.
+        let english = await decide("codex", "Codex CLI")
+        check(english.selected.type == "english_completion", "\(english.selected)")
+        check(english.selected.corrected == false, "\(english.selected)")
         let redacted = green.page.redactingText()
         check(redacted.candidates.allSatisfy { $0.text.isEmpty && $0.comment == nil })
         check(redacted.candidates.map(\.type) == green.page.candidates.map(\.type))
         check(redacted.candidates.map(\.corrected) == green.page.candidates.map(\.corrected))
         check(redacted.candidates.map(\.evidence) == green.page.candidates.map(\.evidence))
-        print("PASS candidate facts: phrase, user_phrase, corrected via z/zh (zongguo), lv not corrected, text-free")
+        print("PASS candidate facts: phrase, user_phrase, corrected via z/zh (zongguo), lv and English not corrected,"
+            + " text-free")
     }
 
     @MainActor static func phraseMatrix(_ store: QualityStore, _ db: CaptureDatabase) async throws {

@@ -81,7 +81,8 @@ fn parse_metadata_reads_candidate_type_and_corrected() {
             "0,3,n,0,0,n,completion,0",
             "0,7,n,3,0,n,sentence,0",
             "0,7,n,0,0,c,user_table,0",
-            "0,7,a,1,2,e,,0",
+            "0,7,a,1,2,e,english_personal_2,0",
+            "0,7,m,1,3,m,mixed_personal_3,0",
         ],
         7,
     )
@@ -98,7 +99,8 @@ fn parse_metadata_reads_candidate_type_and_corrected() {
             ("completion", false),
             ("sentence", false),
             ("user_table", false),
-            ("", false),
+            ("english_personal_2", false),
+            ("mixed_personal_3", false),
         ]
     );
     assert_eq!(rows[0].coverage, 0..7);
@@ -106,6 +108,9 @@ fn parse_metadata_reads_candidate_type_and_corrected() {
     assert!(rows[3].sentence);
     assert_eq!(rows[4].source, Source::Custom);
     assert_eq!(rows[5].personal, 2);
+    assert_eq!(rows[5].source, Source::English);
+    assert_eq!(rows[6].personal, 3);
+    assert_eq!(rows[6].source, Source::Mixed);
     let longest = "a".repeat(32);
     let row = format!("0,7,n,1,0,n,{longest},0");
     assert_eq!(parse_rows(&[&row], 7).unwrap()[0].candidate_type, longest);
@@ -137,7 +142,7 @@ fn parse_metadata_rejects_bad_candidate_facts() {
         "0,7,n,1,0,n,phrase,true",
         "0,7,n,1,0,n,Phrase,0",
         "0,7,n,1,0,n,user-phrase,0",
-        "0,7,n,1,0,n,phrase1,0",
+        "0,7,n,1,0,n,1phrase,0",
         "0,7,n,1,0,n,user phrase,0",
         "0,7,n,1,0,n,短语,0",
         too_long.as_str(),
@@ -145,7 +150,9 @@ fn parse_metadata_rejects_bad_candidate_facts() {
     for row in rejected {
         assert!(parse_rows(&[row], 7).is_none(), "{row}");
     }
-    assert!(parse_rows(&["0,7,n,1,0,n,phrase,0"], 7).is_some());
+    for row in ["0,7,n,1,0,n,phrase,0", "0,7,n,1,0,n,_x9,1", "0,7,n,1,0,n,phrase1,0", "0,7,n,1,0,n,,0"] {
+        assert!(parse_rows(&[row], 7).is_some(), "{row}");
+    }
 }
 
 /// The row an engine keeps as evidence is the row it parsed, whichever form it arrived in.
@@ -157,7 +164,9 @@ fn metadata_row_round_trips_through_parse_metadata() {
         "0,3,n,0,0,n,completion,0",
         "0,7,n,3,0,n,sentence,0",
         "0,7,a,2,0,e,english_exact,0",
-        "0,7,m,1,3,m,,0",
+        "0,7,m,1,3,m,mixed_personal_3,0",
+        "0,7,a,1,2,e,english_personal_2,0",
+        "0,7,m,1,0,m,,0",
         "2,7,o,0,0,c,user_table,0",
     ] {
         let parsed = parse_rows(&[row], 7).unwrap();

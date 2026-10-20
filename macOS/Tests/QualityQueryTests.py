@@ -725,7 +725,7 @@ class QueryTests(unittest.TestCase):
 
     def test_timing_actual_controller_writer(self):
         result = self.result('timing', db=ENGINE_DB)
-        self.assertEqual(result['coverage']['compositions'], 49)
+        self.assertEqual(result['coverage']['compositions'], 50)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
         # This engine/controller fixture does not observe native panel visibility.
@@ -757,10 +757,10 @@ class QueryTests(unittest.TestCase):
         # The deferred-toggle then panel-selection fixture adds one valid composition,
         # decision and issued candidate commit; the toggle itself adds no decision.
         # The five custom-phrase matrix cases each add one valid decision/commit.
-        # The four candidate-fact cases (phrase, user_phrase, fuzzy, lv) add one each as well.
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[49,45,46])
-        self.assertEqual(result['coverage']['valid'],37)
-        self.assertEqual(result['coverage']['regular_issued'],38)
+        # The five candidate-fact cases (phrase, user_phrase, fuzzy, lv, English) add one each as well.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[50,46,47])
+        self.assertEqual(result['coverage']['valid'],38)
+        self.assertEqual(result['coverage']['regular_issued'],39)
         self.assertEqual(result['coverage']['regular_not_issued'],1)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)
