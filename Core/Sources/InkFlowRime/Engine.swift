@@ -595,11 +595,13 @@ package final class IFEngine {
             }
             var start = 0, end = 0
             let consumed = source != nil && ifr_snapshot_candidate_consumed_input(page.handle, display, &start, &end) != 0
+            let evidence = page.evidence(display)
             return QualityCandidate(text: page.text(display), comment: page.comment(display),
                 displayIndex: display, displayRank: number * size + display + 1,
                 nativeIndex: Int(ifr_snapshot_candidate_native_index(page.handle, display)),
                 nativeRank: Int(ifr_snapshot_candidate_native_rank(page.handle, display)), source: source,
-                consumedInputStart: consumed ? start : nil, consumedInputEnd: consumed ? end : nil)
+                consumedInputStart: consumed ? start : nil, consumedInputEnd: consumed ? end : nil,
+                type: evidence?.type, corrected: evidence?.corrected, evidence: evidence?.row)
         }
         return QualityPageSnapshot(generation: 0, rawInput: page.input, caret: page.rawCaretBytes,
             selectedPrefix: prefix ?? "", precedingContext: precedingText, configurationRevisionID: qualityRevision.id,

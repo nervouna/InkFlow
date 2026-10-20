@@ -52,6 +52,15 @@ final class PortableSnapshot {
     func text(_ index: Int) -> String { ifrString(ifr_snapshot_candidate_text(handle, index)) }
     func comment(_ index: Int) -> String { ifrString(ifr_snapshot_candidate_comment(handle, index)) }
 
+    /// The engine's ranking evidence row of a candidate, split into the facts quality records keep.
+    func evidence(_ index: Int) -> (row: String, type: String, corrected: Bool)? {
+        guard let pointer = ifr_snapshot_candidate_evidence(handle, index) else { return nil }
+        let row = String(cString: pointer)
+        let fields = row.split(separator: ",", omittingEmptySubsequences: false)
+        guard fields.count == 8 else { return nil }
+        return (row, String(fields[6]), fields[7] == "1")
+    }
+
     var content: EngineSnapshot {
         let preedit = preedit
         return EngineSnapshot(preedit: preedit,

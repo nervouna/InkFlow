@@ -66,6 +66,11 @@ mixed:
     - xform/([jqxy])v/$1u/
 mixed_personal:
   max_input_length: 64
+# The Memory of inkflow_input_coverage.lua decodes candidate codes to dictionary syllables. It owns no user
+# dictionary, so it records no commits; the runtime patch does not replace this node.
+inkflow_input_coverage:
+  dictionary: pinyin_simp
+  enable_user_dict: false
 key_binder:
   bindings:
     - { when: has_menu, accept: minus, send: Page_Up }

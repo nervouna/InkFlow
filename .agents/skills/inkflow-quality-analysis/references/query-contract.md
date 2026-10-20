@@ -192,8 +192,25 @@ pages and decision snapshots are retained; unseen candidates are not enumerated.
 Tentative segments become committed only through verified final paths. Undo can
 mark a decision reverted; ambiguous edits and interruptions remain explicit.
 Candidate text kind describes output, and matches_custom_phrase is equality with
-the applied custom-phrase configuration, not translator/source provenance. The raw
-engine API does not provide reliable candidate source or consumed-input spans.
+the applied custom-phrase configuration, not translator/source provenance. The
+engine records provenance itself, per candidate, from the ranking evidence row it
+computed for the page: `type` (Rime's candidate type of the genuine candidate, such
+as `phrase`, `user_phrase`, `sentence`, `completion`, `user_table` or the personal
+English and mixed types such as `english_personal_2`; empty when it is not lowercase
+letters, digits and underscores starting with a letter or underscore, at most 32
+bytes), `corrected` (the dictionary syllables of the candidate's own code, joined,
+differ from the letters typed for its span with spaces and apostrophes removed, so a
+fuzzy or algebra rule reached it; an abbreviation such as `nh` for 你好 counts; there
+is no syllable-count limit; always false for `completion` and for candidates that are
+not Rime phrases of the pinyin dictionary, such as the English and mixed modules' own)
+and `evidence` (the row `start,end,class,exact,personal,source,type,corrected`, which
+`parse_metadata` reads, with the covered span in raw-input bytes). These fields are
+content-free, so text-free records keep them. They exist only on candidates the
+engine ranked: no selected prefix, no custom-phrase code match, at most nine
+candidates and a readable reply. Records from before they were added, and
+other candidates, omit all three. `source` and the consumed-input span stay limited
+to learned English and mixed candidates. The engine reads no candidate comment for
+these facts and writes no spelling comment, so text-captured records carry none.
 
 The worker persists four independent identities. `ranking_fingerprint` covers the
 engine, audited offline ranking source/resources, and ranking-affecting applied

@@ -201,6 +201,15 @@ int ifr_snapshot_candidate_personal_source(const IFRSnapshot* snapshot, size_t i
 int ifr_snapshot_candidate_consumed_input(const IFRSnapshot* snapshot, size_t index,
                                           size_t* start, size_t* end);
 
+/* The ranking evidence row the engine computed for the candidate, or NULL when it has none
+ * (a selected prefix is pending, a custom phrase code matches, or the page could not be read)
+ * or index is out of range: "start,end,class,exact,personal,source,type,corrected". start and end
+ * are the raw-input bytes the candidate covers; type is Rime's candidate type of the genuine
+ * candidate ("phrase", "user_phrase", "sentence", "completion", "user_table", ...), empty when
+ * unknown; corrected is 1 when a fuzzy or algebra rule reached the candidate's spelling, else 0.
+ * Content-free: no candidate, comment or input text. Valid as long as the snapshot. */
+const char* ifr_snapshot_candidate_evidence(const IFRSnapshot* snapshot, size_t index);
+
 IFRStatus ifr_session_select(const IFRSession* session, const IFRSnapshot* snapshot,
                              size_t index, int* handled);
 IFRStatus ifr_session_highlight(const IFRSession* session, const IFRSnapshot* snapshot,

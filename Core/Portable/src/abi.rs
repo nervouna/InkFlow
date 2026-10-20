@@ -253,6 +253,8 @@ pub struct SnapshotHandle {
     input: CString,
     preedit: CString,
     candidates: Vec<(CString, CString)>,
+    /// The ranking evidence row of each candidate, if it has one.
+    evidence: Vec<Option<CString>>,
 }
 
 impl SnapshotHandle {
@@ -264,11 +266,17 @@ impl SnapshotHandle {
             .iter()
             .map(|c| Ok((c_string(&c.text)?, c_string(&c.comment)?)))
             .collect::<Result<Vec<_>, Failure>>()?;
+        let evidence = snapshot
+            .candidates
+            .iter()
+            .map(|c| c.evidence.as_ref().map(|e| c_string(&e.row())).transpose())
+            .collect::<Result<Vec<_>, Failure>>()?;
         Ok(Self {
             snapshot,
             input,
             preedit,
             candidates,
+            evidence,
         })
     }
 }
@@ -583,6 +591,19 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_personal_source(
             PersonalSource::ExactEnglish => PERSONAL_EXACT_ENGLISH,
             PersonalSource::ExactMixed => PERSONAL_EXACT_MIXED,
         })
+}
+
+/// The ranking evidence row of the displayed candidate `index`, or NULL when it has none or `index`
+/// is out of range. The string lives as long as the snapshot.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_snapshot_candidate_evidence(
+    snapshot: *const SnapshotHandle,
+    index: usize,
+) -> *const c_char {
+    unsafe { snapshot.as_ref() }
+        .and_then(|s| s.evidence.get(index))
+        .and_then(Option::as_ref)
+        .map_or(ptr::null(), |row| row.as_ptr())
 }
 
 /// Returns 1 and writes the raw-input byte range the candidate consumes, which exists only for
