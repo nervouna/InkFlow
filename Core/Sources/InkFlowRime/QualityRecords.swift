@@ -386,6 +386,49 @@ extension QualityPageSnapshot {
     }
 }
 
+package enum QualityPostCommitWindowEnd: String, Codable, Sendable {
+    case nextCode = "next_code"
+    case clientChanged = "client_changed"
+    case deactivated
+    case timeout
+}
+
+/// Content-free counts of the keys that arrived after one commit, while no composition was active, until the next code
+/// started, the client changed, InkFlow was deactivated or `QualityLimits.postCommitWindowSeconds` passed.
+/// A commit without a window was not observed. Never interpret absence as zero.
+package struct QualityPostCommitWindow: Codable, Equatable, Sendable {
+    package var commitID: String
+    package var end: QualityPostCommitWindowEnd
+    /// 0 ... postCommitWindowSeconds * 1000.
+    package var elapsedMilliseconds: Int
+    /// Whole window: Backspace, Forward Delete, Cmd+Z, pass-through printable ASCII keys and Cmd+V.
+    package var deletions = 0
+    package var forwardDeletions = 0
+    package var undo = 0
+    package var directText = 0
+    package var paste = 0
+    /// Backspace, Forward Delete and Cmd+Z before the first direct-text or paste key.
+    package var leadingDeletions = 0
+    package var leadingForwardDeletions = 0
+    package var leadingUndo = 0
+
+    package init(commitID: String, end: QualityPostCommitWindowEnd = .nextCode, elapsedMilliseconds: Int = 0,
+                 deletions: Int = 0, forwardDeletions: Int = 0, undo: Int = 0, directText: Int = 0, paste: Int = 0,
+                 leadingDeletions: Int = 0, leadingForwardDeletions: Int = 0, leadingUndo: Int = 0) {
+        self.commitID = commitID
+        self.end = end
+        self.elapsedMilliseconds = elapsedMilliseconds
+        self.deletions = deletions
+        self.forwardDeletions = forwardDeletions
+        self.undo = undo
+        self.directText = directText
+        self.paste = paste
+        self.leadingDeletions = leadingDeletions
+        self.leadingForwardDeletions = leadingForwardDeletions
+        self.leadingUndo = leadingUndo
+    }
+}
+
 /// Counters are separate facts: an arrow crossing a page increments moves and page turns.
 package struct QualityOperations: Codable, Equatable, Sendable {
     package var keypresses = 0
@@ -399,6 +442,9 @@ package struct QualityOperations: Codable, Equatable, Sendable {
     /// Raw input just before the first Backspace, Delete or Escape that removed input in this span.
     /// Typed text: stored only in text mode. Absent when nothing was deleted, and in records written before it existed.
     package var inputBeforeDeletion: String? = nil
+    /// Windows of earlier commits, carried by the composition record that follows them. Composition only: decisions
+    /// keep nil and `add` ignores it. Absent when none was observed, and in records written before it existed.
+    package var postCommitWindows: [QualityPostCommitWindow]? = nil
 
     mutating func add(_ other: Self) {
         keypresses += other.keypresses
@@ -792,6 +838,7 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         budget.strings(composition.id, composition.appBundleID, composition.clientID, composition.outcomeReason,
                        composition.operations.inputBeforeDeletion)
         budget.timing(composition.operations.timing)
+        budget.record(96 * (composition.operations.postCommitWindows?.count ?? 0))
         for revision in revisions {
             if budget.exhausted { return QualityLimits.envelopeBytes + 1 }
             budget.record(256)
@@ -829,6 +876,8 @@ package enum QualityLimits {
     package static let flushInterval: TimeInterval = 1
     package static let metricRuleVersion = 1
     package static let collectionRuleVersion = 1
+    /// `W`: how long after a commit the recorder counts deletions, undo, direct text and paste.
+    package static let postCommitWindowSeconds: TimeInterval = 10
     package static let keySamples = 256
     package static let visibilityObservationInterval: TimeInterval = 0.1
     package static let bufferedEffectivenessEvents = 256

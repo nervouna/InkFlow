@@ -41,6 +41,13 @@ SAME_GENERATION_FIELDS = ('generation', 'rawInput', 'caret', 'selectedPrefix', '
 GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'text_kind', 'presentation')
 ISSUE_GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
                'preceding_context', 'first_page_top1', 'selected_text', 'text_kind', 'matches_custom_phrase')
+# Post-commit windows ride the composition that follows their commit: one `windows` row per commit.
+WINDOW_KEYS = {'commit_id': 'commitID', 'end': 'end', 'elapsed_ms': 'elapsedMilliseconds', 'deletions': 'deletions',
+               'forward_deletions': 'forwardDeletions', 'undo': 'undo', 'direct_text': 'directText',
+               'paste': 'paste', 'leading_deletions': 'leadingDeletions',
+               'leading_forward_deletions': 'leadingForwardDeletions', 'leading_undo': 'leadingUndo'}
+WINDOW_ENDS = ('next_code', 'client_changed', 'deactivated', 'timeout')
+WINDOW_COLUMNS = ', '.join(f'w."{column}" AS window_{column}' for column in WINDOW_KEYS if column != 'commit_id')
 OPERATIONS = {'keypresses': 'keypresses', 'page_requests': 'pageRequests', 'page_turns': 'pageTurns',
               'candidate_moves': 'candidateMoves', 'preedit_edits': 'preeditEdits'}
 COUNTERS = {
@@ -146,6 +153,14 @@ def filters(args):
     return ' AND '.join(composition) or '1', ' AND '.join(decision) or '1', parameters
 
 
+def windows_cte(args):
+    """One row per commit, with the commit named as the database names it: exports prefix every id with its source."""
+    combined = getattr(args, 'input', None) or getattr(args, 'exports_only', False) or getattr(args, 'source', None)
+    select = ', '.join(("c.source_id || ':' || " if combined and column == 'commit_id' else '')
+                       + f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
+    return f"windows AS (SELECT {select} FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') w)"
+
+
 def ctes(args):
     composition_filter, decision_filter, parameters = filters(args)
     same_generation = ' AND '.join(
@@ -154,12 +169,12 @@ def ctes(args):
     sql = f"""
     WITH selected_compositions AS (
         SELECT c.* FROM compositions c WHERE {composition_filter}
-    ), base AS (
+    ), {windows_cte(args)}, base AS (
         SELECT d.*, c.started_at AS composition_started_at, r.fingerprint,
           COALESCE(r.ranking_fingerprint,'unknown') AS ranking_fingerprint,
           r.settings_fingerprint,
           COALESCE(r.measurement_fingerprint,'unknown') AS measurement_fingerprint,
-          r.build_identity, m.insertion_issued, m.text AS commit_text,
+          r.build_identity, m.insertion_issued, m.text AS commit_text, {WINDOW_COLUMNS},
           json_extract(r.build_metadata_json,'$.appVersion') AS app_version,
           json_extract(r.build_metadata_json,'$.appBuild') AS app_build,
           json_extract(r.build_metadata_json,'$.sourceRevision') AS source_revision,
@@ -179,6 +194,7 @@ def ctes(args):
         FROM candidate_decisions d JOIN selected_compositions c ON c.id=d.composition_id
         JOIN config_revisions r ON r.id=d.config_revision_id
         LEFT JOIN commits m ON m.id=d.commit_id AND m.composition_id=d.composition_id
+        LEFT JOIN windows w ON w.commit_id=d.commit_id
         WHERE {decision_filter}
     ), ranked AS (
         SELECT *, CASE WHEN ((text_captured=0 AND selected_text IS NULL) OR json_extract(selected_candidate,'$.text')=selected_text)
@@ -242,6 +258,7 @@ def rates(row, status=None):
 
 
 def coverage(db, sql, parameters):
+    selected_commits = '(SELECT m.id FROM commits m WHERE m.composition_id IN (SELECT id FROM selected_compositions))'
     measurement = rows(db, sql + """SELECT COUNT(*) AS total,
         COUNT(DISTINCT CASE WHEN measurement_fingerprint!='unknown' THEN measurement_fingerprint END) AS known_distinct,
         COALESCE(SUM(measurement_fingerprint='unknown'),0) AS unknown FROM observations""", parameters)[0]
@@ -255,12 +272,16 @@ def coverage(db, sql, parameters):
         rate_status = 'unavailable_across_measurement_fingerprints'
     result = rates(rows(db, sql + 'SELECT ' + aggregate_sql() + ' FROM observations', parameters)[0],
                    rate_status)
-    result.update(rows(db, sql + """SELECT COUNT(*) AS compositions,
+    result.update(rows(db, sql + f"""SELECT COUNT(*) AS compositions,
         COALESCE(SUM(page_history_truncated),0) AS truncated_compositions,
         (SELECT COUNT(*) FROM commits WHERE composition_id IN (SELECT id FROM selected_compositions)) AS commits,
         (SELECT COUNT(*) FROM commits WHERE insertion_issued=0 AND composition_id IN
-          (SELECT id FROM selected_compositions)) AS commits_not_issued
+          (SELECT id FROM selected_compositions)) AS commits_not_issued,
+        (SELECT COUNT(*) FROM windows WHERE commit_id IN {selected_commits}) AS commit_windows
         FROM selected_compositions""", parameters)[0])
+    ends = {row[0]: row[1] for row in db.execute(
+        sql + f'SELECT "end", COUNT(*) FROM windows WHERE commit_id IN {selected_commits} GROUP BY "end"', parameters)}
+    result['windows_by_end'] = {end: ends.pop(end, 0) for end in WINDOW_ENDS} | ends
     return result
 
 
@@ -739,9 +760,12 @@ def inspect(db, args):
             raise QueryError('A recorded page references a missing configuration revision.')
         revisions.append(dict(revision))
     commits = rows(db, 'SELECT * FROM commits WHERE composition_id=:id ORDER BY issued_at,id', parameters)
+    # A window is stored on the composition after its commit, so it is found through the commit.
+    windows = rows(db, 'WITH ' + windows_cte(args) + ''' SELECT w.* FROM windows w JOIN commits m ON m.id=w.commit_id
+        WHERE m.composition_id=:id ORDER BY m.issued_at,m.id''', parameters)
     decoded_revisions = [decode_row(r) for r in revisions]
     return dict(composition=decode_row(dict(raw)), decisions=decoded_decisions,
-                commits=commits, configurations=decoded_revisions,
+                commits=commits, windows=windows, configurations=decoded_revisions,
                 identity_coverage=revision_identity_coverage(revisions),
                 commit_scope='all commits of the matching composition; decisions honor config/kind filters')
 

@@ -69,6 +69,7 @@ struct QualityCaptureTests {
         try await engineAndController(store, db, isolated.settings)
         try await candidateFacts(store, db)
         try await phraseMatrix(store, db)
+        try await postCommitWindows(store, db)
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
@@ -174,6 +175,154 @@ struct QualityCaptureTests {
             check(store.statistics().written == before.written + 1 && store.statistics().droppedOversized == before.droppedOversized)
         }
         print("PASS actual Engine/Controller: 0/1/20/50/200 phrases, five candidates, eight visited pages, applied revision and exact commit output")
+    }
+
+    /// The window of a commit is stored on the next composition the recorder submits, never on the commit's own.
+    @MainActor static func postCommitWindows(_ store: QualityStore, _ db: CaptureDatabase) async throws {
+        let isolated = IsolatedSettings()
+        defer { isolated.cleanup() }
+        let settings = isolated.settings
+        /// Compositions submitted by `body`: the commit each made and the windows its record carries.
+        func submitted(_ body: () -> Void) async -> [(commit: String?, windows: [QualityPostCommitWindow])] {
+            await store.flush()
+            let before = db.rows("SELECT id FROM compositions").count
+            body()
+            await store.flush()
+            return db.rows("SELECT * FROM compositions ORDER BY rowid").dropFirst(before).map { row in
+                (db.rows("SELECT id FROM commits WHERE composition_id = '\(row["id"]!)'").first?["id"],
+                 db.ops(row).postCommitWindows ?? [])
+            }
+        }
+        /// The window as the tests expect it: the elapsed time is only checked to be inside `W`.
+        func shape(_ window: QualityPostCommitWindow?) -> QualityPostCommitWindow? {
+            let limit = Int(QualityLimits.postCommitWindowSeconds * 1000)
+            guard var window, (0...limit).contains(window.elapsedMilliseconds) else { return nil }
+            window.elapsedMilliseconds = 0
+            return window
+        }
+        func commitNihao(_ control: InkFlowInputController, _ client: RecordingClient?) {
+            input("nihao", control, client)
+            check(control.handle(keyEvent(49, " "), client: client))
+        }
+        /// A second composition on the same controller, which carries what the first one's window recorded.
+        func commitA(_ control: InkFlowInputController, _ client: RecordingClient?) {
+            input("a", control, client)
+            digit(0, control, client)
+        }
+        let backspace = keyEvent(51, "")
+        let forwardDelete = keyEvent(117, "")
+        let undo = keyEvent(6, "z", .command)
+        let paste = keyEvent(9, "v", .command)
+
+        // (a) Two Backspaces covering 你好, then typing: next_code, and the window rides the second composition.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            let rows = await submitted {
+                commitNihao(control, client)
+                check(client.document == "你好")
+                check(!control.handle(backspace, client: client))
+                check(!control.handle(backspace, client: client))
+                commitA(control, client)
+            }
+            check(rows.count == 2 && rows[0].windows.isEmpty && rows[1].windows.count == 1, "\(rows)")
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode,
+                deletions: 2, leadingDeletions: 2), "\(rows[1].windows)")
+        }
+        // (b) Cmd+Z right after the commit leads; Cmd+V ends the leading run, so a later Cmd+Z only counts overall.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            let rows = await submitted {
+                commitNihao(control, client)
+                check(!control.handle(undo, client: client))
+                commitA(control, client)
+            }
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode,
+                undo: 1, leadingUndo: 1), "\(rows)")
+            let both = await submitted {
+                commitNihao(control, client)
+                check(!control.handle(forwardDelete, client: client))
+                check(!control.handle(paste, client: client))
+                check(!control.handle(undo, client: client))
+                commitA(control, client)
+            }
+            check(shape(both[1].windows.last) == QualityPostCommitWindow(commitID: both[0].commit!, end: .nextCode,
+                forwardDeletions: 1, undo: 1, paste: 1, leadingForwardDeletions: 1), "\(both)")
+        }
+        // (c) A pass-through digit is direct text: a later Backspace counts overall but not as leading.
+        // Arrows end nothing and count nothing.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            let rows = await submitted {
+                commitNihao(control, client)
+                check(!control.handle(keyEvent(123, ""), client: client))
+                check(!control.handle(keyEvent(18, "1"), client: client))
+                check(!control.handle(backspace, client: client))
+                commitA(control, client)
+            }
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode,
+                deletions: 1, directText: 1), "\(rows)")
+        }
+        // (d) A punctuation commit straight after a candidate commit ends the first window and opens its own.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            let rows = await submitted {
+                commitNihao(control, client)
+                check(control.handle(keyEvent(43, ","), client: client))
+                commitA(control, client)
+            }
+            check(rows.count == 3 && rows[0].windows.isEmpty && rows[1].windows.count == 1
+                && rows[2].windows.count == 1, "\(rows)")
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode),
+                  "\(rows)")
+            check(shape(rows[2].windows.first) == QualityPostCommitWindow(commitID: rows[1].commit!, end: .nextCode),
+                  "\(rows)")
+        }
+        // (e) The client changes before anything is typed: the switch closes the window, not the next letter.
+        do {
+            let first = RecordingClient(document: "")
+            let second = RecordingClient(document: "")
+            let control = controller(settings, first, store)
+            let rows = await submitted {
+                input("nihao", control, first)
+                digit(0, control, first)
+                input("n", control, second)
+                digit(0, control, second)
+            }
+            check(rows.count == 2 && rows[0].windows.isEmpty && rows[1].windows.count == 1, "\(rows)")
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!,
+                end: .clientChanged), "\(rows)")
+        }
+        // (f) Deactivation closes it; the controller types on, so the window has a record to ride.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, client, store)
+            let rows = await submitted {
+                commitNihao(control, client)
+                control.deactivateServer(client)
+                commitA(control, client)
+            }
+            check(rows.count == 2 && rows[1].windows.count == 1, "\(rows)")
+            check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!,
+                end: .deactivated), "\(rows)")
+        }
+        // (g) No insertion was issued without a client, so there is no window to carry.
+        do {
+            let client = RecordingClient(document: "")
+            let control = controller(settings, nil, store)
+            let rows = await submitted {
+                commitNihao(control, nil)
+                commitA(control, client)
+            }
+            check(rows.count == 2 && rows.allSatisfy { $0.windows.isEmpty }, "\(rows)")
+            let issued = db.rows("SELECT insertion_issued FROM commits WHERE id = '\(rows[0].commit!)'")
+            check(issued.first?["insertion_issued"] == "0")
+        }
+        print("PASS post-commit windows: next_code, leading counts, undo/paste, direct text, punctuation,"
+            + " client_changed, deactivated and none without an insertion; each rides the next submitted record")
     }
 
     @MainActor static func controller(_ settings: IFSettings, _ client: RecordingClient?, _ store: QualityStore?) -> InkFlowInputController {

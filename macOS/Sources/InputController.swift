@@ -291,6 +291,7 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
             thunderPresentation?.hide()
         }
         commitComposition(sender)
+        MainActor.assumeIsolated { engine?.qualityRecorder?.closePostCommitWindow(.deactivated) }
         MainActor.assumeIsolated { ai.deactivateCommitted() }
         MainActor.assumeIsolated { inputDiagnostics.deactivationBeforeSuper() }
         super.deactivateServer(sender)

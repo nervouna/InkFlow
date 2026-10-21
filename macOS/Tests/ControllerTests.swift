@@ -762,7 +762,9 @@ struct ControllerTests {
             check(client.requests.count == 1, "Context is read once, at composition start")
             return (controller, client)
         }
-        for action in ["space", "digit", "click", "arrow", "panel-highlight", "comma", "return", "shortcut", "toggle", "commit", "deactivate"] {
+        let actions = ["space", "digit", "click", "arrow", "panel-highlight", "comma", "return", "shortcut", "undo",
+                       "paste", "toggle", "commit", "deactivate"]
+        for action in actions {
             let (controller, client) = prepared()
             let candidates = controller.candidates(nil) as! [String]
             check(candidates.first == "餐", "action=\(action) secure=\(controller.secureInput()) preceding=\(controller.engine!.qualitySnapshot().precedingContext) candidates=\(candidates)")
@@ -784,6 +786,8 @@ struct ControllerTests {
             case "comma": check(controller.handle(keyEvent(43, ","), client: client)); expected = "餐，"
             case "return": check(controller.handle(keyEvent(36, "\r"), client: client)); expected = "can"
             case "shortcut": check(!controller.handle(keyEvent(0, "a", .command), client: client))
+            case "undo": check(!controller.handle(keyEvent(6, "z", .command), client: client))
+            case "paste": check(!controller.handle(keyEvent(9, "v", .command), client: client))
             case "toggle":
                 let before = controller.engine!.snapshot()
                 check(controller.handle(modifierEvent(56, .shift), client: client))
@@ -835,6 +839,10 @@ struct ControllerTests {
         let client = RecordingClient()
         check(!controller.handle(keyEvent(123, ""), client: client)); check(client.mutations.isEmpty)
         check(!controller.handle(keyEvent(0, "a", .command), client: client)); check(client.mutations.isEmpty)
+        check(!controller.handle(keyEvent(6, "z", .command), client: client))
+        check(client.mutations.isEmpty)
+        check(!controller.handle(keyEvent(9, "v", .command), client: client))
+        check(client.mutations.isEmpty)
         check(controller.handle(modifierEvent(56, .shift), client: client))
         check(controller.handle(modifierEvent(56), client: client)); check(client.mutations.isEmpty)
         check(!controller.handle(keyEvent(0, "a"), client: client))
@@ -973,6 +981,18 @@ struct ControllerTests {
                           && client.mutations == ["insert:\(committed)"] && controller.engine!.snapshot().preedit.isEmpty,
                           "chords \(label): \(name) chord commits \(committed) and passes through")
                 }
+            }
+            // Cmd+Z and Cmd+V have their own key codes for the quality recorder; they still pass through alike.
+            for (name, code, text) in [("Cmd+Z", UInt16(6), "z"), ("Cmd+V", UInt16(9), "v")] {
+                let (idle, idleClient) = session()
+                check(!idle.handle(keyEvent(code, text, .command), client: idleClient) && idleClient.mutations.isEmpty,
+                      "chords idle: \(name) passes through")
+                let (controller, client) = session()
+                typeKeys(controller, client, "nihao", row: "chords \(name)")
+                client.mutations.removeAll()
+                check(!controller.handle(keyEvent(code, text, .command), client: client)
+                      && client.mutations == ["insert:你好"] && controller.engine!.snapshot().preedit.isEmpty,
+                      "chords composing: \(name) commits 你好 and passes through")
             }
         }
         // recognizer-url-email

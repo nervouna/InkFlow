@@ -436,7 +436,8 @@ package final class IFEngine {
         configurationError = message
     }
 
-    /// Semantic key input. Negative values record an unsupported platform event without entering Rime.
+    /// Semantic key input. Negative values record an unsupported platform event without entering Rime:
+    /// -1 any other chord, -2 an unsupported character, -3 Cmd+Z and -4 Cmd+V.
     @discardableResult
     package func input(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false,
                capturedAt: TimeInterval? = nil) -> Bool {

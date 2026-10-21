@@ -25,6 +25,19 @@ STAMP = '2026-09-06T16:00:00.000Z'
 OPS = dict(keypresses=5, pageRequests=1, pageTurns=1, candidateMoves=2, preeditEdits=0)
 
 
+def window(commit, end, elapsed, **counts):
+    """A post-commit window as the recorder writes it into the operations of the composition after its commit."""
+    return dict(dict(commitID=commit, end=end, elapsedMilliseconds=elapsed, deletions=0, forwardDeletions=0, undo=0,
+                     directText=0, paste=0, leadingDeletions=0, leadingForwardDeletions=0, leadingUndo=0), **counts)
+
+
+# The fixture's `raw-only` composition is their carrier; the commits they describe belong to compositions a to d.
+WINDOWS = [window('commit-a', 'next_code', 1500, deletions=2, leadingDeletions=2),
+           window('commit-b', 'timeout', 10000, deletions=1, directText=1, paste=1),
+           window('commit-c', 'client_changed', 250),
+           window('commit-d', 'deactivated', 400, forwardDeletions=2, leadingForwardDeletions=2, undo=1, leadingUndo=1)]
+
+
 def insert(db, table, **values):
     db.execute(f'INSERT INTO {table} ({",".join(values)}) VALUES ({",".join("?" for _ in values)})', list(values.values()))
 
@@ -106,7 +119,8 @@ def fixture(path):
     add('o', caret=2); add('p', context='前文'); add('q', custom=1); add('r', revision='rev3')
     add('s', outcome='unknown'); add('t', outcome='interrupted')
     insert(db, 'compositions', id='raw-only', run_id='run', started_at=STAMP, ended_at=STAMP,
-           app_bundle_id='other.app', outcome='committed', operations_json=json.dumps(OPS),
+           app_bundle_id='other.app', outcome='committed',
+           operations_json=json.dumps(dict(OPS, postCommitWindows=WINDOWS)),
            page_history_truncated=0, dropped_page_count=0)
     insert(db, 'commits', id='raw-commit', composition_id='raw-only', issued_at=STAMP, text='raw',
            kind='raw_return', insertion_issued=1, character_count=3)
@@ -381,6 +395,53 @@ class QueryTests(unittest.TestCase):
             visited['configurationRevisionID'] = 'missing'
             db.execute("UPDATE candidate_decisions SET visited_pages_json=? WHERE composition_id='a'", (json.dumps([visited]),))
         self.assertIn('missing configuration', self.run_cli('inspect', 'a', success=False))
+
+    def test_post_commit_windows_are_found_through_their_commit(self):
+        args = self.quality.parser().parse_args(['summary', '--db', str(self.db)])
+        with contextlib.closing(self.quality.connect(self.db)) as db:
+            sql, parameters = self.quality.ctes(args)
+            observed = {row['composition_id']: row
+                        for row in self.quality.rows(db, sql + 'SELECT * FROM observations', parameters)}
+        columns = lambda row: {key: value for key, value in row.items() if key.startswith('window_')}
+        self.assertEqual(columns(observed['a']), dict(
+            window_end='next_code', window_elapsed_ms=1500, window_deletions=2, window_forward_deletions=0,
+            window_undo=0, window_direct_text=0, window_paste=0, window_leading_deletions=2,
+            window_leading_forward_deletions=0, window_leading_undo=0))
+        timeout = observed['b']
+        self.assertEqual((timeout['window_end'], timeout['window_elapsed_ms'], timeout['window_paste'],
+                          timeout['window_direct_text'], timeout['window_leading_deletions']),
+                         ('timeout', 10000, 1, 1, 0))
+        self.assertEqual((observed['d']['window_forward_deletions'], observed['d']['window_undo'],
+                          observed['d']['window_leading_forward_deletions'], observed['d']['window_leading_undo']),
+                         (2, 1, 2, 1))
+        # Not observed is null, never zero.
+        self.assertEqual(set(columns(observed['e']).values()), {None})
+        # The decisions keep their own identity: the join adds columns and no rows.
+        self.assertEqual(len(observed), 20)
+
+    def test_inspect_lists_the_windows_of_its_own_commits(self):
+        windows = self.result('inspect', 'a')['windows']
+        self.assertEqual(windows, [dict(commit_id='commit-a', end='next_code', elapsed_ms=1500, deletions=2,
+                                        forward_deletions=0, undo=0, direct_text=0, paste=0, leading_deletions=2,
+                                        leading_forward_deletions=0, leading_undo=0)])
+        self.assertIn('$.windows[0].end | "next_code"', self.run_cli('inspect', 'a'))
+        # The carrier holds four windows in its operations, none of them for its own commit.
+        self.assertEqual(self.result('inspect', 'raw-only')['windows'], [])
+        self.assertEqual(self.result('inspect', 'e')['windows'], [])
+
+    def test_coverage_counts_windows_of_the_selected_commits(self):
+        every = dict(next_code=1, client_changed=1, deactivated=1, timeout=1)
+        coverage = self.result()['coverage']
+        self.assertEqual((coverage['commit_windows'], coverage['windows_by_end']), (4, every))
+        # The carrier is outside this filter and the commits it describes are inside.
+        quoted = self.result('summary', '--app', "app'quoted")['coverage']
+        self.assertEqual((quoted['commit_windows'], quoted['windows_by_end']), (4, every))
+        none = dict(next_code=0, client_changed=0, deactivated=0, timeout=0)
+        other = self.result('summary', '--app', 'other.app')['coverage']
+        self.assertEqual((other['commit_windows'], other['windows_by_end']), (0, none))
+        exported = self.export_file()
+        imported = self.result('summary', '--exports-only', '--input', str(exported))['coverage']
+        self.assertEqual((imported['commit_windows'], imported['windows_by_end']), (4, every))
 
     def test_inspect_shows_candidate_ranking_facts(self):
         candidate = self.result('inspect', 'a')['decisions'][0]['snapshot']['candidates'][0]
@@ -1000,7 +1061,7 @@ class QueryTests(unittest.TestCase):
 
     def test_timing_actual_controller_writer(self):
         result = self.result('timing', db=ENGINE_DB)
-        self.assertEqual(result['coverage']['compositions'], 50)
+        self.assertEqual(result['coverage']['compositions'], 67)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
         # This engine/controller fixture does not observe native panel visibility.
@@ -1049,10 +1110,12 @@ class QueryTests(unittest.TestCase):
         # decision and issued candidate commit; the toggle itself adds no decision.
         # The five custom-phrase matrix cases each add one valid decision/commit.
         # The five candidate-fact cases (phrase, user_phrase, fuzzy, lv, English) add one each as well.
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[50,46,47])
-        self.assertEqual(result['coverage']['valid'],38)
-        self.assertEqual(result['coverage']['regular_issued'],39)
-        self.assertEqual(result['coverage']['regular_not_issued'],1)
+        # The post-commit window cases add 17 compositions and commits and 16 decisions (one is a direct comma),
+        # one decision of which was committed without a client.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[67,62,64])
+        self.assertEqual(result['coverage']['valid'],53)
+        self.assertEqual(result['coverage']['regular_issued'],54)
+        self.assertEqual(result['coverage']['regular_not_issued'],2)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)
         cohort=self.result('summary','--app','inkflow.recording-client',db=ENGINE_DB)
@@ -1063,6 +1126,20 @@ class QueryTests(unittest.TestCase):
         inspected=self.result('inspect',selected,db=ENGINE_DB)
         self.assertTrue(inspected['commits'][0]['insertion_issued'])
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+        # Case (a): two Backspaces covered 你好, the next code ended the window and it rides the second composition.
+        carried = db.execute('''SELECT json_extract(w.value,'$.commitID') FROM compositions c,
+            json_each(c.operations_json,'$.postCommitWindows') w WHERE json_extract(w.value,'$.end')='next_code'
+            AND json_extract(w.value,'$.deletions')=2 AND json_extract(w.value,'$.leadingDeletions')=2''').fetchall()
+        self.assertEqual(len(carried), 1)
+        owner = db.execute('SELECT composition_id FROM commits WHERE id=?', carried[0]).fetchone()[0]
+        windows = self.result('inspect', owner, db=ENGINE_DB)['windows']
+        self.assertEqual(windows, [dict(commit_id=carried[0][0], end='next_code', elapsed_ms=windows[0]['elapsed_ms'],
+                                        deletions=2, forward_deletions=0, undo=0, direct_text=0, paste=0,
+                                        leading_deletions=2, leading_forward_deletions=0, leading_undo=0)])
+        self.assertTrue(0 <= windows[0]['elapsed_ms'] <= 10000)
+        ends = result['coverage']['windows_by_end']
+        self.assertTrue(ends['next_code'] > 0 and ends['client_changed'] > 0 and ends['deactivated'] > 0, ends)
+        self.assertEqual(result['coverage']['commit_windows'], sum(ends.values()))
         exported = Path(self.temp.name) / 'engine.json'
         self.run_cli('export', '--output', str(exported), db=ENGINE_DB)
         exchanged = self.result('summary', '--exports-only', '--input', str(exported))

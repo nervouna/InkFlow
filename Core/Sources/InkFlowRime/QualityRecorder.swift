@@ -78,6 +78,10 @@ package final class QualityRecorder {
     private var hadClient = false
     private var captureGeneration: UInt64
     private var privacySuppressed = false
+    /// The open post-commit window and the closed ones waiting for the next submitted record.
+    /// They outlive any composition, so `reset()` leaves them alone; a new capture generation drops them.
+    private var openWindow: (window: QualityPostCommitWindow, openedAt: TimeInterval, leading: Bool)?
+    private var closedWindows: [QualityPostCommitWindow] = []
 
     package init(store: QualityStore, clock: QualityClock = QualityClock()) {
         self.store = store; self.clock = clock
@@ -96,6 +100,8 @@ package final class QualityRecorder {
         if captureGeneration != state.generation || !state.enabled {
             captureGeneration = state.generation
             reset()
+            openWindow = nil
+            closedWindows = []
             privacySuppressed = true
         }
         guard state.enabled else { return false }
@@ -110,6 +116,7 @@ package final class QualityRecorder {
     package func setTimingCaptureEnabled(_ enabled: Bool) {
         timingEnabled = enabled
         if !enabled {
+            openWindow = nil
             timing = nil
             timingSuppressed = envelope != nil
             envelope?.composition.operations.timing = nil
@@ -150,6 +157,7 @@ package final class QualityRecorder {
 
     package func associateClient(_ client: AnyObject?, id: String?, app: String?) {
         if let client, hadClient, associatedClient !== client {
+            closeWindow(.clientChanged, at: clock.monotonic())
             finish(.interrupted, reason: "client_changed")
             clientID = nil
             appBundleID = nil
@@ -157,6 +165,11 @@ package final class QualityRecorder {
         if let client { associatedClient = client; hadClient = true }
         if let id { clientID = id }
         if let app { appBundleID = app }
+    }
+
+    /// The controller's deactivation signal; the window rides the next record this recorder submits.
+    package func closePostCommitWindow(_ end: QualityPostCommitWindowEnd) {
+        closeWindow(end, at: clock.monotonic())
     }
 
     package func willMutate(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, action: QualityAction,
@@ -234,6 +247,8 @@ package final class QualityRecorder {
         guard let operation = inProgress else { return }
         inProgress = nil
         let before = operation.before
+        observeWindow(operation.action, before: before, after: snapshot, handled: handled,
+                      at: monotonicStart + operation.entered)
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||
             before.selectedPrefix != snapshot.selectedPrefix || before.selectedPrefixValid != snapshot.selectedPrefixValid
         // Typo evidence: what was typed before the user started removing it. The store drops it without text capture.
@@ -330,6 +345,7 @@ package final class QualityRecorder {
 
     package func commitDrained(_ text: String, insertionIssued: Bool, clientID: String?) {
         guard captureAllowed() else { return }
+        if !text.isEmpty { closeWindow(.nextCode, at: clock.monotonic()) }
         if suppressed {
             if !text.isEmpty || latest?.rawInput.isEmpty == true { reset() }
             return
@@ -368,6 +384,10 @@ package final class QualityRecorder {
             }
         }
         finish(.committed, reason: nil)
+        // After finish: a window rides the record that follows its commit, never the commit's own.
+        if insertionIssued, timingEnabled {
+            openWindow = (QualityPostCommitWindow(commitID: commit.id), clock.monotonic(), true)
+        }
     }
 
     package func interrupt(reason: String) { finish(.interrupted, reason: reason) }
@@ -416,6 +436,55 @@ package final class QualityRecorder {
         }
     }
 
+    /// Counts the keys that reach the engine while no composition exists after a commit. Lazy: no timer, and the
+    /// window closes at the first event after `W` seconds, so a key past `W` is outside it.
+    private func observeWindow(_ action: QualityAction, before: QualityPageSnapshot, after: QualityPageSnapshot,
+                               handled: Bool, at now: TimeInterval) {
+        guard let open = openWindow else { return }
+        if now - open.openedAt > QualityLimits.postCommitWindowSeconds {
+            closeWindow(.timeout, at: now)
+            return
+        }
+        if case .key(let key, _, _) = action, before.rawInput.isEmpty, before.selectedPrefix.isEmpty {
+            countWindowKey(key, handled: handled)
+        }
+        if !after.rawInput.isEmpty { closeWindow(.nextCode, at: now) }
+    }
+
+    private func countWindowKey(_ key: Int32, handled: Bool) {
+        guard var open = openWindow else { return }
+        switch key {
+        case 0xff08 where !handled:
+            open.window.deletions += 1
+            if open.leading { open.window.leadingDeletions += 1 }
+        case 0xffff where !handled:
+            open.window.forwardDeletions += 1
+            if open.leading { open.window.leadingForwardDeletions += 1 }
+        case -3:
+            open.window.undo += 1
+            if open.leading { open.window.leadingUndo += 1 }
+        case -4:
+            open.window.paste += 1
+            open.leading = false
+        case 0x20...0x7e where !handled:
+            open.window.directText += 1
+            open.leading = false
+        default:
+            return
+        }
+        openWindow = open
+    }
+
+    /// Lazy close: with no timer an event can arrive long after `W`, so the distance is clamped to `W`.
+    private func closeWindow(_ end: QualityPostCommitWindowEnd, at now: TimeInterval) {
+        guard var open = openWindow else { return }
+        openWindow = nil
+        let elapsed = min(max(0, now - open.openedAt), QualityLimits.postCommitWindowSeconds)
+        open.window.end = end
+        open.window.elapsedMilliseconds = Int((elapsed * 1000).rounded())
+        closedWindows.append(open.window)
+    }
+
     private func ensureComposition(at monotonicTime: TimeInterval? = nil) {
         guard envelope == nil, !suppressed else { return }
         let now = clock.monotonic()
@@ -428,7 +497,7 @@ package final class QualityRecorder {
 
     private func keyKind(_ action: QualityAction, snapshot: QualityPageSnapshot) -> QualityKeyKind {
         guard case .key(let key, let modifiers, _) = action else { return .other }
-        if key == -1 || modifiers > 1 { return .shortcut }
+        if key == -1 || key == -3 || key == -4 || modifiers > 1 { return .shortcut }
         if action.requestsPage(with: snapshot.configuration.inputOptions), !snapshot.candidates.isEmpty { return .page }
         switch key {
         case 0xff08: return .backspace
@@ -583,7 +652,9 @@ package final class QualityRecorder {
         } ?? clock.utc()
         // Empty finish callbacks and idle highlight calls do not create compositions.
         if !record.decisions.isEmpty || !record.commits.isEmpty || observedComposition {
+            if !closedWindows.isEmpty { record.composition.operations.postCommitWindows = closedWindows }
             store.submit(record)
+            closedWindows = []
         }
         reset()
     }
