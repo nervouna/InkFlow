@@ -414,7 +414,8 @@ struct QualityCaptureTests {
         await store.flush()
         check(acts() == [["source": "candidate_learning", "event": "forgotten", "count": "1"]],
               "learning acts: one press is one forgotten act: \(acts())")
-        check(control.handle(keyEvent(53, ""), client: client), "learning acts: Escape cancels the forgotten composition")
+        check(control.handle(keyEvent(53, ""), client: client),
+              "learning acts: Escape cancels the forgotten composition")
         control.deactivateServer(client)
         print("PASS learning acts: Shift+Backspace on shown candidates records one content-free forgotten act")
     }
