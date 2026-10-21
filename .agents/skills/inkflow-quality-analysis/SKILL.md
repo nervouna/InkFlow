@@ -24,6 +24,12 @@ For a routine quality review, use `trend`. Default to 7 days for a short operati
 check and 28 days for a broader review. Present the SVG chart and summarize Top1 and
 Top3 selection rates for daily, 7-day rolling and 28-day rolling windows. Both rates
 share the same validated known-display-rank denominator; Top3 means display rank 1–3.
+The same `trend` output carries the scorecard: read E-onekey (`onekey_rate`), E-dec (`decisions_per_composition`),
+the learned-miss share (`learned_miss_share`, the interim L-avoid) and L-over (`learned_leader_miss_rate` beside
+`dictionary_leader_miss_rate`) from a series, E-kspc (`kspc`) from the `chinese` series, and C-pre
+(`preedit_edit_rate`), C-cancel (`cancel_rate`) and C-raw (`raw_commit_rate`) from `overall`, the only series that
+has them. Report a bucket under 200 units with its Wilson interval only. C-rev is documented in the query contract
+but not computed yet.
 Keep generated charts in a task-owned
 temporary directory unless the user requests a durable artifact.
 

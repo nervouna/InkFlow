@@ -13,7 +13,9 @@ database or empty filter result, exits 0. Help is available at each command.
 
 - `summary`: pooled raw coverage counts, separate ranking-fingerprint/measurement-
   fingerprint/text-kind/presentation groups, exact displayed-rank counts, identity
-  coverage, and separately scoped recorder statistics.
+  coverage, and separately scoped recorder statistics. `coverage` carries the composition and commit counters of
+  `trend`, their rates without intervals, `unknown_fingerprint_compositions` and `composition_rate_status` (below);
+  `coverage` and every group carry the decision counters and rates of the scorecard.
 - `trend`: the primary routine-report command. It returns a continuous local-calendar
   series, recomputed 7-day and 28-day rolling metrics, output-kind series, version
   markers and identity coverage. `--days` defaults to 28. `--chart PATH` writes a
@@ -27,6 +29,25 @@ database or empty filter result, exits 0. Help is available at each command.
   its selected text. `length_unavailable` counts the known-rank decisions with no length (an older
   text-free decision, or a zero count) beside the buckets, so the bucket `known_rank` values plus
   `length_unavailable` equal `known_rank`. `text_free` counts the known-rank text-free decisions.
+  The scorecard of `docs/input-quality-metrics.md` rides the same points as summed counters, each rate with its exact
+  denominator (see the tables below), a rate in [0,1] and null for a zero denominator. On every point and in every
+  `by_selection_length` bucket: `onekey_selected`, `onekey_rate` (E-onekey); `misses`, `learned_misses`,
+  `misses_with_provenance`, `learned_miss_share` (the L-avoid interim proxy); `learned_leader`,
+  `learned_leader_missed`, `learned_leader_miss_rate`, `dictionary_leader`, `dictionary_leader_missed`,
+  `dictionary_leader_miss_rate` (L-over); and the 95% Wilson interval of each of those proportions as
+  `onekey_wilson_low` / `_high`, `learned_miss_wilson_*`, `learned_leader_miss_wilson_*` and
+  `dictionary_leader_miss_wilson_*`. On every point and in no bucket: `code_compositions`, `cancelled_compositions`,
+  `edited_compositions`, `regular_committed_compositions`, `regular_decisions`, `kspc_compositions`,
+  `kspc_keypresses`, `kspc_characters`, `kspc_text_free_compositions`, `candidate_commits`, `raw_return_commits`,
+  and the rates `cancel_rate` (C-cancel), `preedit_edit_rate` (C-pre), `raw_commit_rate` (C-raw), each with
+  `cancel_wilson_*`, `preedit_edit_wilson_*` and `raw_commit_wilson_*`, `decisions_per_composition` (E-dec, a mean) and
+  `kspc` (E-kspc, keys per committed character), which have no interval. C-rev has a row below and no field yet.
+  Composition and commit counters are grouped by the local day of the composition's `started_at`, the composition kind
+  and its measurement fingerprint, and the trend keeps the latest fingerprint as it does for decisions. The three
+  rates over compositions without a kind, `cancel_rate`, `preedit_edit_rate` and `raw_commit_rate`, are computed in the
+  `overall` series only and are null in every kind series; with `--kind` every composition and commit rate is null and
+  the counters stay (the filter keeps compositions with a matching decision, so cancels and raw Returns drop out).
+  `metric_scope` also reports `included_compositions`, `excluded_compositions` and `excluded_unknown_compositions`.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
 - `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, the
@@ -157,6 +178,13 @@ cancelled and interrupted. Unknown paths never become successful choices.
 | pair_identity | known_rank whose snapshot has a `codeHash` and whose selected candidate has a `textHash`; `pair_id` is `code_hash \|\| '\|' \|\| selected_text_hash` |
 | pair_unavailable | known_rank without `pair_id`: records from before pair hashes, decisions with a selected prefix, decisions whose consumed span is unknown (no `evidence` row and no custom-phrase match), envelopes submitted before the key was loaded, and records written while the key file could not be kept; `pair_identity + pair_unavailable = known_rank` |
 
+| onekey_selected / onekey_rate | `valid` with trigger `space`, snapshot `page` 0, and `pageTurns` 0 and `candidateMoves` 0 in the decision's own operations (E-onekey; `valid` is the design's regular decisions); rate over `valid` |
+| misses | `valid` with display rank above 1; a paged choice has a rank above the page size, so it is a miss |
+| learned_misses / learned_miss_share | misses whose selected candidate `type` is `user_phrase`, `english_personal_1` to `english_personal_3` or `mixed_personal_0` to `mixed_personal_3` (the learned set); share over `misses`, the interim L-avoid proxy, which undercounts because a learned word can also be a first-time dictionary miss |
+| misses_with_provenance | misses whose selected candidate has a non-empty `type`: the evidence coverage of the share. Records from before candidate types (#129) and candidates without evidence carry none, so the share undercounts until they leave retention |
+| learned_leader / learned_leader_missed / learned_leader_miss_rate | `comparable` decisions whose first-page candidate 0 has a learned `type`; missed adds `NOT top1_match`; rate is missed over leader (L-over) |
+| dictionary_leader / dictionary_leader_missed / dictionary_leader_miss_rate | the same for first-page candidate 0 of `type` `phrase` or `user_table` (the dictionary set), reported beside the learned rate |
+
 A zero denominator yields null/N/A, never 0%. `rank_counts` enumerates each exact
 global display rank for known_rank in each group. Page and index are zero-based;
 rank is one-based: `page * actual_page_size + index + 1`. Native rank is separate
@@ -223,6 +251,36 @@ field existed, a commit without an insertion, secure input, engine teardown and 
 record the store dropped all leave none. `coverage.commit_windows` counts the
 windows whose commit belongs to a selected composition, and `windows_by_end` splits
 them by `end`. Each is one more fact on the existing schema, so no cohort changes.
+
+### Composition and commit counters
+
+One row per selected composition, read in `trend` and `summary` `coverage` (the groups carry decision counters only).
+A composition's decisions are the filtered ones, as for every decision aggregate; its `keypresses` and `preeditEdits`
+are the whole composition's totals.
+
+- **Kind** is the `text_kind` all its decisions share, `mixed` when they differ and `unknown` when it has no decision;
+  a commit takes its composition's kind. `chinese` is Han without Latin (`mixed` is Han with Latin).
+- **Measurement fingerprint** is the decisions' fingerprint (`unknown` when they disagree); a composition without a
+  decision takes the fingerprint of the decisions of its `run_id` (any filter, `unknown` when the run has none or they
+  disagree), because the versions that make it are build constants of a process. In `trend` a day or point of
+  compositions without a decision still has a status and rates; it is `unavailable_without_measurement_evidence` only
+  with neither decisions nor compositions. `summary` pools the fingerprints of decisions and compositions into
+  `composition_rate_status` by the rule of `quality_rate_status`: `available_within_measurement_fingerprint` when they
+  share exactly one known fingerprint and none is `unknown`, `unavailable_without_measurement_evidence` when there are
+  none, else `unavailable_unknown_measurement_fingerprint` or `unavailable_across_measurement_fingerprints`; the
+  composition and commit rates are null unless it is available. `quality_rate_status` and the decision rates keep
+  the decisions-only rule. `unknown_fingerprint_compositions` counts compositions with fingerprint `unknown`.
+
+| Field | Exact cohort or meaning |
+| --- | --- |
+| code_compositions | compositions with at least one decision, or outcome `cancelled` or `interrupted`, or a commit of kind `candidate`, `raw_return`, `ascii` or `forced_flush`. Not: a composition without a decision whose commits are only `direct_symbol`, `punctuation`, `mode_toggle` or `unknown` (a symbol key opens and closes a record that types no code), and a committed composition with no commit (`outcome_reason` `ai_adopted`) |
+| cancelled_compositions / cancel_rate | `code_compositions` with outcome `cancelled` over `code_compositions` (C-cancel); `interrupted` is in the denominator and is not a cancel |
+| edited_compositions / preedit_edit_rate | `code_compositions` with `preeditEdits` above 0 over `code_compositions` (C-pre) |
+| regular_committed_compositions / regular_decisions / decisions_per_composition | compositions with outcome `committed` and at least one `valid` decision, and the `valid` decisions they hold; the mean is `regular_decisions / regular_committed_compositions` (E-dec) |
+| kspc_compositions / kspc_keypresses / kspc_characters / kspc | regular committed compositions whose decisions are all text-captured; their summed `keypresses` (letters, edits, paging, moves, selection) and the summed `length(text)` of their `candidate` commits (Unicode scalars); `kspc` is keys over characters, null when there are no characters (E-kspc). Overall pools every kind; the scorecard's Chinese E-kspc is the `chinese` series |
+| kspc_text_free_compositions | regular committed compositions with a text-free decision: counted and left out of E-kspc, whose characters come from the commit text (the commit `character_count` is recorded in either mode, but the cohort is unchanged) |
+| candidate_commits / raw_return_commits / raw_commit_rate | commits of those kinds in the selected compositions; `raw_commit_rate` is `raw_return_commits / (candidate_commits + raw_return_commits)` (C-raw). The design's "commits of Chinese-kind compositions" cannot be read: a Return on raw pinyin records a decision with trigger `return_raw` and kind `unknown`, or none, so the denominator is the commits of pinyin compositions of every kind. `ascii`, `punctuation`, `direct_symbol`, `forced_flush` and `mode_toggle` commits are in neither term |
+| C-rev (not computed) | `candidate` commits whose post-commit window (`windows`, `window_*`) shows deletions of at least the committed character count (`character_count`), or an undo, before other typing, over `candidate` commits with a window observed; reserved field names `commits_with_window`, `reverted_commits`, `revert_rate`. The window `W` and the deletion threshold are instrument constants of C-rev. Nothing reads these fields yet |
 
 ## Storage, identity and coverage limits
 
