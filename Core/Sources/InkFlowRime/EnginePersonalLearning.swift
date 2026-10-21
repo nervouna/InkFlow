@@ -66,12 +66,14 @@ extension IFEngine {
         var token: OpaquePointer?
         try personalLearningMutation { ifr_personal_learning_delete($0, entry.listing.handle, entry.index, &token) }
         guard let token else { throw PersonalLearningError.unavailable }
+        if entry.source == .english { recordEffectiveness(.init(source: .candidateLearning, event: .deleted)) }
         return PersonalLearningUndo(entry: entry, revision: voiceLexicon.learningRevision, token: LearningUndoToken(token))
     }
 
     package static func undoPersonalLearning(_ undo: PersonalLearningUndo) throws {
         guard undo.revision == voiceLexicon.learningRevision else { throw PersonalLearningError.conflict }
         try personalLearningMutation { ifr_personal_learning_undo($0, undo.token.handle) }
+        if undo.entry.source == .english { recordEffectiveness(.init(source: .candidateLearning, event: .restored)) }
     }
 
     private static func personalLearningMutation(_ operation: (OpaquePointer) -> IFRStatus) throws {

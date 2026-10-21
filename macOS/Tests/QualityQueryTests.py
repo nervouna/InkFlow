@@ -62,7 +62,9 @@ def fixture(path):
             ('voice_session', 'finalized', 4, None), ('voice_correction', 'detected', 2, None),
             ('voice_correction', 'learned', 1, None), ('voice_correction', 'rejected', 1, 'immediate_undo'),
             ('voice_alias', 'hit', 2, None), ('voice_alias', 'later_reuse', 1, None),
-            ('canonical_lexicon', 'hit', 3, None), ('canonical_lexicon', 'later_reuse', 2, None)]:
+            ('canonical_lexicon', 'hit', 3, None), ('canonical_lexicon', 'later_reuse', 2, None),
+            ('candidate_learning', 'forgotten', 3, None), ('candidate_learning', 'deleted', 2, None),
+            ('candidate_learning', 'restored', 1, None)]:
         insert(db, 'effectiveness_events', run_id='run', occurred_at=STAMP, source=source,
                event=event, reason=reason, count=count)
     identities = {
@@ -423,7 +425,7 @@ class QueryTests(unittest.TestCase):
             db.execute("INSERT INTO effectiveness_events(id,run_id,occurred_at,source,event,count) VALUES(1,'run','2026-09-07T16:00:00.000Z','voice_session','finalized',1)")
         after_cleanup = self.export_file('after-cleanup.json')
         retained = self.result('summary', '--exports-only', '--input', str(overlap), '--input', str(after_cleanup))
-        self.assertEqual(retained['sources'][0]['counts']['effectiveness_events'], 10)
+        self.assertEqual(retained['sources'][0]['counts']['effectiveness_events'], 13)
 
     def test_export_empty_invalid_and_conflicting_inputs_fail_without_summary(self):
         empty = Path(self.temp.name) / 'empty.sqlite3'; db = empty_db(empty); db.close()
@@ -803,9 +805,11 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(effectiveness['voice']['correction_learning_rate'], 0.5)
         self.assertEqual(effectiveness['voice']['alias_reuse_rate'], 0.5)
         self.assertEqual(effectiveness['canonical_lexicon']['reuse_rate'], 2 / 3)
+        self.assertEqual(effectiveness['candidate_learning'], dict(forgotten=3, deleted=2, restored=1))
         filtered = self.result('summary', '--kind', 'english')['learning_effectiveness']
         self.assertEqual(filtered['status'], 'unavailable_for_candidate_filters')
         self.assertIsNone(filtered['voice']['correction_detection_rate'])
+        self.assertEqual(filtered['candidate_learning'], dict(forgotten=3, deleted=2, restored=1))
 
     def test_top3_uses_the_known_rank_denominator_and_includes_ranks_two_and_three(self):
         with sqlite3.connect(self.db) as db:
@@ -1341,7 +1345,7 @@ class QueryTests(unittest.TestCase):
 
     def test_timing_actual_controller_writer(self):
         result = self.result('timing', db=ENGINE_DB)
-        self.assertEqual(result['coverage']['compositions'], 67)
+        self.assertEqual(result['coverage']['compositions'], 69)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
         # This engine/controller fixture does not observe native panel visibility.
@@ -1392,13 +1396,15 @@ class QueryTests(unittest.TestCase):
         # The five candidate-fact cases (phrase, user_phrase, fuzzy, lv, English) add one each as well.
         # The post-commit window cases add 17 compositions and commits and 16 decisions (one is a direct comma),
         # one decision of which was committed without a client.
-        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[67,62,64])
-        self.assertEqual(result['coverage']['valid'],53)
+        # The learning-act fixture adds two compositions, one valid decision and one commit: the learned pick, and the
+        # composition whose learned candidate Shift+Backspace forgets before Escape cancels it.
+        self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[69,63,65])
+        self.assertEqual(result['coverage']['valid'],54)
         # Every known-rank decision of the real capture is hashed or counted as without a pair identity.
         coverage = result['coverage']
         self.assertEqual(coverage['pair_identity'] + coverage['pair_unavailable'], coverage['known_rank'])
         self.assertGreater(coverage['pair_identity'], 0)
-        self.assertEqual(result['coverage']['regular_issued'],54)
+        self.assertEqual(result['coverage']['regular_issued'],55)
         self.assertEqual(result['coverage']['regular_not_issued'],2)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)

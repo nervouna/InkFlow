@@ -401,9 +401,18 @@ private extension QualityStoreTests {
         await store.flush()
         expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "strict 90-day event cutoff")
         let writer = try Reader(url, writable: true)
-        try writer.execute("WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < 4100) INSERT INTO effectiveness_events (run_id, occurred_at, source, event, count) SELECT '\(store.runID)', '\(QualityJSON.timestamp(maintenanceDate))', 'voice_session', 'finalized', 1 FROM n")
+        // One aged-in row plus more than the cap, so the pruning below must remove rows to reach the cap.
+        let excess = QualityLimits.effectivenessRetentionRows + 16
+        try writer.execute("""
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < \(excess))
+            INSERT INTO effectiveness_events (run_id, occurred_at, source, event, count)
+            SELECT '\(store.runID)', '\(QualityJSON.timestamp(maintenanceDate))',
+                'voice_session', 'finalized', 1 FROM n
+            """)
         await store.maintainRetention()
-        expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "4096", "maintenance enforces event count without new submissions")
+        let retained = try reader.scalar("SELECT count(*) FROM effectiveness_events")
+        expect(retained == String(QualityLimits.effectivenessRetentionRows),
+               "maintenance enforces event count without new submissions")
         await store.close()
         let reopened = QualityStore(maintenanceNow: { maintenanceDate.addingTimeInterval(91 * 86_400) },
             url: url, engineVersion: "test", buildMetadata: metadata, paused: true, textCapture: true)
@@ -698,12 +707,21 @@ private extension QualityStoreTests {
             QualityEffectivenessEvent(source: .canonicalLexicon, event: .hit),
             QualityEffectivenessEvent(source: .canonicalLexicon, event: .laterReuse),
             QualityEffectivenessEvent(source: .voiceCorrection, event: .rejected, reason: .immediateUndo),
+            QualityEffectivenessEvent(source: .candidateLearning, event: .forgotten),
+            QualityEffectivenessEvent(source: .candidateLearning, event: .deleted),
+            QualityEffectivenessEvent(source: .candidateLearning, event: .restored),
         ]
         for event in events { expect(store.submit(event) == .accepted, "content-free event accepted") }
         expect(store.submit(.init(source: .voiceAlias, event: .hit, count: 0)) == .invalid,
                "invalid numeric event fails before the worker")
         expect(store.submit(.init(source: .voiceSession, event: .learned)) == .invalid,
                "invalid source/event pairing fails before the worker")
+        expect(store.submit(.init(source: .candidateLearning, event: .hit)) == .invalid,
+               "learning acts accept only their own events")
+        expect(store.submit(.init(source: .canonicalLexicon, event: .forgotten)) == .invalid,
+               "learning acts events are not accepted from other sources")
+        expect(store.submit(.init(source: .candidateLearning, event: .forgotten, reason: .unavailable)) == .invalid,
+               "learning acts carry no rejection reason")
         expect(store.submit(.init(source: .voiceSession, event: .finalized,
                                   occurredAt: maintenanceDate.addingTimeInterval(-100 * 86_400))) == .accepted,
                "old event reaches bounded retention")

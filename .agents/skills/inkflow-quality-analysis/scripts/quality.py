@@ -376,6 +376,9 @@ def effectiveness(db, args):
                  alias_later_reuse=value('voice_alias', 'later_reuse'))
     canonical = dict(exact_hits=value('canonical_lexicon', 'hit'),
                      later_reuse=value('canonical_lexicon', 'later_reuse'))
+    learning_acts = dict(forgotten=value('candidate_learning', 'forgotten'),
+                         deleted=value('candidate_learning', 'deleted'),
+                         restored=value('candidate_learning', 'restored'))
     if unsupported:
         status = 'unavailable_for_candidate_filters'
         voice.update(correction_detection_rate=None, correction_learning_rate=None, alias_reuse_rate=None)
@@ -391,7 +394,7 @@ def effectiveness(db, args):
         canonical['reuse_rate'] = (canonical['later_reuse'] / canonical['exact_hits']
                                    if canonical['exact_hits'] else None)
     return dict(scope='content_free_events_separate_from_candidate_accuracy', status=status,
-                voice=voice, canonical_lexicon=canonical)
+                voice=voice, canonical_lexicon=canonical, candidate_learning=learning_acts)
 
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',

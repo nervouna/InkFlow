@@ -11,7 +11,9 @@ struct QualitySettingsView: View {
 
     var body: some View {
         Section("输入质量记录") {
-            Text("墨流在本机保存过去 28 天的候选排名和操作时序，以及 90 天的学习效果事件（最多 4096 条），用于评估历史输入质量。默认不保存任何输入文本，只保存输入编码和所选词的哈希，用来认出重复出现的选择；哈希的密钥只保存在这台 Mac 上，不会导出。你可以暂停记录，或者清除所有记录（密钥也会更换）。")
+            Text("墨流在本机保存过去 28 天的候选排名和操作时序，以及 90 天的学习效果事件（最多 16384 条），"
+                + "用于评估历史输入质量。默认不保存任何输入文本，只保存输入编码和所选词的哈希，用来认出重复出现的选择；"
+                + "哈希的密钥只保存在这台 Mac 上，不会导出。你可以暂停记录，或者清除所有记录（密钥也会更换）。")
             HStack {
                 Button(settings.qualityRecordingPaused ? "恢复记录" : "暂停记录", action: changeRecording)
                     .accessibilityIdentifier("settings.quality.toggle")
