@@ -43,7 +43,7 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 `tests/parity.rs` compares the Rust engine with the recorded behavior of the Swift engine on prepared production resources and isolated user directories (`parity.sh`; the tests skip without `INKFLOW_PORTABLE_RESOURCES`):
 
-- The 24 samples of [the quality baseline](../Fixtures/QualityBaseline/README.md) reproduce `baseline.json` exactly: first page, target rank, paging, selection, one-shot commits, five learning commits, and the learned state after the runtime restarts on the same user directory.
+- The 24 samples of [the quality baseline](../Fixtures/QualityBaseline/README.md) reproduce `baseline.json` exactly: first page, target rank, paging, selection, one-shot commits, five learning commits with the observations before selections 2 to 5 (`training`), the learned state after the runtime restarts on the same user directory, and the retained state after the retention pass of ten unrelated Han commits in that directory.
 - `swift_engine_regressions` carries the expectations of the Swift engine regressions for basic cases, context ranking, custom phrases, input settings and ASCII boundaries, plus the stale-selection and observer contracts.
 - `swift_personal_learning_and_data` covers learning management at the idle boundary, export/import between isolated user directories, a macOS-format document with disclosed unsupported preferences, and rejected snapshots rolling back.
 

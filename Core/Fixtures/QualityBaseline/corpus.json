@@ -1,6 +1,7 @@
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "learningSelections": 5,
+  "retentionCommits": 10,
   "candidateCount": 9,
   "pageLimit": 20,
   "samples": [
