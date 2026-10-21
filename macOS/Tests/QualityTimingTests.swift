@@ -117,10 +117,17 @@ private func near(_ value: Double?, _ expected: Double) -> Bool {
         time.now = 160.2
         recorder.willMutate(page("n"), revision: revision, action: .toggle(true))
         recorder.didMutate(page("n"), handled: true)
-        time.now = 160.4; action(0xff1b, page("n"), page(""))
+        // Cmd+Z (-3) and Cmd+V (-4) are shortcut keys like every other chord, so key timing is unchanged.
+        time.now = 160.3
+        action(-3, page("n"), page("n"))
+        action(-4, page("n"), page("n"))
+        time.now = 160.4
+        action(0xff1b, page("n"), page(""))
         await store.flush(); rows = try operations(url)
         expect(rows[6].timing?.keySamples[1].kind == .modeToggle && rows[6].timing?.keySamples[1].isRepeat == true,
                "mode toggle preserves its physical key repeat flag")
+        expect(rows[6].timing?.keySamples.map(\.kind) == [.typing, .modeToggle, .shortcut, .shortcut, .escape],
+               "Cmd+Z and Cmd+V record as shortcut")
         let legacy = Data(#"{"keypresses":2,"pageRequests":0,"pageTurns":0,"candidateMoves":0,"preeditEdits":0}"#.utf8)
         expect(try QualityJSON.decoder().decode(QualityOperations.self, from: legacy).timing == nil, "legacy missing timing remains unknown")
         await store.close()

@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import InkFlowRime
 
 @MainActor
@@ -7,7 +8,16 @@ extension IFEngine {
     func event(_ event: NSEvent, capturedAt: TimeInterval? = nil) -> Bool {
         guard available else { return false }
         let flags = event.modifierFlags
-        guard flags.intersection([.command, .control, .option]).isEmpty else { return input(-1, isRepeat: event.isARepeat, capturedAt: capturedAt) }
+        guard flags.intersection([.command, .control, .option]).isEmpty else {
+            // Cmd+Z and Cmd+V reach Rime as unsupported keys like every other chord; the recorder tells them apart.
+            let chord = flags.intersection([.command, .control, .option, .shift])
+            let key: Int32 = switch (chord == .command, Int(event.keyCode)) {
+            case (true, kVK_ANSI_Z): -3
+            case (true, kVK_ANSI_V): -4
+            default: -1
+            }
+            return input(key, isRepeat: event.isARepeat, capturedAt: capturedAt)
+        }
         let key: Int32
         switch event.keyCode {
         case 36, 76: key = 0xff0d

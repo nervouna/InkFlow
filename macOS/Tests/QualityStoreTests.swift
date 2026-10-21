@@ -425,11 +425,18 @@ private extension QualityStoreTests {
         phrased.decisions[0].snapshot.configuration = phrases
         phrased.composition.operations.inputBeforeDeletion = "nihoa"
         phrased.decisions[0].operations.inputBeforeDeletion = "nihoa"
+        let window = QualityPostCommitWindow(commitID: "commit-before", end: .clientChanged, elapsedMilliseconds: 1234,
+            deletions: 3, forwardDeletions: 1, undo: 2, directText: 4, paste: 5,
+            leadingDeletions: 2, leadingForwardDeletions: 1, leadingUndo: 1)
+        phrased.composition.operations.postCommitWindows = [window]
         expect(store.submit(phrased) == .accepted, "default mode accepts envelopes")
         await store.flush()
         let reader = try Reader(url)
         expect(try reader.scalar("SELECT json_extract(c.operations_json,'$.inputBeforeDeletion') IS NULL AND json_extract(d.operations_json,'$.inputBeforeDeletion') IS NULL FROM compositions c JOIN candidate_decisions d ON d.composition_id = c.id") == "1",
                "input before deletion is text and is dropped by default")
+        let stored = try QualityJSON.decoder().decode(QualityOperations.self,
+            from: Data(try reader.scalar("SELECT operations_json FROM compositions").utf8))
+        expect(stored.postCommitWindows == [window], "a window is counts only: text-free records keep every field")
         expect(try reader.scalar("SELECT json_extract(applied_config_json,'$.customPhrases[0].id') || json_extract(applied_config_json,'$.customPhrases[0].code') || json_extract(applied_config_json,'$.customPhrases[0].text') FROM config_revisions") == "phrase-1",
                "custom phrases keep their IDs but lose code and text")
         expect(try reader.scalar("SELECT id FROM config_revisions") == phrased.revisions[0].id + "/text-free", "redacted configurations are their own revision")

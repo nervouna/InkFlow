@@ -29,7 +29,8 @@ database or empty filter result, exits 0. Help is available at each command.
   `length_unavailable` equal `known_rank`. `text_free` counts the known-rank text-free decisions.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
-- `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, and
+- `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, the
+  post-commit `windows` of those commits, and
   all four layered identities plus the legacy fingerprint, decoded applied
   configuration, raw build metadata, engine version and metric-rule version for
   those decisions and every referenced
@@ -170,6 +171,28 @@ any, is in the next composition. It is typed text: present only in text-mode
 records, absent when nothing was deleted, and absent in records written before the
 field existed, so absence alone is not evidence of no deletion. No command
 aggregates it yet; `inspect` shows it.
+
+`operations_json.postCommitWindows`, on a composition only, holds the post-commit
+windows closed since the recorder last submitted a record. The carrier is the
+recorder's next composition, not the commit's own, so read a window by its commit:
+`inspect` lists the `windows` of its own commits, and `observations` carries
+`window_end`, `window_elapsed_ms` and the counts below as `window_*` on the decision
+that made the commit. A window counts the keys that reached InkFlow while no
+composition was active, from the commit until it ended: Backspace (`deletions`),
+Forward Delete (`forward_deletions`), Cmd+Z (`undo`), pass-through printable ASCII
+keys (`direct_text`) and Cmd+V (`paste`). The three `leading_*` counts are the
+deletions, forward deletions and undo before the first direct-text or paste key.
+`end` is `next_code` (a code started or another commit was made), `client_changed`,
+`deactivated` or `timeout`. `W` is 10 seconds (`QualityLimits.postCommitWindowSeconds`);
+there is no timer, so the first event after `W` closes the window as `timeout` or
+another end with `elapsed_ms` clamped to 10000, and a key past `W` is never counted.
+Arrows, Home, End, Return, Tab, Escape, mode toggles and other chords, Option or
+Command with Backspace among them, are not counted and do not end it. A commit with
+no window was not observed, which is not zero deletions: records written before the
+field existed, a commit without an insertion, secure input, engine teardown and a
+record the store dropped all leave none. `coverage.commit_windows` counts the
+windows whose commit belongs to a selected composition, and `windows_by_end` splits
+them by `end`. Each is one more fact on the existing schema, so no cohort changes.
 
 ## Storage, identity and coverage limits
 

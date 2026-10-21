@@ -147,9 +147,53 @@ extension QualityCaptureTests {
             check(db.ops(db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]).timing == nil,
                   "secure input does not accrue per-key timing")
         }
+        // The post-commit window runs on the injected clock, and secure input keeps it from opening or drops it.
+        let limit = QualityLimits.postCommitWindowSeconds
+        func commitNihao(_ control: InkFlowInputController, _ client: RecordingClient) {
+            typeInput(control, client)
+            time.now += 0.1
+            check(control.handle(keyEvent(49, " "), client: client))
+        }
+        /// The record the next composition submits, which carries the windows closed before it.
+        func carrier(_ control: InkFlowInputController, _ client: RecordingClient) async -> [QualityPostCommitWindow]? {
+            time.now += 0.1
+            check(control.handle(keyEvent(0, "a"), client: client))
+            time.now += 0.1
+            check(control.handle(keyEvent(49, " "), client: client))
+            await store.flush()
+            return db.ops(db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]).postCommitWindows
+        }
+        do {
+            let (control, client, _) = fixture()
+            commitNihao(control, client)
+            await store.flush()
+            let commit = db.rows("SELECT id FROM commits ORDER BY rowid DESC LIMIT 1")[0]["id"]!
+            time.now += 1
+            check(!control.handle(keyEvent(51, ""), client: client))
+            time.now += limit
+            check(!control.handle(keyEvent(51, ""), client: client))
+            let windows = await carrier(control, client)
+            check(windows == [QualityPostCommitWindow(commitID: commit, end: .timeout,
+                elapsedMilliseconds: Int(limit * 1000), deletions: 1, leadingDeletions: 1)],
+                "W + 1 seconds out is a timeout and the key is not counted: \(windows ?? [])")
+        }
+        for begins in [false, true] {
+            var secure = !begins
+            let (control, client, _) = fixture(secure: { secure })
+            commitNihao(control, client)
+            secure = true
+            time.now += 0.1
+            check(!control.handle(keyEvent(51, ""), client: client))
+            secure = false
+            let windows = await carrier(control, client)
+            let when = begins ? "beginning" : "throughout"
+            check(windows == nil, "secure input \(when) leaves no window: \(windows ?? [])")
+        }
         await store.close()
-        check(store.statistics().written == 9 && store.statistics().droppedOversized == 0 && store.statistics().droppedInvalid == 0)
+        let statistics = store.statistics()
+        check(statistics.written == 15 && statistics.droppedOversized == 0 && statistics.droppedInvalid == 0)
         print("PASS controller timing: real Rime first/final keys, digit/space/return/escape/click/AI Tab, callback time exclusion, delayed visibility without AI and secure input")
+        print("PASS post-commit window timeout on the injected clock; secure input throughout or beginning leaves none")
     }
 
     @MainActor private static func pumpVisibilityTimer() {
