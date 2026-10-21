@@ -39,14 +39,18 @@ database or empty filter result, exits 0. Help is available at each command.
   `dictionary_leader_miss_wilson_*`. On every point and in no bucket: `code_compositions`, `cancelled_compositions`,
   `edited_compositions`, `regular_committed_compositions`, `regular_decisions`, `kspc_compositions`,
   `kspc_keypresses`, `kspc_characters`, `kspc_text_free_compositions`, `candidate_commits`, `raw_return_commits`,
-  and the rates `cancel_rate` (C-cancel), `preedit_edit_rate` (C-pre), `raw_commit_rate` (C-raw), each with
-  `cancel_wilson_*`, `preedit_edit_wilson_*` and `raw_commit_wilson_*`, `decisions_per_composition` (E-dec, a mean) and
-  `kspc` (E-kspc, keys per committed character), which have no interval. C-rev has a row below and no field yet.
+  `commits_with_window`, `reverted_commits`, and the rates `cancel_rate` (C-cancel), `preedit_edit_rate` (C-pre),
+  `raw_commit_rate` (C-raw) and `revert_rate` (C-rev), each with `cancel_wilson_*`, `preedit_edit_wilson_*`,
+  `raw_commit_wilson_*` and `revert_wilson_*`, `decisions_per_composition` (E-dec, a mean) and `kspc` (E-kspc, keys per
+  committed character), which have no interval.
   Composition and commit counters are grouped by the local day of the composition's `started_at`, the composition kind
   and its measurement fingerprint, and the trend keeps the latest fingerprint as it does for decisions. The three
   rates over compositions without a kind, `cancel_rate`, `preedit_edit_rate` and `raw_commit_rate`, are computed in the
-  `overall` series only and are null in every kind series; with `--kind` every composition and commit rate is null and
-  the counters stay (the filter keeps compositions with a matching decision, so cancels and raw Returns drop out).
+  `overall` series only and are null in every kind series; with `--kind` every composition and commit rate but
+  `revert_rate` is null and the counters stay (the filter keeps compositions with a matching decision, so cancels and
+  raw Returns drop out). `revert_rate` is reported in `overall`, in every kind series and under `--kind`, because a
+  `candidate` commit always belongs to a composition with decisions, so its kind is known and the filter keeps the
+  whole population of C-rev; it is null only for a status that is not available or a zero denominator.
   `metric_scope` also reports `included_compositions`, `excluded_compositions` and `excluded_unknown_compositions`.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
@@ -280,7 +284,7 @@ are the whole composition's totals.
 | kspc_compositions / kspc_keypresses / kspc_characters / kspc | regular committed compositions whose decisions are all text-captured; their summed `keypresses` (letters, edits, paging, moves, selection) and the summed `length(text)` of their `candidate` commits (Unicode scalars); `kspc` is keys over characters, null when there are no characters (E-kspc). Overall pools every kind; the scorecard's Chinese E-kspc is the `chinese` series |
 | kspc_text_free_compositions | regular committed compositions with a text-free decision: counted and left out of E-kspc, whose characters come from the commit text (the commit `character_count` is recorded in either mode, but the cohort is unchanged) |
 | candidate_commits / raw_return_commits / raw_commit_rate | commits of those kinds in the selected compositions; `raw_commit_rate` is `raw_return_commits / (candidate_commits + raw_return_commits)` (C-raw). The design's "commits of Chinese-kind compositions" cannot be read: a Return on raw pinyin records a decision with trigger `return_raw` and kind `unknown`, or none, so the denominator is the commits of pinyin compositions of every kind. `ascii`, `punctuation`, `direct_symbol`, `forced_flush` and `mode_toggle` commits are in neither term |
-| C-rev (not computed) | `candidate` commits whose post-commit window (`windows`, `window_*`) shows deletions of at least the committed character count (`character_count`), or an undo, before other typing, over `candidate` commits with a window observed; reserved field names `commits_with_window`, `reverted_commits`, `revert_rate`. The window `W` and the deletion threshold are instrument constants of C-rev. Nothing reads these fields yet |
+| commits_with_window / reverted_commits / revert_rate | C-rev (unit commit, truth T2 against T3). `commits_with_window` is the denominator: `candidate` commits of the selected compositions that have a post-commit window (a `windows` row) of any end reason; a window that ended `client_changed` or `timeout` with every count 0 was observed, and that commit was kept. `reverted_commits` is those with `leading_undo >= 1` (Cmd+Z), or with `character_count > 0` and `leading_deletions >= character_count` (Backspaces); the `leading_*` counts stop at the first direct-text or paste key, so they already mean "before other typing". Forward Delete never counts, and a commit whose `character_count` is NULL or 0 can only be reverted by Cmd+Z, so a zero threshold never makes every commit a revert. `revert_rate = reverted_commits / commits_with_window`, null for a zero denominator and never 0%, with `revert_wilson_low` / `revert_wilson_high` in `trend`. A commit is counted once, from `commits` and `windows`, whatever the number of decisions that link to it; `observations` is not used because it repeats a commit's window on every decision that links to it. The window rides the composition that follows its commit, which may start after `--until` and is still read. The instrument constants of C-rev, versioned with it, are `W` (`QualityLimits.postCommitWindowSeconds`, 10 s) and the deletion threshold, the commit's `character_count`. `commit_windows` and `windows_by_end` of `summary` count the windows of every kind of commit and are not this denominator |
 
 ## Storage, identity and coverage limits
 

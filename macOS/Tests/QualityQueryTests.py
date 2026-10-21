@@ -48,6 +48,8 @@ COMPOSITION_FIELDS = (*COMPOSITION_COUNTER_FIELDS, 'cancel_rate', 'cancel_wilson
                       'raw_commit_wilson_high')
 OVERALL_ONLY_FIELDS = tuple(name for name in COMPOSITION_FIELDS if name.startswith(('cancel_', 'preedit_edit_',
                                                                                     'raw_commit_')))
+REVERT_COUNTER_FIELDS = ('commits_with_window', 'reverted_commits')
+REVERT_FIELDS = (*REVERT_COUNTER_FIELDS, 'revert_rate', 'revert_wilson_low', 'revert_wilson_high')
 
 
 # The fixture's `raw-only` composition is their carrier; the commits they describe belong to compositions a to d.
@@ -360,6 +362,106 @@ def scorecard_fixture(path):
         commits=[('candidate', '旧')])
     add('old2', outcome='cancelled', started=OLDER, run='old', keys=2)
     add('orphan', outcome='cancelled', started=OLDER, run='quiet', keys=2, app='app.orphan')
+    db.commit()
+    db.close()
+
+
+REVERT_OLD = '2026-08-15T16:00:00.000Z'
+AFTER_UNTIL = '2026-09-09T16:00:00.000Z'
+# Per composition of `revert_fixture`: (commits_with_window, reverted_commits), worked out from its cases.
+REVERT_COMMITS = {
+    'old1': (1, 1), 'd2a': (1, 0), 'd2b': (1, 0), 'd2c': (1, 1), 'd1a': (1, 1), 'd1b': (1, 0),
+    'full': (1, 1), 'short': (1, 0), 'over': (1, 1), 'split': (1, 0), 'undo': (1, 1), 'undo_late': (1, 0),
+    'forward': (1, 0), 'idle_timeout': (1, 0), 'idle_client': (1, 0), 'nowindow': (0, 0), 'zero_kept': (1, 0),
+    'null_kept': (1, 0), 'zero_undo': (1, 1), 'null_undo': (1, 1), 'twice': (1, 1), 'punct': (0, 0),
+    'rawret': (0, 0), 'eng_kept': (1, 0), 'eng_rev': (1, 1), 'late': (1, 1), 'afterwards': (0, 0),
+}
+
+
+def revert_fixture(path):
+    """C-rev: commits of two statistical rules over four days, each with the post-commit window the recorder stores
+    on the composition that follows its own. `test_revert_counters_by_hand` works out every composition."""
+    db = empty_db(path)
+    for run in ('run', 'old'):
+        insert(db, 'recording_runs', id=run, started_at=STAMP, status='closed', engine_version='1.17.0',
+               build_metadata_json='{}', metric_rule_version=1, stats_json='{}')
+    for revision, measurement in (('rev1', 'measurement-A'), ('rev2', 'measurement-B')):
+        insert(db, 'config_revisions', id=revision, fingerprint=f'fingerprint-{revision}', created_at=STAMP,
+               applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1,
+               ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
+               measurement_fingerprint=measurement, build_identity='build-A')
+    carried = []
+
+    def commit(text, count, end=None, elapsed=1000, kind='candidate', **counts):
+        """A commit of `count` characters and, given an `end`, the window that closes after it."""
+        return dict(text=text, count=count, kind=kind, window=None if end is None else (end, elapsed, counts))
+
+    def add(cid, started, *commits, run='run', revision='rev1', app='app', text_kind='chinese', links=None):
+        """Windows of the previous composition's commits ride this one. A decision links to each `candidate` commit,
+        or to the commits at the positions in `links`."""
+        windows = list(carried)
+        carried.clear()
+        insert(db, 'compositions', id=cid, run_id=run, started_at=started, ended_at=started, app_bundle_id=app,
+               outcome='committed', page_history_truncated=0, dropped_page_count=0,
+               operations_json=json.dumps(dict(OPS, postCommitWindows=windows) if windows else OPS))
+        for position, spec in enumerate(commits):
+            insert(db, 'commits', id=f'commit-{cid}-{position}', composition_id=cid, issued_at=started,
+                   text=spec['text'], kind=spec['kind'], insertion_issued=1, character_count=spec['count'])
+            if spec['window']:
+                end, elapsed, counts = spec['window']
+                carried.append(window(f'commit-{cid}-{position}', end, elapsed, **counts))
+        if links is None:
+            links = [position for position, spec in enumerate(commits) if spec['kind'] == 'candidate']
+        for sequence, position in enumerate(links):
+            word = commits[position]['text']
+            page = dict(generation=7, rawInput='code', caret=4, selectedPrefix='', selectedPrefixValid=True,
+                        precedingContext='', configurationRevisionID=revision, configuration={}, page=0, pageSize=9,
+                        highlightedDisplayIndex=0, presentation='candidates_requested', capturedAt=started,
+                        candidates=[dict(text=word, displayIndex=0, displayRank=1, nativeIndex=0, nativeRank=1)])
+            insert(db, 'candidate_decisions', id=f'decision-{cid}-{sequence}', composition_id=cid,
+                   config_revision_id=revision, commit_id=f'commit-{cid}-{position}', occurred_at=started,
+                   sequence=sequence, trigger='space', outcome='committed', selected_display_index=0,
+                   selected_text=word, text_kind=text_kind, snapshot_json=json.dumps(page, ensure_ascii=False),
+                   visited_pages_json='[]', page_history_truncated=0, dropped_page_count=0,
+                   operations_json=json.dumps(OPS), regular_ranked_selection=1, matches_custom_phrase=0,
+                   selected_character_count=len(word))
+
+    # Another statistical rule, inside the trend window: its revert is not counted next to the others.
+    add('old1', REVERT_OLD, commit('旧', 1, 'next_code', deletions=1, leadingDeletions=1),
+        run='old', revision='rev2')
+    add('d2a', OLDER, commit('朋友', 2, 'timeout', 10000))
+    add('d2b', OLDER, commit('朋友', 2, 'next_code', deletions=1, leadingDeletions=1))
+    add('d2c', OLDER, commit('朋友', 2, 'next_code', deletions=2, leadingDeletions=2))
+    add('d1a', DAY_BEFORE, commit('你', 1, 'next_code', deletions=1, leadingDeletions=1))
+    add('d1b', DAY_BEFORE, commit('你好', 2, 'client_changed', 250))
+    # Deletions: as many as the characters, more, one fewer, and as many but after a direct-text key.
+    add('full', STAMP, commit('你好', 2, 'next_code', 1500, deletions=2, leadingDeletions=2))
+    add('over', STAMP, commit('你好', 2, 'next_code', deletions=5, leadingDeletions=5))
+    add('short', STAMP, commit('你好', 2, 'next_code', deletions=1, leadingDeletions=1))
+    add('split', STAMP, commit('你好', 2, 'timeout', 10000, deletions=2, leadingDeletions=1, directText=1))
+    # Cmd+Z first, and after a typed character; Forward Delete only; windows that closed with nothing done.
+    add('undo', STAMP, commit('你好', 2, 'deactivated', undo=1, leadingUndo=1))
+    add('undo_late', STAMP, commit('你好', 2, 'next_code', directText=1, undo=1))
+    add('forward', STAMP, commit('你好', 2, 'next_code', forwardDeletions=3, leadingForwardDeletions=3))
+    add('idle_timeout', STAMP, commit('你好', 2, 'timeout', 10000))
+    add('idle_client', STAMP, commit('你好', 2, 'client_changed', 250))
+    add('nowindow', STAMP, commit('你好', 2), app='app.nowindow')
+    # A zero or an unknown character count: only Cmd+Z can revert.
+    add('zero_kept', STAMP, commit('', 0, 'next_code', deletions=3, leadingDeletions=3))
+    add('null_kept', STAMP, commit('你好', None, 'next_code', deletions=3, leadingDeletions=3))
+    add('zero_undo', STAMP, commit('', 0, 'next_code', undo=1, leadingUndo=1))
+    add('null_undo', STAMP, commit('你好', None, 'next_code', undo=1, leadingUndo=1))
+    # One commit chosen by two segment decisions.
+    add('twice', STAMP, commit('我们', 2, 'next_code', deletions=2, leadingDeletions=2), links=[0, 0])
+    # Other kinds of commit with a window that would revert a candidate.
+    add('punct', STAMP, commit('，', 1, 'next_code', kind='punctuation', deletions=1, leadingDeletions=1))
+    add('rawret', STAMP, commit('nihao', 5, 'next_code', kind='raw_return', deletions=5, leadingDeletions=5,
+                                undo=1, leadingUndo=1))
+    add('eng_kept', STAMP, commit('hello', 5, 'next_code', deletions=4, leadingDeletions=4), text_kind='english')
+    add('eng_rev', STAMP, commit('ok', 2, 'next_code', deletions=2, leadingDeletions=2), text_kind='english')
+    # The window rides a composition that starts after the `--until` of the tests.
+    add('late', STAMP, commit('你好', 2, 'next_code', deletions=2, leadingDeletions=2))
+    add('afterwards', AFTER_UNTIL)
     db.commit()
     db.close()
 
@@ -1219,6 +1321,256 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((summary['candidate_commits'], summary['raw_return_commits']),
                          (commits['candidate'], commits['raw_return']))
         self.assertEqual(summary['composition_rate_status'], 'available_within_measurement_fingerprint')
+
+    def test_actual_engine_revert_counters_match_the_stored_windows(self):
+        trend = self.result('trend', '--days', '7', db=ENGINE_DB)
+        self.assert_revert_fields(trend)
+        week = trend['series']['overall'][-1]['rolling_7d']
+        coverage = self.result('summary', db=ENGINE_DB)['coverage']
+        # The same cohort counted from the stored rows alone: the windows of candidate commits, and what they show.
+        windows = '''FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') j
+            JOIN commits m ON m.id = json_extract(j.value,'$.commitID') WHERE m.kind = 'candidate' '''
+        reverted = '''(json_extract(j.value,'$.leadingUndo') >= 1 OR (m.character_count > 0
+            AND json_extract(j.value,'$.leadingDeletions') >= m.character_count))'''
+        # The capture cases of the post-commit window: two Backspaces over 你好 and Cmd+Z are reverts; Cmd+Z after a
+        # paste (undo 1, leading 0) and a Backspace after a typed digit are not.
+        cases = {
+            'backspaces': ("json_extract(j.value,'$.deletions') = 2 AND json_extract(j.value,'$.leadingDeletions') = 2",
+                           1),
+            'undo': ("json_extract(j.value,'$.undo') = 1 AND json_extract(j.value,'$.leadingUndo') = 1", 1),
+            'undo_after_paste': ("json_extract(j.value,'$.undo') = 1 AND json_extract(j.value,'$.leadingUndo') = 0 "
+                                 "AND json_extract(j.value,'$.paste') = 1", 0),
+            'backspace_after_digit': ("json_extract(j.value,'$.deletions') = 1 AND "
+                                      "json_extract(j.value,'$.leadingDeletions') = 0 "
+                                      "AND json_extract(j.value,'$.directText') = 1", 0),
+        }
+        with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as db:
+            observed, distinct, taken_back = db.execute(
+                f'SELECT COUNT(*), COUNT(DISTINCT m.id), COALESCE(SUM({reverted}), 0) {windows}').fetchone()
+            owners = {name: [row[0] for row in db.execute(f'SELECT m.composition_id {windows} AND {condition}')]
+                      for name, (condition, _) in cases.items()}
+        self.assertEqual(observed, distinct)
+        self.assertGreater(taken_back, 0)
+        self.assertLess(taken_back, observed)
+        for metric in (week, coverage):
+            self.assertEqual((metric['commits_with_window'], metric['reverted_commits']), (observed, taken_back))
+            self.assertEqual(metric['revert_rate'], taken_back / observed)
+        low, high = self.quality.wilson(taken_back, observed)
+        self.assertEqual((week['revert_wilson_low'], week['revert_wilson_high']), (low, high))
+        counts = self.revert_counts(ENGINE_DB)
+        for name, (_, expected) in cases.items():
+            self.assertGreater(len(owners[name]), 0, name)
+            for owner in owners[name]:
+                self.assertEqual(counts[owner], (1, expected), f'{name} {owner}')
+
+    def revert_db(self):
+        db = Path(self.temp.name) / 'revert.sqlite3'
+        if not db.exists():
+            revert_fixture(db)
+        return db
+
+    def revert_trend(self, *args, db=None):
+        with utc():
+            return self.result('trend', '--days', '28', '--until', '2026-09-08', *args, db=db or self.revert_db())
+
+    def assert_revert(self, metric, window_commits, reverted, interval=None):
+        """The counters, the rate over them and its Wilson interval (worked out by hand), null without a
+        denominator."""
+        self.assertEqual((metric['commits_with_window'], metric['reverted_commits']), (window_commits, reverted))
+        if interval is None:
+            self.assertEqual((metric['revert_rate'], metric['revert_wilson_low'], metric['revert_wilson_high']),
+                             (None, None, None))
+            return
+        self.assertEqual(metric['revert_rate'], reverted / window_commits)
+        self.assertAlmostEqual(metric['revert_wilson_low'], interval[0], places=4)
+        self.assertAlmostEqual(metric['revert_wilson_high'], interval[1], places=4)
+
+    def assert_revert_fields(self, trend):
+        """The counters, the rate and its interval are on every point of every series and in no bucket. The rate is
+        null exactly when the status is not available or no commit was observed."""
+        for name, series in trend['series'].items():
+            for point in series:
+                for window_name in ('daily', 'rolling_7d', 'rolling_28d'):
+                    metric = point[window_name]
+                    label = f'{name} {point["date"]} {window_name}'
+                    for key in REVERT_FIELDS:
+                        self.assertIn(key, metric, label)
+                        for bucket in metric['by_selection_length'].values():
+                            self.assertNotIn(key, bucket, f'{label} {key}')
+                    for key in REVERT_COUNTER_FIELDS:
+                        self.assertIsInstance(metric[key], int, f'{label} {key}')
+                    self.assertLessEqual(metric['reverted_commits'], metric['commits_with_window'], label)
+                    if (metric['quality_rate_status'] != 'available_within_measurement_fingerprint'
+                            or not metric['commits_with_window']):
+                        self.assertEqual((metric['revert_rate'], metric['revert_wilson_low'],
+                                          metric['revert_wilson_high']), (None, None, None), label)
+                    else:
+                        self.assertEqual(metric['revert_rate'],
+                                         metric['reverted_commits'] / metric['commits_with_window'], label)
+                        self.assertLessEqual(metric['revert_wilson_low'], metric['revert_rate'], label)
+                        self.assertLessEqual(metric['revert_rate'], metric['revert_wilson_high'], label)
+
+    def test_revert_counters_by_hand(self):
+        # A commit is in W (it has a window) and R (the user took it back) as follows, worked out from the fixture:
+        #   2026-09-06, chinese, 15 in W and 7 in R. In R: full (2 Backspaces for 2 characters), over (5 for 2),
+        #     undo (Cmd+Z), zero_undo and null_undo (Cmd+Z on a commit of 0 and of an unknown length), twice (one
+        #     commit chosen by two decisions: once) and late (its window rides a composition after --until). In W
+        #     only: short (1 for 2), split (2 for 2 but 1 before a direct-text key), undo_late (Cmd+Z after a typed
+        #     character), forward (Forward Delete only), idle_timeout and idle_client (windows closed with nothing
+        #     done), zero_kept and null_kept (3 Backspaces for 0 and for an unknown length). Not in W: nowindow. Not
+        #     candidate commits: punct and rawret, whose windows would revert them.
+        #   2026-09-06, english: eng_kept (4 for 5) in W, eng_rev (2 for 2) in W and R: 2 and 1. Day total 17, 8.
+        #   2026-09-05: d1a in W and R, d1b in W: 2 and 1. 2026-08-20: d2c in R, d2a and d2b not: 3 and 1.
+        #   old1 (2026-08-15, 1 and 1) has another measurement fingerprint, so the trend leaves it out.
+        #   The 28 days to 09-07 hold 15 + 2 + 2 + 3 = 22 in W and 7 + 1 + 1 + 1 = 10 in R; the 7 days hold
+        #   15 + 2 + 2 = 19 and 7 + 1 + 1 = 9.
+        trend = self.revert_trend()
+        scope = trend['metric_scope']
+        self.assertEqual((scope['included_compositions'], scope['excluded_compositions'],
+                          scope['excluded_unknown_compositions']), (25, 1, 0))
+        series = {name: points[-1] for name, points in trend['series'].items()}
+        month = series['overall']['rolling_28d']
+        self.assert_revert(month, 22, 10, (0.2692, 0.6534))
+        self.assert_revert(series['overall']['rolling_7d'], 19, 9, (0.2733, 0.6829))
+        # The commit counters of the scorecard are what they were: 3 + 2 + 18 candidate commits, one raw Return.
+        self.assertEqual((month['candidate_commits'], month['raw_return_commits']), (23, 1))
+        self.assertEqual(series['overall']['rolling_7d']['candidate_commits'], 20)
+        days = {point['date']: point['daily'] for point in trend['series']['overall']}
+        self.assert_revert(days['2026-09-06'], 17, 8, (0.2617, 0.6904))
+        self.assert_revert(days['2026-09-05'], 2, 1, (0.0945, 0.9055))
+        self.assert_revert(days['2026-08-20'], 3, 1, (0.0615, 0.7923))
+        for empty in ('2026-09-07', '2026-09-04', '2026-08-15'):
+            self.assert_revert(days[empty], 0, 0)
+        # A commit takes the kind of its composition: chinese holds 3 + 2 + 15 in W and 1 + 1 + 7 in R, english 2
+        # and 1. punct and rawret have no decision, so they sit in unknown, which holds no candidate commit.
+        self.assert_revert(series['chinese']['rolling_28d'], 20, 9, (0.2582, 0.6579))
+        self.assert_revert(series['chinese']['rolling_7d'], 17, 8, (0.2617, 0.6904))
+        self.assert_revert(series['english']['rolling_28d'], 2, 1, (0.0945, 0.9055))
+        self.assert_revert(series['unknown']['rolling_28d'], 0, 0)
+        self.assertEqual(series['unknown']['rolling_28d']['raw_return_commits'], 1)
+        self.assert_revert(series['emoji']['rolling_28d'], 0, 0)
+        self.assert_revert_fields(trend)
+
+    def revert_counts(self, db):
+        """(commits_with_window, reverted_commits) of every composition, from the cohort the counters sum."""
+        args = self.quality.parser().parse_args(['summary', '--db', str(db)])
+        with contextlib.closing(self.quality.connect(db)) as connection:
+            sql, parameters = self.quality.ctes(args)
+            return {row['id']: (row['commits_with_window'], row['reverted_commits']) for row in self.quality.rows(
+                connection, sql + 'SELECT id, commits_with_window, reverted_commits FROM scored_compositions',
+                parameters)}
+
+    def test_revert_counts_per_composition(self):
+        self.assertEqual(self.revert_counts(self.revert_db()), REVERT_COMMITS)
+
+    def test_revert_fields_are_listed_in_every_format(self):
+        db = self.revert_db()
+        with utc():
+            table = self.run_cli('trend', '--days', '28', '--until', '2026-09-08', db=db)
+            csv_output = self.run_cli('trend', '--days', '28', '--until', '2026-09-08', '--format', 'csv', db=db)
+        listed = ' '.join(row['path'] for row in csv.DictReader(io.StringIO(csv_output)))
+        for field in REVERT_FIELDS:
+            self.assertIn(f'overall[27].rolling_28d.{field}', listed)
+            self.assertIn(f'.series.overall[27].rolling_28d.{field} |', table)
+            self.assertIn(f'.series.chinese[27].daily.{field} |', table)
+            self.assertNotIn(f'by_selection_length.1.{field}', table)
+        # The rate of an empty point prints as N/A.
+        self.assertIn('.series.overall[0].daily.revert_rate | N/A', table)
+
+    def test_revert_rate_under_a_kind_filter_a_zero_denominator_and_another_rule(self):
+        # The kind filter keeps the compositions with a chinese decision, all of which have commits to revert.
+        chinese = self.revert_trend('--kind', 'chinese')
+        self.assert_revert_fields(chinese)
+        for name in ('overall', 'chinese'):
+            self.assert_revert(chinese['series'][name][-1]['rolling_28d'], 20, 9, (0.2582, 0.6579))
+        self.assert_revert(chinese['series']['english'][-1]['rolling_28d'], 0, 0)
+        # The other composition and commit rates still have no true reading under a filter.
+        self.assertIsNone(chinese['series']['overall'][-1]['rolling_28d']['raw_commit_rate'])
+        english = self.revert_trend('--kind', 'english')
+        self.assert_revert_fields(english)
+        self.assert_revert(english['series']['overall'][-1]['rolling_28d'], 2, 1, (0.0945, 0.9055))
+        # A candidate commit without a window: counted as a commit, not as observed, and no rate of 0%.
+        quiet = self.revert_trend('--app', 'app.nowindow')
+        self.assert_revert_fields(quiet)
+        point = quiet['series']['overall'][-1]['rolling_28d']
+        self.assert_revert(point, 0, 0)
+        self.assertEqual((point['candidate_commits'], point['quality_rate_status']),
+                         (1, 'available_within_measurement_fingerprint'))
+        # Before 08-20 only old1 exists, so its rule is the latest one and its revert counts, though the
+        # composition that carries the window starts on 08-20, after this --until.
+        with utc():
+            old = self.result('trend', '--days', '28', '--until', '2026-08-20', db=self.revert_db())
+        self.assert_revert(old['series']['overall'][-1]['rolling_28d'], 1, 1, (0.2065, 1.0))
+
+    def test_summary_reports_the_revert_counters_of_the_trend_window(self):
+        db = self.revert_db()
+        month = self.revert_trend()['series']['overall'][-1]['rolling_28d']
+        # The trend's last point: the same commits whether or not the carrier of the late window is selected.
+        for options in (('--since', '2026-08-18', '--until', '2026-09-08'), ('--since', '2026-08-18')):
+            coverage = self.result('summary', *options, db=db)['coverage']
+            self.assertEqual(coverage['composition_rate_status'], 'available_within_measurement_fingerprint')
+            self.assertEqual((coverage['commits_with_window'], coverage['reverted_commits'], coverage['revert_rate']),
+                             (22, 10, 10 / 22))
+            for key in (*REVERT_COUNTER_FIELDS, 'revert_rate', 'candidate_commits', 'raw_return_commits'):
+                self.assertEqual(coverage[key], month[key], key)
+            # The windows of every kind of commit (24: the 22, punct and rawret) are another count.
+            self.assertEqual(coverage['commit_windows'], 24)
+        # Two measurement fingerprints: the counters are there and the rate is not.
+        every = self.result('summary', db=db)['coverage']
+        self.assertEqual(every['composition_rate_status'], 'unavailable_across_measurement_fingerprints')
+        self.assertEqual((every['commits_with_window'], every['reverted_commits'], every['revert_rate']),
+                         (23, 11, None))
+        older = self.result('summary', '--until', '2026-08-18', db=db)['coverage']
+        self.assertEqual((older['composition_rate_status'], older['commits_with_window'], older['reverted_commits'],
+                          older['revert_rate']), ('available_within_measurement_fingerprint', 1, 1, 1.0))
+        quiet = self.result('summary', '--app', 'app.nowindow', db=db)['coverage']
+        self.assertEqual((quiet['candidate_commits'], quiet['commits_with_window'], quiet['reverted_commits'],
+                          quiet['revert_rate']), (1, 0, 0, None))
+        # Four windows in the base fixture: commit-a (2 Backspaces for 1 character) and commit-d (Cmd+Z) are reverts.
+        base = self.result()['coverage']
+        self.assertEqual((base['commits_with_window'], base['reverted_commits'], base['revert_rate']), (4, 2, 0.5))
+        table = self.run_cli('summary', '--since', '2026-08-18', db=db)
+        listed = {row['path'] for row in csv.DictReader(io.StringIO(
+            self.run_cli('summary', '--since', '2026-08-18', '--format', 'csv', db=db)))}
+        for field in (*REVERT_COUNTER_FIELDS, 'revert_rate'):
+            self.assertIn(f'$.coverage.{field}', listed)
+            self.assertIn(f'$.coverage.{field} |', table)
+
+    def test_revert_counters_are_the_same_for_a_database_its_exports_and_two_devices(self):
+        db = self.revert_db()
+        exported = Path(self.temp.name) / 'revert-a.json'
+        self.run_cli('export', '--output', str(exported), db=db)
+        local = self.revert_trend()
+        options = ('trend', '--days', '28', '--until', '2026-09-08')
+        with utc():
+            exports_only = self.result(*options, '--exports-only', '--input', str(exported), db=db)
+            with_database = self.result(*options, '--input', str(exported), db=db)
+        for imported in (exports_only, with_database):
+            for key in ('series', 'metric_scope'):
+                self.assertEqual(imported[key], local[key], key)
+        month = exports_only['series']['overall'][-1]['rolling_28d']
+        self.assert_revert(month, 22, 10, (0.2692, 0.6534))
+        # Device B has the same ids; its windows and commits stay apart, so the totals double and each device reads
+        # as the database does.
+        document = json.loads(exported.read_text())
+        document['source_id'] = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        other = Path(self.temp.name) / 'revert-b.json'
+        other.write_text(json.dumps(document))
+        both = ('--exports-only', '--input', str(exported), '--input', str(other))
+        with utc():
+            union = self.result(*options, *both, db=db)
+            isolated = self.result(*options, *both, '--source', document['source_id'], db=db)
+        self.assert_revert(union['series']['overall'][-1]['rolling_28d'], 44, 20, (0.3171, 0.5993))
+        self.assertEqual(union['by_source'][document['source_id']]['series'], local['series'])
+        self.assertEqual(isolated['series'], local['series'])
+        window = ('--since', '2026-08-18', '--until', '2026-09-08')
+        local_summary = self.result('summary', *window, db=db)['coverage']
+        imported_summary = self.result('summary', *window, '--exports-only', '--input', str(exported), db=db)
+        for key in (*REVERT_COUNTER_FIELDS, 'revert_rate'):
+            self.assertEqual(imported_summary['coverage'][key], local_summary[key], key)
+        both_summary = self.result('summary', *window, *both, db=db)['coverage']
+        self.assertEqual((both_summary['commits_with_window'], both_summary['reverted_commits'],
+                          both_summary['revert_rate']), (44, 20, 20 / 44))
 
     def test_summary_exact_denominators_and_ranks(self):
         result = self.result()

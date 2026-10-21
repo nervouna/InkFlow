@@ -114,6 +114,8 @@ COMPOSITION_COUNTERS = {
     'kspc_text_free_compositions': f'{REGULAR_COMPOSITION} AND text_captured=0',
     'candidate_commits': 'candidate_commits',
     'raw_return_commits': 'raw_return_commits',
+    'commits_with_window': 'commits_with_window',
+    'reverted_commits': 'reverted_commits',
 }
 COMPOSITION_RATES = {
     'cancel_rate': (('cancelled_compositions',), ('code_compositions',), 'cancel'),
@@ -121,9 +123,12 @@ COMPOSITION_RATES = {
     'decisions_per_composition': (('regular_decisions',), ('regular_committed_compositions',), None),
     'kspc': (('kspc_keypresses',), ('kspc_characters',), None),
     'raw_commit_rate': (('raw_return_commits',), ('candidate_commits', 'raw_return_commits'), 'raw_commit'),
+    'revert_rate': (('reverted_commits',), ('commits_with_window',), 'revert'),
 }
 # Most cancels and raw Returns have no decision, so no kind: a kind series would read near 0 for these.
 OVERALL_ONLY_RATES = ('cancel_rate', 'preedit_edit_rate', 'raw_commit_rate')
+# A `candidate` commit's composition always has a decision, so this rate also reads true under `--kind`.
+KIND_FILTER_RATES = ('revert_rate',)
 
 
 class QueryError(Exception):
@@ -298,8 +303,12 @@ def ctes(args):
     ), composition_commits AS (
         SELECT composition_id, SUM(kind='candidate') AS candidate_commits, SUM(kind='raw_return') AS raw_return_commits,
           SUM(kind IN ('candidate','raw_return','ascii','forced_flush')) AS code_commits,
-          SUM(CASE WHEN kind='candidate' THEN length(text) END) AS committed_characters
-        FROM commits WHERE composition_id IN (SELECT id FROM selected_compositions) GROUP BY composition_id
+          SUM(CASE WHEN kind='candidate' THEN length(text) END) AS committed_characters,
+          SUM(kind='candidate' AND w.commit_id IS NOT NULL) AS commits_with_window,
+          SUM(kind='candidate' AND w.commit_id IS NOT NULL AND (w.leading_undo>=1
+            OR (character_count>0 AND w.leading_deletions>=character_count))) AS reverted_commits
+        FROM commits LEFT JOIN windows w ON w.commit_id=commits.id
+        WHERE composition_id IN (SELECT id FROM selected_compositions) GROUP BY composition_id
     ), scored_compositions AS (
         SELECT c.id, c.started_at AS composition_started_at, c.outcome,
           json_extract(c.operations_json,'$.keypresses') AS keypresses,
@@ -308,7 +317,8 @@ def ctes(args):
           COALESCE(d.kind,'unknown') AS kind,
           COALESCE(d.measurement_fingerprint, r.measurement_fingerprint, 'unknown') AS measurement_fingerprint,
           COALESCE(m.candidate_commits,0) AS candidate_commits, COALESCE(m.raw_return_commits,0) AS raw_return_commits,
-          COALESCE(m.code_commits,0) AS code_commits, COALESCE(m.committed_characters,0) AS committed_characters
+          COALESCE(m.code_commits,0) AS code_commits, COALESCE(m.committed_characters,0) AS committed_characters,
+          COALESCE(m.commits_with_window,0) AS commits_with_window, COALESCE(m.reverted_commits,0) AS reverted_commits
         FROM selected_compositions c LEFT JOIN composition_decisions d ON d.composition_id=c.id
         LEFT JOIN composition_commits m ON m.composition_id=c.id LEFT JOIN run_measurements r ON r.run_id=c.run_id
     )
@@ -684,8 +694,10 @@ def trend(db, args):
     for name, values in raw.items():
         raw_points = [values.get(day, {**{key: 0 for key in TREND_COUNTERS}, '_measurements': {}}) for day in days]
         # Composition and commit rates need compositions without a kind, so only `overall` reports all of them.
-        reported = () if args.kind is not None else tuple(
-            rate for rate in COMPOSITION_RATES if name == 'overall' or rate not in OVERALL_ONLY_RATES)
+        # Under `--kind` the compositions kept are those with a matching decision: only KIND_FILTER_RATES read true.
+        reported = tuple(
+            rate for rate in COMPOSITION_RATES if rate in KIND_FILTER_RATES or (
+                args.kind is None and (name == 'overall' or rate not in OVERALL_ONLY_RATES)))
         points = []
         for index, day in enumerate(days):
             points.append(dict(date=day, daily=trend_metric([raw_points[index]], composition_rates=reported),
