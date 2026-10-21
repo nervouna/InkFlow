@@ -96,6 +96,10 @@ package final class QualityStore: @unchecked Sendable {
     private var paused: Bool
     /// Off by default: envelopes lose every input, candidate, commit and context string before buffering.
     private var textCapture: Bool
+    /// The device key of the pair hashes, loaded by the worker. Nil until then, or when its file cannot be kept.
+    private var pairKey: Data?
+    /// Counts key rotations: an envelope hashed under the key a rotation replaced must not be recorded.
+    private var pairKeyEpoch = 0
     private var commandPending = false
     private var captureGeneration: UInt64 = 0
     private var stats = QualityStoreStatistics()
@@ -139,8 +143,12 @@ package final class QualityStore: @unchecked Sendable {
 
     @discardableResult
     package func submit(_ envelope: QualityEnvelope) -> QualitySubmission {
-        let redacted = lock.withLock { !textCapture }
-        let envelope = redacted ? envelope.redactingText() : envelope
+        let (redacted, key, epoch) = lock.withLock { (!textCapture, pairKey, pairKeyEpoch) }
+        // The pair hashes need the strings that redaction removes, so they are computed here: two HMACs per decision,
+        // in memory. The key file is read, written and rotated on the worker only.
+        var envelope = envelope
+        if let key { envelope = envelope.hashingPairs(key: SymmetricKey(data: key)) }
+        if redacted { envelope = envelope.redactingText() }
         let bounded = envelope.bounded()
         var invalid = false
         if bounded == nil {
@@ -152,7 +160,10 @@ package final class QualityStore: @unchecked Sendable {
         return lock.withLock {
             stats.submitted += 1
             guard accepting && !stats.disabled && !paused && !commandPending,
-                  textCapture || redacted else { stats.droppedDisabled += 1; return .disabled }
+                  textCapture || redacted, epoch == pairKeyEpoch else {
+                stats.droppedDisabled += 1
+                return .disabled
+            }
             guard !invalid else { stats.droppedInvalid += 1; return .invalid }
             guard let bounded else { stats.droppedOversized += 1; return .oversized }
             guard pending.count + inFlight < QualityLimits.bufferedEnvelopes,
@@ -256,7 +267,14 @@ package final class QualityStore: @unchecked Sendable {
                 }
                 do {
                     switch cleanup {
-                    case .clear: try database.removeRecords(before: nil, now: maintenanceNow())
+                    case .clear:
+                        try database.removeRecords(before: nil, now: maintenanceNow())
+                        // Cleared records must not link to later ones.
+                        database.rotatePairKey()
+                        lock.withLock {
+                            pairKey = database.pairKey
+                            pairKeyEpoch += 1
+                        }
                     case .purgeText: try database.removeRecords(before: rawCutoff(maintenanceNow()), now: maintenanceNow(), textRecords: true)
                     case .none: break
                     }
@@ -383,6 +401,7 @@ package final class QualityStore: @unchecked Sendable {
         if ready { return true }
         do {
             try database.start(statistics: statistics())
+            lock.withLock { pairKey = database.pairKey }
             ready = true
             pruneIfNeeded()
             return !statsDisabled
@@ -532,6 +551,11 @@ private final class QualityDatabase: @unchecked Sendable {
     private var lastSavedStatistics: QualityStoreStatistics?
     private let startedAt = Date()
     private lazy var encoder = QualityJSON.encoder(compact: true)
+    /// 32 bytes of the file `quality-pair-key` beside the database. It stays on this Mac: no export, backup, record
+    /// or log carries it, and clearing the records replaces it.
+    private(set) var pairKey: Data?
+    private static let pairKeyName = "quality-pair-key"
+    private static let pairKeySize = 32
     private static let applicationID = 0x49465131 // IFQ1
     private static let unsupportedSchema: Int32 = -1001
 
@@ -575,6 +599,37 @@ private final class QualityDatabase: @unchecked Sendable {
             runStarted = true
             lastSavedStatistics = statistics
         }
+        if pairKey == nil { pairKey = readPairKey() ?? makePairKey() }
+    }
+
+    package func rotatePairKey() {
+        pairKey = makePairKey()
+    }
+
+    private var pairKeyPath: String { url.deletingLastPathComponent().appendingPathComponent(Self.pairKeyName).path }
+
+    private func readPairKey() -> Data? {
+        let descriptor = open(pairKeyPath, O_RDONLY | O_NOFOLLOW)
+        guard descriptor >= 0 else { return nil }
+        defer { close(descriptor) }
+        var bytes = [UInt8](repeating: 0, count: Self.pairKeySize + 1)
+        guard read(descriptor, &bytes, bytes.count) == Self.pairKeySize else { return nil }
+        return Data(bytes.prefix(Self.pairKeySize))
+    }
+
+    /// Replaces the file. The mode is set when the file is created, whatever the directory's mode is. A failure leaves
+    /// no key, so the records carry no pair hashes until the next start.
+    private func makePairKey() -> Data? {
+        unlink(pairKeyPath)
+        let descriptor = open(pairKeyPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { return readPairKey() }
+        defer { close(descriptor) }
+        let key = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }
+        guard key.withUnsafeBytes({ Darwin.write(descriptor, $0.baseAddress, $0.count) }) == key.count else {
+            unlink(pairKeyPath)
+            return nil
+        }
+        return key
     }
 
     private func validateSchema() throws {

@@ -11,7 +11,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-from statistics import NormalDist
+from statistics import NormalDist, median
 import sys
 
 sys.dont_write_bytecode = True
@@ -66,6 +66,8 @@ COUNTERS = {
     'truncated': 'page_history_truncated=1',
     'text_free': 'text_captured=0',
     'length_unavailable': 'valid AND display_rank IS NOT NULL AND selected_length IS NULL',
+    'pair_identity': 'valid AND display_rank IS NOT NULL AND pair_id IS NOT NULL',
+    'pair_unavailable': 'valid AND display_rank IS NOT NULL AND pair_id IS NULL',
 }
 
 
@@ -181,6 +183,7 @@ def ctes(args):
           json_extract(d.snapshot_json,'$.presentation') AS presentation,
           COALESCE(json_extract(d.snapshot_json,'$.textCaptured'),1) AS text_captured,
           json_extract(d.snapshot_json,'$.rawInput') AS raw_input,
+          json_extract(d.snapshot_json,'$.codeHash') AS code_hash,
           json_extract(d.snapshot_json,'$.caret') AS caret,
           json_extract(d.snapshot_json,'$.selectedPrefix') AS selected_prefix,
           json_extract(d.snapshot_json,'$.selectedPrefixValid') AS selected_prefix_valid,
@@ -207,6 +210,8 @@ def ctes(args):
           AND json_extract(selected_candidate,'$.nativeIndex')<page_size
           AND json_extract(selected_candidate,'$.nativeRank')=page*page_size+json_extract(selected_candidate,'$.nativeIndex')+1
           THEN json_extract(selected_candidate,'$.nativeRank') END AS native_rank,
+          json_extract(selected_candidate,'$.textHash') AS selected_text_hash,
+          json_extract(selected_candidate,'$.type') AS selected_type,
           CASE WHEN selected_prefix_valid=1 AND {same_generation}
           AND json_extract(first_page_json,'$.page')=0
           AND json_extract(first_page_json,'$.candidates[0].displayIndex')=0
@@ -216,6 +221,7 @@ def ctes(args):
     ), observations AS (
         SELECT *, COALESCE(regular_committed AND insertion_issued=1
           AND presentation IN ('candidates_requested','panel_show_issued'),0) AS valid,
+          code_hash || '|' || selected_text_hash AS pair_id,
           NULLIF(COALESCE(selected_character_count,
                           CASE WHEN text_captured=0 THEN NULL ELSE length(selected_text) END), 0) AS selected_length,
           CASE WHEN text_captured=0 THEN display_rank=1 ELSE selected_text=first_page_top1 END AS top1_match
@@ -456,13 +462,13 @@ def trend_metric(items, lengths=True):
 
 def trend_bounds(args):
     if args.since is not None:
-        raise QueryError('trend derives --since from --days; omit --since.')
+        raise QueryError(f'{args.command} derives --since from --days; omit --since.')
     if args.until is None:
         exclusive_day = datetime.now().astimezone().date() + timedelta(days=1)
     else:
         local = datetime.fromisoformat(args.until.replace('Z', '+00:00')).astimezone()
         if local.timetz().replace(tzinfo=None) != time():
-            raise QueryError('trend --until must be a local calendar date boundary.')
+            raise QueryError(f'{args.command} --until must be a local calendar date boundary.')
         exclusive_day = local.date()
     first_day = exclusive_day - timedelta(days=args.days)
     args.since = timestamp(first_day.isoformat())
@@ -546,6 +552,126 @@ def trend(db, args):
                 series=series, version_markers=markers,
                 identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'))
 
+
+# Instrument constants of the L family (docs/input-quality-metrics.md section 6), versioned with the metric rule.
+LEARNING_CENSOR_DAYS = 7
+LEARNING_FUTILE_SELECTIONS = 3
+LEARNING_REUSE_WINDOW_DAYS = 28
+LEARNING_REUSE_SPLIT_DAYS = 14
+LEARNING_MIN_UNITS = 200
+# Learned provenance of the selected candidate: the design's provenance dimension, read from the candidate `type`.
+LEARNED_PROVENANCE = ("selected_type = 'user_phrase' OR selected_type LIKE 'english_personal_%' "
+                      "OR selected_type LIKE 'mixed_personal_%'")
+LEARNING_HISTOGRAM = ('1', '2', '3+', 'never')
+
+
+def learning_rate(numerator, denominator):
+    """A rate with its Wilson interval: null for an empty denominator, no verdict below the 200-unit minimum."""
+    low, high = wilson(numerator, denominator)
+    return dict(numerator=numerator, denominator=denominator,
+                rate=numerator / denominator if denominator else None, wilson_low=low, wilson_high=high,
+                status='no_verdict_below_200_units' if denominator < LEARNING_MIN_UNITS else 'available')
+
+
+def learning(db, args):
+    """L-ttl, L-futile, L-util, L-avoid and L-reuse over pair identities (`pair_id`); hashes never link devices."""
+    first_day, exclusive_day = trend_bounds(args)
+    sql, parameters = ctes(args)
+    latest = db.execute(sql + """SELECT measurement_fingerprint FROM observations
+        WHERE measurement_fingerprint!='unknown'
+        ORDER BY composition_started_at DESC,occurred_at DESC,id DESC LIMIT 1""", parameters).fetchone()
+    measurement_identity = latest['measurement_fingerprint'] if latest else None
+    known = rows(db, sql + f"""SELECT pair_id,selected_text_hash,display_rank,measurement_fingerprint,text_captured,
+        COALESCE(raw_input!='' AND selected_text IS NOT NULL AND selected_text!='',0) AS literal_pair,
+        COALESCE({LEARNED_PROVENANCE},0) AS learned,date(composition_started_at,'localtime') AS local_day
+        FROM observations WHERE valid AND display_rank IS NOT NULL
+        ORDER BY composition_started_at,occurred_at,sequence,id""", parameters)
+    included = [row for row in known if row['measurement_fingerprint'] == measurement_identity]
+    decisions = [row for row in included if row['pair_id'] is not None]
+    unavailable = [row for row in included if row['pair_id'] is None]
+    pairs = {}
+    words = {}
+    for row in decisions:
+        row['day'] = (date.fromisoformat(row['local_day']) - first_day).days
+        pairs.setdefault(row['pair_id'], []).append(row)
+        words.setdefault(row['selected_text_hash'], []).append(row)
+    ranks = [[row['display_rank'] for row in sequence] for sequence in pairs.values()]
+    early = sum(sequence[0]['day'] < LEARNING_CENSOR_DAYS for sequence in pairs.values())
+    first_seen = learning_rate(early, len(pairs))
+
+    first_miss = [sequence for sequence in ranks if sequence[0] > 1]
+    histogram = dict.fromkeys(LEARNING_HISTOGRAM, 0)
+    learned_after = []
+    for sequence in first_miss:
+        if 1 in sequence:
+            learned_after.append(sequence.index(1))
+            histogram[str(learned_after[-1]) if learned_after[-1] < 3 else '3+'] += 1
+        else:
+            histogram['never'] += 1
+    ttl = dict(pairs_first_miss=len(first_miss), histogram=histogram,
+               median_selections_to_learn=median(learned_after) if learned_after else None,
+               learned_after_one_rate=learning_rate(histogram['1'], len(first_miss)),
+               first_seen_within_7_days_share=first_seen)
+
+    frequent = [sequence for sequence in ranks if len(sequence) >= LEARNING_FUTILE_SELECTIONS]
+    all_misses = sum(all(rank > 1 for rank in sequence) for sequence in frequent)
+    futile = dict(pairs_with_3_or_more_selections=len(frequent), futile_rate=learning_rate(all_misses, len(frequent)))
+
+    with_hit = [sequence for sequence in ranks if 1 in sequence]
+    hits_until_regression = []
+    for sequence in with_hit:
+        tail = sequence[sequence.index(1):]
+        if any(rank > 1 for rank in tail):
+            hits_until_regression.append(next(index for index, rank in enumerate(tail) if rank > 1))
+    util = dict(pairs_with_hit=len(with_hit), pairs_regressed=len(hits_until_regression),
+                pairs_censored_at_window_end=len(with_hit) - len(hits_until_regression),
+                median_hits_until_regression=median(hits_until_regression) if hits_until_regression else None,
+                regression_rate=learning_rate(len(hits_until_regression), len(with_hit)))
+
+    seen = set()
+    misses = 0
+    avoidable = 0
+    learned = 0
+    for row in decisions:
+        if row['display_rank'] > 1:
+            misses += 1
+            avoidable += row['pair_id'] in seen
+            learned += row['learned']
+        seen.add(row['pair_id'])
+    avoid = dict(misses=misses, avoidable_miss_rate=learning_rate(avoidable, misses),
+                 learned_provenance_miss_rate=learning_rate(learned, misses),
+                 first_seen_within_7_days_share=first_seen)
+
+    first_half = [sequence for sequence in words.values() if sequence[0]['day'] < LEARNING_REUSE_SPLIT_DAYS]
+    if args.days == LEARNING_REUSE_WINDOW_DAYS:
+        again = sum(any(row['day'] >= LEARNING_REUSE_SPLIT_DAYS for row in sequence) for sequence in first_half)
+        reuse_rate = learning_rate(again, len(first_half))
+    else:
+        reuse_rate = dict(numerator=None, denominator=None, rate=None, wilson_low=None, wilson_high=None,
+                          status='needs_28_day_window')
+    reuse = dict(words_first_chosen_in_days_1_to_14=len(first_half), reuse_rate=reuse_rate)
+
+    text_without_hash = sum(row['text_captured'] and row['literal_pair'] for row in unavailable)
+    excluded_unknown = sum(row['measurement_fingerprint'] == 'unknown' for row in known)
+    return dict(window=dict(days=args.days, first_day=first_day.isoformat(),
+                            last_day=(exclusive_day - timedelta(days=1)).isoformat(),
+                            since=args.since, until=args.until, until_exclusive=True),
+                metric_scope=dict(rule_fingerprint=measurement_identity, policy='latest_compatible_metric_rules',
+                                  unit='known_rank_decision', known_rank_decisions=len(known),
+                                  included_decisions=len(included), excluded_decisions=len(known) - len(included),
+                                  excluded_unknown_decisions=excluded_unknown),
+                pair_coverage=dict(pair_identity=len(decisions), pair_unavailable=len(unavailable),
+                                   text_without_hash=text_without_hash),
+                units=dict(decisions=len(decisions), pairs=len(pairs), words=len(words)),
+                l_ttl=ttl, l_futile=futile, l_util=util, l_avoid=avoid, l_reuse=reuse,
+                instrument_constants=dict(
+                    window_days=LEARNING_REUSE_WINDOW_DAYS, censoring_margin_days=LEARNING_CENSOR_DAYS,
+                    futile_selections=LEARNING_FUTILE_SELECTIONS, reuse_split_days=LEARNING_REUSE_SPLIT_DAYS,
+                    minimum_units=LEARNING_MIN_UNITS, learned_provenance=LEARNED_PROVENANCE,
+                    code_normalization='consumed_span_lowercase_without_apostrophes',
+                    hash='hmac_sha256_128_bits_domains_code:_and_text:',
+                    pair_id="code_hash || '|' || selected_text_hash"),
+                identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'))
 
 def write_trend_svg(result, path):
     path = Path(path).expanduser().resolve()
@@ -866,7 +992,7 @@ def render(result, output_format):
 def parser():
     result = argparse.ArgumentParser(description=__doc__)
     commands = result.add_subparsers(dest='command', required=True)
-    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'replay-cases', 'export'):
+    for command in ('trend', 'summary', 'ranking-issues', 'inspect', 'timing', 'replay-cases', 'learning', 'export'):
         sub = commands.add_parser(command)
         if command == 'export':
             sub.add_argument('--output', type=Path, required=True, help='New JSON file; records saved with text recording on contain input text, candidates and preceding context. Never uploaded.')
@@ -883,9 +1009,10 @@ def parser():
         if command == 'ranking-issues':
             sub.add_argument('--min-count', type=positive, default=3)
             sub.add_argument('--limit', type=positive, default=50)
-        if command == 'trend':
+        if command in ('trend', 'learning'):
             sub.add_argument('--days', type=positive, default=28,
                              help='Local calendar days ending before --until; default 28')
+        if command == 'trend':
             sub.add_argument('--chart', type=Path, help='Write a self-contained SVG trend chart')
         sub.add_argument('--db', type=Path, default=DEFAULT_DB, help=f'Default: {DEFAULT_DB}')
         sub.add_argument('--since', type=timestamp, help='Inclusive composition start: local YYYY-MM-DD or ISO time with offset')
@@ -911,8 +1038,8 @@ def main(argv=None):
                 raise QueryError('Export includes all retained records; query filters apply only during analysis.')
             render(quality_exchange.export(args.db, args.output, connect, TABLE_COLUMNS), args.format)
             return 0
-        handler = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues,
-                   'inspect': inspect, 'timing': timing, 'replay-cases': replay_cases}[args.command]
+        handler = {'trend': trend, 'summary': summary, 'ranking-issues': ranking_issues, 'inspect': inspect,
+                   'timing': timing, 'replay-cases': replay_cases, 'learning': learning}[args.command]
         if args.command == 'replay-cases':
             args.output = replay_output(args.output)
         if args.input or args.exports_only or args.source:
@@ -927,11 +1054,14 @@ def main(argv=None):
             with closing(db):
                 if args.source and args.source not in sources:
                     raise QueryError('Requested source is not present in these inputs.')
+                if args.command == 'learning' and len(sources) > 1 and not args.source:
+                    raise QueryError('learning hashes are keyed per device and never link across devices; '
+                                     'choose one with --source.')
                 original_args = copy(args)
                 result = handler(db, args)
                 result['sources'] = list(sources.values())
                 result['analysis_storage'] = 'memory_only; external records never written to local quality database'
-                if args.command not in ('inspect', 'replay-cases') and not args.source:
+                if args.command not in ('inspect', 'replay-cases', 'learning') and not args.source:
                     result['by_source'] = {}
                     for sid in sources:
                         device_args = copy(original_args); device_args.source = sid

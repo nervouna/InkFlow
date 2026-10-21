@@ -22,8 +22,8 @@ enum QualityExport {
 
     static func write(database: URL, destination: URL) throws -> String {
         guard database.standardizedFileURL != destination.standardizedFileURL,
-              destination.lastPathComponent != "quality-source-id" else {
-            throw ExportError("请选择新的 JSON 文件，不能覆盖质量数据库或来源标识。")
+              !["quality-source-id", "quality-pair-key"].contains(destination.lastPathComponent) else {
+            throw ExportError("请选择新的 JSON 文件，不能覆盖质量数据库、来源标识或配对密钥。")
         }
         var connection: OpaquePointer?
         guard sqlite3_open_v2(database.path, &connection, SQLITE_OPEN_READONLY, nil) == SQLITE_OK,

@@ -1,4 +1,5 @@
 @testable import InkFlowRime
+import CryptoKit
 import Foundation
 import SQLite3
 #if SWIFT_PACKAGE
@@ -155,6 +156,27 @@ private func linkedCounts(_ reader: Reader) throws -> [[String]] {
         """)
 }
 
+private func pairKeyURL(_ database: URL) -> URL {
+    database.deletingLastPathComponent().appendingPathComponent("quality-pair-key")
+}
+
+/// What the store must write: HMAC-SHA256 under the key file, first 128 bits as lowercase hex.
+private func expectedPairHash(_ message: String, key: Data) -> String {
+    HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: key)).prefix(16)
+        .map { String(format: "%02x", $0) }.joined()
+}
+
+private func fileMode(_ url: URL) throws -> Int? {
+    try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+}
+
+/// Neither the key's bytes nor its hex appear anywhere in the database file.
+private func expectKeyAbsent(_ key: Data, from database: URL, _ message: String) throws {
+    let bytes = try Data(contentsOf: database)
+    expect(bytes.range(of: key) == nil, "\(message): key bytes")
+    expect(bytes.range(of: Data(key.map { String(format: "%02x", $0) }.joined().utf8)) == nil, "\(message): key hex")
+}
+
 /// A migrated database appends both columns, keeps its legacy row without counts and records them for new rows.
 private func expectMigratedCounts(_ reader: Reader) throws {
     expect(try reader.rows("SELECT name FROM pragma_table_info('commits')").last == ["character_count"],
@@ -238,6 +260,7 @@ struct QualityStoreTests {
         try await v1Migration()
         try await v3Migration()
         try await textCapture()
+        try await pairIdentity()
         try await effectivenessEvents()
         try await malformedSchemaTopology()
         try await identityFailures()
@@ -419,7 +442,14 @@ private extension QualityStoreTests {
         let url = try makeURL("text-free")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
+        // The worker loads the device key on its first start; an envelope submitted before that carries no hashes.
+        await store.maintainRetention()
+        let keyFile = pairKeyURL(url)
+        let key = try Data(contentsOf: keyFile)
+        expect(key.count == 32, "the pair key is 32 bytes")
+        expect(try fileMode(keyFile) == 0o600, "the pair key file is owner-only")
         var phrased = fixture("text-free")
+        phrased.decisions[0].snapshot.candidates[0].evidence = "0,5,n,1,0,n,phrase,0"
         let phrases = QualityAppliedConfiguration(candidateCount: 5, customPhrases: [QualityPhrase(id: "phrase-1", code: "mima", text: "我的密码")])
         phrased.revisions[0].configuration = phrases
         phrased.decisions[0].snapshot.configuration = phrases
@@ -450,12 +480,22 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT json_extract(snapshot_json,'$.candidates[0].displayRank') || selected_display_index || text_kind FROM candidate_decisions") == "60mixed",
                "ranks, indices and text kind survive redaction")
         expect((try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int) == 0o600, "database is owner-only")
+        let codeHash = expectedPairHash("code:nihao", key: key)
+        let textHash = expectedPairHash("text:你好😀", key: key)
+        let hashColumns = "json_extract(snapshot_json,'$.codeHash')"
+            + ", json_extract(snapshot_json,'$.candidates[0].textHash')"
+        expect(try reader.rows("SELECT \(hashColumns) FROM candidate_decisions") == [[codeHash, textHash]],
+               "a text-free decision carries the keyed hashes of its code and of its chosen text")
         try await store.setTextCapture(true)
-        expect(store.submit(fixture("with-text")) == .accepted, "opt-in accepts envelopes")
+        var withText = fixture("with-text")
+        withText.decisions[0].snapshot.candidates[0].evidence = "0,5,n,1,0,n,phrase,0"
+        expect(store.submit(withText) == .accepted, "opt-in accepts envelopes")
         await store.flush()
         expect(try reader.scalar("SELECT count(*) FROM commits WHERE text='你好😀'") == "1" &&
                reader.scalar("SELECT count(*) FROM candidate_decisions WHERE selected_text='你好😀' AND json_extract(snapshot_json,'$.rawInput')='nihao'") == "1",
                "opt-in stores text")
+        let literal = try reader.rows("SELECT \(hashColumns) FROM candidate_decisions WHERE selected_text='你好😀'")
+        expect(literal == [[codeHash, textHash]], "a text-mode decision carries the literals and the same hashes")
         expect(try linkedCounts(reader) == [["commit-text-free", "3", "3"], ["commit-with-text", "3", "3"]],
                "opt-in stores the same counts")
         // An abandoned composition carries text only in its deleted input: no decision, no commit.
@@ -477,6 +517,8 @@ private extension QualityStoreTests {
         for secret in ["nihao", "你好😀", "测试", "mima", "我的密码", "nihoa", "pniggu"] {
             expect(try Data(contentsOf: url).range(of: Data(secret.utf8)) == nil, "no \(secret) remains in the database file")
         }
+        try expectKeyAbsent(key, from: url, "the database file")
+        expect(try Data(contentsOf: url).range(of: Data(codeHash.utf8)) != nil, "the byte scan does see a hash")
         // A character is a Unicode scalar: ❤️ is two scalars and one grapheme. The counts need no stored text.
         expect("❤️".count == 1 && "❤️".unicodeScalars.count == 2, "the fixture text is the two-scalar form")
         let heartURL = try makeURL("heart")
@@ -512,6 +554,135 @@ private extension QualityStoreTests {
         for secret in ["nihao", "mima", "我的密码"] {
             expect(try Data(contentsOf: legacyURL).range(of: Data(secret.utf8)) == nil, "upgrade purge erases \(secret)")
         }
+    }
+
+    /// The pair hashes of one decision: which span, which key, and which decisions get none.
+    static func pairIdentity() async throws {
+        let url = try makeURL("pairs")
+        let directory = url.deletingLastPathComponent()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // The key file's mode does not follow the directory's, and a key of the wrong size is replaced.
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        let keyFile = pairKeyURL(url)
+        try Data("short".utf8).write(to: keyFile)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test",
+                                 buildMetadata: metadata)
+        await store.maintainRetention()
+        let key = try Data(contentsOf: keyFile)
+        expect(key.count == 32 && key != Data("short".utf8), "a key of the wrong size is replaced by 32 bytes")
+        expect(try fileMode(keyFile) == 0o600, "the key is owner-only")
+        expect(try fileMode(directory) == 0o755, "whatever the mode of the directory")
+        func variant(_ id: String, raw: String = "nihao", text: String = "你好😀",
+                     evidence: String? = "0,5,n,1,0,n,phrase,0", custom: Bool = false,
+                     prefix: String = "") -> QualityEnvelope {
+            var envelope = fixture(id)
+            envelope.decisions[0].snapshot.rawInput = raw
+            envelope.decisions[0].snapshot.selectedPrefix = prefix
+            envelope.decisions[0].snapshot.candidates[0].text = text
+            envelope.decisions[0].snapshot.candidates[0].evidence = evidence
+            envelope.decisions[0].selectedText = text
+            envelope.decisions[0].matchesCustomPhrase = custom
+            return envelope
+        }
+        var cases: [(id: String, envelope: QualityEnvelope, code: String?, text: String?)] = []
+        func add(_ id: String, _ envelope: QualityEnvelope, code: String?, text: String? = "你好😀") {
+            cases.append((id, envelope, code, code == nil ? nil : text))
+        }
+        // The span of the evidence row, whole or a leading segment, normalized.
+        add("whole", variant("whole"), code: "nihao")
+        add("segment", variant("segment", raw: "nihaoshijie"), code: "nihao")
+        add("normalized", variant("normalized", raw: "Xi'an", text: "西安"), code: "xian", text: "西安")
+        // Without a row only a custom phrase knows its span: the whole input.
+        add("custom", variant("custom", evidence: nil, custom: true), code: "nihao")
+        add("unknown-span", variant("unknown-span", evidence: nil), code: nil)
+        // A malformed row, a selected prefix and an empty input have no hash.
+        for (index, bad) in ["0,9,n", "5,2,n", "7", "a,b,n", "-1,3,n", "3,3,n", ""].enumerated() {
+            add("malformed-\(index)", variant("malformed-\(index)", evidence: bad), code: nil)
+        }
+        add("prefix", variant("prefix", prefix: "你"), code: nil)
+        add("empty-input", variant("empty-input", raw: ""), code: nil)
+        for item in cases {
+            expect(store.submit(item.envelope) == .accepted, "\(item.id) is accepted")
+        }
+        // Only the selected candidate and only its page: not the others, the first page or the visited pages.
+        var several = variant("several")
+        several.decisions[0].snapshot.candidates.insert(
+            QualityCandidate(text: "你号", displayIndex: 0, displayRank: 5, nativeIndex: 0, nativeRank: 5), at: 0)
+        several.decisions[0].snapshot.candidates[1].displayIndex = 1
+        several.decisions[0].selectedDisplayIndex = 1
+        several.decisions[0].firstPage = several.decisions[0].snapshot
+        several.decisions[0].visitedPages = [several.decisions[0].snapshot]
+        expect(store.submit(several) == .accepted, "several is accepted")
+        await store.flush()
+        let reader = try Reader(url)
+        func hashes(_ id: String, _ page: String = "snapshot_json", _ index: Int = 0) throws -> [String] {
+            let found = try reader.rows("""
+                SELECT json_extract(\(page),'$.codeHash'), json_extract(\(page),'$.candidates[\(index)].textHash'),
+                       selected_text IS NULL FROM candidate_decisions WHERE id = 'decision-\(id)'
+                """)
+            expect(found.count == 1, "\(id) is written: \(store.statistics())")
+            return found[0]
+        }
+        for item in cases {
+            if let code = item.code, let text = item.text {
+                expect(try hashes(item.id) == [expectedPairHash("code:" + code, key: key),
+                                               expectedPairHash("text:" + text, key: key), "1"],
+                       "\(item.id): both hashes, no text")
+            } else {
+                expect(try hashes(item.id) == ["NULL", "NULL", "1"], "\(item.id): neither hash")
+            }
+        }
+        let identity = expectedPairHash("code:nihao", key: key)
+        expect(try hashes("segment")[0] == identity && hashes("custom")[0] == identity,
+               "a leading segment, a custom phrase and a whole input join one identity")
+        let chosen = expectedPairHash("text:你好😀", key: key)
+        expect(try hashes("several", "snapshot_json", 1)[0...1] == [identity, chosen],
+               "the selected candidate is hashed")
+        expect(try hashes("several", "snapshot_json", 0)[1] == "NULL", "another candidate is not")
+        expect(try hashes("several", "first_page_json", 1)[0...1] == ["NULL", "NULL"], "nor is the first page")
+        expect(try reader.scalar("""
+            SELECT json_extract(visited_pages_json,'$[0].codeHash') IS NULL
+            FROM candidate_decisions WHERE id = 'decision-several'
+            """) == "1", "nor a visited page")
+        // The same key is read again and gives the same hash for the same text.
+        await store.close()
+        let reopened = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test",
+                                    buildMetadata: metadata)
+        await reopened.maintainRetention()
+        expect(try Data(contentsOf: keyFile) == key, "a restart keeps the key")
+        expect(reopened.submit(variant("again")) == .accepted, "a reopened store accepts")
+        await reopened.flush()
+        // Text mode keeps the literals and the same hashes: one identity space across a mode switch.
+        try await reopened.setTextCapture(true)
+        expect(reopened.submit(variant("text-mode")) == .accepted, "text mode accepts")
+        await reopened.flush()
+        expect(try reader.rows("""
+            SELECT selected_text, json_extract(snapshot_json,'$.rawInput'), json_extract(snapshot_json,'$.codeHash')
+            FROM candidate_decisions WHERE id = 'decision-text-mode'
+            """) == [["你好😀", "nihao", identity]], "text mode keeps the literals and the same hash")
+        expect(try hashes("again")[0] == identity, "a reopened store hashes the same code the same way")
+        try await reopened.setTextCapture(false)
+        expect(try reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id = 'decision-again'") == "1" &&
+               reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id = 'decision-text-mode'") == "0",
+               "turning text off removes the text record, keeps the hashed text-free one")
+        expect(try Data(contentsOf: keyFile) == key, "turning text on and off leaves the key alone")
+        // Clearing the records replaces the key, so cleared records cannot be linked to later ones.
+        try await reopened.clearRecords()
+        let rotated = try Data(contentsOf: keyFile)
+        expect(rotated.count == 32 && rotated != key, "clearing the records replaces the key")
+        expect(try fileMode(keyFile) == 0o600, "the new key is owner-only too")
+        expect(reopened.submit(variant("after-clear")) == .accepted, "a cleared store accepts")
+        await reopened.close()
+        let after = try Reader(url)
+        let rehashed = try after.rows("SELECT json_extract(snapshot_json,'$.codeHash') FROM candidate_decisions")
+        expect(rehashed == [[expectedPairHash("code:nihao", key: rotated)]] && rehashed != [[identity]],
+               "the same code hashes differently under the new key")
+        try expectKeyAbsent(rotated, from: url, "the database file")
+        try expectKeyAbsent(key, from: url, "the database file, the replaced key")
+        for secret in ["nihao", "你好😀", "你号", "xian", "西安"] {
+            expect(try Data(contentsOf: url).range(of: Data(secret.utf8)) == nil, "no \(secret) in the database file")
+        }
+        print("PASS quality store: pair hashes by span, key file mode and rotation, no text in text-free records")
     }
 
     static func effectivenessEvents() async throws {
