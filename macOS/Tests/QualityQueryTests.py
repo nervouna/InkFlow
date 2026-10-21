@@ -31,6 +31,25 @@ def window(commit, end, elapsed, **counts):
                      directText=0, paste=0, leadingDeletions=0, leadingForwardDeletions=0, leadingUndo=0), **counts)
 
 
+DECISION_RATE_FIELDS = tuple(f'{name}{suffix}' for name in (
+    'onekey', 'learned_miss', 'learned_leader_miss', 'dictionary_leader_miss')
+    for suffix in ('_wilson_low', '_wilson_high'))
+DECISION_FIELDS = ('onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
+                   'learned_leader_missed', 'dictionary_leader', 'dictionary_leader_missed', 'onekey_rate',
+                   'learned_miss_share', 'learned_leader_miss_rate', 'dictionary_leader_miss_rate',
+                   *DECISION_RATE_FIELDS)
+COMPOSITION_COUNTER_FIELDS = ('code_compositions', 'cancelled_compositions', 'edited_compositions',
+                              'regular_committed_compositions', 'regular_decisions', 'kspc_compositions',
+                              'kspc_keypresses', 'kspc_characters', 'kspc_text_free_compositions',
+                              'candidate_commits', 'raw_return_commits')
+COMPOSITION_FIELDS = (*COMPOSITION_COUNTER_FIELDS, 'cancel_rate', 'cancel_wilson_low', 'cancel_wilson_high',
+                      'preedit_edit_rate', 'preedit_edit_wilson_low', 'preedit_edit_wilson_high',
+                      'decisions_per_composition', 'kspc', 'raw_commit_rate', 'raw_commit_wilson_low',
+                      'raw_commit_wilson_high')
+OVERALL_ONLY_FIELDS = tuple(name for name in COMPOSITION_FIELDS if name.startswith(('cancel_', 'preedit_edit_',
+                                                                                    'raw_commit_')))
+
+
 # The fixture's `raw-only` composition is their carrier; the commits they describe belong to compositions a to d.
 WINDOWS = [window('commit-a', 'next_code', 1500, deletions=2, leadingDeletions=2),
            window('commit-b', 'timeout', 10000, deletions=1, directText=1, paste=1),
@@ -225,6 +244,122 @@ def replay_fixture(path):
     add('r10', 'shi', ['是'], '是', outcome='reverted')
     # Before the 28-day window of the trend and the --since of the replay tests.
     add('w1', 'shi', ['使', '是'], '使', started=EARLIER)
+    db.commit()
+    db.close()
+
+
+DAY_BEFORE = '2026-09-05T16:00:00.000Z'
+OLDER = '2026-08-20T16:00:00.000Z'
+
+
+def scorecard_fixture(path):
+    """The scorecard counters: one run of compositions under one statistical rule, a day of cancels before it, and
+    older ones under another rule or without any fingerprint. `test_scorecard_counters_by_hand` lists every
+    composition and what it adds."""
+    db = empty_db(path)
+    for run in ('run', 'old', 'quiet'):
+        insert(db, 'recording_runs', id=run, started_at=STAMP, status='closed', engine_version='1.17.0',
+               build_metadata_json='{}', metric_rule_version=1, stats_json='{}')
+    for revision, measurement in (('rev1', 'measurement-A'), ('rev2', 'measurement-B')):
+        insert(db, 'config_revisions', id=revision, fingerprint=f'fingerprint-{revision}', created_at=STAMP,
+               applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1,
+               ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
+               measurement_fingerprint=measurement, build_identity='build-A')
+
+    def pick(word, rank, kind='phrase', *, leader=None, text_kind='chinese', trigger='space', free=False,
+             regular=1, outcome='committed', linked=True, **counts):
+        """A decision choosing `word` at global display `rank` (none: no selection) among candidates of which the
+        chosen one is of `kind`. `leader` is the first-page top candidate (text, kind), the chosen one by default."""
+        return dict(word=word, rank=rank, kind=kind, leader=leader or (word, kind), text_kind=text_kind,
+                    trigger=trigger, free=free, regular=regular, outcome=outcome, linked=linked,
+                    operations={**OPS, 'pageRequests': 0, 'pageTurns': 0, 'candidateMoves': 0, 'preeditEdits': 0,
+                                **counts})
+
+    def snapshot_of(chosen, started, revision):
+        number, index = ((chosen['rank'] - 1) // 9, (chosen['rank'] - 1) % 9) if chosen['rank'] else (0, 0)
+        shown = [dict(text=f'候{position}', displayIndex=position, displayRank=number * 9 + position + 1,
+                      nativeIndex=position, nativeRank=number * 9 + position + 1)
+                 for position in range(index + 1 if chosen['rank'] else 0)]
+        if chosen['rank']:
+            shown[index].update(text=chosen['word'], type=chosen['kind'])
+            if number == 0 and index > 0:
+                shown[0].update(text=chosen['leader'][0], type=chosen['leader'][1])
+        page = dict(generation=7, rawInput='code', caret=4, selectedPrefix='', selectedPrefixValid=True,
+                    precedingContext='', configurationRevisionID=revision, configuration={}, page=number,
+                    pageSize=9, highlightedDisplayIndex=index, presentation='candidates_requested',
+                    capturedAt=started, candidates=shown)
+        first = dict(page, page=0, candidates=[dict(text=chosen['leader'][0], displayIndex=0, displayRank=1,
+                                                    nativeIndex=0, nativeRank=1, type=chosen['leader'][1])])
+        if chosen['free']:
+            for item in (page, first):
+                item.update(rawInput='', textCaptured=False)
+                for shown_candidate in item['candidates']:
+                    shown_candidate['text'] = ''
+        return page, first
+
+    def add(cid, *, outcome='committed', keys=5, edits=0, started=STAMP, run='run', revision='rev1', app='app',
+            decisions=(), commits=(), reason=None):
+        """`commits` are (kind, text[, characters]); a decision links to the commit at its own position."""
+        insert(db, 'compositions', id=cid, run_id=run, started_at=started, ended_at=started, app_bundle_id=app,
+               outcome=outcome, outcome_reason=reason, page_history_truncated=0, dropped_page_count=0,
+               operations_json=json.dumps(dict(OPS, keypresses=keys, preeditEdits=edits)))
+        for position, (kind, text, *count) in enumerate(commits):
+            insert(db, 'commits', id=f'commit-{cid}-{position}', composition_id=cid, issued_at=started, text=text,
+                   kind=kind, insertion_issued=1, character_count=count[0] if count else len(text))
+        for position, chosen in enumerate(decisions):
+            page, first = snapshot_of(chosen, started, revision)
+            rank = chosen['rank']
+            insert(db, 'candidate_decisions', id=f'decision-{cid}-{position}', composition_id=cid,
+                   config_revision_id=revision, commit_id=f'commit-{cid}-{position}' if chosen['linked'] else None,
+                   occurred_at=started, sequence=position, trigger=chosen['trigger'], outcome=chosen['outcome'],
+                   selected_display_index=(rank - 1) % 9 if rank else None,
+                   selected_text=None if chosen['free'] or not rank else chosen['word'],
+                   text_kind=chosen['text_kind'], snapshot_json=json.dumps(page, ensure_ascii=False),
+                   first_page_json=json.dumps(first, ensure_ascii=False), visited_pages_json='[]',
+                   page_history_truncated=0, dropped_page_count=0, operations_json=json.dumps(chosen['operations']),
+                   regular_ranked_selection=chosen['regular'], matches_custom_phrase=0,
+                   selected_character_count=len(chosen['word']) if rank else None)
+
+    # Regular compositions: the chosen word is the commit, so its length is the committed characters.
+    add('one', keys=5, decisions=[pick('你好', 1)], commits=[('candidate', '你好')])
+    add('digit', keys=4, decisions=[pick('使', 3, leader=('是', 'phrase'), trigger='digit')],
+        commits=[('candidate', '使')])
+    add('paged', keys=7, decisions=[pick('汇', 10, leader=('是', 'phrase'), pageRequests=1, pageTurns=1)],
+        commits=[('candidate', '汇')])
+    add('moved', keys=6, decisions=[pick('词', 3, 'sentence', leader=('是', 'sentence'), candidateMoves=2)],
+        commits=[('candidate', '词')])
+    add('learnedmiss', keys=5,
+        decisions=[pick('用户词', 2, 'user_phrase', leader=('是', 'sentence'), candidateMoves=1)],
+        commits=[('candidate', '用户词')])
+    add('learnedlead', keys=5, decisions=[pick('别的', 2, leader=('我的', 'user_phrase'), candidateMoves=1)],
+        commits=[('candidate', '别的')])
+    add('dictkept', keys=4, decisions=[pick('表', 1, 'user_table', pageRequests=2, pageTurns=2)],
+        commits=[('candidate', '表')])
+    add('english', keys=6, decisions=[pick('hello', 1, 'english_personal_2', text_kind='english')],
+        commits=[('candidate', 'hello')])
+    add('blend', keys=8, decisions=[pick('我', 1), pick('ok', 1, 'english_exact', text_kind='english')],
+        commits=[('candidate', '我'), ('candidate', 'ok')])
+    add('two', keys=9, decisions=[pick('我们', 1), pick('去', 1, trigger='digit')],
+        commits=[('candidate', '我们'), ('candidate', '去')])
+    add('edited', keys=8, edits=2, decisions=[pick('朋友', 1, preeditEdits=2)], commits=[('candidate', '朋友')])
+    add('free', keys=5, app='app.free', decisions=[pick('我的', 1, free=True)], commits=[('candidate', '', 2)])
+    # A Return on raw pinyin: a decision of kind unknown with no selection and no linked commit, or no decision.
+    add('raw1', keys=6, decisions=[pick('', None, text_kind='unknown', trigger='return_raw', regular=0,
+                                        outcome='unknown', linked=False)], commits=[('raw_return', 'nihao')])
+    add('raw2', keys=6, commits=[('raw_return', 'ni')])
+    add('ascii', keys=5, commits=[('ascii', 'abc')])
+    # A symbol key opens and closes a record that typed no code; an adopted AI suggestion commits nothing.
+    add('sym', keys=1, commits=[('direct_symbol', '，')])
+    add('nocommit', keys=4, reason='ai_adopted')
+    add('intr', outcome='interrupted', keys=2)
+    add('partial', outcome='cancelled', keys=6, decisions=[pick('再', 1)], commits=[('candidate', '再')])
+    add('canc1', outcome='cancelled', keys=3, edits=2, started=DAY_BEFORE)
+    add('canc2', outcome='cancelled', keys=2, started=DAY_BEFORE)
+    # Another statistical rule, and a run without a decision (no fingerprint to attribute): both before the others.
+    add('old1', started=OLDER, run='old', revision='rev2', keys=5, decisions=[pick('旧', 1)],
+        commits=[('candidate', '旧')])
+    add('old2', outcome='cancelled', started=OLDER, run='old', keys=2)
+    add('orphan', outcome='cancelled', started=OLDER, run='quiet', keys=2, app='app.orphan')
     db.commit()
     db.close()
 
@@ -763,6 +898,328 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(self.result('trend', '--days', '7')['series']['overall'][0]['daily']['top1_wilson_low'],
                          None)
 
+    def scorecard_db(self):
+        db = Path(self.temp.name) / 'scorecard.sqlite3'
+        if not db.exists():
+            scorecard_fixture(db)
+        return db
+
+    def scorecard_trend(self, *args, db=None):
+        with utc():
+            return self.result('trend', '--days', '28', '--until', '2026-09-08', *args, db=db or self.scorecard_db())
+
+    def assert_scorecard_fields(self, trend):
+        """Every decision field is on every point and in every bucket; the composition and commit fields are on
+        every point only, and their overall-only rates are null outside `overall`."""
+        for name, series in trend['series'].items():
+            for point in series:
+                for window in ('daily', 'rolling_7d', 'rolling_28d'):
+                    metric = point[window]
+                    label = f'{name} {point["date"]} {window}'
+                    for key in DECISION_FIELDS + COMPOSITION_FIELDS:
+                        self.assertIn(key, metric, label)
+                    for key in COMPOSITION_COUNTER_FIELDS:
+                        self.assertIsInstance(metric[key], int, f'{label} {key}')
+                    for length, bucket in metric['by_selection_length'].items():
+                        for key in DECISION_FIELDS:
+                            self.assertIn(key, bucket, f'{label} {length}')
+                        for key in COMPOSITION_FIELDS:
+                            self.assertNotIn(key, bucket, f'{label} {length}')
+                    if name != 'overall':
+                        for key in OVERALL_ONLY_FIELDS:
+                            self.assertIsNone(metric[key], f'{label} {key}')
+
+    def test_scorecard_counters_by_hand(self):
+        # The fixture's compositions (all on 2026-09-06 under measurement-A except where noted), what each adds
+        # to the counters below, worked out from the table and not from the query:
+        #   code compositions (19): one digit paged moved learnedmiss learnedlead dictkept english blend two edited
+        #     free (12 with decisions), raw1 raw2 ascii intr partial (5), canc1 canc2 on 09-05 (2); not sym (a
+        #     direct symbol) and not nocommit (an adopted AI suggestion).
+        #   cancelled (3): partial canc1 canc2. edited (2): edited canc1. interrupted intr is only in the 19.
+        #   regular committed (12, one decision each but blend and two with two = 14 decisions): the 12 with
+        #     decisions; partial has a decision and is cancelled, raw1's decision is not regular.
+        #   KSPC (11 text-captured): keys 5+4+7+6+5+5+4+6+8+9+8 = 67 over characters 2+1+1+1+3+2+1+5+3+3+2 = 24;
+        #     free is text-free and only counted. Chinese compositions (all decisions chinese, 9 of them): keys
+        #     5+4+7+6+5+5+4+9+8 = 53 over characters 2+1+1+1+3+2+1+3+2 = 16.
+        #   commits: candidate 15 (13 compositions, blend and two with two), raw_return 2 (raw1 raw2); ascii,
+        #     direct_symbol are in neither. Valid decisions (15): rank 1 and one-key are one, english, blend (both),
+        #     two (first), edited, free, partial (8); not one-key: digit (digit), paged (page), moved and
+        #     learnedmiss and learnedlead (moves), dictkept (turned pages and back), two's second (digit key).
+        #   misses (5): digit paged moved learnedmiss learnedlead, all with a type; learnedmiss is learned.
+        #   leaders: learned 2 (learnedlead missed, english kept), dictionary 10 (digit and paged missed; one,
+        #     dictkept user_table, blend's first, two both, edited, free, partial kept); moved, learnedmiss and
+        #     blend's second have leaders of neither set.
+        trend = self.scorecard_trend()
+        self.assertEqual(trend['metric_scope'], dict(
+            rule_fingerprint='measurement-A', policy='latest_compatible_metric_rules', included_decisions=16,
+            excluded_decisions=1, excluded_unknown_decisions=0, included_compositions=21,
+            excluded_compositions=3, excluded_unknown_compositions=1))
+        wilson = self.quality.wilson
+        overall = trend['series']['overall'][-1]['rolling_28d']
+        self.assertEqual({key: overall[key] for key in DECISION_FIELDS if not key.endswith(('_rate', '_share'))
+                          and 'wilson' not in key},
+                         dict(onekey_selected=8, misses=5, learned_misses=1, misses_with_provenance=5,
+                              learned_leader=2, learned_leader_missed=1, dictionary_leader=10,
+                              dictionary_leader_missed=2))
+        self.assertEqual(overall['valid'], 15)
+        self.assertEqual((overall['onekey_rate'], overall['learned_miss_share'], overall['learned_leader_miss_rate'],
+                          overall['dictionary_leader_miss_rate']), (8 / 15, 1 / 5, 1 / 2, 2 / 10))
+        for name, counts in [('onekey', (8, 15)), ('learned_miss', (1, 5)), ('learned_leader_miss', (1, 2)),
+                             ('dictionary_leader_miss', (2, 10))]:
+            self.assertEqual((overall[f'{name}_wilson_low'], overall[f'{name}_wilson_high']), wilson(*counts), name)
+        self.assertEqual({key: overall[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
+            code_compositions=19, cancelled_compositions=3, edited_compositions=2,
+            regular_committed_compositions=12, regular_decisions=14, kspc_compositions=11, kspc_keypresses=67,
+            kspc_characters=24, kspc_text_free_compositions=1, candidate_commits=15, raw_return_commits=2))
+        self.assertEqual((overall['cancel_rate'], overall['preedit_edit_rate'], overall['decisions_per_composition'],
+                          overall['kspc'], overall['raw_commit_rate']), (3 / 19, 2 / 19, 14 / 12, 67 / 24, 2 / 17))
+        for name, counts in [('cancel', (3, 19)), ('preedit_edit', (2, 19)), ('raw_commit', (2, 17))]:
+            self.assertEqual((overall[f'{name}_wilson_low'], overall[f'{name}_wilson_high']), wilson(*counts), name)
+        # A mean and a ratio of keys per character have no interval.
+        self.assertNotIn('kspc_wilson_low', overall)
+        self.assertNotIn('decisions_per_composition_wilson_low', overall)
+        # The decision series is by the decision's kind, the composition series by the composition's: 13 chinese
+        # valid decisions, of which blend's and partial's are in a mixed and a cancelled composition.
+        chinese = trend['series']['chinese'][-1]['rolling_28d']
+        self.assertEqual({key: chinese[key] for key in DECISION_FIELDS[:8]} | dict(valid=chinese['valid']),
+                         dict(onekey_selected=6, misses=5, learned_misses=1, misses_with_provenance=5,
+                              learned_leader=1, learned_leader_missed=1, dictionary_leader=10,
+                              dictionary_leader_missed=2, valid=13))
+        self.assertEqual((chinese['onekey_rate'], chinese['learned_miss_share'], chinese['learned_leader_miss_rate'],
+                          chinese['dictionary_leader_miss_rate']), (6 / 13, 1 / 5, 1.0, 1 / 5))
+        self.assertEqual({key: chinese[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
+            code_compositions=11, cancelled_compositions=1, edited_compositions=1,
+            regular_committed_compositions=10, regular_decisions=11, kspc_compositions=9, kspc_keypresses=53,
+            kspc_characters=16, kspc_text_free_compositions=1, candidate_commits=12, raw_return_commits=0))
+        self.assertEqual((chinese['decisions_per_composition'], chinese['kspc']), (11 / 10, 53 / 16))
+        # Counters stand in a kind series, but a cancel, a pre-edit or a raw Return has no kind to read.
+        for key in OVERALL_ONLY_FIELDS:
+            self.assertIsNone(chinese[key], key)
+        unknown = trend['series']['unknown'][-1]['rolling_28d']
+        self.assertEqual((unknown['code_compositions'], unknown['cancelled_compositions'],
+                          unknown['edited_compositions'], unknown['raw_return_commits']), (6, 2, 1, 2))
+        self.assertEqual((unknown['raw_commit_rate'], unknown['cancel_rate'], unknown['kspc'],
+                          unknown['decisions_per_composition']), (None, None, None, None))
+        english = trend['series']['english'][-1]['rolling_28d']
+        self.assertEqual((english['regular_decisions'], english['kspc'], english['decisions_per_composition']),
+                         (1, 6 / 5, 1.0))
+        self.assertEqual((english['valid'], english['onekey_rate'], english['learned_leader'],
+                          english['learned_leader_miss_rate'], english['learned_miss_share']),
+                         (2, 1.0, 1, 0.0, None))
+        mixed = trend['series']['mixed'][-1]['rolling_28d']
+        self.assertEqual((mixed['regular_decisions'], mixed['kspc'], mixed['decisions_per_composition']),
+                         (2, 8 / 3, 2.0))
+        # Selected-length buckets keep the decision counters only: 1 character (7 valid), 2 (6) and 3 or more (2).
+        buckets = overall['by_selection_length']
+        fields = ('valid', 'onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
+                  'learned_leader_missed', 'dictionary_leader', 'dictionary_leader_missed')
+        self.assertEqual({length: tuple(bucket[key] for key in fields) for length, bucket in buckets.items()},
+                         {'1': (7, 2, 3, 0, 3, 0, 0, 6, 2), '2': (6, 5, 1, 0, 1, 1, 1, 4, 0),
+                          '3+': (2, 1, 1, 1, 1, 1, 0, 0, 0)})
+        self.assertEqual(buckets['2']['onekey_rate'], 5 / 6)
+        self.assertEqual((buckets['2']['onekey_wilson_low'], buckets['2']['onekey_wilson_high']), wilson(5, 6))
+        self.assertIsNone(buckets['1']['learned_leader_miss_rate'])
+        self.assertEqual((buckets['3+']['learned_miss_share'], buckets['3+']['dictionary_leader_miss_rate']),
+                         (1.0, None))
+        # The week holds the same fixture; the day before has only cancels, which still report their rates.
+        week = trend['series']['overall'][-1]['rolling_7d']
+        self.assertEqual({key: week[key] for key in COMPOSITION_COUNTER_FIELDS},
+                         {key: overall[key] for key in COMPOSITION_COUNTER_FIELDS})
+        days = {point['date']: point['daily'] for point in trend['series']['overall']}
+        cancels = days['2026-09-05']
+        self.assertEqual((cancels['decisions'], cancels['code_compositions'], cancels['cancelled_compositions'],
+                          cancels['edited_compositions']), (0, 2, 2, 1))
+        self.assertEqual((cancels['cancel_rate'], cancels['preedit_edit_rate']), (1.0, 0.5))
+        self.assertEqual(cancels['quality_rate_status'], 'available_within_measurement_fingerprint')
+        self.assertEqual((cancels['top1_rate'], cancels['onekey_rate'], cancels['decisions_per_composition'],
+                          cancels['kspc'], cancels['raw_commit_rate']), (None, None, None, None, None))
+        self.assertEqual((days['2026-09-06']['code_compositions'], days['2026-09-06']['cancel_rate']), (17, 1 / 17))
+        # A day with nothing, and a day of another statistical rule (08-20), have neither counters nor rates.
+        for empty in (days['2026-09-07'], days['2026-08-20']):
+            self.assertEqual(empty['quality_rate_status'], 'unavailable_without_measurement_evidence')
+            self.assertEqual({key: empty[key] for key in COMPOSITION_COUNTER_FIELDS},
+                             dict.fromkeys(COMPOSITION_COUNTER_FIELDS, 0))
+            for key in ('cancel_rate', 'preedit_edit_rate', 'raw_commit_rate', 'kspc', 'decisions_per_composition',
+                        'onekey_rate'):
+                self.assertIsNone(empty[key], key)
+
+    def test_scorecard_fields_are_on_every_point_and_bucket(self):
+        self.assert_scorecard_fields(self.scorecard_trend())
+        self.assert_scorecard_fields(self.result('trend', '--days', '7', '--until', '2026-09-08'))
+        replay = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(replay)
+        self.assert_scorecard_fields(self.result('trend', '--days', '28', '--until', '2026-09-08', db=replay))
+        # Table and CSV list every leaf, so the new fields need no rendering code.
+        fields = ('onekey_rate', 'onekey_wilson_low', 'learned_miss_share', 'learned_leader_miss_rate',
+                  'dictionary_leader_miss_wilson_high', 'code_compositions', 'cancel_rate', 'cancel_wilson_low',
+                  'preedit_edit_rate', 'decisions_per_composition', 'kspc', 'kspc_text_free_compositions',
+                  'raw_commit_rate', 'raw_return_commits')
+        with utc():
+            table = self.run_cli('trend', '--days', '28', '--until', '2026-09-08', db=self.scorecard_db())
+            csv_output = self.run_cli('trend', '--days', '28', '--until', '2026-09-08', '--format', 'csv',
+                                      db=self.scorecard_db())
+        listed = {row['path'] for row in csv.DictReader(io.StringIO(csv_output))}
+        for field in fields:
+            self.assertIn(f'overall[27].rolling_28d.{field}', ' '.join(listed))
+            self.assertIn(f'.series.overall[27].rolling_28d.{field} |', table)
+        self.assertIn('.series.overall[27].rolling_28d.by_selection_length.2.onekey_rate |', table)
+        self.assertNotIn('by_selection_length.2.kspc', table)
+        self.assertIn('.metric_scope.excluded_unknown_compositions | 1', table)
+
+    def test_scorecard_composition_rates_are_null_under_a_kind_filter_and_zero_denominators(self):
+        # A kind filter selects the compositions with a matching decision: the cancels drop out and a mixed
+        # composition shows only its matching decisions, so no composition or commit rate reads true.
+        trend = self.scorecard_trend('--kind', 'chinese')
+        for name in ('overall', 'chinese'):
+            metric = trend['series'][name][-1]['rolling_28d']
+            self.assertEqual((metric['code_compositions'], metric['cancelled_compositions']), (12, 1), name)
+            for key in COMPOSITION_FIELDS[len(COMPOSITION_COUNTER_FIELDS):]:
+                self.assertIsNone(metric[key], f'{name} {key}')
+            self.assertEqual(metric['quality_rate_status'], 'available_within_measurement_fingerprint')
+        self.assert_scorecard_fields(trend)
+        # One text-free composition: no KSPC (0 characters, not 0 keys per character), but it is counted, and a
+        # rate with a nonzero denominator and a zero numerator is 0, not null.
+        free = self.scorecard_trend('--app', 'app.free')['series']['overall'][-1]['rolling_28d']
+        self.assertEqual({key: free[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
+            code_compositions=1, cancelled_compositions=0, edited_compositions=0, regular_committed_compositions=1,
+            regular_decisions=1, kspc_compositions=0, kspc_keypresses=0, kspc_characters=0,
+            kspc_text_free_compositions=1, candidate_commits=1, raw_return_commits=0))
+        self.assertIsNone(free['kspc'])
+        self.assertEqual((free['cancel_rate'], free['preedit_edit_rate'], free['raw_commit_rate'],
+                          free['decisions_per_composition']), (0.0, 0.0, 0.0, 1.0))
+        self.assertEqual((free['cancel_wilson_low'], free['cancel_wilson_high']), self.quality.wilson(0, 1))
+        # Nothing selected: every counter 0 and every rate null.
+        nothing = self.scorecard_trend('--app', 'no.such.app')['series']['overall'][-1]['rolling_28d']
+        self.assertEqual(nothing['quality_rate_status'], 'unavailable_without_measurement_evidence')
+        self.assertEqual({key: nothing[key] for key in COMPOSITION_COUNTER_FIELDS},
+                         dict.fromkeys(COMPOSITION_COUNTER_FIELDS, 0))
+        for key in COMPOSITION_FIELDS[len(COMPOSITION_COUNTER_FIELDS):]:
+            self.assertIsNone(nothing[key], key)
+
+    def test_summary_reports_the_scorecard_counters_and_their_status(self):
+        db = self.scorecard_db()
+        summary = self.result('summary', '--since', '2026-09-01', db=db)
+        coverage = summary['coverage']
+        # The same cohort as the trend's last point, over the selected compositions (21) and decisions (16).
+        self.assertEqual((coverage['compositions'], coverage['decisions'], coverage['valid']), (21, 16, 15))
+        self.assertEqual({key: coverage[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
+            code_compositions=19, cancelled_compositions=3, edited_compositions=2,
+            regular_committed_compositions=12, regular_decisions=14, kspc_compositions=11, kspc_keypresses=67,
+            kspc_characters=24, kspc_text_free_compositions=1, candidate_commits=15, raw_return_commits=2))
+        self.assertEqual(coverage['unknown_fingerprint_compositions'], 0)
+        self.assertEqual(coverage['composition_rate_status'], 'available_within_measurement_fingerprint')
+        self.assertEqual((coverage['cancel_rate'], coverage['preedit_edit_rate'], coverage['decisions_per_composition'],
+                          coverage['kspc'], coverage['raw_commit_rate']), (3 / 19, 2 / 19, 14 / 12, 67 / 24, 2 / 17))
+        self.assertEqual({key: coverage[key] for key in DECISION_FIELDS[:8]}, dict(
+            onekey_selected=8, misses=5, learned_misses=1, misses_with_provenance=5, learned_leader=2,
+            learned_leader_missed=1, dictionary_leader=10, dictionary_leader_missed=2))
+        self.assertEqual((coverage['onekey_rate'], coverage['learned_miss_share'],
+                          coverage['learned_leader_miss_rate'], coverage['dictionary_leader_miss_rate']),
+                         (8 / 15, 1 / 5, 1 / 2, 2 / 10))
+        self.assertEqual((coverage['top1_rate'], coverage['quality_rate_status']),
+                         (10 / 15, 'available_within_measurement_fingerprint'))
+        # Each group has the decision counters and rates, and none of the composition ones.
+        groups = {(group['text_kind'], group['presentation']): group for group in summary['groups']}
+        chinese = groups[('chinese', 'candidates_requested')]
+        self.assertEqual({key: chinese[key] for key in DECISION_FIELDS[:8]} | dict(valid=chinese['valid']), dict(
+            onekey_selected=6, misses=5, learned_misses=1, misses_with_provenance=5, learned_leader=1,
+            learned_leader_missed=1, dictionary_leader=10, dictionary_leader_missed=2, valid=13))
+        self.assertEqual((chinese['onekey_rate'], chinese['learned_miss_share'], chinese['learned_leader_miss_rate'],
+                          chinese['dictionary_leader_miss_rate']), (6 / 13, 1 / 5, 1.0, 1 / 5))
+        self.assertNotIn('code_compositions', chinese)
+        self.assertEqual((groups[('english', 'candidates_requested')]['onekey_rate'],
+                          groups[('english', 'candidates_requested')]['learned_leader_miss_rate']), (1.0, 0.0))
+        raw = groups[('unknown', 'candidates_requested')]
+        self.assertEqual((raw['decisions'], raw['valid'], raw['onekey_rate'], raw['learned_miss_share']),
+                         (1, 0, None, None))
+        # Table and CSV list every field as a leaf.
+        table = self.run_cli('summary', '--since', '2026-09-01', db=db)
+        listed = {row['path'] for row in csv.DictReader(io.StringIO(
+            self.run_cli('summary', '--since', '2026-09-01', '--format', 'csv', db=db)))}
+        for field in (*COMPOSITION_COUNTER_FIELDS, 'cancel_rate', 'preedit_edit_rate', 'decisions_per_composition',
+                      'kspc', 'raw_commit_rate', 'composition_rate_status', 'unknown_fingerprint_compositions',
+                      'onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
+                      'dictionary_leader_missed', 'onekey_rate', 'learned_miss_share', 'learned_leader_miss_rate',
+                      'dictionary_leader_miss_rate'):
+            self.assertIn(f'$.coverage.{field}', listed)
+            self.assertIn(f'$.coverage.{field} |', table)
+        self.assertIn('$.groups[0].onekey_rate |', table)
+
+    def test_summary_composition_rates_need_one_known_fingerprint_among_decisions_and_compositions(self):
+        db = self.scorecard_db()
+        rate_fields = ('cancel_rate', 'preedit_edit_rate', 'decisions_per_composition', 'kspc', 'raw_commit_rate')
+        # Everything: measurement-A and -B decisions, and a composition of a run without any decision.
+        every = self.result('summary', db=db)['coverage']
+        self.assertEqual((every['compositions'], every['code_compositions'], every['unknown_fingerprint_compositions']),
+                         (24, 22, 1))
+        self.assertEqual((every['composition_rate_status'], every['quality_rate_status']),
+                         ('unavailable_across_measurement_fingerprints',) * 2)
+        for key in (*rate_fields, 'top1_rate', 'onekey_rate'):
+            self.assertIsNone(every[key], key)
+        # One known fingerprint among the decisions (-B), but the orphan's composition has none: the decision rates
+        # keep their decisions-only rule and the composition rates do not exist.
+        older = self.result('summary', '--since', '2026-08-15', '--until', '2026-08-25', db=db)['coverage']
+        self.assertEqual((older['quality_rate_status'], older['top1_rate'], older['onekey_rate']),
+                         ('available_within_measurement_fingerprint', 1.0, 1.0))
+        self.assertEqual((older['composition_rate_status'], older['code_compositions'],
+                          older['unknown_fingerprint_compositions']),
+                         ('unavailable_across_measurement_fingerprints', 3, 1))
+        for key in rate_fields:
+            self.assertIsNone(older[key], key)
+        # A composition with no fingerprint alone, and nothing at all.
+        orphan = self.result('summary', '--app', 'app.orphan', db=db)['coverage']
+        self.assertEqual((orphan['composition_rate_status'], orphan['quality_rate_status'], orphan['cancel_rate']),
+                         ('unavailable_unknown_measurement_fingerprint', 'unavailable_without_measurement_evidence',
+                          None))
+        self.assertEqual((orphan['code_compositions'], orphan['cancelled_compositions']), (1, 1))
+        empty = self.result('summary', '--since', '2026-07-01', '--until', '2026-07-02', db=db)['coverage']
+        self.assertEqual(empty['composition_rate_status'], 'unavailable_without_measurement_evidence')
+        self.assertEqual(empty['code_compositions'], 0)
+        self.assertIsNone(empty['cancel_rate'])
+
+    def test_scorecard_counters_are_the_same_for_a_database_and_its_export(self):
+        db = self.scorecard_db()
+        exported = Path(self.temp.name) / 'scorecard.json'
+        self.run_cli('export', '--output', str(exported), db=db)
+        local = self.scorecard_trend()
+        with utc():
+            imported = self.result('trend', '--days', '28', '--until', '2026-09-08', '--exports-only',
+                                   '--input', str(exported), db=db)
+        for key in ('series', 'metric_scope'):
+            self.assertEqual(imported[key], local[key], key)
+        local_summary = self.result('summary', '--since', '2026-09-01', db=db)
+        imported_summary = self.result('summary', '--since', '2026-09-01', '--exports-only', '--input', str(exported),
+                                       db=db)
+        self.assertEqual(imported_summary['coverage'], local_summary['coverage'])
+        self.assertEqual(imported_summary['groups'], local_summary['groups'])
+
+    def test_actual_engine_trend_carries_the_scorecard_counters(self):
+        trend = self.result('trend', '--days', '7', db=ENGINE_DB)
+        self.assert_scorecard_fields(trend)
+        week = trend['series']['overall'][-1]['rolling_7d']
+        with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as db:
+            commits = dict(db.execute('SELECT kind, COUNT(*) FROM commits GROUP BY kind'))
+            compositions = db.execute('SELECT COUNT(*) FROM compositions').fetchone()[0]
+        self.assertEqual((week['candidate_commits'], week['raw_return_commits']),
+                         (commits['candidate'], commits['raw_return']))
+        self.assertEqual(trend['metric_scope']['included_compositions'], compositions)
+        self.assertEqual(trend['metric_scope']['excluded_compositions'], 0)
+        # Counters nest: learned misses have a type, which a miss may lack; leaders are comparable decisions.
+        self.assertLessEqual(week['learned_misses'], week['misses_with_provenance'])
+        self.assertLessEqual(week['misses_with_provenance'], week['misses'])
+        self.assertLessEqual(week['misses'], week['valid'])
+        self.assertLessEqual(week['learned_leader'] + week['dictionary_leader'], week['comparable'])
+        self.assertLessEqual(week['onekey_selected'], week['valid'])
+        self.assertLessEqual(week['regular_committed_compositions'], week['code_compositions'])
+        # Every known-rank decision of this capture has a length, so the buckets sum to the point.
+        self.assertEqual(week['length_unavailable'], 0)
+        for key in ('onekey_selected', 'misses', 'learned_misses', 'dictionary_leader_missed'):
+            self.assertEqual(sum(bucket[key] for bucket in week['by_selection_length'].values()), week[key], key)
+        summary = self.result('summary', db=ENGINE_DB)['coverage']
+        self.assertEqual((summary['candidate_commits'], summary['raw_return_commits']),
+                         (commits['candidate'], commits['raw_return']))
+        self.assertEqual(summary['composition_rate_status'], 'available_within_measurement_fingerprint')
+
     def test_summary_exact_denominators_and_ranks(self):
         result = self.result()
         self.assertEqual(result['coverage']['compositions'], 21)
@@ -1213,7 +1670,8 @@ class QueryTests(unittest.TestCase):
         db.commit()
         after = self.result()['coverage']
         for key in ('valid', 'known_rank', 'unknown_rank', 'comparable', 'top1_selected', 'top3_selected',
-                    'top1_matches', 'top1_rate', 'top3_rate', 'top1_match_rate', 'mean_display_rank', 'mean_native_rank'):
+                    'top1_matches', 'top1_rate', 'top3_rate', 'top1_match_rate', 'mean_display_rank',
+                    'mean_native_rank', *DECISION_FIELDS[:12]):
             self.assertEqual(after[key], before[key], key)
         self.assertEqual(after['text_free'], 3)
         # The counts stay when the text goes, so no decision loses its length bucket.

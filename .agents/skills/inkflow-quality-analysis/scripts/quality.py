@@ -50,6 +50,17 @@ WINDOW_ENDS = ('next_code', 'client_changed', 'deactivated', 'timeout')
 WINDOW_COLUMNS = ', '.join(f'w."{column}" AS window_{column}' for column in WINDOW_KEYS if column != 'commit_id')
 OPERATIONS = {'keypresses': 'keypresses', 'page_requests': 'pageRequests', 'page_turns': 'pageTurns',
               'candidate_moves': 'candidateMoves', 'preedit_edits': 'preeditEdits'}
+# Candidate `type` sets of the L metrics (docs/input-quality-metrics.md section 6): instrument constants of the rule.
+LEARNED_TYPES = ('user_phrase', 'english_personal_1', 'english_personal_2', 'english_personal_3',
+                 'mixed_personal_0', 'mixed_personal_1', 'mixed_personal_2', 'mixed_personal_3')
+DICTIONARY_TYPES = ('phrase', 'user_table')
+COMPARABLE = 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NOT NULL'
+
+
+def type_set(column, types):
+    return f"{column} IN ({','.join(repr(name) for name in types)})"
+
+
 COUNTERS = {
     'committed': "outcome='committed'", 'unknown': "outcome='unknown'", 'reverted': "outcome='reverted'",
     'edited': "outcome='edited'", 'cancelled': "outcome='cancelled'", 'interrupted': "outcome='interrupted'",
@@ -58,7 +69,7 @@ COUNTERS = {
     'regular_insertion_unknown': 'regular_committed AND insertion_issued IS NULL',
     'valid': 'valid', 'known_rank': 'valid AND display_rank IS NOT NULL',
     'unknown_rank': 'valid AND display_rank IS NULL',
-    'comparable': 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NOT NULL',
+    'comparable': COMPARABLE,
     'first_page_unavailable': 'valid AND display_rank IS NOT NULL AND first_page_top1 IS NULL',
     'top1_selected': 'valid AND display_rank=1',
     'top3_selected': 'valid AND display_rank BETWEEN 1 AND 3',
@@ -68,7 +79,51 @@ COUNTERS = {
     'length_unavailable': 'valid AND display_rank IS NOT NULL AND selected_length IS NULL',
     'pair_identity': 'valid AND display_rank IS NOT NULL AND pair_id IS NOT NULL',
     'pair_unavailable': 'valid AND display_rank IS NOT NULL AND pair_id IS NULL',
+    'onekey_selected': ("valid AND trigger='space' AND page=0 AND json_extract(operations_json,'$.pageTurns')=0 "
+                        "AND json_extract(operations_json,'$.candidateMoves')=0"),
+    'misses': 'valid AND display_rank>1',
+    'learned_misses': f"valid AND display_rank>1 AND {type_set('selected_type', LEARNED_TYPES)}",
+    'misses_with_provenance': "valid AND display_rank>1 AND selected_type IS NOT NULL AND selected_type!=''",
+    'learned_leader': f"{COMPARABLE} AND {type_set('first_page_type', LEARNED_TYPES)}",
+    'learned_leader_missed': f"{COMPARABLE} AND {type_set('first_page_type', LEARNED_TYPES)} AND NOT top1_match",
+    'dictionary_leader': f"{COMPARABLE} AND {type_set('first_page_type', DICTIONARY_TYPES)}",
+    'dictionary_leader_missed': f"{COMPARABLE} AND {type_set('first_page_type', DICTIONARY_TYPES)} AND NOT top1_match",
 }
+SCORECARD_COUNTERS = ('onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
+                      'learned_leader_missed', 'dictionary_leader', 'dictionary_leader_missed')
+# rate: (numerator counters, denominator counters, prefix of its Wilson interval or None); counters are summed.
+DECISION_RATES = {
+    'onekey_rate': (('onekey_selected',), ('valid',), 'onekey'),
+    'learned_miss_share': (('learned_misses',), ('misses',), 'learned_miss'),
+    'learned_leader_miss_rate': (('learned_leader_missed',), ('learned_leader',), 'learned_leader_miss'),
+    'dictionary_leader_miss_rate': (('dictionary_leader_missed',), ('dictionary_leader',), 'dictionary_leader_miss'),
+}
+# One row per selected composition (`scored_compositions` in `ctes`); a mean or a ratio has no interval.
+CODE_COMPOSITION = "(decisions>0 OR outcome IN ('cancelled','interrupted') OR code_commits>0)"
+REGULAR_COMPOSITION = "(outcome='committed' AND valid_decisions>0)"
+KSPC_COMPOSITION = f'({REGULAR_COMPOSITION} AND text_captured=1)'
+COMPOSITION_COUNTERS = {
+    'code_compositions': CODE_COMPOSITION,
+    'cancelled_compositions': f"{CODE_COMPOSITION} AND outcome='cancelled'",
+    'edited_compositions': f'{CODE_COMPOSITION} AND preedit_edits>0',
+    'regular_committed_compositions': REGULAR_COMPOSITION,
+    'regular_decisions': f'CASE WHEN {REGULAR_COMPOSITION} THEN valid_decisions END',
+    'kspc_compositions': KSPC_COMPOSITION,
+    'kspc_keypresses': f'CASE WHEN {KSPC_COMPOSITION} THEN keypresses END',
+    'kspc_characters': f'CASE WHEN {KSPC_COMPOSITION} THEN committed_characters END',
+    'kspc_text_free_compositions': f'{REGULAR_COMPOSITION} AND text_captured=0',
+    'candidate_commits': 'candidate_commits',
+    'raw_return_commits': 'raw_return_commits',
+}
+COMPOSITION_RATES = {
+    'cancel_rate': (('cancelled_compositions',), ('code_compositions',), 'cancel'),
+    'preedit_edit_rate': (('edited_compositions',), ('code_compositions',), 'preedit_edit'),
+    'decisions_per_composition': (('regular_decisions',), ('regular_committed_compositions',), None),
+    'kspc': (('kspc_keypresses',), ('kspc_characters',), None),
+    'raw_commit_rate': (('raw_return_commits',), ('candidate_commits', 'raw_return_commits'), 'raw_commit'),
+}
+# Most cancels and raw Returns have no decision, so no kind: a kind series would read near 0 for these.
+OVERALL_ONLY_RATES = ('cancel_rate', 'preedit_edit_rate', 'raw_commit_rate')
 
 
 class QueryError(Exception):
@@ -212,6 +267,7 @@ def ctes(args):
           THEN json_extract(selected_candidate,'$.nativeRank') END AS native_rank,
           json_extract(selected_candidate,'$.textHash') AS selected_text_hash,
           json_extract(selected_candidate,'$.type') AS selected_type,
+          json_extract(first_page_json,'$.candidates[0].type') AS first_page_type,
           CASE WHEN selected_prefix_valid=1 AND {same_generation}
           AND json_extract(first_page_json,'$.page')=0
           AND json_extract(first_page_json,'$.candidates[0].displayIndex')=0
@@ -226,6 +282,35 @@ def ctes(args):
                           CASE WHEN text_captured=0 THEN NULL ELSE length(selected_text) END), 0) AS selected_length,
           CASE WHEN text_captured=0 THEN display_rank=1 ELSE selected_text=first_page_top1 END AS top1_match
         FROM ranked
+    ), run_measurements AS (
+        SELECT c.run_id, CASE WHEN COUNT(DISTINCT COALESCE(r.measurement_fingerprint,'unknown'))=1
+          THEN MIN(COALESCE(r.measurement_fingerprint,'unknown')) ELSE 'unknown' END AS measurement_fingerprint
+        FROM candidate_decisions d JOIN compositions c ON c.id=d.composition_id
+        JOIN config_revisions r ON r.id=d.config_revision_id
+        WHERE c.run_id IN (SELECT run_id FROM selected_compositions) GROUP BY c.run_id
+    ), composition_decisions AS (
+        SELECT composition_id, COUNT(*) AS decisions, SUM(valid) AS valid_decisions,
+          MIN(text_captured) AS text_captured,
+          CASE WHEN COUNT(DISTINCT text_kind)=1 THEN MIN(text_kind) ELSE 'mixed' END AS kind,
+          CASE WHEN COUNT(DISTINCT measurement_fingerprint)=1 THEN MIN(measurement_fingerprint)
+          ELSE 'unknown' END AS measurement_fingerprint
+        FROM observations GROUP BY composition_id
+    ), composition_commits AS (
+        SELECT composition_id, SUM(kind='candidate') AS candidate_commits, SUM(kind='raw_return') AS raw_return_commits,
+          SUM(kind IN ('candidate','raw_return','ascii','forced_flush')) AS code_commits,
+          SUM(CASE WHEN kind='candidate' THEN length(text) END) AS committed_characters
+        FROM commits WHERE composition_id IN (SELECT id FROM selected_compositions) GROUP BY composition_id
+    ), scored_compositions AS (
+        SELECT c.id, c.started_at AS composition_started_at, c.outcome,
+          json_extract(c.operations_json,'$.keypresses') AS keypresses,
+          json_extract(c.operations_json,'$.preeditEdits') AS preedit_edits,
+          COALESCE(d.decisions,0) AS decisions, COALESCE(d.valid_decisions,0) AS valid_decisions, d.text_captured,
+          COALESCE(d.kind,'unknown') AS kind,
+          COALESCE(d.measurement_fingerprint, r.measurement_fingerprint, 'unknown') AS measurement_fingerprint,
+          COALESCE(m.candidate_commits,0) AS candidate_commits, COALESCE(m.raw_return_commits,0) AS raw_return_commits,
+          COALESCE(m.code_commits,0) AS code_commits, COALESCE(m.committed_characters,0) AS committed_characters
+        FROM selected_compositions c LEFT JOIN composition_decisions d ON d.composition_id=c.id
+        LEFT JOIN composition_commits m ON m.composition_id=c.id LEFT JOIN run_measurements r ON r.run_id=c.run_id
     )
     """
     return sql, parameters
@@ -233,6 +318,10 @@ def ctes(args):
 
 def rows(db, sql, parameters=None):
     return [dict(row) for row in db.execute(sql, parameters or {})]
+
+
+def composition_sql():
+    return ', '.join(f'COALESCE(SUM({condition}),0) AS {key}' for key, condition in COMPOSITION_COUNTERS.items())
 
 
 def aggregate_sql():
@@ -247,10 +336,18 @@ def aggregate_sql():
     return ', '.join(fields)
 
 
+def ratio(row, numerators, denominators):
+    """A ratio of summed counters; a zero denominator is null, never 0."""
+    denominator = sum(row[key] for key in denominators)
+    return sum(row[key] for key in numerators) / denominator if denominator else None
+
+
 def rates(row, status=None):
     row['top1_rate'] = row['top1_selected'] / row['known_rank'] if row['known_rank'] else None
     row['top3_rate'] = row['top3_selected'] / row['known_rank'] if row['known_rank'] else None
     row['top1_match_rate'] = row['top1_matches'] / row['comparable'] if row['comparable'] else None
+    for name, (numerators, denominators, _) in DECISION_RATES.items():
+        row[name] = ratio(row, numerators, denominators)
     if status is None:
         status = ('unavailable_unknown_measurement_fingerprint'
                   if row.get('measurement_fingerprint') == 'unknown'
@@ -259,8 +356,20 @@ def rates(row, status=None):
         row['top1_rate'] = None
         row['top3_rate'] = None
         row['top1_match_rate'] = None
+        for name in DECISION_RATES:
+            row[name] = None
     row['quality_rate_status'] = status
     return row
+
+
+def measurement_status(row):
+    if row['total'] == 0:
+        return 'unavailable_without_measurement_evidence'
+    if row['known_distinct'] == 1 and row['unknown'] == 0:
+        return 'available_within_measurement_fingerprint'
+    if row['known_distinct'] == 0:
+        return 'unavailable_unknown_measurement_fingerprint'
+    return 'unavailable_across_measurement_fingerprints'
 
 
 def coverage(db, sql, parameters):
@@ -268,16 +377,8 @@ def coverage(db, sql, parameters):
     measurement = rows(db, sql + """SELECT COUNT(*) AS total,
         COUNT(DISTINCT CASE WHEN measurement_fingerprint!='unknown' THEN measurement_fingerprint END) AS known_distinct,
         COALESCE(SUM(measurement_fingerprint='unknown'),0) AS unknown FROM observations""", parameters)[0]
-    if measurement['total'] == 0:
-        rate_status = 'unavailable_without_measurement_evidence'
-    elif measurement['known_distinct'] == 1 and measurement['unknown'] == 0:
-        rate_status = 'available_within_measurement_fingerprint'
-    elif measurement['known_distinct'] == 0:
-        rate_status = 'unavailable_unknown_measurement_fingerprint'
-    else:
-        rate_status = 'unavailable_across_measurement_fingerprints'
     result = rates(rows(db, sql + 'SELECT ' + aggregate_sql() + ' FROM observations', parameters)[0],
-                   rate_status)
+                   measurement_status(measurement))
     result.update(rows(db, sql + f"""SELECT COUNT(*) AS compositions,
         COALESCE(SUM(page_history_truncated),0) AS truncated_compositions,
         (SELECT COUNT(*) FROM commits WHERE composition_id IN (SELECT id FROM selected_compositions)) AS commits,
@@ -288,6 +389,18 @@ def coverage(db, sql, parameters):
     ends = {row[0]: row[1] for row in db.execute(
         sql + f'SELECT "end", COUNT(*) FROM windows WHERE commit_id IN {selected_commits} GROUP BY "end"', parameters)}
     result['windows_by_end'] = {end: ends.pop(end, 0) for end in WINDOW_ENDS} | ends
+    # Compositions attributed to a fingerprint join the decisions in the status of the composition and commit rates.
+    result.update(rows(db, sql + f"""SELECT {composition_sql()},
+        COALESCE(SUM(measurement_fingerprint='unknown'),0) AS unknown_fingerprint_compositions
+        FROM scored_compositions""", parameters)[0])
+    pooled = rows(db, sql + """SELECT COUNT(*) AS total,
+        COUNT(DISTINCT CASE WHEN fingerprint!='unknown' THEN fingerprint END) AS known_distinct,
+        COALESCE(SUM(fingerprint='unknown'),0) AS unknown FROM (SELECT measurement_fingerprint AS fingerprint
+        FROM observations UNION ALL SELECT measurement_fingerprint FROM scored_compositions)""", parameters)[0]
+    result['composition_rate_status'] = measurement_status(pooled)
+    available = result['composition_rate_status'] == 'available_within_measurement_fingerprint'
+    for name, (numerators, denominators, _) in COMPOSITION_RATES.items():
+        result[name] = ratio(result, numerators, denominators) if available else None
     return result
 
 
@@ -399,7 +512,7 @@ def effectiveness(db, args):
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',
                   'first_page_unavailable', 'top1_selected', 'top3_selected', 'top1_matches',
-                  'paged_selected', 'text_free', 'length_unavailable')
+                  'paged_selected', 'text_free', 'length_unavailable') + SCORECARD_COUNTERS
 SELECTION_LENGTHS = ('1', '2', '3+')
 Z95 = NormalDist().inv_cdf(0.975)
 
@@ -418,15 +531,34 @@ def wilson(successes, total):
     return low, high
 
 
-def trend_metric(items, lengths=True):
-    result = {key: sum(item.get(key, 0) for item in items) for key in TREND_COUNTERS}
-    measurements = {}
+def set_rate(result, name, interval, numerators, denominators, available):
+    """A rate of summed counters, with its Wilson interval when it is a proportion; null unless available."""
+    result[name] = ratio(result, numerators, denominators) if available else None
+    if interval:
+        low, high = wilson(sum(result[key] for key in numerators), sum(result[key] for key in denominators))
+        result[f'{interval}_wilson_low'], result[f'{interval}_wilson_high'] = (
+            (low, high) if result[name] is not None else (None, None))
+
+
+def tally(items, key):
+    result = {}
     for item in items:
-        for identity, count in item.get('_measurements', {}).items():
-            measurements[identity] = measurements.get(identity, 0) + count
-    known = {identity for identity, count in measurements.items() if identity != 'unknown' and count}
-    unknown = measurements.get('unknown', 0)
-    if not result['decisions']:
+        for identity, count in item.get(key, {}).items():
+            result[identity] = result.get(identity, 0) + count
+    return result
+
+
+def trend_metric(items, lengths=True, composition_rates=()):
+    """A point or a selection-length bucket. Composition and commit counters are on points only, and
+    `composition_rates` names the rates of them this series reports."""
+    result = {key: sum(item.get(key, 0) for item in items) for key in TREND_COUNTERS}
+    measurements = tally(items, '_measurements')
+    attributed = tally(items, '_attributed')
+    pooled = {identity: measurements.get(identity, 0) + attributed.get(identity, 0)
+              for identity in measurements.keys() | attributed.keys()}
+    known = {identity for identity, count in pooled.items() if identity != 'unknown' and count}
+    unknown = pooled.get('unknown', 0)
+    if not sum(pooled.values()):
         status = 'unavailable_without_measurement_evidence'
     elif len(known) == 1 and not unknown:
         status = 'available_within_measurement_fingerprint'
@@ -449,10 +581,17 @@ def trend_metric(items, lengths=True):
         else:
             result[f'{name}_wilson_low'], result[f'{name}_wilson_high'] = wilson(
                 result[f'{name}_selected'], result['known_rank'])
+    available = status == 'available_within_measurement_fingerprint'
+    for name, (numerators, denominators, interval) in DECISION_RATES.items():
+        set_rate(result, name, interval, numerators, denominators, available)
     result['quality_rate_status'] = status
     result['measurement_fingerprints'] = sorted(known)
-    result['unknown_measurement_decisions'] = unknown
+    result['unknown_measurement_decisions'] = measurements.get('unknown', 0)
     if lengths:
+        for key in COMPOSITION_COUNTERS:
+            result[key] = sum(item.get(key, 0) for item in items)
+        for name, (numerators, denominators, interval) in COMPOSITION_RATES.items():
+            set_rate(result, name, interval, numerators, denominators, available and name in composition_rates)
         # Known-rank decisions without a length (`length_unavailable`) sit beside the buckets.
         result['by_selection_length'] = {}
         for length in SELECTION_LENGTHS:
@@ -495,6 +634,7 @@ def trend(db, args):
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND page>0),0) AS paged_selected",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND text_captured=0),0) AS text_free",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND selected_length IS NULL),0) AS length_unavailable",
+        *(f'COALESCE(SUM({COUNTERS[key]}),0) AS {key}' for key in SCORECARD_COUNTERS),
     ])
     length = """CASE WHEN selected_length=1 THEN '1' WHEN selected_length=2 THEN '2'
         WHEN selected_length>=3 THEN '3+' END"""
@@ -506,6 +646,10 @@ def trend(db, args):
         WHERE measurement_fingerprint!='unknown'
         ORDER BY composition_started_at DESC,occurred_at DESC,id DESC LIMIT 1""", parameters).fetchone()
     measurement_identity = latest_measurement['measurement_fingerprint'] if latest_measurement else None
+    # A composition without a decision takes the fingerprint of its run's decisions (see `scored_compositions`).
+    scored = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,kind,
+        measurement_fingerprint,COUNT(*) AS compositions,{composition_sql()} FROM scored_compositions
+        GROUP BY local_day,kind,measurement_fingerprint""", parameters)
     total_decisions = sum(row['decisions'] for row in grouped)
     included_decisions = sum(row['decisions'] for row in grouped
                              if row['measurement_fingerprint'] == measurement_identity)
@@ -525,15 +669,28 @@ def trend(db, args):
                 measurements = target.setdefault('_measurements', {})
                 measurements[row['measurement_fingerprint']] = (
                     measurements.get(row['measurement_fingerprint'], 0) + row['decisions'])
+    for row in scored:
+        if row['measurement_fingerprint'] != measurement_identity:
+            continue
+        for series in ('overall', row['kind']):
+            day = raw[series].setdefault(row['local_day'], {key: 0 for key in TREND_COUNTERS})
+            for key in COMPOSITION_COUNTERS:
+                day[key] = day.get(key, 0) + row[key]
+            attributed = day.setdefault('_attributed', {})
+            attributed[row['measurement_fingerprint']] = (
+                attributed.get(row['measurement_fingerprint'], 0) + row['compositions'])
     days = [(first_day + timedelta(days=offset)).isoformat() for offset in range(args.days)]
     series = {}
     for name, values in raw.items():
         raw_points = [values.get(day, {**{key: 0 for key in TREND_COUNTERS}, '_measurements': {}}) for day in days]
+        # Composition and commit rates need compositions without a kind, so only `overall` reports all of them.
+        reported = () if args.kind is not None else tuple(
+            rate for rate in COMPOSITION_RATES if name == 'overall' or rate not in OVERALL_ONLY_RATES)
         points = []
         for index, day in enumerate(days):
-            points.append(dict(date=day, daily=trend_metric([raw_points[index]]),
-                rolling_7d=trend_metric(raw_points[max(0, index-6):index+1]),
-                rolling_28d=trend_metric(raw_points[max(0, index-27):index+1])))
+            points.append(dict(date=day, daily=trend_metric([raw_points[index]], composition_rates=reported),
+                rolling_7d=trend_metric(raw_points[max(0, index-6):index+1], composition_rates=reported),
+                rolling_28d=trend_metric(raw_points[max(0, index-27):index+1], composition_rates=reported)))
         series[name] = points
     markers = rows(db, sql + """SELECT app_version,
         MIN(composition_started_at) AS first_seen,MAX(composition_started_at) AS last_seen,
@@ -551,7 +708,13 @@ def trend(db, args):
                     policy='latest_compatible_metric_rules', included_decisions=included_decisions,
                     excluded_decisions=total_decisions-included_decisions,
                     excluded_unknown_decisions=sum(row['decisions'] for row in grouped
-                                                   if row['measurement_fingerprint'] == 'unknown')),
+                                                   if row['measurement_fingerprint'] == 'unknown'),
+                    included_compositions=sum(row['compositions'] for row in scored
+                                              if row['measurement_fingerprint'] == measurement_identity),
+                    excluded_compositions=sum(row['compositions'] for row in scored
+                                              if row['measurement_fingerprint'] != measurement_identity),
+                    excluded_unknown_compositions=sum(row['compositions'] for row in scored
+                                                      if row['measurement_fingerprint'] == 'unknown')),
                 series=series, version_markers=markers,
                 identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'))
 
