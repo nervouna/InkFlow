@@ -6,11 +6,12 @@
 //! `ranked` (the context ranker run again on the case). The README section "Replay and the
 //! first-choice target" defines the counts and the ship rule.
 //!
-//! `replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--record NAME=FILE ...] [--json]`
-//! runs the real engine once per arm on prepared resources and compares the arms with each other
-//! (see "Engine-mode replay" in the README).
+//! `replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] [--record NAME=FILE ...]
+//! [--json]` runs the real engine once per arm on prepared resources and compares the arms with each other;
+//! an arm named by `--train` learns from the recorded decisions as it goes (see "Engine-mode replay" in the
+//! README).
 use inkflow_rime::{
-    engine::{Configuration, Engine},
+    engine::{Configuration, Engine, InputSession, Snapshot},
     preferences::InputPreferences,
     ranking::{ContextRanker, is_han, parse_metadata},
 };
@@ -21,6 +22,7 @@ use std::{
     f64::consts::LN_2,
     fs,
     io::Write,
+    ops::Range,
     os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -29,9 +31,18 @@ use std::{
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
 const USAGE: &str = "Usage: replay list CASES [--context-index PATH] [--json]\n       \
-                     replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--record NAME=FILE ...] [--json]";
-/// Replay files hold typed text, which quality records keep for 28 days.
+                     replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] \
+                     [--record NAME=FILE ...] [--json]";
+/// Instrument constant: replay files hold typed text, which quality records keep for 28 days.
 const MAX_AGE_SECONDS: i64 = 28 * 24 * 60 * 60;
+/// Instrument constant: the pages searched for a selected text, the quality baseline's `pageLimit`.
+const PAGE_LIMIT: usize = 20;
+/// Instrument constant: a rate over fewer units gets its interval and no verdict (design section 8).
+const MIN_UNITS: u64 = 200;
+/// The 95% two-sided normal quantile, `NormalDist().inv_cdf(0.975)` as `quality.py` computes it.
+const Z95: f64 = 1.959_963_984_540_053_4;
+/// The X11 keysym of Page_Down.
+const PAGE_DOWN: i32 = 0xff56;
 /// Instrument constants, not product rules.
 const FUNCTION_WORDS: [&str; 10] = ["的", "地", "得", "在", "再", "吧", "把", "他", "她", "它"];
 const DICTIONARY_TYPES: [&str; 3] = ["phrase", "user_phrase", "user_table"];
@@ -61,6 +72,7 @@ struct Candidate {
 
 struct Case {
     id: String,
+    composition: String,
     raw_input: String,
     preceding: String,
     page: u64,
@@ -97,6 +109,10 @@ fn case(value: &Value) -> Result<Case> {
         .ok_or("candidates is not a list")?;
     Ok(Case {
         id: value["decision_id"].as_str().unwrap_or_default().to_owned(),
+        composition: value["composition_id"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
         raw_input: text(value, "raw_input")?,
         preceding: text(value, "preceding_context")?,
         page: value["page"].as_u64().ok_or("page is not a count")?,
@@ -310,18 +326,77 @@ impl Tally {
             "broken": self.broken,
         })
     }
+
+    /// Errors the arm introduced per error it fixed: the odds of the regression share. Unavailable
+    /// without a fixed case.
+    fn er(&self) -> Option<f64> {
+        (self.fixed > 0).then(|| self.broken as f64 / self.fixed as f64)
+    }
+
+    /// Broken over fixed plus broken, with its 95% Wilson interval.
+    fn regression(&self) -> Option<Interval> {
+        wilson(self.broken, self.fixed + self.broken)
+    }
+
+    /// Engine mode's block: the counts, ER and the regression share.
+    fn paired_json(&self) -> Value {
+        let mut block = self.json();
+        block["er"] = json!(self.er());
+        block["regression_share"] = json!(self.regression().map(|interval| interval.rate));
+        block["wilson_low"] = json!(self.regression().map(|interval| interval.low));
+        block["wilson_high"] = json!(self.regression().map(|interval| interval.high));
+        block
+    }
 }
 
-/// Every case, and one case per distinct (raw_input, selected_text) pair: its first.
+/// A proportion with its 95% Wilson score interval.
+#[derive(Clone, Copy)]
+struct Interval {
+    rate: f64,
+    low: f64,
+    high: f64,
+}
+
+/// `quality.py`'s `wilson`: unavailable without observations.
+fn wilson(successes: u64, total: u64) -> Option<Interval> {
+    if total == 0 {
+        return None;
+    }
+    let n = total as f64;
+    let rate = successes as f64 / n;
+    let squared = Z95 * Z95;
+    let center = rate + squared / (2.0 * n);
+    let margin = Z95 * (rate * (1.0 - rate) / n + squared / (4.0 * n * n)).sqrt();
+    let scale = 1.0 + squared / n;
+    let low = if successes == 0 {
+        0.0
+    } else {
+        ((center - margin) / scale).max(0.0)
+    };
+    let high = if successes == total {
+        1.0
+    } else {
+        ((center + margin) / scale).min(1.0)
+    };
+    Some(Interval { rate, low, high })
+}
+
+/// Every case, one case per distinct (raw_input, selected_text) pair (its first) and, in engine mode, one
+/// per pair that occurs more than once (its last).
 #[derive(Default, Clone, Copy)]
 struct Scope {
     cases: Tally,
     distinct: Tally,
+    repeat: Tally,
 }
 
 impl Scope {
     fn p(&self) -> f64 {
         mcnemar(self.distinct.fixed, self.distinct.broken)
+    }
+
+    fn repeat_p(&self) -> f64 {
+        mcnemar(self.repeat.fixed, self.repeat.broken)
     }
 }
 
@@ -517,24 +592,80 @@ fn list(args: &[String]) -> Result<()> {
 /// Index of `segmentation` in `SCOPES`: the cases the whole-input candidate is judged on.
 const SEGMENTATION: usize = 3;
 
-/// What one arm showed for one case: the first candidate of the first page, the longest candidate
-/// that consumes the whole input, and whether each equals the gold text.
+/// Where a page's first candidate comes from, a coarser view of the design's provenance dimension.
+/// `Learned` is `user_phrase` or an English or mixed candidate with a personal source, `Dictionary` is
+/// `phrase` or `user_table`, `Assembled` is `sentence`. `Other` folds `completion` and the English and mixed
+/// types without a personal source. `NoEvidence` is a page without evidence: after a selected prefix, or for
+/// a custom-phrase code.
+#[derive(Clone, Copy)]
+enum Provenance {
+    Learned,
+    Dictionary,
+    Assembled,
+    Other,
+    NoEvidence,
+}
+
+impl Provenance {
+    /// In declaration order, which indexes the leader counts.
+    const ALL: [Self; 5] = [
+        Self::Learned,
+        Self::Dictionary,
+        Self::Assembled,
+        Self::Other,
+        Self::NoEvidence,
+    ];
+
+    fn name(self) -> &'static str {
+        match self {
+            Self::Learned => "learned",
+            Self::Dictionary => "dictionary",
+            Self::Assembled => "assembled",
+            Self::Other => "other",
+            Self::NoEvidence => "none",
+        }
+    }
+
+    fn parse(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|provenance| provenance.name() == name)
+    }
+
+    fn of(candidate: Option<&inkflow_rime::engine::Candidate>) -> Self {
+        let Some(evidence) = candidate.and_then(|candidate| candidate.evidence.as_ref()) else {
+            return Self::NoEvidence;
+        };
+        match evidence.candidate_type.as_str() {
+            "user_phrase" => Self::Learned,
+            _ if evidence.personal_source().is_some() => Self::Learned,
+            "phrase" | "user_table" => Self::Dictionary,
+            "sentence" => Self::Assembled,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// What one arm showed for one case: the first candidate of the first page with its provenance, the
+/// longest candidate that consumes the whole input, and whether each equals the gold text.
 struct Outcome {
     id: String,
     first: String,
+    first_provenance: Provenance,
     longest: String,
     first_hit: bool,
     longest_hit: bool,
 }
 
 impl Outcome {
-    fn new(case: &Case, first: String, longest: String) -> Self {
+    fn new(case: &Case, first: String, first_provenance: Provenance, longest: String) -> Self {
         let hit = |shown: &str, gold: &str| !shown.is_empty() && shown == gold;
         Self {
             id: case.id.clone(),
             first_hit: hit(&first, &case.selected),
             longest_hit: hit(&longest, &case.committed),
             first,
+            first_provenance,
             longest,
         }
     }
@@ -543,11 +674,102 @@ impl Outcome {
         json!({
             "id": self.id,
             "first": self.first,
+            "first_provenance": self.first_provenance.name(),
             "longest": self.longest,
             "first_hit": self.first_hit,
             "longest_hit": self.longest_hit,
         })
     }
+}
+
+/// What became of the compositions of one arm. The training counts say what the final selection of a
+/// walkable composition did: `trained` committed the recorded text, `incomplete` left letters behind,
+/// `commit_mismatch` committed something else. Only a trained arm makes that selection.
+#[derive(Default, Clone, Copy)]
+struct Walk {
+    compositions: u64,
+    walkable: u64,
+    unwalkable: u64,
+    unfound: u64,
+    trained: u64,
+    incomplete: u64,
+    commit_mismatch: u64,
+}
+
+impl Walk {
+    fn walk_json(&self) -> Value {
+        json!({
+            "compositions": self.compositions,
+            "walkable": self.walkable,
+            "unwalkable": self.unwalkable,
+            "unfound": self.unfound,
+        })
+    }
+
+    fn training_json(&self) -> Value {
+        json!({
+            "trained": self.trained,
+            "incomplete": self.incomplete,
+            "commit_mismatch": self.commit_mismatch,
+        })
+    }
+
+    /// The counts a record's header carries; a record from before the walk has none.
+    fn from_header(header: &Value) -> Option<Self> {
+        let (walk, training) = (&header["walk"], &header["training"]);
+        let count = |part: &Value, key: &str| part[key].as_u64().unwrap_or_default();
+        walk.is_object().then(|| Self {
+            compositions: count(walk, "compositions"),
+            walkable: count(walk, "walkable"),
+            unwalkable: count(walk, "unwalkable"),
+            unfound: count(walk, "unfound"),
+            trained: count(training, "trained"),
+            incomplete: count(training, "incomplete"),
+            commit_mismatch: count(training, "commit_mismatch"),
+        })
+    }
+}
+
+/// The cases of one composition, which the file keeps together and in order.
+struct Composition {
+    cases: Range<usize>,
+    walkable: bool,
+}
+
+/// Whether the decisions replay as one composition: each later input extends the one before, and the
+/// selected texts in order make the text that was committed.
+fn walkable(cases: &[Case]) -> bool {
+    let extends = cases
+        .windows(2)
+        .all(|pair| pair[1].raw_input.starts_with(&pair[0].raw_input));
+    let selected: String = cases.iter().map(|case| case.selected.as_str()).collect();
+    extends && cases.last().is_some_and(|last| selected == last.committed)
+}
+
+fn compositions(cases: &[Case]) -> Result<Vec<Composition>> {
+    let mut found = Vec::new();
+    let mut seen = HashSet::new();
+    let mut start = 0;
+    while start < cases.len() {
+        let id = &cases[start].composition;
+        if id.is_empty() {
+            return Err("engine mode needs a composition_id on every case".into());
+        }
+        if !seen.insert(id) {
+            return Err(format!("composition {id} is not adjacent in the file").into());
+        }
+        let length = cases[start..]
+            .iter()
+            .take_while(|case| case.composition == *id)
+            .count();
+        let end = start + length;
+        found.push(Composition {
+            cases: start..end,
+            walkable: walkable(&cases[start..end]),
+        });
+        start = end;
+    }
+    Ok(found)
 }
 
 /// A scratch user directory, removed when the arm is done.
@@ -580,9 +802,125 @@ fn longest_whole_input(
     longest.to_owned()
 }
 
-/// Run every case on the first page of a fresh engine. Nothing is selected or committed, so
-/// nothing is learned; the user directory starts absent and is deleted afterwards.
-fn run_live(name: &str, resources: &Path, cases: &[Case]) -> Result<Vec<Outcome>> {
+/// Type letters into the composition.
+fn type_letters(session: &InputSession, letters: &str) -> Result<()> {
+    for byte in letters.bytes() {
+        session.key(i32::from(byte), i32::from(byte.is_ascii_uppercase()))?;
+        session.take_commit()?;
+    }
+    Ok(())
+}
+
+/// A new composition holding the whole `raw_input` of the case.
+fn type_fresh(session: &InputSession, case: &Case) -> Result<()> {
+    session.clear()?;
+    session.set_preceding_text(&case.preceding)?;
+    type_letters(session, &case.raw_input)
+}
+
+/// Score the first page now shown for the case.
+fn observe(session: &InputSession, case: &Case) -> Result<(Outcome, Snapshot)> {
+    let page = session.snapshot()?;
+    let first = page.candidates.first();
+    let shown = first.map_or_else(String::new, |candidate| candidate.text.clone());
+    let longest = longest_whole_input(&page.candidates, case.raw_input.len());
+    let outcome = Outcome::new(case, shown, Provenance::of(first), longest);
+    Ok((outcome, page))
+}
+
+/// Select `text` on the page shown or on a later one, up to `PAGE_LIMIT` pages. False when it is not there.
+fn select_text(session: &InputSession, mut page: Snapshot, text: &str) -> Result<bool> {
+    for pages in 1..=PAGE_LIMIT {
+        if let Some(index) = page.candidates.iter().position(|c| c.text == text) {
+            session.select(&page, index)?;
+            return Ok(true);
+        }
+        if pages == PAGE_LIMIT {
+            break;
+        }
+        session.key(PAGE_DOWN, 0)?;
+        let next = session.snapshot()?;
+        if next.page == page.page {
+            break;
+        }
+        page = next;
+    }
+    Ok(false)
+}
+
+/// Replay one composition. A walkable one is typed once: each decision is scored on the page the user was
+/// shown, in the state their earlier selections left, then its text is selected and the extra letters of the
+/// next decision are typed. A trained arm also makes the last selection, which commits and so trains; the
+/// cold arm leaves it. The walk ends at a text that is not found or at a selection that ends the
+/// composition early, and the decisions after it, like every decision of an unwalkable composition, are
+/// scored on a fresh composition that trains nothing.
+fn walk_composition(
+    session: &InputSession,
+    cases: &[Case],
+    walkable: bool,
+    train: bool,
+    walk: &mut Walk,
+) -> Result<Vec<Outcome>> {
+    walk.compositions += 1;
+    walk.walkable += u64::from(walkable);
+    walk.unwalkable += u64::from(!walkable);
+    let last = cases.len() - 1;
+    let mut walking = walkable;
+    let mut outcomes = Vec::with_capacity(cases.len());
+    for (index, case) in cases.iter().enumerate() {
+        if walking && index > 0 {
+            type_letters(session, &case.raw_input[cases[index - 1].raw_input.len()..])?;
+        } else {
+            type_fresh(session, case)?;
+        }
+        let (outcome, page) = observe(session, case)?;
+        outcomes.push(outcome);
+        if !walking || (index == last && !train) {
+            continue;
+        }
+        if !select_text(session, page, &case.selected)? {
+            walk.unfound += 1;
+            walking = false;
+            continue;
+        }
+        let commit = session.take_commit()?;
+        let remaining = !session.snapshot()?.preedit.is_empty();
+        if remaining && index < last {
+            continue;
+        }
+        walking = false;
+        if remaining {
+            // The next composition's clear discards the letters; nothing is learned.
+            walk.incomplete += 1;
+        } else if commit == cases[last].committed {
+            walk.trained += 1;
+        } else {
+            walk.commit_mismatch += 1;
+        }
+    }
+    Ok(outcomes)
+}
+
+struct Run {
+    name: String,
+    source: String,
+    trained: bool,
+    /// The walk counts; a record from before the walk has none.
+    walk: Option<Walk>,
+    /// Records that carry no `first_provenance`: they load as `none`.
+    without_provenance: u64,
+    outcomes: Vec<Outcome>,
+}
+
+/// Run every composition on a fresh engine, one arm. The user directory starts absent and is deleted
+/// afterwards, whatever a trained arm learned in it.
+fn run_live(
+    name: &str,
+    resources: &Path,
+    cases: &[Case],
+    compositions: &[Composition],
+    train: bool,
+) -> Result<Run> {
     if !resources.join("prepared/complete").is_file() {
         return Err(format!(
             "arm {name}: {} is not a prepared resources directory",
@@ -606,33 +944,49 @@ fn run_live(name: &str, resources: &Path, cases: &[Case]) -> Result<Vec<Outcome>
     if let Some(error) = session.configuration_error() {
         return Err(format!("arm {name}: configuration failed: {}", error.code()).into());
     }
+    let mut walk = Walk::default();
     let mut outcomes = Vec::with_capacity(cases.len());
-    for case in cases {
-        session.clear()?;
-        session.set_preceding_text(&case.preceding)?;
-        for byte in case.raw_input.bytes() {
-            session.key(i32::from(byte), i32::from(byte.is_ascii_uppercase()))?;
-            session.take_commit()?;
-        }
-        let page = session.snapshot()?;
-        let first = page.candidates.first().map(|c| c.text.clone());
-        let longest = longest_whole_input(&page.candidates, case.raw_input.len());
-        outcomes.push(Outcome::new(case, first.unwrap_or_default(), longest));
+    for composition in compositions {
+        let cases = &cases[composition.cases.clone()];
+        let walked = walk_composition(&session, cases, composition.walkable, train, &mut walk)?;
+        outcomes.extend(walked);
     }
     session.clear()?;
-    Ok(outcomes)
+    Ok(Run {
+        name: name.to_owned(),
+        source: format!("live on {}", resources.display()),
+        trained: train,
+        walk: Some(walk),
+        without_provenance: 0,
+        outcomes,
+    })
 }
 
-fn record_row(value: &Value) -> Result<(String, String, String)> {
-    Ok((
-        text(value, "id")?,
-        text(value, "first")?,
-        text(value, "longest")?,
-    ))
+/// What a record row says about one case.
+struct Row {
+    first: String,
+    provenance: Option<Provenance>,
+    longest: String,
 }
 
-/// The outcomes a `--record` run wrote, matched to the cases by decision id.
-fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Vec<Outcome>> {
+fn record_row(value: &Value) -> Result<(String, Row)> {
+    let provenance = value["first_provenance"]
+        .as_str()
+        .map(|name| {
+            Provenance::parse(name)
+                .ok_or_else(|| format!("first_provenance {name:?} is not a provenance"))
+        })
+        .transpose()?;
+    let row = Row {
+        first: text(value, "first")?,
+        provenance,
+        longest: text(value, "longest")?,
+    };
+    Ok((text(value, "id")?, row))
+}
+
+/// The arm a `--record` run wrote, matched to the cases by decision id.
+fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Run> {
     let fail = |message: String| format!("arm {name}: {path}: {message}");
     let body = fs::read_to_string(path).map_err(|error| fail(format!("cannot read: {error}")))?;
     let mut lines = body.lines();
@@ -643,21 +997,35 @@ fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Vec<Outcome>> {
     for (number, line) in (2..).zip(lines).filter(|(_, line)| !line.is_empty()) {
         let value = serde_json::from_str::<Value>(line)
             .map_err(|error| fail(format!("line {number}: {error}")))?;
-        let (id, first, longest) =
+        let (id, row) =
             record_row(&value).map_err(|error| fail(format!("line {number}: {error}")))?;
-        if recorded.insert(id, (first, longest)).is_some() {
+        if recorded.insert(id, row).is_some() {
             return Err(fail(format!("line {number}: a case is recorded twice")).into());
         }
     }
-    cases
-        .iter()
-        .map(|case| {
-            let (first, longest) = recorded
-                .get(&case.id)
-                .ok_or_else(|| fail(format!("no record of case {}", case.id)))?;
-            Ok(Outcome::new(case, first.clone(), longest.clone()))
-        })
-        .collect()
+    let mut without_provenance = 0;
+    let mut outcomes = Vec::with_capacity(cases.len());
+    for case in cases {
+        let row = recorded
+            .get(&case.id)
+            .ok_or_else(|| fail(format!("no record of case {}", case.id)))?;
+        without_provenance += u64::from(row.provenance.is_none());
+        let provenance = row.provenance.unwrap_or(Provenance::NoEvidence);
+        outcomes.push(Outcome::new(
+            case,
+            row.first.clone(),
+            provenance,
+            row.longest.clone(),
+        ));
+    }
+    Ok(Run {
+        name: name.to_owned(),
+        source: format!("recorded in {path}"),
+        trained: header["trained"].as_bool().unwrap_or(false),
+        walk: Walk::from_header(&header),
+        without_provenance,
+        outcomes,
+    })
 }
 
 /// Typed text stays outside the repository, like the case files.
@@ -683,11 +1051,22 @@ fn outside_repository(path: &str) -> Result<()> {
 }
 
 /// A new owner-only file, as the case files are; it is never written over another file.
-fn write_record(path: &str, name: &str, generated_at: &str, outcomes: &[Outcome]) -> Result<()> {
-    let mut body =
-        json!({"generated_at": generated_at, "arm": name, "cases": outcomes.len()}).to_string();
+fn write_record(path: &str, generated_at: &str, run: &Run) -> Result<()> {
+    let mut header = json!({
+        "generated_at": generated_at,
+        "arm": run.name,
+        "cases": run.outcomes.len(),
+        "trained": run.trained,
+    });
+    if let Some(walk) = run.walk {
+        header["walk"] = walk.walk_json();
+        if run.trained {
+            header["training"] = walk.training_json();
+        }
+    }
+    let mut body = header.to_string();
     body.push('\n');
-    for outcome in outcomes {
+    for outcome in &run.outcomes {
         body += &outcome.json().to_string();
         body.push('\n');
     }
@@ -743,6 +1122,7 @@ enum Source {
 struct EngineArgs {
     path: String,
     arms: Vec<(String, Source)>,
+    trains: Vec<String>,
     records: Vec<(String, String)>,
     as_json: bool,
 }
@@ -761,7 +1141,8 @@ fn name_value(arg: &str) -> Result<(String, String)> {
 }
 
 fn parse_engine(args: &[String]) -> Result<EngineArgs> {
-    let (mut path, mut arms, mut records, mut as_json) = (None, Vec::new(), Vec::new(), false);
+    let (mut path, mut arms, mut as_json) = (None, Vec::new(), false);
+    let (mut trains, mut records) = (Vec::new(), Vec::new());
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         match arg.as_str() {
@@ -774,6 +1155,7 @@ fn parse_engine(args: &[String]) -> Result<EngineArgs> {
                 };
                 arms.push((name, source));
             }
+            "--train" => trains.push(rest.next().ok_or(USAGE)?.clone()),
             "--record" => records.push(name_value(rest.next().ok_or(USAGE)?)?),
             other if path.is_none() && !other.starts_with("--") => path = Some(other.to_owned()),
             _ => return Err(USAGE.into()),
@@ -787,12 +1169,22 @@ fn parse_engine(args: &[String]) -> Result<EngineArgs> {
     if names.len() != arms.len() {
         return Err("--arm names must be different".into());
     }
+    let live = |name: &String| {
+        let arm = arms.iter().find(|(arm, _)| arm == name);
+        arm.is_some_and(|(_, source)| matches!(source, Source::Live(_)))
+    };
+    let mut trained = HashSet::new();
+    for name in &trains {
+        if !live(name) {
+            return Err(format!("--train {name}: only a live --arm can be trained").into());
+        }
+        if !trained.insert(name) {
+            return Err(format!("--train {name} is given twice").into());
+        }
+    }
     let mut recorded = HashSet::new();
     for (name, _) in &records {
-        let live = arms
-            .iter()
-            .any(|(arm, source)| arm == name && matches!(source, Source::Live(_)));
-        if !live {
+        if !live(name) {
             return Err(format!("--record {name}: only a live --arm can be recorded").into());
         }
         if !recorded.insert(name) {
@@ -802,6 +1194,7 @@ fn parse_engine(args: &[String]) -> Result<EngineArgs> {
     Ok(EngineArgs {
         path,
         arms,
+        trains,
         records,
         as_json,
     })
@@ -816,14 +1209,44 @@ struct Facts {
     distinct: bool,
     /// First case of its (raw_input, committed_text) pair.
     distinct_whole: bool,
+    /// Last case of a (raw_input, selected_text) pair that occurs more than once.
+    repeat: bool,
+    /// Last case of a (raw_input, committed_text) pair that occurs more than once.
+    repeat_whole: bool,
+}
+
+/// A case's identity as a pair: its raw input and the text it is judged against.
+type Key<'a> = (&'a str, &'a str);
+
+fn pair_key(case: &Case) -> Key<'_> {
+    (&case.raw_input, &case.selected)
+}
+
+fn whole_key(case: &Case) -> Key<'_> {
+    (&case.raw_input, &case.committed)
+}
+
+/// The index of the last case of each key, and how many cases have it.
+fn last_of<'a>(keys: impl Iterator<Item = Key<'a>>) -> HashMap<Key<'a>, (usize, usize)> {
+    let mut last = HashMap::new();
+    for (index, key) in keys.enumerate() {
+        let entry = last.entry(key).or_insert((index, 0));
+        entry.0 = index;
+        entry.1 += 1;
+    }
+    last
 }
 
 fn facts(cases: &[Case]) -> Vec<Facts> {
     let mut pairs = HashSet::new();
     let mut wholes = HashSet::new();
+    let last_pair = last_of(cases.iter().map(pair_key));
+    let last_whole = last_of(cases.iter().map(whole_key));
+    let repeats = |last: (usize, usize), index: usize| last.1 > 1 && last.0 == index;
     cases
         .iter()
-        .map(|case| Facts {
+        .enumerate()
+        .map(|(index, case)| Facts {
             scopes: scopes(case),
             leader: case
                 .candidates
@@ -831,8 +1254,10 @@ fn facts(cases: &[Case]) -> Vec<Facts> {
                 .find(|c| c.display_index == 0)
                 .map(|c| c.text.clone())
                 .unwrap_or_default(),
-            distinct: pairs.insert((&case.raw_input, &case.selected)),
-            distinct_whole: wholes.insert((&case.raw_input, &case.committed)),
+            distinct: pairs.insert(pair_key(case)),
+            distinct_whole: wholes.insert(whole_key(case)),
+            repeat: repeats(last_pair[&pair_key(case)], index),
+            repeat_whole: repeats(last_whole[&whole_key(case)], index),
         })
         .collect()
 }
@@ -852,6 +1277,19 @@ impl Count {
     fn json(&self) -> Value {
         json!({"cases": self.cases, "hits": self.hits})
     }
+
+    /// The misses among the cases, with their rate and interval; unavailable, never 0%, without cases.
+    fn miss_json(&self) -> Value {
+        let misses = self.cases - self.hits;
+        let interval = wilson(misses, self.cases);
+        json!({
+            "cases": self.cases,
+            "misses": misses,
+            "miss_rate": interval.map(|interval| interval.rate),
+            "wilson_low": interval.map(|interval| interval.low),
+            "wilson_high": interval.map(|interval| interval.high),
+        })
+    }
 }
 
 /// An arm's hits over every case and over the distinct pairs of one scope.
@@ -862,31 +1300,39 @@ struct Hits {
 }
 
 /// One arm over all cases: first-candidate hits per scope, whole-input hits on the
-/// segmentation cases, and how often its first candidate was the recorded displayed leader.
+/// segmentation cases, how often its first candidate was the recorded displayed leader, and the
+/// first candidate's misses by provenance (the `learned` row is L-over).
 struct ArmReport {
     name: String,
     source: String,
+    trained: bool,
+    walk: Option<Walk>,
+    without_provenance: u64,
     reproduces: u64,
+    leaders: [Hits; 5],
     scopes: [Hits; 10],
     whole: Hits,
-}
-
-struct Run {
-    name: String,
-    source: String,
-    outcomes: Vec<Outcome>,
 }
 
 fn arm_report(run: &Run, facts: &[Facts]) -> ArmReport {
     let mut report = ArmReport {
         name: run.name.clone(),
         source: run.source.clone(),
+        trained: run.trained,
+        walk: run.walk,
+        without_provenance: run.without_provenance,
         reproduces: 0,
+        leaders: [Hits::default(); 5],
         scopes: [Hits::default(); 10],
         whole: Hits::default(),
     };
     for (fact, outcome) in facts.iter().zip(&run.outcomes) {
         report.reproduces += u64::from(!fact.leader.is_empty() && outcome.first == fact.leader);
+        let leaders = &mut report.leaders[outcome.first_provenance as usize];
+        leaders.cases.add(outcome.first_hit);
+        if fact.distinct {
+            leaders.distinct.add(outcome.first_hit);
+        }
         for (hits, _) in report
             .scopes
             .iter_mut()
@@ -934,11 +1380,17 @@ fn pair_report(base: &Run, arm: &Run, facts: &[Facts]) -> PairReport {
             if fact.distinct {
                 scope.distinct.add(b.first_hit, a.first_hit);
             }
+            if fact.repeat {
+                scope.repeat.add(b.first_hit, a.first_hit);
+            }
         }
         if fact.scopes[SEGMENTATION] {
             report.whole.cases.add(b.longest_hit, a.longest_hit);
             if fact.distinct_whole {
                 report.whole.distinct.add(b.longest_hit, a.longest_hit);
+            }
+            if fact.repeat_whole {
+                report.whole.repeat.add(b.longest_hit, a.longest_hit);
             }
         }
     }
@@ -949,35 +1401,61 @@ fn hits_json(hits: &Hits) -> Value {
     json!({"cases": hits.cases.json(), "distinct": hits.distinct.json()})
 }
 
+fn arm_report_json(arm: &ArmReport) -> Value {
+    let mut scopes = Map::new();
+    for (name, hits) in SCOPES.iter().zip(&arm.scopes) {
+        scopes.insert((*name).to_owned(), hits_json(hits));
+    }
+    let mut leaders = Map::new();
+    for (provenance, hits) in Provenance::ALL.iter().zip(&arm.leaders) {
+        let miss = json!({"cases": hits.cases.miss_json(), "distinct": hits.distinct.miss_json()});
+        leaders.insert(provenance.name().to_owned(), miss);
+    }
+    let mut report = json!({
+        "source": arm.source,
+        "trained": arm.trained,
+        "walk": arm.walk.map(|walk| walk.walk_json()),
+        "reproduces_displayed": arm.reproduces,
+        "without_provenance": arm.without_provenance,
+        "leaders": leaders,
+        "first_hits": scopes,
+        "whole_input_hits": hits_json(&arm.whole),
+    });
+    if let Some(walk) = arm.walk.filter(|_| arm.trained) {
+        report["training"] = walk.training_json();
+    }
+    report
+}
+
+/// A pair's scope in engine mode: the counts with ER and the regression share, and the McNemar p-values of
+/// the distinct pairs and of the repeated ones.
+fn pair_scope_json(scope: &Scope) -> Value {
+    json!({
+        "cases": scope.cases.paired_json(),
+        "distinct": scope.distinct.paired_json(),
+        "repeat": scope.repeat.paired_json(),
+        "p": scope.p(),
+        "repeat_p": scope.repeat_p(),
+    })
+}
+
 fn engine_json(cases: usize, distinct: u64, arms: &[ArmReport], pairs: &[PairReport]) -> Value {
     let mut by_arm = Map::new();
     for arm in arms {
-        let mut scopes = Map::new();
-        for (name, hits) in SCOPES.iter().zip(&arm.scopes) {
-            scopes.insert((*name).to_owned(), hits_json(hits));
-        }
-        by_arm.insert(
-            arm.name.clone(),
-            json!({
-                "source": arm.source,
-                "reproduces_displayed": arm.reproduces,
-                "first_hits": scopes,
-                "whole_input_hits": hits_json(&arm.whole),
-            }),
-        );
+        by_arm.insert(arm.name.clone(), arm_report_json(arm));
     }
     let pairs: Vec<_> = pairs
         .iter()
         .map(|pair| {
             let mut scopes = Map::new();
             for (name, scope) in SCOPES.iter().zip(&pair.scopes) {
-                scopes.insert((*name).to_owned(), scope_json(scope));
+                scopes.insert((*name).to_owned(), pair_scope_json(scope));
             }
             json!({
                 "base": pair.base,
                 "arm": pair.arm,
                 "scopes": scopes,
-                "whole_input": scope_json(&pair.whole),
+                "whole_input": pair_scope_json(&pair.whole),
             })
         })
         .collect();
@@ -993,17 +1471,182 @@ fn share(part: u64, whole: u64) -> String {
     format!("{part} ({rate:.1}%)")
 }
 
+/// `12.3% [4.0, 31.0]`, starred under `MIN_UNITS` units (the interval and no verdict), or `unavailable`.
+fn rate_text(successes: u64, total: u64) -> String {
+    let Some(interval) = wilson(successes, total) else {
+        return "unavailable".to_owned();
+    };
+    let star = if total < MIN_UNITS { "*" } else { "" };
+    format!(
+        "{:.1}% [{:.1}, {:.1}]{star}",
+        100.0 * interval.rate,
+        100.0 * interval.low,
+        100.0 * interval.high
+    )
+}
+
+fn er_text(tally: &Tally) -> String {
+    tally
+        .er()
+        .map_or("unavailable".to_owned(), |er| format!("{er:.3}"))
+}
+
+fn print_walks(arms: &[ArmReport]) {
+    println!(
+        "\nWalk: the compositions of the file and what became of them in each arm (the final selection of a"
+    );
+    println!("walkable composition is made, and trains, only in a trained arm):");
+    println!(
+        "{:<14}{:>13}{:>10}{:>12}{:>9}{:>9}{:>12}{:>17}",
+        "arm",
+        "compositions",
+        "walkable",
+        "unwalkable",
+        "unfound",
+        "trained",
+        "incomplete",
+        "commit_mismatch"
+    );
+    for arm in arms {
+        let Some(walk) = arm.walk else {
+            println!("{:<14}the record carries no walk counts", arm.name);
+            continue;
+        };
+        let training = |count: u64| {
+            if arm.trained {
+                count.to_string()
+            } else {
+                "-".to_owned()
+            }
+        };
+        println!(
+            "{:<14}{:>13}{:>10}{:>12}{:>9}{:>9}{:>12}{:>17}",
+            arm.name,
+            walk.compositions,
+            walk.walkable,
+            walk.unwalkable,
+            walk.unfound,
+            training(walk.trained),
+            training(walk.incomplete),
+            training(walk.commit_mismatch),
+        );
+    }
+}
+
+fn print_leaders(arms: &[ArmReport]) {
+    println!(
+        "\nMisses of the first candidate by its provenance, against selected_text. The learned row is L-over:"
+    );
+    println!("an arm with no learned first candidate, as a cold arm has none, has no L-over.");
+    println!(
+        "{:<14}{:<12}{:>7}{:>8}{:>26} |{:>9}{:>8}{:>26}",
+        "arm",
+        "provenance",
+        "cases",
+        "misses",
+        "miss rate [95% Wilson]",
+        "distinct",
+        "misses",
+        "miss rate [95% Wilson]"
+    );
+    for arm in arms {
+        for (provenance, hits) in Provenance::ALL.iter().zip(&arm.leaders) {
+            let (c, d) = (hits.cases, hits.distinct);
+            println!(
+                "{:<14}{:<12}{:>7}{:>8}{:>26} |{:>9}{:>8}{:>26}",
+                arm.name,
+                provenance.name(),
+                c.cases,
+                c.cases - c.hits,
+                rate_text(c.cases - c.hits, c.cases),
+                d.cases,
+                d.cases - d.hits,
+                rate_text(d.cases - d.hits, d.cases),
+            );
+        }
+        if arm.without_provenance > 0 {
+            println!(
+                "{:<14}{} records carry no first_provenance and count as none; this arm has no L-over",
+                arm.name, arm.without_provenance
+            );
+        }
+    }
+    println!("* under {MIN_UNITS} units: the interval and no verdict.");
+}
+
+/// ER, the regression share and the repeated pairs of an arm against its base.
+fn print_repeat(rows: &[(&str, Scope)]) {
+    println!(
+        "{:<18}{:>13}{:>13} |{:>8}{:>8}{:>6}{:>7}{:>8}{:>13}{:>11}",
+        "scope",
+        "ER cases",
+        "ER distinct",
+        "repeat",
+        "base",
+        "arm",
+        "fixed",
+        "broken",
+        "ER",
+        "McNemar p"
+    );
+    for (label, scope) in rows {
+        let r = scope.repeat;
+        println!(
+            "{label:<18}{:>13}{:>13} |{:>8}{:>8}{:>6}{:>7}{:>8}{:>13}{:>11}",
+            er_text(&scope.cases),
+            er_text(&scope.distinct),
+            r.cases,
+            r.native_hits,
+            r.hits,
+            r.fixed,
+            r.broken,
+            er_text(&r),
+            p_text(scope.repeat_p()),
+        );
+    }
+    let all = rows[0].1;
+    println!("regression share, broken of fixed + broken, in the first row:");
+    for (label, tally) in [
+        ("cases", all.cases),
+        ("distinct", all.distinct),
+        ("repeat", all.repeat),
+    ] {
+        let total = tally.fixed + tally.broken;
+        println!(
+            "  {label:<9}{}/{total} {}",
+            tally.broken,
+            rate_text(tally.broken, total)
+        );
+    }
+}
+
 fn print_engine(path: &str, cases: usize, distinct: u64, arms: &[ArmReport], pairs: &[PairReport]) {
     println!(
         "Replay engine of {path}: {cases} cases, {distinct} distinct (raw_input, selected_text) pairs."
     );
     println!(
         "Each live arm ran the real engine on its prepared resources: absent user directory, nine \
-         candidates, default input options, no selection or commit."
+         candidates, default input options. It walks each composition, scoring every decision before \
+         its text is selected."
     );
-    println!(
-        "The records came from a trained user dictionary, so compare the arms only with each other."
-    );
+    let trained: Vec<_> = arms
+        .iter()
+        .filter(|arm| arm.trained)
+        .map(|arm| arm.name.as_str())
+        .collect();
+    if trained.is_empty() {
+        println!(
+            "No arm trains: nothing is committed, so nothing is learned. The records came from a trained \
+             user dictionary, so compare the arms only with each other."
+        );
+    } else {
+        println!(
+            "Training arms: {}. They commit each walkable composition after scoring it, so their user \
+             dictionary learns the recorded decisions in file order. A trained arm starts cold while the \
+             recorded dictionary did not, so compare the arms only with each other.",
+            trained.join(", ")
+        );
+    }
     for arm in arms {
         println!("arm {:<12} {}", arm.name, arm.source);
     }
@@ -1026,6 +1669,8 @@ fn print_engine(path: &str, cases: usize, distinct: u64, arms: &[ArmReport], pai
             share(arm.whole.cases.hits, segmentation),
         );
     }
+    print_walks(arms);
+    print_leaders(arms);
     println!("\nFirst-candidate hits against selected_text, by scope (every case):");
     print!("{:<18}{:>7}", "scope", "cases");
     for arm in arms {
@@ -1049,6 +1694,12 @@ fn print_engine(path: &str, cases: usize, distinct: u64, arms: &[ArmReport], pai
         let mut rows: Vec<_> = SCOPES.iter().copied().zip(pair.scopes).collect();
         rows.push(("whole_input", pair.whole));
         print_scopes("base", &rows);
+        println!(
+            "\nER = broken / fixed: the errors {} introduced per error it fixed against {}. repeat has one \
+             unit per pair seen more than once, its last case: the view after every selection of the pair.",
+            pair.arm, pair.base
+        );
+        print_repeat(&rows);
     }
 }
 
@@ -1063,6 +1714,7 @@ fn engine(args: &[String]) -> Result<()> {
     if ids.len() != cases.len() || ids.contains("") {
         return Err("engine mode needs a different decision_id on every case".into());
     }
+    let compositions = compositions(&cases)?;
     for (_, file) in &args.records {
         outside_repository(file)?;
         if Path::new(file).exists() {
@@ -1073,31 +1725,18 @@ fn engine(args: &[String]) -> Result<()> {
     }
     let mut runs = Vec::new();
     for (name, source) in &args.arms {
-        let (outcomes, source) = match source {
-            Source::Live(resources) => (
-                run_live(name, resources, &cases)?,
-                format!("live on {}", resources.display()),
-            ),
-            Source::Recorded(file) => (
-                load_record(name, file, &cases)?,
-                format!("recorded in {file}"),
-            ),
-        };
-        runs.push(Run {
-            name: name.clone(),
-            source,
-            outcomes,
+        runs.push(match source {
+            Source::Live(resources) => {
+                let train = args.trains.contains(name);
+                run_live(name, resources, &cases, &compositions, train)?
+            }
+            Source::Recorded(file) => load_record(name, file, &cases)?,
         });
     }
     let generated_at = generated_at.unwrap_or_else(now_stamp);
     for (name, file) in &args.records {
         let run = runs.iter().find(|run| run.name == *name);
-        write_record(
-            file,
-            name,
-            &generated_at,
-            &run.expect("a live arm").outcomes,
-        )?;
+        write_record(file, &generated_at, run.expect("a live arm"))?;
     }
     let facts = facts(&cases);
     let arms: Vec<_> = runs.iter().map(|run| arm_report(run, &facts)).collect();
@@ -1145,6 +1784,63 @@ mod tests {
         assert!((mcnemar(1, 6) - 0.125).abs() < 1e-12);
         assert!((mcnemar(9, 2) - 134.0 / 2048.0).abs() < 1e-12);
         assert!((mcnemar(10, 0) - 2.0 / 1024.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn wilson_matches_the_python_instrument() {
+        let close = |actual: f64, expected: f64| (actual - expected).abs() < 1e-12;
+        let interval = wilson(2, 14).unwrap();
+        assert!(close(interval.rate, 2.0 / 14.0));
+        assert!(close(interval.low, 0.040093921271464966));
+        assert!(close(interval.high, 0.3994137949697035));
+        let interval = wilson(0, 1).unwrap();
+        assert!(interval.low == 0.0 && close(interval.high, 0.7934506856227624));
+        let interval = wilson(1, 1).unwrap();
+        assert!(close(interval.low, 0.20654931437723753) && interval.high == 1.0);
+        assert!(wilson(0, 0).is_none());
+    }
+
+    fn typed(composition: &str, raw_input: &str, selected: &str, committed: &str) -> Case {
+        Case {
+            id: String::new(),
+            composition: composition.to_owned(),
+            raw_input: raw_input.to_owned(),
+            preceding: String::new(),
+            page: 0,
+            candidates: Vec::new(),
+            selected_index: None,
+            selected: selected.to_owned(),
+            committed: committed.to_owned(),
+        }
+    }
+
+    #[test]
+    fn compositions_walk_when_each_input_extends_the_last_and_the_selections_add_up() {
+        let cases = [
+            typed("a", "beijing", "北京", "北京"),
+            typed("b", "beijingdaxue", "北京", "北京大学"),
+            typed("b", "beijingdaxue", "大学", "北京大学"),
+            typed("c", "zhunbei", "准", "准备"),
+            typed("d", "beijingdaxue", "北京", "北京大学"),
+            typed("d", "daxue", "大学", "北京大学"),
+        ];
+        let found = compositions(&cases).unwrap();
+        let walks: Vec<_> = found
+            .iter()
+            .map(|c| (c.cases.clone(), c.walkable))
+            .collect();
+        assert_eq!(
+            walks,
+            [(0..1, true), (1..3, true), (3..4, false), (4..6, false)]
+        );
+        let apart = [
+            typed("a", "x", "", ""),
+            typed("b", "x", "", ""),
+            typed("a", "x", "", ""),
+        ];
+        let error = compositions(&apart).err().unwrap().to_string();
+        assert!(error.contains("not adjacent"), "{error}");
+        assert!(compositions(&[typed("", "x", "", "")]).is_err());
     }
 
     #[test]
