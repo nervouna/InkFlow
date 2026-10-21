@@ -62,7 +62,7 @@ Dimensions, usable on any metric, never inside a formula:
 | Candidate provenance | dictionary (`phrase`, `user_table`), learned (`user_phrase`, personal English and mixed types), assembled (`sentence`), completion, custom phrase, English module | `type`, `matches_custom_phrase`, `source` |
 | Position | first segment of the composition, later segment, whole | `sequence`, selected prefix |
 | Context | preceding text present or empty | `precedingContext` non-empty |
-| Learned state | cold (fresh user directory) or trained | benchmark only |
+| Learned state | cold (fresh user directory) or trained | benchmark and replay |
 | Application | bundle identifier | `app_bundle_id` |
 
 ## 3. Truth hierarchy
@@ -275,7 +275,7 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | Pair identity (recorded, #137) | per decision: keyed hash of the normalized code (the span the selected candidate consumed, lowercase, without apostrophes) and of the selected text, hashed in both modes with literals additionally in text mode, so one window that spans a mode switch is one identity space. The key is 32 bytes generated once per device (`quality-pair-key`, beside `quality-source-id`, mode 0600), never exported, and replaced when the records are cleared. **This is a privacy decision, not an instrument detail**, adopted 2026-10-21: the text-free default was adopted deliberately (#54), and a keyed hash of short Chinese words is recoverable by dictionary attack by anyone holding the key on the same machine. Decisions with a selected prefix, and decisions whose span is unknown, carry no hash and are counted `pair_unavailable`. Open question for the user: restricting the hash to text-free records. L-avoid keeps its interim proxy beside the pair-based rate (`quality.py learning`) | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
 | Learning acts (counts recorded, #138) | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, as counts with no text; the pair hash of each act is open with #137 | L-forget |
 | Trend counters | C-rev in `quality.py trend` and `summary` | the scorecard; enabled by the post-commit window and character counts rows |
-| Replay arms for learning | cold and trained arms in engine mode; ER between them | L-over, L-cold acceptance |
+| Replay arms for learning (recorded, #140) | cold and trained arms in engine mode (`replay engine --train`, [Learning arms](../Core/Portable/README.md#learning-arms)); ER between them, L-over per arm | L-over, L-cold acceptance |
 | Benchmark schedule | selection counts 1, 2, 5 and a retention pass in the baseline runner; a black-box driver for other input methods under `Experiments/` | section 7 |
 
 ## Sources
