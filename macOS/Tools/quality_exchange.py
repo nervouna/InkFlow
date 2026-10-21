@@ -57,8 +57,8 @@ def snapshot(path, connect, columns, create_source=False):
 def export(path, output, connect, columns):
     output = output.expanduser().resolve()
     database = path.expanduser().resolve()
-    if output == database or output.name == 'quality-source-id':
-        raise ValueError('Choose a new JSON path, not the database or source marker.')
+    if output == database or output.name in ('quality-source-id', 'quality-pair-key'):
+        raise ValueError('Choose a new JSON path, not the database, source marker or pair key.')
     document = snapshot(path, connect, columns, create_source=True)
     validate(document, columns)
     # CLI refuses to overwrite any file; Settings uses the save panel's overwrite choice.

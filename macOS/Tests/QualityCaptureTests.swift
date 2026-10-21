@@ -1,4 +1,5 @@
 @testable import InkFlowRime
+import CryptoKit
 import InputMethodKit
 import SQLite3
 #if SWIFT_PACKAGE
@@ -60,6 +61,8 @@ struct QualityCaptureTests {
         let db = CaptureDatabase(url: output.appendingPathComponent("engine-controller.sqlite3"))
         if files.fileExists(atPath: db.url.path) { try files.removeItem(at: db.url) }
         let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata, textCapture: true)
+        // The worker loads the device key on its first start; envelopes submitted before that carry no pair hashes.
+        await store.maintainRetention()
         try IFEngine.start(shared: shared, user: scratch.appendingPathComponent("rime").path)
         IFStubHeadlessControllerFramework()
         let isolated = IsolatedSettings()
@@ -70,6 +73,7 @@ struct QualityCaptureTests {
         try await candidateFacts(store, db)
         try await phraseMatrix(store, db)
         try await postCommitWindows(store, db)
+        try await pairHashes(store, db)
         try await controllerTiming(output)
         let pagingDB = CaptureDatabase(url: output.appendingPathComponent("paging-settings.sqlite3"))
         if files.fileExists(atPath: pagingDB.url.path) { try files.removeItem(at: pagingDB.url) }
@@ -144,6 +148,9 @@ struct QualityCaptureTests {
         check(redacted.candidates.map(\.type) == green.page.candidates.map(\.type))
         check(redacted.candidates.map(\.corrected) == green.page.candidates.map(\.corrected))
         check(redacted.candidates.map(\.evidence) == green.page.candidates.map(\.evidence))
+        check(green.page.codeHash != nil && green.selected.textHash != nil, "A real decision carries both pair hashes")
+        check(redacted.codeHash == green.page.codeHash)
+        check(redacted.candidates.map(\.textHash) == green.page.candidates.map(\.textHash))
         print("PASS candidate facts: phrase, user_phrase, corrected via z/zh (zongguo), lv and English not corrected,"
             + " text-free")
     }
@@ -175,6 +182,51 @@ struct QualityCaptureTests {
             check(store.statistics().written == before.written + 1 && store.statistics().droppedOversized == before.droppedOversized)
         }
         print("PASS actual Engine/Controller: 0/1/20/50/200 phrases, five candidates, eight visited pages, applied revision and exact commit output")
+    }
+
+    /// Every real decision is hashed under the key beside the database, over the span its evidence row names.
+    @MainActor static func pairHashes(_ store: QualityStore, _ db: CaptureDatabase) async throws {
+        await store.flush()
+        let keyFile = db.url.deletingLastPathComponent().appendingPathComponent("quality-pair-key")
+        let keyBytes = try Data(contentsOf: keyFile)
+        check(keyBytes.count == 32, "The key is 32 bytes")
+        let key = SymmetricKey(data: keyBytes)
+        func hash(_ message: String) -> String {
+            HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key).prefix(16)
+                .map { String(format: "%02x", $0) }.joined()
+        }
+        var hashed = 0
+        var leading = 0
+        var unhashed = 0
+        for row in db.decisions() {
+            let page = db.page(row)
+            guard let index = row["selected_display_index"].flatMap({ Int($0) }),
+                  page.candidates.indices.contains(index) else { continue }
+            let candidate = page.candidates[index]
+            check(page.candidates.enumerated().allSatisfy { $0.offset == index || $0.element.textHash == nil },
+                  "Only the selected candidate is hashed: \(row)")
+            let span = (candidate.evidence ?? "").split(separator: ",").prefix(2).compactMap { Int($0) }
+            let input = Array(page.rawInput.utf8)
+            var code: String?
+            if page.selectedPrefix.isEmpty {
+                if span.count == 2 { code = String(decoding: input[span[0]..<span[1]], as: UTF8.self) }
+                else if candidate.evidence == nil && row["matches_custom_phrase"] == "1" { code = page.rawInput }
+            }
+            guard let code else {
+                check(page.codeHash == nil && candidate.textHash == nil, "No span, no hash: \(row)")
+                unhashed += 1
+                continue
+            }
+            let normalized = code.lowercased().replacingOccurrences(of: "'", with: "")
+            check(page.codeHash == hash("code:" + normalized), "The code hash is the HMAC of the consumed span: \(row)")
+            let chosen = row["selected_text"] ?? ""
+            check(candidate.textHash == hash("text:" + chosen), "The text hash is the HMAC of the choice: \(row)")
+            hashed += 1
+            if span.count == 2 && span[1] < input.count { leading += 1 }
+        }
+        check(hashed > 0, "The capture holds hashed decisions")
+        print("PASS pair hashes: \(hashed) decisions hashed over their evidence span (\(leading) of them leading segments),"
+            + " \(unhashed) without a known span or with a selected prefix carry none")
     }
 
     /// The window of a commit is stored on the next composition the recorder submits, never on the commit's own.

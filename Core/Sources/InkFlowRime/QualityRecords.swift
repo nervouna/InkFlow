@@ -214,6 +214,8 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
     /// The engine's ranking evidence row, `start,end,class,exact,personal,source,type,corrected`, which
     /// `parse_metadata` reads. Content-free; present on a candidate only when the engine computed it.
     package var evidence: String? = nil
+    /// Keyed hash of `text` on the selected candidate of a decision (`QualityEnvelope.hashingPairs`); never on others.
+    package var textHash: String? = nil
     package init(text: String,
         comment: String? = nil,
         displayIndex: Int,
@@ -225,7 +227,8 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
         consumedInputEnd: Int? = nil,
         type: String? = nil,
         corrected: Bool? = nil,
-        evidence: String? = nil) {
+        evidence: String? = nil,
+        textHash: String? = nil) {
         self.text = text
         self.comment = comment
         self.displayIndex = displayIndex
@@ -238,6 +241,7 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
         self.type = type
         self.corrected = corrected
         self.evidence = evidence
+        self.textHash = textHash
     }
 
 }
@@ -261,6 +265,8 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
     package var capturedAt = Date()
     /// False once every typed, shown or chosen string was removed before persistence.
     package var textCaptured = true
+    /// Keyed hash of the code the selected candidate consumed (`QualityEnvelope.hashingPairs`); on decision snapshots.
+    package var codeHash: String? = nil
     package init(generation: Int,
         rawInput: String,
         caret: Int,
@@ -275,7 +281,8 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
         selectedPrefixValid: Bool = true,
         presentation: QualityPresentation = .notShown,
         capturedAt: Date = Date(),
-        textCaptured: Bool = true) {
+        textCaptured: Bool = true,
+        codeHash: String? = nil) {
         self.generation = generation
         self.rawInput = rawInput
         self.caret = caret
@@ -291,6 +298,7 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
         self.presentation = presentation
         self.capturedAt = capturedAt
         self.textCaptured = textCaptured
+        self.codeHash = codeHash
     }
 
     /// Keeps positions, ranks and classification; removes every string the user typed, saw or chose.
@@ -335,7 +343,7 @@ extension QualityPageSnapshot {
     private enum CodingKeys: String, CodingKey {
         case generation, rawInput, caret, selectedPrefix, precedingContext, configurationRevisionID, configuration
         case page, pageSize, candidates, highlightedDisplayIndex, selectedPrefixValid, presentation, capturedAt
-        case textCaptured
+        case textCaptured, codeHash
     }
 
     package func encode(to encoder: Encoder) throws {
@@ -357,6 +365,7 @@ extension QualityPageSnapshot {
         try container.encode(presentation, forKey: .presentation)
         try container.encode(capturedAt, forKey: .capturedAt)
         if !textCaptured { try container.encode(false, forKey: .textCaptured) }
+        try container.encodeIfPresent(codeHash, forKey: .codeHash)
     }
 
     package init(from decoder: Decoder) throws {
@@ -382,7 +391,8 @@ extension QualityPageSnapshot {
             selectedPrefixValid: try container.decode(Bool.self, forKey: .selectedPrefixValid),
             presentation: try container.decode(QualityPresentation.self, forKey: .presentation),
             capturedAt: try container.decode(Date.self, forKey: .capturedAt),
-            textCaptured: try container.decodeIfPresent(Bool.self, forKey: .textCaptured) ?? true)
+            textCaptured: try container.decodeIfPresent(Bool.self, forKey: .textCaptured) ?? true,
+            codeHash: try container.decodeIfPresent(String.self, forKey: .codeHash))
     }
 }
 
@@ -708,6 +718,27 @@ package struct QualityDecision: Codable, Equatable, Sendable {
     }
 }
 
+extension QualityDecision {
+    /// The code the candidate consumed: lowercase, apostrophes removed. Its span is the first two fields of the
+    /// candidate's `evidence` row, in raw-input bytes. Without that row only a chosen custom phrase knows its span,
+    /// the whole input; any other decision has none, because guessing the whole input would split a leading segment
+    /// from its recurrences. Nil for a malformed row.
+    fileprivate func consumedCode(by candidate: QualityCandidate) -> String? {
+        let input = Array(snapshot.rawInput.utf8)
+        var span = input.indices
+        if let evidence = candidate.evidence {
+            let fields = evidence.split(separator: ",", omittingEmptySubsequences: false)
+            guard fields.count >= 2, let start = Int(fields[0]), let end = Int(fields[1]),
+                  0 <= start, start <= end, end <= input.count else { return nil }
+            span = start..<end
+        } else if !matchesCustomPhrase {
+            return nil
+        }
+        let code = String(bytes: input[span], encoding: .utf8)?.lowercased().replacingOccurrences(of: "'", with: "")
+        return code?.isEmpty == false ? code : nil
+    }
+}
+
 package struct QualityCommit: Codable, Equatable, Sendable {
     package var id = UUID().uuidString
     package var issuedAt = Date()
@@ -780,6 +811,31 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
             envelope.decisions[index].visitedPages = envelope.decisions[index].visitedPages.map { $0.redactingText() }
         }
         return envelope
+    }
+
+    /// Pair identity: keyed hashes of the code the selected candidate consumed and of its text, so a recurring pair
+    /// is recognizable without either string. A decision gets both hashes or neither. In-memory only; it runs before
+    /// `redactingText()` because the strings are gone after it.
+    package func hashingPairs(key: SymmetricKey) -> Self {
+        var envelope = self
+        for index in envelope.decisions.indices {
+            let decision = envelope.decisions[index]
+            guard let selected = decision.selectedDisplayIndex,
+                  decision.snapshot.candidates.indices.contains(selected),
+                  decision.snapshot.selectedPrefix.isEmpty else { continue }
+            let candidate = decision.snapshot.candidates[selected]
+            guard !candidate.text.isEmpty, let code = decision.consumedCode(by: candidate) else { continue }
+            envelope.decisions[index].snapshot.codeHash = Self.pairHash("code:" + code, key: key)
+            let textHash = Self.pairHash("text:" + candidate.text, key: key)
+            envelope.decisions[index].snapshot.candidates[selected].textHash = textHash
+        }
+        return envelope
+    }
+
+    /// HMAC-SHA256 truncated to 128 bits, 32 lowercase hex characters.
+    private static func pairHash(_ message: String, key: SymmetricKey) -> String {
+        HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key).prefix(16)
+            .map { String(format: "%02x", $0) }.joined()
     }
 
     /// Includes reference-only pages; conflicting identity is invalid evidence.
@@ -924,10 +980,11 @@ private struct QualityMemoryBudget {
         guard !exhausted else { return }
         record(512)
         strings(value.rawInput, value.selectedPrefix, value.precedingContext, value.configurationRevisionID)
+        strings(value.codeHash)
         for candidate in value.candidates {
             guard !exhausted else { return }
             record(256)
-            strings(candidate.text, candidate.comment, candidate.source)
+            strings(candidate.text, candidate.comment, candidate.source, candidate.textHash)
         }
     }
 }

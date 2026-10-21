@@ -40,10 +40,12 @@ comparing configurations, investigating incomplete evidence, or changing queries
 
 Use `timing` for key intervals, last-edit waits and candidate visibility.
 
+Use `learning` (one device, `--days 28`) for how fast and how long corrections take effect: time to learn, futile pairs, retention, avoidable misses and word reuse over the keyed pair hashes; read its `pair_coverage` before trusting a rate.
+
 Use `replay-cases --output FILE` to export decisions as replay cases for the offline `replay` scorer; the file holds typed text, so keep it outside the repository and delete it after the run (rules and target in [Replay and the first-choice target](../../../Core/Portable/README.md#replay-and-the-first-choice-target)).
 
-Records are text-free by default: ranks, indices, text kinds, timing and the character counts of the
-chosen and committed text are kept, but
+Records are text-free by default: ranks, indices, text kinds, timing, the character counts of the
+chosen and committed text and the keyed pair hashes (`codeHash`, `textHash`) are kept, but
 raw input, input before deletion, candidate text, chosen text and preceding context are empty or null and
 each page carries `textCaptured: false`. `trend`, `summary` and `timing` work
 unchanged (Top1 match uses the chosen display rank; the selected-length buckets use the kept counts of

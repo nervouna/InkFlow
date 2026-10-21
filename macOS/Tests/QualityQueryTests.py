@@ -131,6 +131,11 @@ def fixture(path):
 EARLIER = '2026-08-01T16:00:00.000Z'
 
 
+def fake_hash(kind, value):
+    """Stands in for the store's keyed hash: deterministic, 32 hex characters, no key involved."""
+    return hashlib.sha256(f'{kind}:{value}'.encode()).hexdigest()[:32]
+
+
 def replay_fixture(path):
     """Decisions for `replay-cases` and the trend buckets, apart from `fixture` so its counts stay put."""
     db = empty_db(path)
@@ -141,15 +146,17 @@ def replay_fixture(path):
            ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
            measurement_fingerprint='measurement-A', build_identity='build-A')
 
-    def page(raw, texts, *, number=0, context='', generation=7, facts=None, natives=None, text=True):
-        """`facts` is how many leading candidates carry type, corrected and evidence (all by default)."""
+    def page(raw, texts, *, number=0, context='', generation=7, facts=None, natives=None, text=True, end=None):
+        """`facts` is how many leading candidates carry type, corrected and evidence (all by default).
+        `end` is where the span they consumed ends in the raw input (all of it by default)."""
         candidates = []
         for index, shown in enumerate(texts):
             native = index if natives is None else natives[index]
             item = dict(text=shown, displayIndex=index, displayRank=number * 9 + index + 1,
                         nativeIndex=native, nativeRank=number * 9 + native + 1)
             if index < (len(texts) if facts is None else facts):
-                item.update(type='phrase', corrected=False, evidence=f'0,{len(raw)},n,1,0,n,phrase,0')
+                item.update(type='phrase', corrected=False,
+                            evidence=f'0,{len(raw) if end is None else end},n,1,0,n,phrase,0')
             candidates.append(item)
         result = dict(generation=generation, rawInput=raw, caret=len(raw), selectedPrefix='',
                       selectedPrefixValid=True, precedingContext=context, configurationRevisionID='rev1',
@@ -174,13 +181,18 @@ def replay_fixture(path):
         insert(db, 'commits', id=f'commit-{cid}', composition_id=cid, issued_at=started, kind='candidate',
                text=(committed or chosen) if text else '', insertion_issued=1, character_count=committed_count)
         snapshot = page(raw, texts, number=number, text=text, **options)
+        selected = texts.index(chosen) if index is None else index
+        # The store hashes the selected candidate before it redacts the text; the span is the evidence row's.
+        if chosen and 'evidence' in snapshot['candidates'][selected]:
+            snapshot['codeHash'] = fake_hash('code', raw[:options.get('end') or len(raw)])
+            snapshot['candidates'][selected]['textHash'] = fake_hash('text', chosen)
         first_page = None
         if first is not None:
             first_page = json.dumps(page(raw, first, generation=first_generation, text=text, **options),
                                     ensure_ascii=False)
         insert(db, 'candidate_decisions', id=f'decision-{cid}', composition_id=cid, config_revision_id='rev1',
                commit_id=f'commit-{cid}', occurred_at=started, sequence=0, trigger=trigger, outcome=outcome,
-               selected_display_index=texts.index(chosen) if index is None else index,
+               selected_display_index=selected,
                selected_text=chosen if text else None, text_kind=kind,
                snapshot_json=json.dumps(snapshot, ensure_ascii=False), first_page_json=first_page,
                visited_pages_json='[]', page_history_truncated=0, dropped_page_count=0,
@@ -213,6 +225,116 @@ def replay_fixture(path):
     add('w1', 'shi', ['使', '是'], '使', started=EARLIER)
     db.commit()
     db.close()
+
+
+@contextlib.contextmanager
+def utc():
+    """The local calendar days of a window are the UTC days."""
+    previous = os.environ.get('TZ')
+    os.environ['TZ'] = 'UTC'
+    time.tzset()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop('TZ', None)
+        else:
+            os.environ['TZ'] = previous
+        time.tzset()
+
+
+LEARNING_START = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
+LEARNING_ARGS = ('--until', '2026-10-01')
+
+
+def learning_fixture(path, rows):
+    """Regular committed decisions for `learning`, one composition each. `day` counts from the first day of the
+    28-day window that ends before 2026-10-01 (2026-09-03, with TZ=UTC), `order` is minutes within the day.
+    A row is (day, order, code, word, rank) and options: `end` (where the consumed span ends in the code),
+    `type`, `revision`, `hashed`, `evidence`, `text` (text mode) and `prefix`."""
+    db = empty_db(path)
+    insert(db, 'recording_runs', id='run', started_at=STAMP, status='closed', engine_version='1.17.0',
+           build_metadata_json='{}', metric_rule_version=1, stats_json='{}')
+    for revision, measurement in [('rev0', 'measurement-0'), ('rev1', 'measurement-A'), ('revU', None)]:
+        insert(db, 'config_revisions', id=revision, fingerprint='fingerprint-A', created_at=STAMP,
+               applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1,
+               ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
+               measurement_fingerprint=measurement, build_identity='build-A')
+    for number, (day, order, code, word, rank, *rest) in enumerate(rows):
+        options = rest[0] if rest else {}
+        cid = f'c{number}'
+        started = (LEARNING_START + timedelta(days=day, minutes=order)).isoformat(
+            timespec='milliseconds').replace('+00:00', 'Z')
+        text = options.get('text', True)
+        index, paged = (rank - 1) % 9, (rank - 1) // 9
+        candidates = [dict(text=f'other{shown}', displayIndex=shown, displayRank=paged * 9 + shown + 1,
+                           nativeIndex=shown, nativeRank=paged * 9 + shown + 1) for shown in range(index + 1)]
+        selected = candidates[index]
+        selected['text'] = word
+        if options.get('evidence', True):
+            end = options.get('end', len(code))
+            selected.update(type=options.get('type', 'phrase'), corrected=False,
+                            evidence=f'0,{end},n,1,0,n,{options.get("type", "phrase")},0')
+        snapshot = dict(generation=7, rawInput=code, caret=len(code), selectedPrefix=options.get('prefix', ''),
+                        selectedPrefixValid=True, precedingContext='', configurationRevisionID='rev1',
+                        configuration={}, page=paged, pageSize=9, highlightedDisplayIndex=index,
+                        presentation='candidates_requested', capturedAt=started, candidates=candidates)
+        if options.get('hashed', True) and 'evidence' in selected and not options.get('prefix'):
+            snapshot['codeHash'] = fake_hash('code', code[:end])
+            selected['textHash'] = fake_hash('text', word)
+        if not text:
+            snapshot.update(rawInput='', textCaptured=False)
+            for shown in candidates:
+                shown['text'] = ''
+        insert(db, 'compositions', id=cid, run_id='run', started_at=started, ended_at=started, app_bundle_id='app',
+               outcome='committed', operations_json=json.dumps(OPS), page_history_truncated=0, dropped_page_count=0)
+        insert(db, 'commits', id=f'commit-{cid}', composition_id=cid, issued_at=started, kind='candidate',
+               text=word if text else '', insertion_issued=1, character_count=len(word))
+        insert(db, 'candidate_decisions', id=f'decision-{cid}', composition_id=cid,
+               config_revision_id=options.get('revision', 'rev1'), commit_id=f'commit-{cid}', occurred_at=started,
+               sequence=0, trigger=options.get('trigger', 'space'), outcome=options.get('outcome', 'committed'),
+               selected_display_index=index, selected_text=word if text else None, text_kind='chinese',
+               snapshot_json=json.dumps(snapshot, ensure_ascii=False), visited_pages_json='[]',
+               page_history_truncated=0, dropped_page_count=0, operations_json=json.dumps(OPS),
+               regular_ranked_selection=options.get('regular', 1), matches_custom_phrase=0,
+               selected_character_count=len(word))
+    db.commit()
+    db.close()
+
+
+# The pairs of the main fixture, each a sequence of (day, rank, type); pair J is the same word as E under another code.
+LEARNING_PAIRS = {
+    ('nihao', '你好'): [(0, 3, 'phrase'), (1, 1, 'phrase'), (2, 1, 'phrase')],
+    ('pengyou', '朋友'): [(1, 2, 'user_phrase'), (3, 4, 'phrase'), (5, 1, 'phrase'), (9, 1, 'phrase'),
+                          (10, 5, 'phrase')],
+    ('zhongguo', '中国'): [(2, 2, 'phrase'), (4, 2, 'phrase')],
+    ('shijie', '世界'): [(8, 6, 'phrase'), (9, 2, 'phrase'), (12, 3, 'phrase')],
+    ('xihuan', '喜欢'): [(6, 1, 'phrase'), (7, 1, 'phrase'), (8, 3, 'english_personal_2')],
+    ('women', '我们'): [(10, 4, 'phrase'), (11, 4, 'phrase'), (12, 4, 'phrase'), (13, 1, 'phrase')],
+    ('tianqi', '天气'): [(15, 2, 'mixed_personal_0')],
+    ('de', '的'): [(16, 1, 'phrase')],
+    ('xh', '喜欢'): [(20, 1, 'phrase')],
+}
+
+
+def learning_rows():
+    rows = [(day, order, code, word, rank, dict(type=kind))
+            for order, ((code, word), sequence) in enumerate(LEARNING_PAIRS.items())
+            for day, rank, kind in sequence]
+    # The same word chosen again as the leading segment of a longer code: the same pair as the whole input.
+    rows.append((16, 30, 'nihaoshijie', '你好', 1, dict(end=5)))
+    # Inside the cohort but with no pair identity: no evidence row to name a span, a text record written before the
+    # hashes, a text-free record without them, and a decision after a selected prefix.
+    rows += [(5, 40, 'wu', '无', 2, dict(evidence=False, text=False)),
+             (5, 41, 'jiu', '旧', 2, dict(hashed=False)),
+             (5, 42, 'mian', '免', 2, dict(hashed=False, text=False)),
+             (5, 43, 'houmian', '后', 3, dict(prefix='前', text=False))]
+    # Not counted: another metric rule (known, then unknown), before the window, and outside the regular cohort.
+    rows += [(1, 50, 'qita', '其', 2, dict(revision='rev0')),
+             (1, 51, 'weizhi', '未', 2, dict(revision='revU')),
+             (-1, 0, 'pengyou', '朋友', 1),
+             (5, 52, 'zhongguo', '中国', 1, dict(trigger='punctuation', regular=0))]
+    return rows
 
 
 class QueryTests(unittest.TestCase):
@@ -348,6 +470,16 @@ class QueryTests(unittest.TestCase):
         self.assertIn('conflicting', self.run_cli('summary', '--input', str(a), '--input', str(bad), success=False))
         self.run_cli('export', '--output', str(self.db), success=False)
         self.run_cli('export', '--output', str(a), success=False)
+        # The pair key beside the database is never an export destination and never in an export.
+        key = Path(self.temp.name) / 'quality-pair-key'
+        secret = os.urandom(32)
+        key.write_bytes(secret)
+        self.assertIn('pair key', self.run_cli('export', '--output', str(key), success=False))
+        self.assertEqual(key.read_bytes(), secret)
+        keyed = Path(self.temp.name) / 'keyed.json'
+        self.run_cli('export', '--output', str(keyed))
+        self.assertNotIn(secret, keyed.read_bytes())
+        self.assertNotIn(secret.hex().encode(), keyed.read_bytes())
 
     def test_native_settings_export_is_readable_and_preserves_database(self):
         executable = os.environ.get('INKFLOW_QUALITY_EXPORT_FIXTURE')
@@ -358,7 +490,16 @@ class QueryTests(unittest.TestCase):
             db.execute("UPDATE commits SET text=? WHERE id='raw-commit'", ('raw\0tail',))
         before = self.db.read_bytes()
         out = Path(self.temp.name) / 'native.json'
+        key = Path(self.temp.name) / 'quality-pair-key'
+        secret = os.urandom(32)
+        key.write_bytes(secret)
         subprocess.run([executable, str(self.db), str(out)], check=True, capture_output=True)
+        self.assertNotIn(secret, out.read_bytes())
+        self.assertNotIn(secret.hex().encode(), out.read_bytes())
+        refused_key = subprocess.run([executable, str(self.db), str(key)], capture_output=True)
+        self.assertEqual(refused_key.returncode, 2)
+        self.assertIn('配对密钥', refused_key.stderr.decode())
+        self.assertEqual(key.read_bytes(), secret)
         result = self.result('summary', '--exports-only', '--input', str(out))
         self.assertEqual(result['coverage'], self.result()['coverage'])
         self.assertEqual(self.db.read_bytes(), before)
@@ -905,6 +1046,145 @@ class QueryTests(unittest.TestCase):
             self.assertIn('incompatible',self.run_cli('summary',db=bad,success=False))
         self.assertIn('not found',self.run_cli('inspect','missing',success=False))
 
+    def test_pair_counters_cover_every_known_rank_decision(self):
+        # No record of the base fixture has a hash.
+        base = self.result()['coverage']
+        self.assertEqual((base['pair_identity'], base['pair_unavailable']), (0, base['known_rank']))
+        db = Path(self.temp.name) / 'replay.sqlite3'
+        replay_fixture(db)
+        summary = self.result(db=db)
+        coverage = summary['coverage']
+        # r5 has no evidence row and r12 chose the empty text: no span, no text, no hash. The text-free r7 and r11 do.
+        self.assertEqual((coverage['known_rank'], coverage['pair_identity'], coverage['pair_unavailable']), (12, 10, 2))
+        for group in summary['groups']:
+            self.assertEqual(group['pair_identity'] + group['pair_unavailable'], group['known_rank'])
+        windowed = self.result('summary', '--since', '2026-09-01', '--until', '2026-09-08', db=db)['coverage']
+        self.assertEqual(windowed['pair_identity'] + windowed['pair_unavailable'], windowed['known_rank'])
+        # Both hashes reach inspect through the decoded pages, text-free or not.
+        for cid, raw, word in [('r1', 'kaihui', '开会'), ('r7', 'ke', '课')]:
+            decision = self.result('inspect', cid, db=db)['decisions'][0]
+            self.assertEqual(decision['snapshot']['codeHash'], fake_hash('code', raw))
+            selected = decision['snapshot']['candidates'][decision['selected_display_index']]
+            self.assertEqual(selected['textHash'], fake_hash('text', word))
+        self.assertIn('$.decisions[0].snapshot.codeHash | "' + fake_hash('code', 'kaihui') + '"',
+                      self.run_cli('inspect', 'r1', db=db))
+
+    def run_learning(self, *args, rows=None, name='learning.sqlite3', **options):
+        db = Path(self.temp.name) / name
+        if not db.exists():
+            learning_fixture(db, learning_rows() if rows is None else rows)
+        with utc():
+            return self.result('learning', *(args or LEARNING_ARGS), db=db, **options)
+
+    def test_learning_reports_every_metric_with_wilson_bounds_and_statuses(self):
+        result = self.run_learning()
+        rate = lambda numerator, denominator: dict(
+            numerator=numerator, denominator=denominator,
+            rate=numerator / denominator if denominator else None,
+            wilson_low=self.quality.wilson(numerator, denominator)[0],
+            wilson_high=self.quality.wilson(numerator, denominator)[1],
+            status='no_verdict_below_200_units')
+        self.assertEqual(result['window'], dict(days=28, first_day='2026-09-03', last_day='2026-09-30',
+                                                since='2026-09-03T00:00:00.000Z', until='2026-10-01T00:00:00.000Z',
+                                                until_exclusive=True))
+        # Two decisions follow another metric rule, one of them an unknown one; the window and the cohort leave the
+        # rest out. The four without a pair identity stay in the cohort and are counted.
+        self.assertEqual(result['metric_scope'], dict(
+            rule_fingerprint='measurement-A', policy='latest_compatible_metric_rules', unit='known_rank_decision',
+            known_rank_decisions=30, included_decisions=28, excluded_decisions=2, excluded_unknown_decisions=1))
+        self.assertEqual(result['pair_coverage'], dict(pair_identity=24, pair_unavailable=4, text_without_hash=1))
+        self.assertEqual(result['units'], dict(decisions=24, pairs=9, words=8))
+        first_seen = rate(4, 9)
+        self.assertEqual(result['l_ttl'], dict(
+            pairs_first_miss=6, histogram={'1': 1, '2': 1, '3+': 1, 'never': 3}, median_selections_to_learn=2,
+            learned_after_one_rate=rate(1, 6), first_seen_within_7_days_share=first_seen))
+        self.assertEqual(result['l_futile'], dict(pairs_with_3_or_more_selections=5, futile_rate=rate(1, 5)))
+        self.assertEqual(result['l_util'], dict(
+            pairs_with_hit=6, pairs_regressed=2, pairs_censored_at_window_end=4, median_hits_until_regression=2,
+            regression_rate=rate(2, 6)))
+        self.assertEqual(result['l_avoid'], dict(
+            misses=14, avoidable_miss_rate=rate(8, 14), learned_provenance_miss_rate=rate(3, 14),
+            first_seen_within_7_days_share=first_seen))
+        self.assertEqual(result['l_reuse'], dict(words_first_chosen_in_days_1_to_14=6, reuse_rate=rate(2, 6)))
+        self.assertEqual(result['instrument_constants']['minimum_units'], 200)
+        self.assertEqual(set(result['identity_coverage']),
+                         {'cohort', 'unit', 'ranking', 'settings', 'measurement', 'build'})
+
+    def test_learning_pair_identity_follows_the_consumed_span(self):
+        # The leading segment of nihaoshijie joins the whole-input pair, so pair 你好 has 4 decisions, not 3 and 1.
+        rows = [(0, 0, 'nihao', '你好', 3, dict()), (1, 0, 'nihaoshijie', '你好', 1, dict(end=5))]
+        result = self.run_learning(rows=rows, name='segment.sqlite3')
+        self.assertEqual(result['units'], dict(decisions=2, pairs=1, words=1))
+        self.assertEqual(result['l_ttl']['histogram'], {'1': 1, '2': 0, '3+': 0, 'never': 0})
+        # Without the span the same decision is not guessed to be the whole input.
+        rows = [(0, 0, 'nihao', '你好', 3, dict()), (1, 0, 'nihaoshijie', '你好', 1, dict(evidence=False))]
+        result = self.run_learning(rows=rows, name='unknown-span.sqlite3')
+        self.assertEqual((result['units'], result['pair_coverage']['pair_unavailable']),
+                         (dict(decisions=1, pairs=1, words=1), 1))
+
+    def test_learning_needs_a_28_day_window_for_reuse_and_200_units_for_a_verdict(self):
+        week = self.run_learning('--days', '7', *LEARNING_ARGS)
+        self.assertEqual(week['window']['first_day'], '2026-09-24')
+        self.assertEqual(week['l_reuse']['reuse_rate'], dict(
+            numerator=None, denominator=None, rate=None, wilson_low=None, wilson_high=None,
+            status='needs_28_day_window'))
+        # A window with nothing in it has null rates, not zero.
+        self.assertEqual(week['units'], dict(decisions=0, pairs=0, words=0))
+        self.assertIsNone(week['l_ttl']['learned_after_one_rate']['rate'])
+        self.assertIsNone(week['l_ttl']['median_selections_to_learn'])
+        emoji = self.run_learning('--kind', 'emoji', *LEARNING_ARGS)
+        self.assertEqual(emoji['units']['decisions'], 0)
+        self.assertIsNone(emoji['l_avoid']['avoidable_miss_rate']['rate'])
+        # 210 pairs, each missed once: enough for a verdict.
+        rows = [(20, number % 60, f'code{number}', f'词{number}', 2, dict()) for number in range(210)]
+        large = self.run_learning(rows=rows, name='large.sqlite3')
+        self.assertEqual(large['l_ttl']['learned_after_one_rate']['status'], 'available')
+        self.assertEqual(large['l_ttl']['learned_after_one_rate']['rate'], 0.0)
+        self.assertEqual(large['l_avoid']['avoidable_miss_rate'], dict(
+            numerator=0, denominator=210, rate=0.0, wilson_low=0.0, wilson_high=self.quality.wilson(0, 210)[1],
+            status='available'))
+        self.assertEqual(large['l_reuse']['reuse_rate']['status'], 'no_verdict_below_200_units')
+
+    def test_learning_counts_pair_coverage_on_every_window(self):
+        db = Path(self.temp.name) / 'learning.sqlite3'
+        learning_fixture(db, learning_rows())
+        coverage = self.result(db=db)['coverage']
+        # The two other-rule decisions and the one before the window carry hashes; the four others do not.
+        self.assertEqual((coverage['known_rank'], coverage['pair_identity'], coverage['pair_unavailable']), (31, 27, 4))
+
+    def test_learning_never_pools_devices_and_reads_exports(self):
+        exported = self.export_file()
+        document = json.loads(exported.read_text())
+        document['source_id'] = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+        other = Path(self.temp.name) / 'B.json'
+        other.write_text(json.dumps(document))
+        window = ('--until', '2026-09-08')
+        message = self.run_cli('learning', '--input', str(exported), '--input', str(other), *window, success=False)
+        self.assertIn('never link across devices', message)
+        # The local database counts as a source of its own beside two exports.
+        self.run_cli('learning', '--input', str(other), *window, success=False)
+        one = json.loads(self.run_cli('learning', '--exports-only', '--input', str(other), *window, '--format', 'json'))
+        self.assertEqual(len(one['sources']), 1)
+        self.assertNotIn('by_source', one)
+        chosen = json.loads(self.run_cli('learning', '--input', str(exported), '--input', str(other), *window,
+                                         '--source', document['source_id'], '--format', 'json'))
+        self.assertEqual(chosen['filters']['source'], document['source_id'])
+        self.assertNotIn('by_source', chosen)
+        # The window is derived from --days.
+        self.assertIn('derives --since', self.run_cli('learning', '--since', '2026-09-01', success=False))
+        self.assertIn('local calendar date', self.run_cli('learning', '--until', '2026-09-08T12:00:00Z', success=False))
+
+    def test_learning_prints_in_every_format(self):
+        db = Path(self.temp.name) / 'learning.sqlite3'
+        learning_fixture(db, learning_rows())
+        with utc():
+            table = self.run_cli('learning', *LEARNING_ARGS, db=db)
+            exported = self.run_cli('learning', *LEARNING_ARGS, '--format', 'csv', db=db)
+        lines = list(csv.DictReader(io.StringIO(exported)))
+        self.assertIn('$.l_ttl.histogram.never | 3', table)
+        self.assertIn('$.l_avoid.avoidable_miss_rate.wilson_low |', table)
+        self.assertTrue(any(row['path'] == '$.l_reuse.reuse_rate.status' for row in lines))
+
     def test_text_free_records_keep_rank_metrics(self):
         before = self.result()['coverage']
         self.assertEqual(before['text_free'], 0)
@@ -1114,6 +1394,10 @@ class QueryTests(unittest.TestCase):
         # one decision of which was committed without a client.
         self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[67,62,64])
         self.assertEqual(result['coverage']['valid'],53)
+        # Every known-rank decision of the real capture is hashed or counted as without a pair identity.
+        coverage = result['coverage']
+        self.assertEqual(coverage['pair_identity'] + coverage['pair_unavailable'], coverage['known_rank'])
+        self.assertGreater(coverage['pair_identity'], 0)
         self.assertEqual(result['coverage']['regular_issued'],54)
         self.assertEqual(result['coverage']['regular_not_issued'],2)
         # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.

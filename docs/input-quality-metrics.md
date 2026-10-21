@@ -14,7 +14,7 @@ Design rules:
   interval.** A zero denominator is "unavailable", never 0%.
 - **Judgement is per bucket, never a composite score.** The scorecard in section 7 lists the headline metrics; none is
   a weighted sum of the others.
-- **Content-free by default.** Every new signal this document asks for is a count, a flag or a salted hash. Literal
+- **Content-free by default.** Every new signal this document asks for is a count, a flag or a keyed hash whose key never leaves the device (section 9). Literal
   text appears only in records written while 「同时保存输入文本」 is on, as today.
 
 ## 1. What exists and what this adds
@@ -49,7 +49,7 @@ All metrics are defined over these entities. Names in parentheses are the fields
 | **Decision** | One act that resolves a span of the code into text from a shown list. Action: accept highlighted (Space), pick by digit, pick by pointer, after optional paging and highlight moves. A decision is *whole* when its span ends at the end of the code, *segment* otherwise. | `candidate_decisions` (trigger, outcome, `selected_display_index`, operations) |
 | **Commit** | Text delivered to the application, with its kind: candidate, punctuation, raw letters, ASCII, forced flush, mode toggle. | `commits` (kind, `insertion_issued`) |
 | **Post-commit window** | Keys arriving after a commit until the next code starts, the client or application changes, InkFlow is deactivated, or `W` seconds pass: deletions, forward deletions, Cmd+Z, direct text, paste. The controller sees these keys while InkFlow is the active input source, the same way the voice module's `considerLearningEvent` does, and ends the window on client change as the voice coordinator cancels on `clientDrift`. | `operations_json.postCommitWindows` of the next composition (section 9) |
-| **Pair** | The identity `(normalized code, chosen text)`; **word** is the chosen text alone. In text mode both are literal; in text-free mode they exist only if the keyed hash of section 9 is adopted. | Literal in text mode only (section 9) |
+| **Pair** | The identity `(normalized code, chosen text)`; **word** is the chosen text alone. Hashed in both modes (section 9, #137); literals additionally in text mode, so one window that spans a mode switch is one identity space. | `codeHash` and the selected candidate's `textHash` in both modes, literals in text mode (section 9) |
 | **Learning act** | A user act about learning: forget the highlighted candidate (Shift+Backspace), delete or restore an entry in Settings. | **Not recorded** (section 9) |
 
 Dimensions, usable on any metric, never inside a formula:
@@ -110,9 +110,9 @@ list shown).
 | 13 | Deletion right after commit covering the committed text | post-commit window: deletions ≥ committed length before other typing | C-rev, R-adj | yes |
 | 14 | Deletion of part of the committed text, then typing | deletions 1 … length − 1, then direct text | C-partial | yes |
 | 15 | Cmd+Z right after commit | post-commit window: undo | C-rev | yes |
-| 16 | Same code typed again right after a revert | next composition's pair identity equals the reverted one | C-retype (confirms an engine miss, not a change of mind) | pair identity needed |
+| 16 | Same code typed again right after a revert | next composition's pair identity equals the reverted one | C-retype (confirms an engine miss, not a change of mind) | yes (pair hash, #137, and post-commit window, #136) |
 | 17 | Chosen candidate was a learned entry | provenance learned | L-over, provenance dimension of every R metric | yes |
-| 18 | The same pair chosen again | pair identity recurs in the window | L-ttl, L-futile, L-util, L-avoid, L-reuse | text mode only |
+| 18 | The same pair chosen again | pair identity recurs in the window | L-ttl, L-futile, L-util, L-avoid, L-reuse | yes (pair hash, #137) |
 | 19 | Shift+Backspace forgets the highlighted candidate | learning act `forgotten` | L-forget | **no** |
 | 20 | Entry deleted or restored in Settings | learning act `deleted`, `restored` | L-forget | **no** |
 | 21 | Custom phrase chosen | `matches_custom_phrase` | provenance dimension | yes |
@@ -159,7 +159,7 @@ counterpart it maps to, and the bias to state when reporting. Dimensions from se
 | C-raw | Raw-commit rate | `raw_return` commits / commits of Chinese-kind compositions | commit | T2 | F | none standard | dictionary gaps and deliberate pinyin output look alike |
 | C-rev | Revert rate | candidate commits whose post-commit window shows deletions ≥ committed length, or Cmd+Z, before other typing / candidate commits with a window observed | commit | T2 vs T3 | F | Words Modified Ratio (Gboard) | counts a change of mind as a revert; C-retype separates it |
 | C-partial | Partial edit rate | commits whose window shows 1 … length − 1 deletions followed by direct text / same denominator | commit | T2 vs T3 | F | WMR | typing slips in the next word are excluded by "before other typing" |
-| C-retype | Confirmed-miss rate | reverts followed by a composition with the same code identity / reverts | commit | T3 | F | none standard | needs pair identity in text-free mode |
+| C-retype | Confirmed-miss rate | reverts followed by a composition with the same code identity / reverts | commit | T3 | F | none standard | depends on the post-commit window (#136) only; the code identity is the keyed hash of section 9 |
 | C-total | Effective first-choice error | 1 − R-adj | decision | T3 | F | total error rate (Soukoreff & MacKenzie 2003) | lower bound: errors left in the document are invisible |
 
 ## 6. Learning intelligence
@@ -272,7 +272,7 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | --- | --- | --- |
 | Post-commit window (recorded, #136) | per commit: deletions, forward deletions, undo, direct-text keys and paste counts before the next code, a client change, deactivation or `W` seconds, with the deletions, forward deletions and undo before the first direct-text or paste key, and the end reason; `W` = 10 s | C-rev, C-partial, R-adj, C-total |
 | Character counts | per commit the committed character count (`character_count`), per decision the selected character count (`selected_character_count`), as integers of Unicode scalar values. Recorded since schema v4 in either text mode, so the per-length buckets of the adopted band and the deletion threshold of C-rev no longer need text mode and the 56-day stability rule does not depend on text recording; only text-free records written before v4 lack a length, and `quality.py trend` counts their known-rank decisions as `length_unavailable` | C-rev, C-partial, R1 by length in text-free mode |
-| Pair identity in text-free mode | per decision: keyed hash of the normalized code and of the selected text, key generated once per device beside `quality-source-id` and never exported; literal values in text mode. **This is a privacy decision, not an instrument detail**: the text-free default was adopted deliberately (#54), and a keyed hash of short Chinese words is recoverable by dictionary attack by anyone holding the key on the same machine. The user decides whether the learning metrics are worth it; until then they exist in text mode only, and L-avoid uses its interim proxy | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
+| Pair identity (recorded, #137) | per decision: keyed hash of the normalized code (the span the selected candidate consumed, lowercase, without apostrophes) and of the selected text, hashed in both modes with literals additionally in text mode, so one window that spans a mode switch is one identity space. The key is 32 bytes generated once per device (`quality-pair-key`, beside `quality-source-id`, mode 0600), never exported, and replaced when the records are cleared. **This is a privacy decision, not an instrument detail**, adopted 2026-10-21: the text-free default was adopted deliberately (#54), and a keyed hash of short Chinese words is recoverable by dictionary attack by anyone holding the key on the same machine. Decisions with a selected prefix, and decisions whose span is unknown, carry no hash and are counted `pair_unavailable`. Open question for the user: restricting the hash to text-free records. L-avoid keeps its interim proxy beside the pair-based rate (`quality.py learning`) | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
 | Learning acts | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, plus the pair hash | L-forget |
 | Trend counters | E-kspc, E-onekey, E-dec, C-pre, C-cancel, C-raw, C-rev, L-avoid, L-over in `quality.py trend` and `summary` | the scorecard |
 | Replay arms for learning | cold and trained arms in engine mode; ER between them | L-over, L-cold acceptance |

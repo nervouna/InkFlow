@@ -48,6 +48,34 @@ database or empty filter result, exits 0. Help is available at each command.
   gold and `committed_text` the text of the decision's linked commit. The file holds typed text: the path must be
   outside the repository and new, and the file is owner-only. The `replay` binary scores it; see
   [Replay and the first-choice target](../../../../Core/Portable/README.md#replay-and-the-first-choice-target).
+- `learning`: the L family over pair identities (design: `docs/input-quality-metrics.md` section 6), for
+  known-rank regular committed decisions that carry a `pair_id`, ordered by composition start, decision time and
+  sequence. It takes the shared filters (`--kind` defaults to all kinds), `--input` and `--days` (default 28, a window
+  derived like `trend`, so `--since` is refused), selects the latest known measurement cohort as `trend` does and
+  reports the exclusions: `metric_scope` (`excluded_decisions`, `excluded_unknown_decisions`) and `pair_coverage`
+  (`pair_identity` and `pair_unavailable` inside the cohort, and `text_without_hash`, the text-mode rows among them
+  with a literal pair but no hash, which is every text record written before pair hashes existed). Hashes are keyed per
+  device and never link across devices, so `learning` never pools sources: with more than one source among the combined
+  inputs and no `--source` it fails with exit 2. A **miss** is `display_rank > 1` (every paged choice included), a **hit**
+  is `display_rank = 1`; truth T1. Every rate carries `numerator`, `denominator`, `rate`, a 95% Wilson interval and a
+  `status`: `no_verdict_below_200_units` under 200 units, else `available`; the rate is null for an empty denominator.
+  - `l_ttl` (unit pair): over pairs whose first decision in the window is a miss, `histogram` of the selections before
+    the pair's first hit (`1`, `2`, `3+`, and `never` for pairs with no hit in the window, right-censored),
+    `median_selections_to_learn` over the learned pairs and `learned_after_one_rate`.
+  - `l_futile` (pair): `futile_rate`, pairs with at least 3 decisions that are all misses over pairs with at least 3.
+  - `l_util` (pair): over pairs with a hit, the run of consecutive hits from the first hit to the next miss
+    (`median_hits_until_regression` over regressed pairs; pairs still at rank 1 at the window end are counted in
+    `pairs_censored_at_window_end`) and `regression_rate`.
+  - `l_avoid` (decision): `avoidable_miss_rate`, misses whose pair has an earlier decision in the window at any rank,
+    and beside it the interim proxy `learned_provenance_miss_rate`, misses whose selected candidate has learned
+    provenance, `type = 'user_phrase' OR type LIKE 'english_personal_%' OR type LIKE 'mixed_personal_%'`.
+  - `l_reuse` (word, identified by `selected_text_hash`): `reuse_rate`, words first chosen in days 1-14 of the window
+    that are chosen again in days 15-28; null with `status: needs_28_day_window` unless `--days` is 28.
+  - `first_seen_within_7_days_share` (pairs whose first decision is in the first 7 days of the window, over pairs)
+    sits in `l_ttl` and `l_avoid`: a pair first seen early may have been learned before the window. Nothing is excluded.
+  - `instrument_constants` lists what the rule versions: 28-day window, 7-day censoring margin, 3 selections for
+    futile, 14 + 14 day reuse split, the 200-unit minimum, the learned-provenance predicate, the code normalization, the
+    128-bit truncation with the `code:` and `text:` prefixes and the `pair_id` composition.
 - `timing`: composition-level timing coverage, retained adjacent-key intervals,
   ended/unfinished wait and visible-duration distributions, plus identity coverage,
   without raw typed text.
@@ -126,6 +154,8 @@ cancelled and interrupted. Unknown paths never become successful choices.
 | truncated / dropped_page_count | Filtered decision history flags and removed snapshot-history entries |
 | text_free | Decisions whose pages carry `textCaptured: false`; outside ranking-issues and without inspectable text |
 | length_unavailable | known_rank without a selected length: no `selected_character_count` and no selected text (an older text-free record), or a zero count; outside the length buckets |
+| pair_identity | known_rank whose snapshot has a `codeHash` and whose selected candidate has a `textHash`; `pair_id` is `code_hash \|\| '\|' \|\| selected_text_hash` |
+| pair_unavailable | known_rank without `pair_id`: records from before pair hashes, decisions with a selected prefix, decisions whose consumed span is unknown (no `evidence` row and no custom-phrase match), envelopes submitted before the key was loaded, and records written while the key file could not be kept; `pair_identity + pair_unavailable = known_rank` |
 
 A zero denominator yields null/N/A, never 0%. `rank_counts` enumerates each exact
 global display rank for known_rank in each group. Page and index are zero-based;
@@ -256,6 +286,16 @@ candidates and a readable reply. Records from before they were added, and
 other candidates, omit all three. `source` and the consumed-input span stay limited
 to learned English and mixed candidates. The engine reads no candidate comment for
 these facts and writes no spelling comment, so text-captured records carry none.
+
+Pair identity: a decision whose selected index points at a candidate and whose snapshot has no selected prefix also
+carries `snapshot.codeHash` and, on that selected candidate only, `textHash`, in both text modes (no schema change).
+Each is the first 128 bits (32 lowercase hex characters) of HMAC-SHA256 under the device key, over `code:` plus the
+code, or `text:` plus the candidate text. The code is the span the selected candidate consumed, the raw-input bytes
+`[start, end)` named by the first two fields of its `evidence` row, lowercased with apostrophes removed; a custom phrase
+chosen without an `evidence` row uses the whole input. Any other decision without an `evidence` row has no known span
+and no hash. The key is 32 bytes in `quality-pair-key` beside the database and is never exported, backed up or recorded,
+so hashes from different devices never match and exports carry only opaque values. Clearing the records replaces the
+key; older records then no longer match newer ones. Records written before this field existed, in either mode, have none.
 
 The worker persists four independent identities. `ranking_fingerprint` covers the
 engine, audited offline ranking source/resources, and ranking-affecting applied
