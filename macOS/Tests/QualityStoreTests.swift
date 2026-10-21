@@ -131,6 +131,40 @@ private func createV2Database(at url: URL) throws {
     try writer.execute("PRAGMA user_version=2")
 }
 
+private func createV3Database(at url: URL) throws {
+    try createV2Database(at: url)
+    let writer = try Reader(url, writable: true)
+    try writer.execute("""
+        CREATE TABLE effectiveness_events (
+            id INTEGER PRIMARY KEY, run_id TEXT NOT NULL REFERENCES recording_runs(id),
+            occurred_at TEXT NOT NULL, source TEXT NOT NULL, event TEXT NOT NULL, reason TEXT,
+            count INTEGER NOT NULL CHECK(count BETWEEN 1 AND 64),
+            milliseconds INTEGER CHECK(milliseconds BETWEEN 0 AND 60000),
+            CHECK((event = 'rejected' AND reason IS NOT NULL) OR (event != 'rejected' AND reason IS NULL))
+        );
+        CREATE INDEX effectiveness_time_source ON effectiveness_events(occurred_at, source, event);
+        PRAGMA user_version=3;
+        """)
+}
+
+/// Each commit with the decision linked to it: the commit's and the decision's character counts.
+private func linkedCounts(_ reader: Reader) throws -> [[String]] {
+    try reader.rows("""
+        SELECT c.id, c.character_count, d.selected_character_count
+        FROM commits c JOIN candidate_decisions d ON d.commit_id = c.id ORDER BY c.id
+        """)
+}
+
+/// A migrated database appends both columns, keeps its legacy row without counts and records them for new rows.
+private func expectMigratedCounts(_ reader: Reader) throws {
+    expect(try reader.rows("SELECT name FROM pragma_table_info('commits')").last == ["character_count"],
+           "character_count is the last commits column")
+    expect(try reader.rows("SELECT name FROM pragma_table_info('candidate_decisions')").last ==
+           ["selected_character_count"], "selected_character_count is the last decision column")
+    expect(try linkedCounts(reader) == [["commit-after-migration", "3", "3"], ["legacy-commit", "NULL", "NULL"]],
+           "legacy rows have no counts, never zero; new rows record both")
+}
+
 @main
 struct QualityStoreTests {
     static func main() async throws {
@@ -162,9 +196,9 @@ struct QualityStoreTests {
         let reader = try Reader(url)
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1", "decision persisted")
         expect(try reader.scalar("PRAGMA journal_mode") == "delete", "rollback journal")
-        expect(try reader.scalar("PRAGMA user_version") == "3", "schema v3")
+        expect(try reader.scalar("PRAGMA user_version") == "4", "schema v4")
         expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") == "6",
-               "schema v3 adds one owned event table")
+               "schema v4 keeps the one owned event table")
         expect(try reader.scalar("SELECT ranking_fingerprint IS NOT NULL AND settings_fingerprint IS NOT NULL AND measurement_fingerprint IS NOT NULL AND build_identity IS NOT NULL FROM config_revisions") == "1",
                "new revisions persist every layered identity")
         let expectedFingerprints = try QualityFingerprints.make(configuration: record.revisions[0].configuration,
@@ -202,6 +236,7 @@ struct QualityStoreTests {
         try await configurationBudgetsAndReferences()
         try await fatalFaults()
         try await v1Migration()
+        try await v3Migration()
         try await textCapture()
         try await effectivenessEvents()
         try await malformedSchemaTopology()
@@ -401,6 +436,7 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1", "ranking evidence is written without text")
         expect(try reader.scalar("SELECT selected_text IS NULL FROM candidate_decisions") == "1", "no selected text by default")
         expect(try reader.scalar("SELECT text FROM commits") == "", "commit text is empty by default")
+        expect(try linkedCounts(reader) == [["commit-text-free", "3", "3"]], "scalar counts of 你好😀 survive redaction")
         expect(try reader.scalar("SELECT json_extract(snapshot_json,'$.rawInput') || json_extract(snapshot_json,'$.precedingContext') || json_extract(snapshot_json,'$.candidates[0].text') FROM candidate_decisions") == "",
                "page strings are empty by default")
         expect(try reader.scalar("SELECT json_extract(snapshot_json,'$.textCaptured') FROM candidate_decisions") == "0", "text-free pages are marked")
@@ -413,6 +449,8 @@ private extension QualityStoreTests {
         expect(try reader.scalar("SELECT count(*) FROM commits WHERE text='你好😀'") == "1" &&
                reader.scalar("SELECT count(*) FROM candidate_decisions WHERE selected_text='你好😀' AND json_extract(snapshot_json,'$.rawInput')='nihao'") == "1",
                "opt-in stores text")
+        expect(try linkedCounts(reader) == [["commit-text-free", "3", "3"], ["commit-with-text", "3", "3"]],
+               "opt-in stores the same counts")
         // An abandoned composition carries text only in its deleted input: no decision, no commit.
         var abandoned = QualityEnvelope(composition: QualityComposition(id: "abandoned", appBundleID: "test.app", outcome: .cancelled))
         abandoned.composition.operations.inputBeforeDeletion = "pniggu"
@@ -426,10 +464,30 @@ private extension QualityStoreTests {
         expect(try reader.rows("SELECT id FROM compositions") == [["text-free"]], "opting out removes only compositions that carry text")
         expect(try reader.scalar("SELECT count(*) FROM candidate_decisions") == "1" && reader.scalar("SELECT count(*) FROM commits") == "1" &&
                reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "text-free records and learning events stay")
+        expect(try linkedCounts(reader) == [["commit-text-free", "3", "3"]],
+               "opting out keeps the text-free row with its counts")
         await store.close()
         for secret in ["nihao", "你好😀", "测试", "mima", "我的密码", "nihoa", "pniggu"] {
             expect(try Data(contentsOf: url).range(of: Data(secret.utf8)) == nil, "no \(secret) remains in the database file")
         }
+        // A character is a Unicode scalar: ❤️ is two scalars and one grapheme. The counts need no stored text.
+        expect("❤️".count == 1 && "❤️".unicodeScalars.count == 2, "the fixture text is the two-scalar form")
+        let heartURL = try makeURL("heart")
+        defer { try? FileManager.default.removeItem(at: heartURL.deletingLastPathComponent()) }
+        let heartStore = QualityStore(maintenanceNow: { maintenanceDate }, url: heartURL, engineVersion: "test",
+                                      buildMetadata: metadata)
+        var heart = fixture("heart")
+        heart.commits[0] = QualityCommit(id: "commit-heart", text: "❤️", kind: .candidate, insertionIssued: true)
+        heart.decisions[0] = QualityDecision(id: "decision-heart", sequence: 1, trigger: .space, outcome: .committed,
+            selectedDisplayIndex: 0, selectedText: "❤️", textKind: .symbol, commitID: "commit-heart",
+            snapshot: heart.decisions[0].snapshot)
+        expect(heartStore.submit(heart) == .accepted, "text-free mode accepts the heart envelope")
+        await heartStore.close()
+        let heartReader = try Reader(heartURL)
+        expect(try linkedCounts(heartReader) == [["commit-heart", "2", "2"]], "counts are scalars, not graphemes")
+        expect(try heartReader.scalar("SELECT count(*) FROM commits WHERE text != ''") == "0" &&
+               heartReader.scalar("SELECT count(*) FROM candidate_decisions WHERE selected_text IS NOT NULL") == "0",
+               "the counts come without any stored text")
         // Upgrade: a database written with text reopens in the text-free default and loses its text at startup maintenance.
         let legacyURL = try makeURL("legacy-text")
         let legacy = QualityStore(maintenanceNow: { maintenanceDate }, url: legacyURL, engineVersion: "test", buildMetadata: metadata, textCapture: true)
@@ -473,7 +531,7 @@ private extension QualityStoreTests {
                "old event reaches bounded retention")
         await store.flush()
         let reader = try Reader(url)
-        expect(try reader.scalar("PRAGMA user_version") == "3", "effectiveness events migrate quality schema to v3")
+        expect(try reader.scalar("PRAGMA user_version") == "4", "effectiveness events live in the current schema")
         expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == String(events.count),
                "all current source-aware events persist and aged evidence is pruned")
         expect(try reader.scalar("SELECT count(*) FROM effectiveness_events WHERE event='rejected' AND reason='immediate_undo'") == "1",
@@ -499,10 +557,10 @@ private extension QualityStoreTests {
         try createV2Database(at: v2URL)
         let migrated = QualityStore(maintenanceNow: { maintenanceDate }, url: v2URL, engineVersion: "test", buildMetadata: metadata, textCapture: true)
         expect(migrated.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
-               "v2 database accepts deferred v3 migration")
+               "v2 database accepts deferred migration")
         await migrated.close()
         let migratedReader = try Reader(v2URL)
-        expect(try migratedReader.scalar("PRAGMA user_version") == "3" &&
+        expect(try migratedReader.scalar("PRAGMA user_version") == "4" &&
                migratedReader.scalar("SELECT count(*) FROM effectiveness_events") == "1" &&
                migratedReader.scalar("SELECT count(*) FROM compositions WHERE id='legacy-composition'") == "1",
                "v2 rows survive the additive effectiveness migration")
@@ -517,9 +575,10 @@ private extension QualityStoreTests {
         expect(store.submit(fixture("after-migration")) == .accepted, "migration stays off producer path")
         await store.close()
         let reader = try Reader(url)
-        expect(try reader.scalar("PRAGMA user_version") == "3", "strict v1 migrates to v3")
+        expect(try reader.scalar("PRAGMA user_version") == "4", "strict v1 migrates to v4")
         expect(try reader.scalar("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != 'sqlite_sequence'") == "6",
                "migration keeps five legacy tables and adds only effectiveness events")
+        try expectMigratedCounts(reader)
         expect(try reader.scalar("SELECT fingerprint FROM config_revisions WHERE id='legacy-revision'") == "legacy-fingerprint",
                "legacy fingerprint remains exact")
         expect(try reader.scalar("SELECT ranking_fingerprint IS NULL AND settings_fingerprint IS NULL AND measurement_fingerprint IS NULL AND build_identity IS NULL FROM config_revisions WHERE id='legacy-revision'") == "1",
@@ -548,12 +607,35 @@ private extension QualityStoreTests {
         print("PASS quality store: atomic v1 migration, exact rows, NULL legacy layers and rollback")
     }
 
+    static func v3Migration() async throws {
+        let url = try makeURL("v3-migration")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try createV3Database(at: url)
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test",
+                                 buildMetadata: metadata, textCapture: true)
+        expect(store.submit(fixture("after-migration")) == .accepted, "migration stays off producer path")
+        await store.close()
+        let reader = try Reader(url)
+        expect(try reader.scalar("PRAGMA user_version") == "4", "v3 migrates to v4")
+        expect(try reader.rows("SELECT name FROM sqlite_master WHERE type='table'").count == 6,
+               "a v3 source already owns the effectiveness table")
+        try expectMigratedCounts(reader)
+        expect(try reader.scalar("SELECT count(*) FROM recording_runs WHERE id='legacy-run'") == "1" &&
+               reader.scalar("SELECT count(*) FROM config_revisions WHERE id='legacy-revision'") == "1" &&
+               reader.scalar("SELECT count(*) FROM compositions WHERE id='legacy-composition'") == "1" &&
+               reader.scalar("SELECT count(*) FROM commits WHERE id='legacy-commit'") == "1" &&
+               reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id='legacy-decision'") == "1",
+               "every legacy row survives")
+        print("PASS quality store: v3 migrates to v4 by adding two columns, legacy rows keep NULL counts")
+    }
+
     static func malformedSchemaTopology() async throws {
         func reject(_ label: String, version: Int, mutation: String) async throws {
             let url = try makeURL("malformed-\(label)")
             defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
             if version == 1 { try createV1Database(at: url) }
             else if version == 2 { try createV2Database(at: url) }
+            else if version == 3 { try createV3Database(at: url) }
             else {
                 let seed = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata, textCapture: true)
                 await seed.close()
@@ -597,7 +679,10 @@ private extension QualityStoreTests {
                          mutation: "ALTER TABLE config_revisions ADD COLUMN unexpected TEXT")
         try await reject("v3-extra-table", version: 3, mutation: "CREATE TABLE unexpected_table (id INTEGER)")
         try await reject("v3-missing-index", version: 3, mutation: "DROP INDEX effectiveness_time_source")
-        print("PASS quality store: malformed v1/v2 migration and v3 topology reject without mutation")
+        try await reject("v3-extra-column", version: 3, mutation: "ALTER TABLE commits ADD COLUMN unexpected TEXT")
+        try await reject("v4-extra-column", version: 4, mutation: "ALTER TABLE commits ADD COLUMN unexpected TEXT")
+        try await reject("v4-missing-index", version: 4, mutation: "DROP INDEX effectiveness_time_source")
+        print("PASS quality store: malformed v1/v2/v3 migration and v4 topology reject without mutation")
     }
 
     static func identityFailures() async throws {

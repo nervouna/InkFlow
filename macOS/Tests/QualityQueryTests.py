@@ -33,7 +33,7 @@ def empty_db(path):
     db = sqlite3.connect(path)
     db.execute('PRAGMA foreign_keys=ON')
     db.execute('PRAGMA application_id=1229345073')
-    db.execute('PRAGMA user_version=3')
+    db.execute('PRAGMA user_version=4')
     for sql in DDL.values():
         db.execute(sql)
     return db
@@ -77,7 +77,8 @@ def fixture(path):
         commit_id = f'commit-{cid}' if outcome == 'committed' else None
         if commit_id:
             insert(db, 'commits', id=commit_id, composition_id=cid, issued_at=STAMP, text=chosen,
-                   kind='candidate' if regular else 'punctuation', insertion_issued=issued)
+                   kind='candidate' if regular else 'punctuation', insertion_issued=issued,
+                   character_count=len(chosen))
         page = dict(generation=7, rawInput='shi', caret=caret, selectedPrefix='', selectedPrefixValid=prefix_valid,
                     precedingContext=context, configurationRevisionID=revision, configuration={},
                     page=0 if rank == 1 else 1, pageSize=3, highlightedDisplayIndex=0,
@@ -92,7 +93,8 @@ def fixture(path):
                snapshot_json=json.dumps(page, ensure_ascii=False), first_page_json=json.dumps(first_page) if first else None,
                visited_pages_json='[]', page_history_truncated=truncated, dropped_page_count=2*truncated,
                operations_json=json.dumps(OPS), regular_ranked_selection=regular, matches_custom_phrase=custom,
-               unknown_rank_reason='ambiguous_candidate_text' if index is None else None)
+               unknown_rank_reason='ambiguous_candidate_text' if index is None else None,
+               selected_character_count=len(chosen))
 
     add('a'); add('b', revision='rev2'); add('c', truncated=1)
     add('d', chosen='是', rank=1)
@@ -107,7 +109,7 @@ def fixture(path):
            app_bundle_id='other.app', outcome='committed', operations_json=json.dumps(OPS),
            page_history_truncated=0, dropped_page_count=0)
     insert(db, 'commits', id='raw-commit', composition_id='raw-only', issued_at=STAMP, text='raw',
-           kind='raw_return', insertion_issued=1)
+           kind='raw_return', insertion_issued=1, character_count=3)
     db.commit()
     db.close()
 
@@ -146,12 +148,17 @@ def replay_fixture(path):
         return result
 
     def add(cid, raw, texts, chosen, *, committed=None, number=0, index=None, first=None, first_generation=7,
-            kind='chinese', started=STAMP, trigger='space', outcome='committed', regular=1, text=True, **options):
+            kind='chinese', started=STAMP, trigger='space', outcome='committed', regular=1, text=True,
+            counts='written', **options):
+        """`counts` is what the writer stores: its own scalar counts, nothing (before v4) or an explicit number."""
+        committed_count, selected_count = counts, counts
+        if counts == 'written':
+            committed_count, selected_count = len(committed or chosen), len(chosen)
         insert(db, 'compositions', id=cid, run_id='run', started_at=started, ended_at=started, app_bundle_id='app',
                outcome='committed', operations_json=json.dumps(OPS), page_history_truncated=0,
                dropped_page_count=0)
         insert(db, 'commits', id=f'commit-{cid}', composition_id=cid, issued_at=started, kind='candidate',
-               text=(committed or chosen) if text else '', insertion_issued=1)
+               text=(committed or chosen) if text else '', insertion_issued=1, character_count=committed_count)
         snapshot = page(raw, texts, number=number, text=text, **options)
         first_page = None
         if first is not None:
@@ -163,7 +170,8 @@ def replay_fixture(path):
                selected_text=chosen if text else None, text_kind=kind,
                snapshot_json=json.dumps(snapshot, ensure_ascii=False), first_page_json=first_page,
                visited_pages_json='[]', page_history_truncated=0, dropped_page_count=0,
-               operations_json=json.dumps(OPS), regular_ranked_selection=regular, matches_custom_phrase=0)
+               operations_json=json.dumps(OPS), regular_ranked_selection=regular, matches_custom_phrase=0,
+               selected_character_count=selected_count)
 
     # Page 0: the snapshot list is the case, whatever the first page held.
     add('r1', 'kaihui', ['凯会', '开会', '开汇'], '开会', natives=[1, 0, 2], first=['开会', '开汇', '凯会'],
@@ -175,11 +183,16 @@ def replay_fixture(path):
     add('r4', 'womenqukaihui', ['我们去开会', '我们去开汇'], '我们去开会', number=1, first=['我们去开会'],
         first_generation=99)
     # Records from before the facts existed: all or some candidates lack them.
-    add('r5', 'tianqi', ['天气', '田七'], '天气', facts=0)
+    add('r5', 'tianqi', ['天气', '田七'], '天气', facts=0, counts=None)
     add('r6', 'de', ['的', '得'], '的', facts=1)
     # Text-free, another kind, not regular, not committed.
     add('r7', 'ke', ['课', '可'], '课', text=False)
     add('r8', 'xiao', ['😀'], '😀', kind='emoji')
+    # Lengths that cannot be known, in their own kind so the Chinese series stays put: a text-free decision written
+    # before v4, an empty selection (a zero count) and a text-mode decision before v4, which buckets by its text.
+    add('r11', 'ke', ['课'], '课', kind='symbol', text=False, counts=None)
+    add('r12', 'kong', [''], '', kind='symbol', counts=0)
+    add('r13', 'pu', ['——'], '——', kind='symbol', counts=None)
     add('r9', 'pu', ['，'], '，', trigger='punctuation', regular=0)
     add('r10', 'shi', ['是'], '是', outcome='reverted')
     # Before the 28-day window of the trend and the --since of the replay tests.
@@ -234,6 +247,9 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(document['range'], dict(first=STAMP, last=STAMP))
         self.assertEqual(document['tables']['config_revisions'][0]['applied_config_json'], '{}')
         self.assertNotIn('configuration', json.loads(document['tables']['candidate_decisions'][0]['snapshot_json']))
+        self.assertEqual(document['schema_version'], 4)
+        self.assertEqual({r['character_count'] for r in document['tables']['commits']}, {1, 3})
+        self.assertEqual({r['selected_character_count'] for r in document['tables']['candidate_decisions']}, {1})
         # Same device, another export after extending an active run and adding an event.
         with sqlite3.connect(self.db) as db:
             db.execute("UPDATE recording_runs SET stats_json=?", (json.dumps(dict(written=22)),))
@@ -291,9 +307,12 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(events['sources'][0]['versions'][0]['app_version'], '0.5.0')
         self.assertEqual(events['sources'][0]['counts']['compositions'], 0)
         a = self.export_file()
-        for mutation in ('version', 'missing-parent', 'bad-json', 'duplicate', 'shape', 'type', 'range', 'huge-integer', 'offset-time'):
+        for mutation in ('version', 'schema-v3', 'negative-count', 'missing-parent', 'bad-json', 'duplicate', 'shape',
+                         'type', 'range', 'huge-integer', 'offset-time'):
             doc = json.loads(a.read_text())
             if mutation == 'version': doc['format_version'] = 99
+            elif mutation == 'schema-v3': doc['schema_version'] = 3
+            elif mutation == 'negative-count': doc['tables']['commits'][0]['character_count'] = -1
             elif mutation == 'missing-parent': doc['tables']['compositions'][0]['run_id'] = 'missing'
             elif mutation == 'bad-json': doc['tables']['candidate_decisions'][0]['snapshot_json'] = '{'
             elif mutation == 'duplicate': doc['tables']['commits'].append(doc['tables']['commits'][0])
@@ -305,7 +324,9 @@ class QueryTests(unittest.TestCase):
                 doc['range']['last'] = '2026-09-07T00:00:00.000+08:00'
             else: doc['tables']['commits'] = None
             bad = Path(self.temp.name) / 'bad.json'; bad.write_text(json.dumps(doc))
-            self.run_cli('summary', '--exports-only', '--input', str(bad), success=False)
+            message = self.run_cli('summary', '--exports-only', '--input', str(bad), success=False)
+            if mutation == 'schema-v3':
+                self.assertIn('schema v4', message)
         bad.write_text('{')
         self.run_cli('summary', '--input', str(bad), success=False)
         doc = json.loads(a.read_text()); doc['tables']['commits'][0]['text'] = 'conflict'
@@ -330,6 +351,8 @@ class QueryTests(unittest.TestCase):
         document = json.loads(out.read_text())
         self.assertEqual(len(document['tables']), 6)
         self.assertEqual(next(r['text'] for r in document['tables']['commits'] if r['id'] == 'raw-commit'), 'raw\0tail')
+        self.assertEqual((document['schema_version'], {r['character_count'] for r in document['tables']['commits']}),
+                         (4, {1, 3}))
         self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
         self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
         # Invalid native source schemas are rejected before any output is saved.
@@ -470,7 +493,7 @@ class QueryTests(unittest.TestCase):
                 for window in ('daily', 'rolling_7d', 'rolling_28d'):
                     metric = point[window]
                     for key in ('top1_wilson_low', 'top1_wilson_high', 'paged_selected', 'paged_rate',
-                                'by_selection_length', 'text_free'):
+                                'by_selection_length', 'text_free', 'length_unavailable'):
                         self.assertIn(key, metric, f'{name} {point["date"]} {window}')
                     self.assertEqual(list(metric['by_selection_length']), ['1', '2', '3+'])
                     if metric['top1_rate'] is None:
@@ -481,22 +504,38 @@ class QueryTests(unittest.TestCase):
                         self.assertLessEqual(metric['top1_rate'], metric['top1_wilson_high'])
         month = trend['series']['chinese'][-1]['rolling_28d']
         self.assertEqual((month['known_rank'], month['top1_selected'], month['top3_selected']), (7, 3, 4))
-        self.assertEqual((month['paged_selected'], month['text_free']), (3, 1))
+        self.assertEqual((month['paged_selected'], month['text_free'], month['length_unavailable']), (3, 1, 0))
         self.assertAlmostEqual(month['paged_rate'], 3 / 7)
         self.assertAlmostEqual(month['top1_wilson_low'], 0.1582, places=4)
         self.assertAlmostEqual(month['top1_wilson_high'], 0.7495, places=4)
         buckets = month['by_selection_length']
         counts = {key: (b['known_rank'], b['top1_selected'], b['top3_selected'], b['paged_selected'])
                   for key, b in buckets.items()}
-        self.assertEqual(counts, {'1': (2, 1, 1, 1), '2': (2, 1, 2, 0), '3+': (2, 0, 0, 2)})
-        self.assertEqual(sum(b['known_rank'] for b in buckets.values()) + month['text_free'], month['known_rank'])
+        # The text-free 课 (r7) is in bucket 1 through its stored count; 天气 (r5) has none and buckets by its text.
+        self.assertEqual(counts, {'1': (3, 2, 2, 1), '2': (2, 1, 2, 0), '3+': (2, 0, 0, 2)})
+        self.assertEqual(sum(b['known_rank'] for b in buckets.values()) + month['length_unavailable'],
+                         month['known_rank'])
         self.assertAlmostEqual(buckets['2']['top3_rate'], 1.0)
-        self.assertAlmostEqual(buckets['1']['top1_wilson_low'], self.quality.wilson(1, 2)[0])
+        self.assertAlmostEqual(buckets['1']['top1_wilson_low'], self.quality.wilson(2, 3)[0])
         self.assertEqual((buckets['3+']['top1_rate'], buckets['3+']['top1_wilson_low']), (0.0, 0.0))
         self.assertNotIn('by_selection_length', buckets['1'])
         self.assertNotIn('text_free', buckets['1'])
+        self.assertNotIn('length_unavailable', buckets['1'])
         # The decision outside the window and the emoji one stay out of the Chinese series.
-        self.assertEqual(trend['series']['overall'][-1]['rolling_28d']['known_rank'], 8)
+        overall = trend['series']['overall'][-1]['rolling_28d']
+        self.assertEqual(overall['known_rank'], 11)
+        # A text-free decision before v4 and an empty selection have no length; a text-mode one before v4 still has.
+        symbols = trend['series']['symbol'][-1]['rolling_28d']
+        self.assertEqual((symbols['known_rank'], symbols['text_free'], symbols['length_unavailable']), (3, 1, 2))
+        self.assertEqual({key: b['known_rank'] for key, b in symbols['by_selection_length'].items()},
+                         {'1': 0, '2': 1, '3+': 0})
+        self.assertEqual(sum(b['known_rank'] for b in overall['by_selection_length'].values())
+                         + overall['length_unavailable'], overall['known_rank'])
+        for point in trend['series']['overall']:
+            for window in ('daily', 'rolling_7d', 'rolling_28d'):
+                metric = point[window]
+                self.assertEqual(sum(b['known_rank'] for b in metric['by_selection_length'].values())
+                                 + metric['length_unavailable'], metric['known_rank'], point['date'])
         # Table and CSV list every leaf, so the interval, paged rate and buckets appear in both.
         for output in (self.run_cli('trend', '--days', '28', '--until', '2026-09-08', db=db),
                        self.run_cli('trend', '--days', '28', '--until', '2026-09-08', '--format', 'csv', db=db)):
@@ -512,6 +551,7 @@ class QueryTests(unittest.TestCase):
         # Eleven known-rank decisions: 使 or 是 or 😀 chosen at rank 4 on page 1, except 是 at rank 1.
         self.assertEqual((month['known_rank'], month['top1_selected'], month['paged_selected']), (11, 1, 10))
         self.assertAlmostEqual(month['paged_rate'], 10 / 11)
+        self.assertEqual(month['length_unavailable'], 0)
         buckets = month['by_selection_length']
         self.assertEqual((buckets['1']['known_rank'], buckets['1']['top1_selected']), (11, 1))
         self.assertEqual((buckets['2']['known_rank'], buckets['2']['top1_rate'], buckets['3+']['top1_wilson_low']),
@@ -807,6 +847,9 @@ class QueryTests(unittest.TestCase):
     def test_text_free_records_keep_rank_metrics(self):
         before = self.result()['coverage']
         self.assertEqual(before['text_free'], 0)
+        def overall():
+            return self.result('trend', '--days', '7', '--until', '2026-09-08')['series']['overall'][-1]['rolling_28d']
+        trend_before = overall()
         self.assertIn('a', [cid for issue in self.result('ranking-issues', '--min-count', '1')['issues'] for cid in issue['composition_ids']])
         db = sqlite3.connect(self.db)
         self.addCleanup(db.close)
@@ -828,6 +871,12 @@ class QueryTests(unittest.TestCase):
                     'top1_matches', 'top1_rate', 'top3_rate', 'top1_match_rate', 'mean_display_rank', 'mean_native_rank'):
             self.assertEqual(after[key], before[key], key)
         self.assertEqual(after['text_free'], 3)
+        # The counts stay when the text goes, so no decision loses its length bucket.
+        self.assertEqual((before['length_unavailable'], after['length_unavailable']), (0, 0))
+        trend_after = overall()
+        self.assertEqual(trend_after['by_selection_length'], trend_before['by_selection_length'])
+        self.assertEqual((trend_before['text_free'], trend_after['text_free'], trend_after['length_unavailable']),
+                         (0, 3, 0))
         issues = self.result('ranking-issues', '--min-count', '1')['issues']
         self.assertFalse({'a', 'c', 'd'} & {cid for issue in issues for cid in issue['composition_ids']},
                          'text-free decisions never form recurring-choice issues')
@@ -975,6 +1024,22 @@ class QueryTests(unittest.TestCase):
             fields = candidate['evidence'].split(',')
             self.assertEqual(len(fields), 8)
             self.assertEqual((candidate['type'], candidate['corrected']), (fields[6], fields[7] == '1'))
+
+    def test_actual_engine_counts_match_the_stored_text(self):
+        with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as db:
+            self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0], 4)
+            self.assertGreater(db.execute(
+                'SELECT count(*) FROM candidate_decisions WHERE selected_text IS NOT NULL').fetchone()[0], 0)
+            self.assertGreater(db.execute("SELECT count(*) FROM commits WHERE text != ''").fetchone()[0], 0)
+            self.assertEqual(db.execute('''SELECT count(*) FROM candidate_decisions WHERE selected_text IS NOT NULL
+                AND selected_character_count IS NOT length(selected_text)''').fetchone()[0], 0)
+            self.assertEqual(db.execute('''SELECT count(*) FROM commits WHERE text != ''
+                AND character_count IS NOT length(text)''').fetchone()[0], 0)
+        # Every row is written by v4 in text mode, so the buckets cover every known-rank decision.
+        week = self.result('trend', '--days', '7', db=ENGINE_DB)['series']['overall'][-1]['rolling_7d']
+        self.assertGreater(week['known_rank'], 0)
+        self.assertEqual(week['length_unavailable'], 0)
+        self.assertEqual(sum(b['known_rank'] for b in week['by_selection_length'].values()), week['known_rank'])
 
     def test_actual_engine_schema_and_controller_cohort(self):
         db=sqlite3.connect(ENGINE_DB.as_uri()+'?mode=ro',uri=True)

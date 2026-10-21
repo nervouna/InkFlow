@@ -7,8 +7,11 @@ enum QualityExport {
         "recording_runs": "id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code",
         "config_revisions": "id fingerprint created_at applied_config_json build_metadata_json engine_version metric_rule_version ranking_fingerprint settings_fingerprint measurement_fingerprint build_identity",
         "compositions": "id run_id started_at ended_at app_bundle_id client_id outcome page_history_truncated dropped_page_count outcome_reason operations_json",
-        "commits": "id composition_id issued_at text kind insertion_issued client_id",
-        "candidate_decisions": "id composition_id config_revision_id commit_id occurred_at sequence trigger outcome selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json page_history_truncated dropped_page_count operations_json regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason",
+        "commits": "id composition_id issued_at text kind insertion_issued client_id character_count",
+        "candidate_decisions": "id composition_id config_revision_id commit_id occurred_at sequence trigger outcome "
+            + "selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json "
+            + "page_history_truncated dropped_page_count operations_json regular_ranked_selection "
+            + "matches_custom_phrase unknown_rank_reason path_reason selected_character_count",
         "effectiveness_events": "id run_id occurred_at source event reason count milliseconds"
     ]
 
@@ -58,7 +61,7 @@ enum QualityExport {
             }
         }
         _ = try query("BEGIN")
-        guard try query("PRAGMA user_version").first?["user_version"] as? Int64 == 3,
+        guard try query("PRAGMA user_version").first?["user_version"] as? Int64 == 4,
               try query("PRAGMA application_id").first?["application_id"] as? Int64 == 0x49465131 else {
             throw ExportError("质量数据库格式不兼容，请升级墨流后重试。")
         }
@@ -103,7 +106,7 @@ enum QualityExport {
         let times = (tables["compositions"] ?? []).compactMap { $0["started_at"] as? String }
             + (tables["effectiveness_events"] ?? []).compactMap { $0["occurred_at"] as? String }
         let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let document: [String: Any] = ["format": "inkflow-quality", "format_version": 1, "schema_version": 3,
+        let document: [String: Any] = ["format": "inkflow-quality", "format_version": 1, "schema_version": 4,
             "source_id": source.lowercased(), "exported_at": formatter.string(from: Date()),
             "range": ["first": times.min().map { $0 as Any } ?? NSNull(), "last": times.max().map { $0 as Any } ?? NSNull()],
             "tables": tables]

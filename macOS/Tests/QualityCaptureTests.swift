@@ -110,6 +110,10 @@ struct QualityCaptureTests {
             let row = db.decisions().last!
             let page = db.page(row)
             check(page.page == 0 && page.candidates.count == 9 && row["selected_text"] == text)
+            check(row["selected_character_count"] == String(text.unicodeScalars.count), "selected count: \(row)")
+            let commit = db.rows("SELECT character_count FROM commits WHERE id = '\(row["commit_id"] ?? "")'")
+            let delivered = String((client.document ?? "").unicodeScalars.count)
+            check(commit.first?["character_count"] == delivered, "commit count: \(commit)")
             for candidate in page.candidates {
                 let fields = (candidate.evidence ?? "").split(separator: ",", omittingEmptySubsequences: false)
                 let consistent = fields.count == 8

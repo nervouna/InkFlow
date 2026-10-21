@@ -42,10 +42,12 @@ Use `timing` for key intervals, last-edit waits and candidate visibility.
 
 Use `replay-cases --output FILE` to export decisions as replay cases for the offline `replay` scorer; the file holds typed text, so keep it outside the repository and delete it after the run (rules and target in [Replay and the first-choice target](../../../Core/Portable/README.md#replay-and-the-first-choice-target)).
 
-Records are text-free by default: ranks, indices, text kinds and timing are kept, but
+Records are text-free by default: ranks, indices, text kinds, timing and the character counts of the
+chosen and committed text are kept, but
 raw input, input before deletion, candidate text, chosen text and preceding context are empty or null and
 each page carries `textCaptured: false`. `trend`, `summary` and `timing` work
-unchanged (Top1 match uses the chosen display rank). `ranking-issues` and the text
+unchanged (Top1 match uses the chosen display rank; the selected-length buckets use the kept counts of
+records written by schema v4, so only older text-free records land in `length_unavailable`). `ranking-issues` and the text
 fields of `inspect` only cover records saved while 「同时保存输入文本」 was on;
 `coverage.text_free` counts the excluded decisions. Say so when it is nonzero.
 

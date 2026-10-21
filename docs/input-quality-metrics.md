@@ -57,7 +57,7 @@ Dimensions, usable on any metric, never inside a formula:
 | Dimension | Values | Source |
 | --- | --- | --- |
 | Text kind | chinese, english, mixed, emoji, symbol, number, other | `text_kind` |
-| Selected length | 1, 2, 3+ characters | selected text |
+| Selected length | 1, 2, 3+ characters | `selected_character_count` (selected text for text-mode rows written before v4) |
 | Code kind | full spelling, abbreviation, corrected spelling, mixed Latin | `corrected`, evidence span, code letters |
 | Candidate provenance | dictionary (`phrase`, `user_table`), learned (`user_phrase`, personal English and mixed types), assembled (`sentence`), completion, custom phrase, English module | `type`, `matches_custom_phrase`, `source` |
 | Position | first segment of the composition, later segment, whole | `sequence`, selected prefix |
@@ -270,7 +270,7 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | Gap | Shape | Enables |
 | --- | --- | --- |
 | Post-commit window | per commit: deletions, forward deletions, undo, direct-text keys and paste counts before the next code, a client change, deactivation or `W` seconds | C-rev, C-partial, R-adj, C-total |
-| Character counts | per commit the committed character count, per decision the selected character count, as integers; text-free records carry neither today (the text is cleared and no length is kept), which is why the per-length buckets of the adopted band need text mode. The integers make the deletion threshold of C-rev and the length buckets available in text-free mode, so the 56-day stability rule no longer depends on text recording | C-rev, C-partial, R1 by length in text-free mode |
+| Character counts | per commit the committed character count (`character_count`), per decision the selected character count (`selected_character_count`), as integers of Unicode scalar values. Recorded since schema v4 in either text mode, so the per-length buckets of the adopted band and the deletion threshold of C-rev no longer need text mode and the 56-day stability rule does not depend on text recording; only text-free records written before v4 lack a length, and `quality.py trend` counts their known-rank decisions as `length_unavailable` | C-rev, C-partial, R1 by length in text-free mode |
 | Pair identity in text-free mode | per decision: keyed hash of the normalized code and of the selected text, key generated once per device beside `quality-source-id` and never exported; literal values in text mode. **This is a privacy decision, not an instrument detail**: the text-free default was adopted deliberately (#54), and a keyed hash of short Chinese words is recoverable by dictionary attack by anyone holding the key on the same machine. The user decides whether the learning metrics are worth it; until then they exist in text mode only, and L-avoid uses its interim proxy | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
 | Learning acts | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, plus the pair hash | L-forget |
 | Trend counters | E-kspc, E-onekey, E-dec, C-pre, C-cancel, C-raw, C-rev, L-avoid, L-over in `quality.py trend` and `summary` | the scorecard |

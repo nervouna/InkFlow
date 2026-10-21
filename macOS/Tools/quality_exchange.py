@@ -48,7 +48,7 @@ def snapshot(path, connect, columns, create_source=False):
         tables = {table: [sanitize(table, row) for row in db.execute(f'SELECT * FROM {table} ORDER BY id')]
                   for table in columns}
     times = [r['started_at'] for r in tables['compositions']] + [r['occurred_at'] for r in tables['effectiveness_events']]
-    return dict(format=FORMAT, format_version=1, schema_version=3,
+    return dict(format=FORMAT, format_version=1, schema_version=4,
                 source_id=source_id(path, create_source),
                 exported_at=datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z'),
                 range=dict(first=min(times) if times else None, last=max(times) if times else None), tables=tables)
@@ -101,8 +101,8 @@ def load(path, columns):
 def validate(document, columns):
     if (not isinstance(document, dict) or document.get('format') != FORMAT
             or type(document.get('format_version')) is not int or document['format_version'] != 1
-            or type(document.get('schema_version')) is not int or document['schema_version'] != 3):
-        raise ValueError('Incompatible format; expected inkflow-quality v1, schema v3.')
+            or type(document.get('schema_version')) is not int or document['schema_version'] != 4):
+        raise ValueError('Incompatible format; expected inkflow-quality v1, schema v4.')
     document['source_id'] = str(uuid.UUID(document['source_id']))
     observed = datetime.fromisoformat(document['exported_at'].replace('Z', '+00:00'))
     if observed.tzinfo is None:
@@ -114,13 +114,14 @@ def validate(document, columns):
         'recording_runs': {'ended_at', 'error_code'},
         'config_revisions': {'ranking_fingerprint', 'settings_fingerprint', 'measurement_fingerprint', 'build_identity'},
         'compositions': {'app_bundle_id', 'client_id', 'outcome_reason'},
-        'commits': {'client_id'},
-        'candidate_decisions': {'commit_id', 'selected_display_index', 'selected_text', 'first_page_json', 'unknown_rank_reason', 'path_reason'},
+        'commits': {'client_id', 'character_count'},
+        'candidate_decisions': {'commit_id', 'selected_display_index', 'selected_text', 'first_page_json',
+                                'unknown_rank_reason', 'path_reason', 'selected_character_count'},
         'effectiveness_events': {'reason', 'milliseconds'},
     }
     integers = {'metric_rule_version', 'error_code', 'page_history_truncated', 'dropped_page_count',
                 'insertion_issued', 'sequence', 'selected_display_index', 'regular_ranked_selection',
-                'matches_custom_phrase', 'count', 'milliseconds'}
+                'matches_custom_phrase', 'count', 'milliseconds', 'character_count', 'selected_character_count'}
     indexes = {}
     for table, fields in columns.items():
         if not isinstance(tables[table], list):
@@ -148,7 +149,8 @@ def validate(document, columns):
                     raise ValueError(f'Integer outside SQLite range in {table}.{field}.')
                 if field in {'page_history_truncated', 'insertion_issued', 'regular_ranked_selection', 'matches_custom_phrase'} and value not in (0, 1):
                     raise ValueError(f'Invalid boolean in {table}.{field}.')
-                if field in {'dropped_page_count', 'sequence', 'selected_display_index'} and value < 0:
+                if field in {'dropped_page_count', 'sequence', 'selected_display_index', 'character_count',
+                             'selected_character_count'} and value < 0:
                     raise ValueError(f'Negative count/index in {table}.{field}.')
                 if field.endswith('_json') and value is not None:
                     decoded = json.loads(value)
