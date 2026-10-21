@@ -1,0 +1,61 @@
+{
+  "note": "Hand-written example of the report format for --score. The committed values are made up; nothing here comes from an input method or a database.",
+  "formatVersion": 1,
+  "generatedAt": "2026-01-01T00:00:00Z",
+  "inputSourceID": "example.input-source",
+  "bundleID": "example.bundle",
+  "inputMethodVersion": "example",
+  "system": "example",
+  "corpusPath": "example",
+  "corpusSHA256": "example",
+  "driverSHA256": "example",
+  "policy": "full code, one Space, read back",
+  "state": {"freshProfile": "yes", "cloud": "off"},
+  "eventPath": "nsapp",
+  "settleMs": 400,
+  "timeoutMs": 3000,
+  "rows": [
+    {
+      "id": "example-hit",
+      "category": "ordinary-control",
+      "input": "zhongguo",
+      "target": "中国",
+      "committed": "中国 ",
+      "trailingSpace": true,
+      "keys": 9,
+      "hit": true,
+      "charAccuracy": 1,
+      "hanCount": 2,
+      "uncommitted": false,
+      "elapsedMs": 850
+    },
+    {
+      "id": "example-partial",
+      "category": "ordinary-control",
+      "input": "shurufa",
+      "target": "输入法",
+      "committed": "书入法",
+      "trailingSpace": false,
+      "keys": 8,
+      "hit": false,
+      "charAccuracy": 0.667,
+      "hanCount": 3,
+      "uncommitted": false,
+      "elapsedMs": 820
+    },
+    {
+      "id": "example-uncommitted",
+      "category": "technical",
+      "input": "API",
+      "target": "API",
+      "committed": "",
+      "trailingSpace": false,
+      "keys": 4,
+      "hit": false,
+      "charAccuracy": 0,
+      "hanCount": 0,
+      "uncommitted": true,
+      "elapsedMs": 3010
+    }
+  ]
+}
