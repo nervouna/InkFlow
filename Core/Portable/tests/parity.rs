@@ -6,6 +6,7 @@ use inkflow_rime::{
     channel::Reply,
     engine::{Configuration, Engine, InputSession},
     preferences::InputPreferences,
+    ranking::is_han,
 };
 use serde_json::{Value, json};
 use std::{
@@ -51,8 +52,7 @@ fn configured(engine: &Arc<Engine>) -> InputSession {
     session
 }
 
-/// The Swift runner's fixed recipe: type, record the first page, find and select the target.
-fn observe(session: &InputSession, input: &str, target: &str, page_limit: usize) -> Value {
+fn type_input(session: &InputSession, input: &str) {
     session.clear().unwrap();
     session.set_preceding_text("").unwrap();
     for byte in input.bytes() {
@@ -66,6 +66,39 @@ fn observe(session: &InputSession, input: &str, target: &str, page_limit: usize)
             "early commit {input}"
         );
     }
+}
+
+/// The Swift runner's retention pass: commit the shown-first of unrelated Han samples, in corpus order
+/// after this sample and wrapping, into the same user directory. Returns the commits made.
+fn retain(session: &InputSession, samples: &[Value], index: usize, count: usize) -> usize {
+    let target = samples[index]["target"].as_str().unwrap();
+    let pool = samples[index + 1..]
+        .iter()
+        .chain(&samples[..index])
+        .filter(|other| {
+            let text = other["target"].as_str().unwrap();
+            text != target && text.chars().all(|c| is_han(c.encode_utf8(&mut [0; 4])))
+        });
+    let mut made = 0;
+    for other in pool.take(count) {
+        let id = other["id"].as_str().unwrap();
+        type_input(session, other["input"].as_str().unwrap());
+        let snapshot = session.snapshot().unwrap();
+        session.select(&snapshot, 0).unwrap();
+        assert!(
+            !session.take_commit().unwrap().is_empty()
+                && session.snapshot().unwrap().preedit.is_empty(),
+            "retention commit did not consume complete input: {id}"
+        );
+        session.clear().unwrap();
+        made += 1;
+    }
+    made
+}
+
+/// The Swift runner's fixed recipe: type, record the first page, find and select the target.
+fn observe(session: &InputSession, input: &str, target: &str, page_limit: usize) -> Value {
+    type_input(session, input);
     let first_page = session.snapshot().unwrap();
     let (mut offset, mut paging, mut exhausted, mut rank, mut committed) =
         (0, 0, false, None, None);
@@ -129,6 +162,9 @@ fn swift_quality_baseline() {
     assert_eq!(corpus["candidateCount"], 9);
     let page_limit = corpus["pageLimit"].as_u64().unwrap() as usize;
     let selections = corpus["learningSelections"].as_u64().unwrap() as usize;
+    let retention = corpus["retentionCommits"].as_u64().unwrap() as usize;
+    assert_eq!(corpus["formatVersion"], 2);
+    assert!(retention > 0);
     let expected: Vec<(&str, bool)> = InputPreferences::default().recorded_values();
     for (name, value) in expected {
         assert_eq!(baseline["inputOptions"][name], json!(value), "{name}");
@@ -136,16 +172,18 @@ fn swift_quality_baseline() {
     let users = scratch("quality-baseline");
     let mut results = Vec::new();
     let mut drift = Vec::new();
-    for (index, sample) in corpus["samples"].as_array().unwrap().iter().enumerate() {
+    let samples = corpus["samples"].as_array().unwrap();
+    for (index, sample) in samples.iter().enumerate() {
         let id = sample["id"].as_str().unwrap();
         let input = sample["input"].as_str().unwrap();
         let target = sample["target"].as_str().unwrap();
         let user = users.join(id);
-        let (initial, training) = {
+        let (initial, training, training_observations) = {
             let engine = engine(&resources, &user);
             let session = configured(&engine);
             let initial = observe(&session, input, target, page_limit);
             let mut training = 0;
+            let mut observations = Vec::new();
             if !initial["committedText"].is_null() {
                 training = 1;
                 for _ in 1..selections {
@@ -155,20 +193,34 @@ fn swift_quality_baseline() {
                         json!(target),
                         "learning target disappeared: {id}"
                     );
+                    observations.push(repeat);
                     training += 1;
                 }
             }
-            (initial, training)
+            (initial, training, observations)
         };
         let engine = engine(&resources, &user);
-        let learned = observe(&configured(&engine), input, target, page_limit);
+        let session = configured(&engine);
+        let learned = observe(&session, input, target, page_limit);
+        let retention_commits = retain(&session, samples, index, retention);
+        let retained = observe(&session, input, target, page_limit);
+        drop(session);
         drop(engine);
-        let result = json!({"sample": sample, "initial": initial, "trainingCommits": training, "learned": learned});
+        let result = json!({
+            "sample": sample,
+            "initial": initial,
+            "trainingCommits": training,
+            "training": training_observations,
+            "learned": learned,
+            "retentionCommits": retention_commits,
+            "retained": retained,
+        });
         let recorded = &baseline["results"][index];
         println!(
-            "{id}: rank {} → {}; training commits {}{}",
+            "{id}: rank {} → {} → {}; training commits {}{}",
             initial["targetRank"],
             learned["targetRank"],
+            retained["targetRank"],
             training,
             if *recorded == result { "" } else { " DRIFT" }
         );
@@ -192,7 +244,7 @@ fn swift_quality_baseline() {
         output.display()
     );
     println!(
-        "PASS Swift/Rust quality baseline: {} samples, initial and persisted learned states",
+        "PASS Swift/Rust quality baseline: {} samples, learning curve and persisted learned states",
         results.len()
     );
 }

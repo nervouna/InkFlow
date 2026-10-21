@@ -183,7 +183,7 @@ whose first observation is within 7 days of the window start, and exclude nothin
 | L-over | Learned-leader miss rate | decisions whose shown-first has learned provenance and the user chose another candidate / decisions whose shown-first has learned provenance; reported beside the same rate for dictionary-led lists | decision | F P | error ratio (Suzuki & Gao 2005) | a learned leader displacing a right dictionary choice is 误学; replay computes ER directly from cold and trained arms |
 | L-reuse | Learned-word reuse rate | words first chosen in days 1–14 that recur in days 15–28 / words first chosen in days 1–14 | word | F | reused-word rate (Tanaka-Ishii 2003) | low values mean the user dictionary fills with one-off words |
 | L-forget | Forget correctness | after a `forgotten` act: pairs that reappear at rank 1 within the window (forget failed) and pairs the user selects again (forget regretted), each / forgotten pairs | pair | F B | none standard | needs learning acts recorded |
-| L-cold | Learning curve | B only: rank of the target cold, after 1, 2 and 5 selections, and after `M` unrelated commits; Eb and U per sample | sample | B | Jiang 2011 | the baseline fixture records cold and after-5 today |
+| L-cold | Learning curve | B only: rank of the target cold, after 1, 2 and 5 selections, and after `M` unrelated commits; Eb and U per sample | sample | B | Jiang 2011 | the baseline fixture records cold, after 1-4 selections, learned (after 5 and a restart) and retained |
 
 The learning headline is L-avoid, read with L-over: a low avoidable-miss rate with a low learned-leader miss rate
 means the engine learns what it should and nothing else. A low L-avoid with a high L-over means it over-learns.
@@ -276,7 +276,6 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | Learning acts (counts recorded, #138) | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, as counts with no text; the pair hash of each act is open with #137 | L-forget |
 | Trend counters | C-rev in `quality.py trend` and `summary` | the scorecard; enabled by the post-commit window and character counts rows |
 | Replay arms for learning (recorded, #140) | cold and trained arms in engine mode (`replay engine --train`, [Learning arms](../Core/Portable/README.md#learning-arms)); ER between them, L-over per arm | L-over, L-cold acceptance |
-| Benchmark schedule | selection counts 1, 2, 5 and a retention pass in the baseline runner; a black-box driver for other input methods under `Experiments/` | section 7 |
 
 ## Sources
 
