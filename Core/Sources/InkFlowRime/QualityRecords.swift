@@ -614,6 +614,8 @@ package struct QualityDecision: Codable, Equatable, Sendable {
     package var outcome: QualityDecisionOutcome
     package var selectedDisplayIndex: Int? = nil
     package var selectedText: String? = nil
+    /// Unicode scalars of `selectedText` at construction; survives text-free redaction. Nil when there was no text.
+    package var selectedCharacterCount: Int? = nil
     package var textKind: QualityTextKind = .unknown
     package var commitID: String? = nil
     package var operations = QualityOperations()
@@ -628,16 +630,61 @@ package struct QualityDecision: Codable, Equatable, Sendable {
     package var visitedPages: [QualityPageSnapshot] = []
     package var pageHistoryTruncated = false
     package var droppedPageCount = 0
+
+    package init(
+        id: String = UUID().uuidString, occurredAt: Date = Date(), sequence: Int, trigger: QualityTrigger,
+        outcome: QualityDecisionOutcome, selectedDisplayIndex: Int? = nil, selectedText: String? = nil,
+        textKind: QualityTextKind = .unknown, commitID: String? = nil, operations: QualityOperations = .init(),
+        regularRankedSelection: Bool = false, matchesCustomPhrase: Bool = false, unknownRankReason: String? = nil,
+        pathReason: String? = nil, snapshot: QualityPageSnapshot, firstPage: QualityPageSnapshot? = nil,
+        visitedPages: [QualityPageSnapshot] = [], pageHistoryTruncated: Bool = false, droppedPageCount: Int = 0
+    ) {
+        self.id = id
+        self.occurredAt = occurredAt
+        self.sequence = sequence
+        self.trigger = trigger
+        self.outcome = outcome
+        self.selectedDisplayIndex = selectedDisplayIndex
+        self.selectedText = selectedText
+        self.selectedCharacterCount = selectedText?.unicodeScalars.count
+        self.textKind = textKind
+        self.commitID = commitID
+        self.operations = operations
+        self.regularRankedSelection = regularRankedSelection
+        self.matchesCustomPhrase = matchesCustomPhrase
+        self.unknownRankReason = unknownRankReason
+        self.pathReason = pathReason
+        self.snapshot = snapshot
+        self.firstPage = firstPage
+        self.visitedPages = visitedPages
+        self.pageHistoryTruncated = pageHistoryTruncated
+        self.droppedPageCount = droppedPageCount
+    }
 }
 
 package struct QualityCommit: Codable, Equatable, Sendable {
     package var id = UUID().uuidString
     package var issuedAt = Date()
     package var text: String
+    /// Unicode scalars of `text` at construction; survives text-free redaction.
+    package var characterCount: Int
     package var kind: QualityCommitKind
     /// An insertText call was issued; this is not independent observation of the document.
     package var insertionIssued: Bool
     package var clientID: String? = nil
+
+    package init(
+        id: String = UUID().uuidString, issuedAt: Date = Date(), text: String, kind: QualityCommitKind,
+        insertionIssued: Bool, clientID: String? = nil
+    ) {
+        self.id = id
+        self.issuedAt = issuedAt
+        self.text = text
+        self.characterCount = text.unicodeScalars.count
+        self.kind = kind
+        self.insertionIssued = insertionIssued
+        self.clientID = clientID
+    }
 }
 
 package struct QualityEnvelope: Codable, Equatable, Sendable {
@@ -773,7 +820,7 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
 }
 
 package enum QualityLimits {
-    package static let databaseSchemaVersion = 3
+    package static let databaseSchemaVersion = 4
     package static let envelopeBytes = 64 * 1024
     package static let configurationBytes = 256 * 1024
     package static let bufferedBytes = 8 * 1024 * 1024

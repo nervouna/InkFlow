@@ -22,8 +22,11 @@ database or empty filter result, exits 0. Help is available at each command.
   `top1_wilson_high` and so on; null when the rate is null), `paged_selected` and `paged_rate`
   (known-rank decisions whose snapshot `page` is above 0, over `known_rank`), and
   `by_selection_length`: the same counters, rates and intervals for selected texts of 1, 2 and
-  3 or more characters. Text-free decisions have no length; `text_free` counts the known-rank
-  ones beside the buckets.
+  3 or more characters (Unicode scalar values), in either text mode. A decision written by schema v4
+  or later has `selected_character_count`; an older text-mode decision falls back to the length of
+  its selected text. `length_unavailable` counts the known-rank decisions with no length (an older
+  text-free decision, or a zero count) beside the buckets, so the bucket `known_rank` values plus
+  `length_unavailable` equal `known_rank`. `text_free` counts the known-rank text-free decisions.
 - `ranking-issues`: coverage plus recurring chosen-text/first-page-top1 differences.
   Defaults `--min-count 3 --limit 50`; both accept positive integers.
 - `inspect COMPOSITION_ID`: composition, selected decisions, all its commits, and
@@ -121,6 +124,7 @@ cancelled and interrupted. Unknown paths never become successful choices.
 | mean_native_rank | Mean of available, internally consistent native ranks among known_rank |
 | truncated / dropped_page_count | Filtered decision history flags and removed snapshot-history entries |
 | text_free | Decisions whose pages carry `textCaptured: false`; outside ranking-issues and without inspectable text |
+| length_unavailable | known_rank without a selected length: no `selected_character_count` and no selected text (an older text-free record), or a zero count; outside the length buckets |
 
 A zero denominator yields null/N/A, never 0%. `rank_counts` enumerates each exact
 global display rank for known_rank in each group. Page and index are zero-based;
@@ -169,11 +173,12 @@ aggregates it yet; `inspect` shows it.
 
 ## Storage, identity and coverage limits
 
-Schema v3 has application ID `0x49465131` (IFQ1). The query requires v3, checks the
+Schema v4 has application ID `0x49465131` (IFQ1). The query requires v4, checks the
 identity, required columns and exact six table names, and accepts measurement
 cohorts distinguished by their persisted fingerprints. A v1 database must first be
-migrated by the writer; v2 is migrated by the writer by adding only the effectiveness
-table. The query never creates or migrates a database. Foreign, malformed
+migrated by the writer; v2 is migrated by the writer by adding the effectiveness
+table, and v3 by adding two columns, `commits.character_count` and
+`candidate_decisions.selected_character_count`, which stay NULL on rows written before v4. The query never creates or migrates a database. Foreign, malformed
 or unknown schemas are not repaired or reset. The canonical writer/models are
 `Core/Sources/InkFlowRime/QualityStore.swift` and `QualityRecords.swift`; query fixture tests
 extract their current DDL and full acceptance verifies actual engine-written DDL.
@@ -181,8 +186,8 @@ extract their current DDL and full acceptance verifies actual engine-written DDL
 | Table | Role |
 | --- | --- |
 | compositions | Separate ID, run, start/end, app/client, outcome/reason, full operation totals, history truncation |
-| candidate_decisions | ID and sequence, composition/config/commit links, trigger/outcome, selected text/index/kind, custom flag, unknown/path reasons, operations, pre-action/first-page/visited-page JSON |
-| commits | Separate ID, same-composition link, time, text, kind, insertion issuance and client |
+| candidate_decisions | ID and sequence, composition/config/commit links, trigger/outcome, selected text/index/kind, selected character count, custom flag, unknown/path reasons, operations, pre-action/first-page/visited-page JSON |
+| commits | Separate ID, same-composition link, time, text, character count, kind, insertion issuance and client |
 | config_revisions | Capture UUID, legacy stable fingerprint, ranking/settings/measurement/build identities, applied config, build/resource metadata, engine and metric-rule versions |
 | recording_runs | Writer lifetime, engine/build identity, status/error and best-effort cumulative counters |
 | effectiveness_events | Content-free time, closed source/event/rejection labels, bounded count and optional bounded milliseconds; no input, transcript, correction, candidate or document text |
@@ -197,7 +202,7 @@ unavailable because effectiveness events deliberately carry no candidate identit
 
 New page JSON stores `configurationRevisionID` and omits the repeated
 `configuration` payload. `configurations` in inspect resolves every retained page
-reference. Legacy full page JSON remains readable after its database is migrated to v3;
+reference. Legacy full page JSON remains readable after its database is migrated to v4;
 compact Swift decoding requires an explicit revision map and fails for missing or
 conflicting configuration evidence. No defaults or database migration are used.
 
@@ -288,7 +293,7 @@ decision, then the whole matching composition's timing is included. No timing
 field or unsupported version means unavailable evidence, not a zero duration.
 Coverage reports missing/unsupported timing, ended versus unfinished snapshots,
 truncated compositions, dropped keys and retained key counts. Existing commands
-retain their result-format contract, while database compatibility is strictly v3.
+retain their result-format contract, while database compatibility is strictly v4.
 
 All timing units are **seconds**. `key_intervals.all` and category/repeat groups
 use the stored interval of each retained key, including navigation and finishing

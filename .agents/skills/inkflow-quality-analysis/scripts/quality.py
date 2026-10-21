@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only queries for InkFlow quality schema v3 (stdlib only)."""
+"""Read-only queries for InkFlow quality schema v4 (stdlib only)."""
 import argparse
 from contextlib import closing
 import csv
@@ -27,8 +27,12 @@ TABLE_COLUMNS = {
                          'metric_rule_version ranking_fingerprint settings_fingerprint '
                          'measurement_fingerprint build_identity'),
     'compositions': 'id run_id started_at ended_at app_bundle_id client_id outcome page_history_truncated dropped_page_count outcome_reason operations_json',
-    'commits': 'id composition_id issued_at text kind insertion_issued client_id',
-    'candidate_decisions': 'id composition_id config_revision_id commit_id occurred_at sequence trigger outcome selected_display_index selected_text text_kind snapshot_json first_page_json visited_pages_json page_history_truncated dropped_page_count operations_json regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason',
+    'commits': 'id composition_id issued_at text kind insertion_issued client_id character_count',
+    'candidate_decisions': ('id composition_id config_revision_id commit_id occurred_at sequence trigger outcome '
+                            'selected_display_index selected_text text_kind snapshot_json first_page_json '
+                            'visited_pages_json page_history_truncated dropped_page_count operations_json '
+                            'regular_ranked_selection matches_custom_phrase unknown_rank_reason path_reason '
+                            'selected_character_count'),
     'effectiveness_events': 'id run_id occurred_at source event reason count milliseconds',
 }
 # A first page belongs to a snapshot when these agree.
@@ -54,6 +58,7 @@ COUNTERS = {
     'top1_matches': 'valid AND display_rank IS NOT NULL AND top1_match',
     'truncated': 'page_history_truncated=1',
     'text_free': 'text_captured=0',
+    'length_unavailable': 'valid AND display_rank IS NOT NULL AND selected_length IS NULL',
 }
 
 
@@ -96,16 +101,16 @@ def connect(path):
     try:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
-        if (db.execute('PRAGMA user_version').fetchone()[0] != 3
+        if (db.execute('PRAGMA user_version').fetchone()[0] != 4
                 or db.execute('PRAGMA application_id').fetchone()[0] != 0x49465131):
-            raise QueryError('Database is incompatible: expected InkFlow quality schema v3 (IFQ1).')
+            raise QueryError('Database is incompatible: expected InkFlow quality schema v4 (IFQ1).')
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table' AND substr(name,1,7)!='sqlite_'")}
         if tables != set(TABLE_COLUMNS):
             raise QueryError('Database is incompatible: expected the six InkFlow quality tables.')
         for table, columns in TABLE_COLUMNS.items():
             actual = {r['name'] for r in db.execute(f'PRAGMA table_info({table})')}
             if set(columns.split()) != actual:
-                raise QueryError(f'Database is incompatible: unexpected v3 columns in {table}.')
+                raise QueryError(f'Database is incompatible: unexpected v4 columns in {table}.')
         db.execute("SELECT json_extract('{\"v\":1}', '$.v')").fetchone()
         return db
     except Exception:
@@ -195,6 +200,8 @@ def ctes(args):
     ), observations AS (
         SELECT *, COALESCE(regular_committed AND insertion_issued=1
           AND presentation IN ('candidates_requested','panel_show_issued'),0) AS valid,
+          NULLIF(COALESCE(selected_character_count,
+                          CASE WHEN text_captured=0 THEN NULL ELSE length(selected_text) END), 0) AS selected_length,
           CASE WHEN text_captured=0 THEN display_rank=1 ELSE selected_text=first_page_top1 END AS top1_match
         FROM ranked
     )
@@ -362,7 +369,7 @@ def effectiveness(db, args):
 
 TREND_COUNTERS = ('decisions', 'valid', 'known_rank', 'unknown_rank', 'comparable',
                   'first_page_unavailable', 'top1_selected', 'top3_selected', 'top1_matches',
-                  'paged_selected', 'text_free')
+                  'paged_selected', 'text_free', 'length_unavailable')
 SELECTION_LENGTHS = ('1', '2', '3+')
 Z95 = NormalDist().inv_cdf(0.975)
 
@@ -416,11 +423,12 @@ def trend_metric(items, lengths=True):
     result['measurement_fingerprints'] = sorted(known)
     result['unknown_measurement_decisions'] = unknown
     if lengths:
-        # Text-free decisions have no length; their known-rank count (`text_free`) sits beside the buckets.
+        # Known-rank decisions without a length (`length_unavailable`) sit beside the buckets.
         result['by_selection_length'] = {}
         for length in SELECTION_LENGTHS:
             bucket = trend_metric([item.get('_lengths', {}).get(length, {}) for item in items], lengths=False)
             del bucket['text_free']
+            del bucket['length_unavailable']
             result['by_selection_length'][length] = bucket
     return result
 
@@ -456,9 +464,10 @@ def trend(db, args):
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND top1_match),0) AS top1_matches",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND page>0),0) AS paged_selected",
         "COALESCE(SUM(valid AND display_rank IS NOT NULL AND text_captured=0),0) AS text_free",
+        "COALESCE(SUM(valid AND display_rank IS NOT NULL AND selected_length IS NULL),0) AS length_unavailable",
     ])
-    length = """CASE WHEN text_captured=0 THEN NULL WHEN length(selected_text)=1 THEN '1'
-        WHEN length(selected_text)=2 THEN '2' WHEN length(selected_text)>=3 THEN '3+' END"""
+    length = """CASE WHEN selected_length=1 THEN '1' WHEN selected_length=2 THEN '2'
+        WHEN selected_length>=3 THEN '3+' END"""
     grouped = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,
         text_kind,measurement_fingerprint,{length} AS selection_length,{fields} FROM observations
         GROUP BY local_day,text_kind,measurement_fingerprint,selection_length

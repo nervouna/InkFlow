@@ -590,11 +590,11 @@ private final class QualityDatabase: @unchecked Sendable {
                     try validateSchema()
                     return
                 }
-                for sql in Self.creationOrder(schema: Self.schemaV3) { try execute(sql) }
+                for sql in Self.creationOrder(schema: Self.schemaV4) { try execute(sql) }
                 for (name, column) in Self.layeredIndexes.sorted(by: { $0.key < $1.key }) {
                     try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
                 }
-                try validateTopology(version: "3")
+                try validateTopology(version: "4")
                 try execute("PRAGMA application_id = \(Self.applicationID)")
                 try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
                 try execute("COMMIT")
@@ -604,7 +604,7 @@ private final class QualityDatabase: @unchecked Sendable {
         guard identity == String(Self.applicationID) else {
             throw QualityDatabaseError(code: Self.unsupportedSchema)
         }
-        if version == "1" || version == "2" {
+        if ["1", "2", "3"].contains(version) {
             try migrate(from: version)
             return
         }
@@ -624,7 +624,7 @@ private final class QualityDatabase: @unchecked Sendable {
                 rollback()
                 return
             }
-            guard ["1", "2"].contains(lockedVersion), lockedIdentity == String(Self.applicationID) else {
+            guard ["1", "2", "3"].contains(lockedVersion), lockedIdentity == String(Self.applicationID) else {
                 throw QualityDatabaseError(code: Self.unsupportedSchema)
             }
             // Legacy ownership must be exact before the first ALTER/CREATE. Unknown
@@ -639,9 +639,16 @@ private final class QualityDatabase: @unchecked Sendable {
                     try execute("CREATE INDEX \(name) ON config_revisions(\(column))")
                 }
             }
-            try execute(Self.effectivenessTable)
-            try execute(Self.effectivenessTimeIndex)
-            try validateTopology(version: "3")
+            if lockedVersion != "3" {
+                try execute(Self.effectivenessTable)
+                try execute(Self.effectivenessTimeIndex)
+            }
+            try execute("ALTER TABLE commits ADD COLUMN character_count INTEGER CHECK(character_count >= 0)")
+            try execute("""
+                ALTER TABLE candidate_decisions ADD COLUMN selected_character_count INTEGER
+                    CHECK(selected_character_count >= 0)
+                """)
+            try validateTopology(version: "4")
             try execute("PRAGMA user_version = \(QualityLimits.databaseSchemaVersion)")
             try inject(.beforeMigrationCommit)
             try execute("COMMIT")
@@ -668,7 +675,9 @@ private final class QualityDatabase: @unchecked Sendable {
         if version != "1" {
             for (name, column) in Self.layeredIndexes { indexes[name] = [column] }
         }
-        if version == "3" { indexes["effectiveness_time_source"] = ["occurred_at", "source", "event"] }
+        if version == "3" || version == "4" {
+            indexes["effectiveness_time_source"] = ["occurred_at", "source", "event"]
+        }
         var expectedObjects = columns.keys.map { ["table", $0] }
         expectedObjects.append(contentsOf: indexes.keys.map { ["index", $0] })
         expectedObjects.sort {
@@ -797,9 +806,14 @@ private final class QualityDatabase: @unchecked Sendable {
         try inject(.afterComposition)
         // Commit parents precede decision children; the composite FK prevents cross-composition links.
         for commit in envelope.commits {
-            try execute("INSERT INTO commits (id, composition_id, issued_at, text, kind, insertion_issued, client_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            try execute("""
+                INSERT INTO commits (id, composition_id, issued_at, text, kind, insertion_issued, client_id,
+                                     character_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                         [.text(commit.id), .text(composition.id), .text(QualityJSON.timestamp(commit.issuedAt)),
-                         .text(commit.text), .text(commit.kind.rawValue), .integer(commit.insertionIssued ? 1 : 0), .optional(commit.clientID)])
+                         .text(commit.text), .text(commit.kind.rawValue), .integer(commit.insertionIssued ? 1 : 0),
+                         .optional(commit.clientID), .integer(commit.characterCount)])
         }
         for decision in envelope.decisions {
             // An unchanged revision can be referenced without re-sending it. Never accept a
@@ -813,15 +827,26 @@ private final class QualityDatabase: @unchecked Sendable {
                     throw QualityDatabaseError(code: SQLITE_MISMATCH, identityFailure: "missing layered revision identity")
                 }
             }
-            try execute("INSERT INTO candidate_decisions (id, composition_id, config_revision_id, commit_id, occurred_at, sequence, trigger, outcome, selected_display_index, selected_text, text_kind, snapshot_json, first_page_json, visited_pages_json, page_history_truncated, dropped_page_count, operations_json, regular_ranked_selection, matches_custom_phrase, unknown_rank_reason, path_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            try execute("""
+                INSERT INTO candidate_decisions (id, composition_id, config_revision_id, commit_id, occurred_at,
+                    sequence, trigger, outcome, selected_display_index, selected_text, text_kind, snapshot_json,
+                    first_page_json, visited_pages_json, page_history_truncated, dropped_page_count, operations_json,
+                    regular_ranked_selection, matches_custom_phrase, unknown_rank_reason, path_reason,
+                    selected_character_count)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                         [.text(decision.id), .text(composition.id), .text(decision.snapshot.configurationRevisionID),
-                         .optional(decision.commitID), .text(QualityJSON.timestamp(decision.occurredAt)), .integer(decision.sequence),
-                         .text(decision.trigger.rawValue), .text(decision.outcome.rawValue), .optional(decision.selectedDisplayIndex),
-                         .optional(decision.selectedText), .text(decision.textKind.rawValue), .text(try json(decision.snapshot)),
-                         try decision.firstPage.map { .text(try json($0)) } ?? .null, .text(try json(decision.visitedPages)),
+                         .optional(decision.commitID), .text(QualityJSON.timestamp(decision.occurredAt)),
+                         .integer(decision.sequence), .text(decision.trigger.rawValue),
+                         .text(decision.outcome.rawValue), .optional(decision.selectedDisplayIndex),
+                         .optional(decision.selectedText), .text(decision.textKind.rawValue),
+                         .text(try json(decision.snapshot)),
+                         try decision.firstPage.map { .text(try json($0)) } ?? .null,
+                         .text(try json(decision.visitedPages)),
                          .integer(decision.pageHistoryTruncated ? 1 : 0), .integer(decision.droppedPageCount),
                          .text(try json(decision.operations)), .integer(decision.regularRankedSelection ? 1 : 0),
-                         .integer(decision.matchesCustomPhrase ? 1 : 0), .optional(decision.unknownRankReason), .optional(decision.pathReason)])
+                         .integer(decision.matchesCustomPhrase ? 1 : 0), .optional(decision.unknownRankReason),
+                         .optional(decision.pathReason), .optional(decision.selectedCharacterCount)])
         }
     }
 
@@ -1019,7 +1044,10 @@ private final class QualityDatabase: @unchecked Sendable {
         var v3 = v2
         v3["effectiveness_events"] = ["id", "run_id", "occurred_at", "source", "event", "reason", "count",
                                       "milliseconds"]
-        return ["1": v1, "2": v2, "3": v3]
+        var v4 = v3
+        v4["commits"] = common["commits"]! + ["character_count"]
+        v4["candidate_decisions"] = common["candidate_decisions"]! + ["selected_character_count"]
+        return ["1": v1, "2": v2, "3": v3, "4": v4]
     }()
 
     private static let schemaV2: [String: String] = {
@@ -1052,6 +1080,39 @@ private final class QualityDatabase: @unchecked Sendable {
         var schema = schemaV2
         schema["effectiveness_events"] = effectivenessTable
         schema["effectiveness_time_source"] = effectivenessTimeIndex
+        return schema
+    }()
+
+    private static let schemaV4: [String: String] = {
+        var schema = schemaV3
+        schema["commits"] = """
+        CREATE TABLE commits (
+            id TEXT PRIMARY KEY NOT NULL, composition_id TEXT NOT NULL REFERENCES compositions(id),
+            issued_at TEXT NOT NULL, text TEXT NOT NULL, kind TEXT NOT NULL,
+            insertion_issued INTEGER NOT NULL CHECK(insertion_issued IN (0,1)), client_id TEXT,
+            character_count INTEGER CHECK(character_count >= 0),
+            UNIQUE(id, composition_id)
+        )
+        """
+        schema["candidate_decisions"] = """
+        CREATE TABLE candidate_decisions (
+            id TEXT PRIMARY KEY NOT NULL, composition_id TEXT NOT NULL REFERENCES compositions(id),
+            config_revision_id TEXT NOT NULL REFERENCES config_revisions(id), commit_id TEXT,
+            occurred_at TEXT NOT NULL, sequence INTEGER NOT NULL, trigger TEXT NOT NULL, outcome TEXT NOT NULL,
+            selected_display_index INTEGER, selected_text TEXT, text_kind TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL, first_page_json TEXT, visited_pages_json TEXT NOT NULL,
+            page_history_truncated INTEGER NOT NULL CHECK(page_history_truncated IN (0,1)),
+            dropped_page_count INTEGER NOT NULL CHECK(dropped_page_count >= 0),
+            operations_json TEXT NOT NULL,
+            regular_ranked_selection INTEGER NOT NULL CHECK(regular_ranked_selection IN (0,1)),
+            matches_custom_phrase INTEGER NOT NULL CHECK(matches_custom_phrase IN (0,1)),
+            unknown_rank_reason TEXT, path_reason TEXT,
+            selected_character_count INTEGER CHECK(selected_character_count >= 0),
+            UNIQUE(composition_id, sequence),
+            FOREIGN KEY(commit_id, composition_id) REFERENCES commits(id, composition_id),
+            CHECK(outcome != 'committed' OR commit_id IS NOT NULL)
+        )
+        """
         return schema
     }()
 }
