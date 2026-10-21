@@ -497,11 +497,13 @@ package enum QualityEffectivenessSource: String, Codable, Sendable {
     case voiceCorrection = "voice_correction"
     case voiceAlias = "voice_alias"
     case canonicalLexicon = "canonical_lexicon"
+    case candidateLearning = "candidate_learning"
 }
 
 package enum QualityEffectivenessKind: String, Codable, Sendable {
     case finalized, detected, learned, rejected, hit
     case laterReuse = "later_reuse"
+    case forgotten, deleted, restored
 }
 
 package enum QualityEffectivenessReason: String, Codable, Sendable {
@@ -533,6 +535,7 @@ package struct QualityEffectivenessEvent: Equatable, Sendable {
         case .voiceSession: event == .finalized
         case .voiceCorrection: [.detected, .learned, .rejected].contains(event)
         case .voiceAlias, .canonicalLexicon: [.hit, .laterReuse].contains(event)
+        case .candidateLearning: [.forgotten, .deleted, .restored].contains(event)
         }
         guard pairing else { return false }
         return event == .rejected ? reason != nil : reason == nil
@@ -939,7 +942,7 @@ package enum QualityLimits {
     package static let bufferedEffectivenessEvents = 256
     package static let effectivenessMaxCount = 64
     package static let effectivenessMaxMilliseconds = 60_000
-    package static let effectivenessRetentionRows = 4_096
+    package static let effectivenessRetentionRows = 16_384
     package static let effectivenessRetentionDays = 90
     package static let rawRetentionDays = 28
     package static let maintenanceInterval: TimeInterval = 3_600

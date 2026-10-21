@@ -247,6 +247,10 @@ package final class QualityRecorder {
         guard let operation = inProgress else { return }
         inProgress = nil
         let before = operation.before
+        // The engine forgets the highlighted candidate on Shift+Backspace whenever it shows candidates.
+        if case .key(0xff08, 1, _) = operation.action, !before.candidates.isEmpty, handled {
+            recordEffectiveness(.init(source: .candidateLearning, event: .forgotten))
+        }
         observeWindow(operation.action, before: before, after: snapshot, handled: handled,
                       at: monotonicStart + operation.entered)
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||

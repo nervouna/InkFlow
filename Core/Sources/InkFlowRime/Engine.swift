@@ -151,6 +151,11 @@ package final class IFEngine {
     /// The process owns recording across native dictionary replacement and recovery.
     package static func configureQualityRecording(_ store: QualityStore?) { productionQualityStore = store }
 
+    /// Content-free counts from outside the recorder, such as the Settings learning management.
+    package static func recordEffectiveness(_ event: QualityEffectivenessEvent) {
+        _ = productionQualityStore?.submit(event)
+    }
+
     /// Standalone startup retains the existing explicit quality-store injection.
     package static func start(shared: String, user: String, qualityStore: QualityStore? = nil) throws {
         if ready { return }

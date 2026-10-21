@@ -243,13 +243,16 @@ extract their current DDL and full acceptance verifies actual engine-written DDL
 | commits | Separate ID, same-composition link, time, text, character count, kind, insertion issuance and client |
 | config_revisions | Capture UUID, legacy stable fingerprint, ranking/settings/measurement/build identities, applied config, build/resource metadata, engine and metric-rule versions |
 | recording_runs | Writer lifetime, engine/build identity, status/error and best-effort cumulative counters |
-| effectiveness_events | Content-free time, closed source/event/rejection labels, bounded count and optional bounded milliseconds; no input, transcript, correction, candidate or document text |
+| effectiveness_events | Content-free time, closed source/event/rejection labels (`candidate_learning` for learning acts), bounded count and optional bounded milliseconds; no input, transcript, correction, candidate or document text |
 
 Summary reports these events under `learning_effectiveness`, separate from candidate
 accuracy. Voice finalized sessions are the correction-detection denominator, detected
 corrections are the learning denominator, exact alias matches are the alias-reuse
 denominator, and deduplicated personal-exact opportunities are the canonical-reuse
 denominator. Rejection counts are grouped only by the closed reason label.
+Learning acts are plain counts under `candidate_learning`, with no rate: `forgotten`
+for Shift+Backspace on shown candidates, and `deleted` and `restored` for English
+entries in Settings. Voice-alias deletions are not recorded.
 Unavailable denominators return `null`; candidate-specific filters make this section
 unavailable because effectiveness events deliberately carry no candidate identity.
 

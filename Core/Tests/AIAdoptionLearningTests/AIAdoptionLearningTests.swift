@@ -1,6 +1,7 @@
 import InkFlowRime
 import InkFlowDomain
 import Foundation
+import SQLite3
 #if SWIFT_PACKAGE
 @testable import InkFlowDomain
 @testable import InkFlowRime
@@ -170,6 +171,14 @@ struct AIAdoptionLearningTests {
     }
 
     @MainActor private static func personalManagement(engine: IFEngine) async throws {
+        // Learning acts are counted in a quality store of their own, outside the Rime user directory.
+        let scratch = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ai-personal-management-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: scratch) }
+        let qualityURL = scratch.appendingPathComponent("quality.sqlite3")
+        let store = QualityStore(url: qualityURL, engineVersion: "test", buildMetadata: nil)
+        IFEngine.configureQualityRecording(store)
         func verify(_ value: Bool, _ message: String) { check(value, message) }
         func entry(_ source: IFEngine.PersonalLearningEntry.Source) throws -> IFEngine.PersonalLearningEntry {
             guard let result = try IFEngine.personalLearningEntries().first(where: { $0.source == source && $0.text == "Codex" }) else {
@@ -220,6 +229,28 @@ struct AIAdoptionLearningTests {
         engine.key(0xff08)
         try await Task.sleep(for: .milliseconds(4100))
         _ = try IFEngine.personalLearningEntries()
+        // Only the English deletion and its restoration are learning acts: voice aliases and failed undos are not.
+        await store.flush()
+        IFEngine.configureQualityRecording(nil)
+        _ = await store.close()
+        check(learningActRows(qualityURL) == ["deleted:1", "restored:1"],
+              "Settings deletions count English acts only: \(learningActRows(qualityURL))")
+    }
+
+    /// The `candidate_learning` rows of a closed quality store, as `event:count` in insertion order.
+    @MainActor private static func learningActRows(_ url: URL) -> [String] {
+        var db: OpaquePointer?
+        check(sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = "SELECT event || ':' || count FROM effectiveness_events WHERE source='candidate_learning' ORDER BY id"
+        var statement: OpaquePointer?
+        check(sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK)
+        defer { sqlite3_finalize(statement) }
+        var rows: [String] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            rows.append(String(cString: sqlite3_column_text(statement, 0)))
+        }
+        return rows
     }
 
     @MainActor private static func voiceCorrectionLearning(engine: IFEngine, user: String,

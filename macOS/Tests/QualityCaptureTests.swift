@@ -70,6 +70,7 @@ struct QualityCaptureTests {
         classification()
         pureSnapshots()
         try await engineAndController(store, db, isolated.settings)
+        await learningActs(store, db, isolated.settings)
         try await candidateFacts(store, db)
         try await phraseMatrix(store, db)
         try await postCommitWindows(store, db)
@@ -375,6 +376,48 @@ struct QualityCaptureTests {
         }
         print("PASS post-commit windows: next_code, leading counts, undo/paste, direct text, punctuation,"
             + " client_changed, deactivated and none without an insertion; each rides the next submitted record")
+    }
+
+    /// Shift+Backspace on shown candidates is one `forgotten` act per press, through the real controller.
+    /// The idle press and a plain Backspace while composing add no act. The fixture matches ControllerTests.
+    @MainActor static func learningActs(_ store: QualityStore, _ db: CaptureDatabase, _ settings: IFSettings) async {
+        func acts() -> [[String: String]] {
+            db.rows("SELECT source,event,reason,count FROM effectiveness_events"
+                + " WHERE source='candidate_learning' ORDER BY id")
+        }
+        let shiftBackspace = keyEvent(51, "\u{8}", .shift)
+        let idleClient = RecordingClient(document: "")
+        check(!controller(settings, idleClient, store).handle(shiftBackspace, client: idleClient),
+              "learning acts idle: the key passes through")
+        let client = RecordingClient(document: "")
+        let control = controller(settings, client, store)
+        input("tianqi", control, client)
+        let native = control.engine!.snapshot().candidates
+        digit(2, control, client)
+        check(client.document == native[2], "learning acts fixture: learn \(native[2])")
+        check(control.handle(keyEvent(48, "\t"), client: client) == false,
+              "learning acts fixture: Tab ends the undo window")
+        input("tianqi", control, client)
+        check(control.engine!.snapshot().candidates.first == native[2],
+              "learning acts fixture: the learned candidate leads")
+        check(control.handle(keyEvent(51, "\u{8}"), client: client), "learning acts composing: plain Backspace edits")
+        input("i", control, client)
+        await store.flush()
+        check(acts().isEmpty, "learning acts: idle and plain Backspace add no act: \(acts())")
+
+        check(control.handle(modifierEvent(56, .shift), client: client))
+        check(control.handle(shiftBackspace, client: client), "learning acts composing: the key is consumed")
+        check(!control.handle(modifierEvent(56), client: client) && !control.engine!.requestedASCIIMode,
+              "learning acts composing chord: releasing Shift does not toggle the mode")
+        check(control.engine!.snapshot().candidates == native,
+              "learning acts composing: the candidate returns to its native position")
+        await store.flush()
+        check(acts() == [["source": "candidate_learning", "event": "forgotten", "count": "1"]],
+              "learning acts: one press is one forgotten act: \(acts())")
+        check(control.handle(keyEvent(53, ""), client: client),
+              "learning acts: Escape cancels the forgotten composition")
+        control.deactivateServer(client)
+        print("PASS learning acts: Shift+Backspace on shown candidates records one content-free forgotten act")
     }
 
     @MainActor static func controller(_ settings: IFSettings, _ client: RecordingClient?, _ store: QualityStore?) -> InkFlowInputController {
@@ -932,6 +975,18 @@ struct QualityCaptureTests {
         let truncated = db.decisions().last!
         check(truncated["page_history_truncated"] == "1")
         check(db.page(truncated).page == 69 && db.page(truncated, "first_page_json").page == 0)
+        var emptyPage = page("tong")
+        emptyPage.candidates = []
+        recorder.willMutate(emptyPage, revision: revision, action: .key(0xff08, 1))
+        recorder.didMutate(emptyPage, handled: true)
+        recorder.willMutate(page("tong"), revision: revision, action: .key(0xff08, 1))
+        recorder.didMutate(page("tong"), handled: true)
+        recorder.willMutate(page("tong"), revision: revision, action: .key(0xff08, 0))
+        recorder.didMutate(page("tong"), handled: true)
+        await store.flush()
+        check(db.rows("SELECT source,event,reason,count FROM effectiveness_events WHERE source='candidate_learning'")
+              == [["source": "candidate_learning", "event": "forgotten", "count": "1"]],
+              "Shift+Backspace counts one act only when candidates were shown; plain Backspace counts none")
         print("PASS synthetic unknown-rank/first-page/not-shown evidence, bounded active overflow/resumption and preserved core after history truncation")
     }
 
