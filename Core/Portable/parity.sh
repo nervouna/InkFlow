@@ -1,5 +1,5 @@
 #!/bin/bash
-# Old/new comparison on prepared production resources: the Swift quality baseline and the
+# Old/new comparison on prepared production resources: the Swift quality baseline, engine-mode replay and the
 # ported engine regressions run against the Rust engine. Pass an existing resources
 # directory (from prepare-resources.sh) to skip preparation.
 set -euo pipefail
@@ -12,5 +12,5 @@ fi
 # cargo test runs from the manifest directory.
 resources=$(cd "$resources" && pwd)
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
-INKFLOW_PORTABLE_RESOURCES="$resources" cargo test --locked --manifest-path Core/Portable/Cargo.toml --test parity -- --nocapture
+INKFLOW_PORTABLE_RESOURCES="$resources" cargo test --locked --manifest-path Core/Portable/Cargo.toml --test parity --test replay -- --nocapture
 bash Core/Portable/abi.sh "$resources"

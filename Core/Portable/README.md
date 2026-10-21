@@ -95,6 +95,26 @@ Without `--context-index` the `ranked` arm is not run. The checked-in fixture ra
 - **Sample size.** About 2.4k, 6.3k and 13k decisions are needed to see +1, +0.5 and +0.3 percentage points at disagreement rates of 3%, 2% and 1.5%. This is `n = d * (2.8 / delta)^2` for 80% power at two-sided 0.05, with `d` the share of decisions on which the two arms differ in outcome and `delta` the net gain.
 - **Replay files** stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off.
 
+## Engine-mode replay
+
+`replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--record NAME=FILE ...] [--json]` runs the real engine on the same case files as list mode and compares **arms with each other**. A live arm (`NAME=RESOURCES`, a `prepare-resources.sh` output) starts one `Engine` on those resources with an absent user directory and `set_configuration(9, &[], Some(&InputPreferences::default()))`. Per case it clears the session, sets `preceding_context`, types `raw_input` and snapshots the first page; it never selects or commits, so nothing is learned. The user directory is a scratch directory removed afterwards, and one arm finishes before the next engine starts (Rime is process-global).
+
+Each arm is scored on the first candidate against `selected_text` (a hit), and, for `segmentation` cases, on the longest candidate whose evidence covers the whole input against `committed_text`. The report gives, per arm, its first-candidate hits, how often its first candidate equals the recorded `displayed` leader (below 100%: the records came from a trained user dictionary, which a fresh engine does not have), the whole-input hits and the hits per class; then, for every pair of arms in the order given (the earlier one is the base), fixed, broken, distinct counts and the McNemar p-value in list mode's table, plus a `whole_input` row on the segmentation cases. Counts of two arms are only comparable with each other.
+
+`--record NAME=FILE` writes a live arm's outcomes as JSON Lines (a header with `generated_at`, then `id` (the `decision_id`), `first`, `longest`, `first_hit` and `longest_hit` per case), and `--arm NAME=@FILE` loads such a file as an arm. That is how an arm from another binary joins the comparison. Record files hold typed text and follow the case files' rules: they are created new and owner-only, refused inside the repository, refused after the 28 days the header allows (it carries the case file's `generated_at`), and deleted after the run.
+
+```sh
+query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
+python3 "$query" replay-cases --since 2026-10-15 --until 2026-10-21 --output "$TMPDIR/cases.jsonl"
+bash Core/Portable/prepare-resources.sh   # prints "PASS production resources: build/portable/resources.XXXXXX"
+cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin replay -- \
+  engine "$TMPDIR/cases.jsonl" --arm base=build/portable/resources.XXXXXX --arm candidate=PATH/TO/OTHER/RESOURCES \
+  --record base="$TMPDIR/base.jsonl"
+rm "$TMPDIR/cases.jsonl" "$TMPDIR/base.jsonl"
+```
+
+`tests/replay.rs` replays `fixtures/replay-cases.json` this way: recorded arms reproduce list mode's pairwise counts without Rime, and with `INKFLOW_PORTABLE_RESOURCES` set two live arms on the prepared resources must agree, record, and reload as the same arm. `performance.sh` on an arm's resources measures it against the approved limits.
+
 ## Personal learning and portable personal data
 
 `Engine::personal_learning_entries`, `delete_personal_learning` and `undo_personal_learning` port `EnginePersonalLearning.swift` over the same Lua `learning_manage` channel: they run only when every session is idle and Rime's native undo window (4 s after the last commit) has passed, otherwise `Busy`; entries and undo tokens carry a learning revision that any commit, Backspace/Delete, new session or invalidation supersedes (`Conflict`). As on macOS, the newest commit may still be in Rime's pending transaction until the next transaction or teardown, and a native restore revives a deleted count with one confirmation. Never call this API from a key callback.
