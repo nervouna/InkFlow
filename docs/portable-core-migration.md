@@ -8,7 +8,7 @@ The delivery order is Linux/Fcitx5, macOS cutover, mobile, Windows, then the GNO
 
 The migration preserves existing macOS features and personal data. New platforms start with offline typing and portable backup/import; optional-feature parity follows separately. Cloud synchronization is out of scope.
 
-This document records the architecture, rationale, and migration sequence. [Tracking issue #32](https://github.com/nervouna/InkFlow/issues/32) links the phase issues that own the execution roadmap and progress. Do not maintain a second progress checklist here.
+This document records the architecture, rationale, and migration sequence. The phase issues own the execution roadmap and progress: phases 0–4 (#33–#37) are done and recorded in the closed [tracking issue #32](https://github.com/nervouna/InkFlow/issues/32); mobile is #38, Windows #39, Steam Deck #70, and Linux parity with macOS #153. Do not maintain a second progress checklist here.
 
 ## Starting point
 
@@ -159,7 +159,7 @@ Completion means a usable offline Windows IME backed by the same core. Windows-s
 
 ### Optional follow-up work
 
-Track quality recording/export, dictionary downloads, AI, voice backends, and additional Linux adapters as separate issues. Implement them without changing offline input availability or privacy guarantees. Their priority can be decided independently of platform rollout.
+Track quality recording/export, dictionary downloads, AI, voice backends, and additional Linux adapters as separate issues; #153 lists the Linux ones. Implement them without changing offline input availability or privacy guarantees. Their priority can be decided independently of platform rollout.
 
 ## Validation and operating rules
 
