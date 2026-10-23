@@ -45,12 +45,13 @@ async def main():
             context = bus.get_proxy_object("org.fcitx.Fcitx5", path, tree).get_interface(
                 "org.fcitx.Fcitx.InputContext1"
             )
-            commits, preedits, panels = [], [], []
+            commits, preedits, panels, uppers = [], [], [], []
             context.on_commit_string(lambda text: commits.append(text))
             context.on_update_formatted_preedit(lambda text, cursor: preedits.append((text, cursor)))
 
             def panel(preedit, cursor, upper, lower, candidates, index, layout, previous, following):
                 panels.append(candidates)
+                uppers.append(upper)
 
             context.on_update_client_side_ui(panel)
             capabilities = (1 << 1) | (1 << 4) | (1 << 39)
@@ -62,6 +63,15 @@ async def main():
 
             async def key(code, release=False):
                 return await context.call_process_key_event(code, 0, 0, release, 0)
+
+            # Fcitx5 shows the input-method information as an overlay after a switch; the
+            # trigger's key releases reach the engine and must not clear it.
+            await controller.call_set_current_im("keyboard-us")
+            await controller.call_set_current_im("inkflow-pinyin")
+            assert uppers and uppers[-1], "no input-method information after the switch"
+            await key(0xFFE3, True)
+            assert uppers[-1], "a key release cleared the input-method information"
+            print("PASS installed addon: input-method information survives a key release")
 
             async def type_text(text):
                 for char in text:
