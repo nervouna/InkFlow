@@ -254,7 +254,8 @@ package enum IFReferenceSpellingGenerator {
         for (initial, bit) in [("z", 4), ("c", 8), ("s", 16)] where profile & bit != 0 {
             equivalents += [("^\(initial)h", initial), ("^\(initial)([^h])", initial + "h$1")]
         }
-        var rules = equivalents.map { "derive/\($0.0)/\($0.1)/" }
+        // The legacy source's consonant-only syllables must not cover input, which would prune abbreviations.
+        var rules = ["erase/^(hm|m|n|ng)$/"] + equivalents.map { "derive/\($0.0)/\($0.1)/" }
         if profile & 1 != 0 {
             rules += ["abbrev/^([a-z]).+$/$1/", "abbrev/^([zcs]h).+$/$1/"]
         }

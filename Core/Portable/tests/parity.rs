@@ -393,19 +393,22 @@ fn swift_engine_regressions() {
         type_keys(&session, input);
         session
     };
-    let coverage = prepared("什么", "neng", 9);
+    // `nia` is ni + a: the complete phrase 你啊 leads and the partial 你 consumes only `ni`. A consonant-only
+    // tail such as the ng of `neng` is erased from the spelling profiles, so it leaves no partial choices.
+    let coverage = prepared("谢谢", "nia", 9);
     assert_eq!(
         texts(&coverage)[0],
-        "能",
-        "context must not promote partial 呢 above complete 能"
+        "你啊",
+        "context must not promote partial 你 above complete 你啊"
     );
     assert!(coverage.key(32, 0).unwrap());
     assert!(
-        coverage.take_commit().unwrap() == "能" && coverage.snapshot().unwrap().preedit.is_empty()
+        coverage.take_commit().unwrap() == "你啊"
+            && coverage.snapshot().unwrap().preedit.is_empty()
     );
     for count in [3, 5, 9] {
-        let contextual = prepared("什么", "neng", count);
-        let native = prepared("", "neng", count);
+        let contextual = prepared("谢谢", "nia", count);
+        let native = prepared("", "nia", count);
         assert_eq!(
             texts(&contextual),
             texts(&native),
@@ -416,11 +419,11 @@ fn swift_engine_regressions() {
         assert!(contextual.key(0xff55, 0).unwrap() && texts(&contextual) == first_page);
         let partial = first_page
             .iter()
-            .position(|c| c == "呢")
-            .expect("呢 on the neng first page");
+            .position(|c| c == "你")
+            .expect("你 on the nia first page");
         let page = contextual.snapshot().unwrap();
         contextual.highlight(&page, partial).unwrap();
-        contextual.set_preceding_text("什么").unwrap();
+        contextual.set_preceding_text("谢谢").unwrap();
         assert_eq!(
             contextual.snapshot().unwrap().highlighted,
             partial,
@@ -429,7 +432,7 @@ fn swift_engine_regressions() {
         assert!(contextual.key(32, 0).unwrap());
         assert!(
             contextual.take_commit().unwrap().is_empty()
-                && contextual.snapshot().unwrap().preedit == "呢ng"
+                && contextual.snapshot().unwrap().preedit == "你a"
         );
         let page = native.snapshot().unwrap();
         native.select(&page, partial).unwrap();

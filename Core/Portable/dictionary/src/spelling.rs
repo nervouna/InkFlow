@@ -10,6 +10,8 @@ pub fn spelling(dictionary: &[u8]) -> Result<BTreeMap<String, Vec<u8>>> {
     let mut schemas = BTreeMap::new();
     for profile in 0..32 {
         let mut rules = vec![
+            // The legacy source's consonant-only syllables must not cover input, which would prune abbreviations.
+            "erase/^(hm|m|n|ng)$/".to_owned(),
             "derive/^([nl])ue$/$1ve/".to_owned(),
             "derive/^([jqxy])u/$1v/".to_owned(),
         ];

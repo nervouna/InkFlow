@@ -1504,7 +1504,7 @@
             "nativeIndex" : 3,
             "nativeRank" : 4,
             "source" : null,
-            "text" : "我哟"
+            "text" : "我"
           },
           {
             "consumedInputEnd" : null,
@@ -1514,7 +1514,7 @@
             "nativeIndex" : 4,
             "nativeRank" : 5,
             "source" : null,
-            "text" : "喔哟"
+            "text" : "喔"
           },
           {
             "consumedInputEnd" : null,
@@ -1524,7 +1524,7 @@
             "nativeIndex" : 5,
             "nativeRank" : 6,
             "source" : null,
-            "text" : "我"
+            "text" : "窝"
           },
           {
             "consumedInputEnd" : null,
@@ -1534,7 +1534,7 @@
             "nativeIndex" : 6,
             "nativeRank" : 7,
             "source" : null,
-            "text" : "喔"
+            "text" : "握"
           },
           {
             "consumedInputEnd" : null,
@@ -1544,7 +1544,7 @@
             "nativeIndex" : 7,
             "nativeRank" : 8,
             "source" : null,
-            "text" : "窝"
+            "text" : "沃"
           },
           {
             "consumedInputEnd" : null,
@@ -1554,7 +1554,7 @@
             "nativeIndex" : 8,
             "nativeRank" : 9,
             "source" : null,
-            "text" : "握"
+            "text" : "卧"
           }
         ],
         "caret" : 16,

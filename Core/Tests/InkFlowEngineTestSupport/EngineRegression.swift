@@ -58,6 +58,34 @@ package enum EngineRegression {
         let exact = defaults.setting(.abbreviation, to: false).setting(.typoTolerance, to: false)
         configure(engine, exact)
         check(!contains(engine, "hlw", "互联网"), "Abbreviation OFF")
+
+        // Consonant-only syllables (hm, m, n, ng) are erased before any other rule, so they cannot cover the input
+        // and prune its abbreviation readings. Nothing has been committed yet: the user data is still fresh.
+        func firstPage(_ input: String) -> [String] {
+            engine.clear()
+            type(engine, input)
+            return engine.snapshot().candidates
+        }
+        engine.clear()
+        configure(engine, defaults)
+        for (input, expected) in [("wom", "我们"), ("tam", "他们"), ("nim", "你们"), ("zenm", "怎么")] {
+            let page = firstPage(input)
+            check(page.first == expected, "Consonant-only syllables do not cover \(input): \(page)")
+        }
+        let lone = firstPage("m")
+        check(lone.first != "呒", "A lone m does not offer 呒 first: \(lone)")
+        let vowel = firstPage("en")
+        check(vowel.first == "嗯", "en still offers 嗯 first: \(vowel)")
+        for typo in [false, true] {
+            engine.clear()
+            configure(engine, defaults.setting(.abbreviation, to: false).setting(.typoTolerance, to: typo))
+            let page = firstPage("wom")
+            check(page.contains("我们"), "Abbreviation OFF, typo \(typo): 我们 is on page one of wom: \(page)")
+            check(!page.contains("我呒"), "Abbreviation OFF, typo \(typo): 我呒 is not on the first page: \(page)")
+        }
+        engine.clear()
+        configure(engine, exact)
+
         for (option, input, output, reverse, reverseOutput) in [
             (InputOption.fuzzyZ, "zongguo", "中国", "zhiran", "自然"),
             (.fuzzyC, "canpin", "产品", "changuan", "参观"),
@@ -1053,28 +1081,30 @@ package enum EngineRegression {
             engine.setPrecedingText(prefix); type(engine, input)
             return engine
         }
-        let coverage = prepared("什么", "neng", count: 9)
-        check(coverage.snapshot().candidates.first == "能",
-              "Context must not promote partial 呢 above complete 能: \(coverage.snapshot())")
+        // `nia` is ni + a: the complete phrase 你啊 leads and the partial 你 consumes only `ni`. A consonant-only
+        // tail such as the ng of `neng` is erased from the spelling profiles, so it leaves no partial choices.
+        let coverage = prepared("谢谢", "nia", count: 9)
+        check(coverage.snapshot().candidates.first == "你啊",
+              "Context must not promote partial 你 above complete 你啊: \(coverage.snapshot())")
         check(coverage.key(32))
-        check(coverage.takeCommit() == "能" && coverage.snapshot().preedit.isEmpty,
-              "The complete contextual first candidate consumes neng")
+        check(coverage.takeCommit() == "你啊" && coverage.snapshot().preedit.isEmpty,
+              "The complete contextual first candidate consumes nia")
         for count in [3, 5, 9] {
-            let contextual = prepared("什么", "neng", count: count), native = prepared("", "neng", count: count)
+            let contextual = prepared("谢谢", "nia", count: count), native = prepared("", "nia", count: count)
             check(contextual.snapshot().candidates == native.snapshot().candidates,
                   "Same-character-length partial choices retain native order")
             let firstPage = contextual.snapshot().candidates
             check(contextual.key(0xff56) && contextual.snapshot().page == 1)
             check(contextual.key(0xff55) && contextual.snapshot().candidates == firstPage,
                   "Coverage remains aligned after paging back")
-            guard let partialIndex = firstPage.firstIndex(of: "呢") else {
-                check(false, "Expected partial 呢 on neng first page"); continue
+            guard let partialIndex = firstPage.firstIndex(of: "你") else {
+                check(false, "Expected partial 你 on nia first page"); continue
             }
             contextual.highlight(partialIndex)
-            contextual.setPrecedingText("什么")
+            contextual.setPrecedingText("谢谢")
             check(contextual.snapshot().highlight == partialIndex, "An unchanged prefix preserves explicit selection")
             check(contextual.key(32))
-            check(contextual.takeCommit().isEmpty && contextual.snapshot().preedit == "呢ng",
+            check(contextual.takeCommit().isEmpty && contextual.snapshot().preedit == "你a",
                   "Selecting the displayed partial candidate retains native unconsumed input")
             native.select(partialIndex)
             check(contextual.snapshot().candidates == native.snapshot().candidates,
@@ -1736,7 +1766,8 @@ package enum EngineRegression {
 
     /// An exact technical English word leads the page when its input is 4 or more letters that are
     /// not complete Pinyin syllables optionally followed by one unfinished final syllable (rule 14).
-    /// Every guard input kept the first candidate recorded on `main` before this rule existed.
+    /// Every guard input kept the first candidate recorded on `main` before this rule existed, except `tin` and
+    /// `chin`: their recorded 题嗯 and 吃嗯 were built from the consonant-only syllable `n`, which is erased now.
     @MainActor package static func technicalEnglishLead(event: Event = rimeEvent) {
         let engine = IFEngine()!
         func first(_ input: String) -> String? {
@@ -1748,7 +1779,7 @@ package enum EngineRegression {
         }
         // technical-guard: complete Pinyin, an unfinished final syllable, abbreviations and inputs of
         // three letters or fewer keep the first candidate recorded before the rule.
-        let guards = [("tin", "题嗯"), ("chin", "吃嗯"), ("women", "我们"), ("can", "惨"), ("hen", "很"),
+        let guards = [("tin", "体内"), ("chin", "吃奶"), ("women", "我们"), ("can", "惨"), ("hen", "很"),
                       ("bs", "不是"), ("hlw", "互联网"), ("zhguo", "中国"), ("nihao", "你好"),
                       ("xianzaiwomenlai", "现在我们来"), ("shanghai", "伤害"),
                       ("email", "而买了"), ("banana", "芭娜娜")]
