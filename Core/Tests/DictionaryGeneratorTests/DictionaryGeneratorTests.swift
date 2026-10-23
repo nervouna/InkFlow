@@ -138,7 +138,8 @@ struct DictionaryGeneratorTests {
         expect(try IFSpellingGenerator.generate(dictionary: reordered) == schemas, "Order, weights and comments do not change spelling")
         func guarded(_ code: String, in schemas: [String: Data], profile: Int) throws -> Bool {
             let schema = String(decoding: schemas["inkflow_spelling_\(profile).schema.yaml"]!, as: UTF8.self)
-            guard let line = schema.components(separatedBy: "\n").first(where: { $0.contains("- erase/") }) else { return false }
+            let lines = schema.components(separatedBy: "\n")
+            guard let line = lines.first(where: { $0.contains("- erase/^~(") }) else { return false }
             let pattern = line.components(separatedBy: "/")[1]
             let value = "~" + code
             return try NSRegularExpression(pattern: pattern).firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
