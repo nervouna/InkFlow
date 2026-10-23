@@ -485,6 +485,33 @@ package enum EngineRegression {
             check(engine.takeCommit() == word && engine.snapshot().preedit.isEmpty,
                   "Select the Shift-typed technical word: \(word)")
         }
+        // Capitals typed as a standalone word lead as typed and Space commits them. Caps Lock sends the same
+        // characters without the Shift modifier. The lowercase spelling is a word of its own (`os`, `it`),
+        // and learning it must not override the typed case.
+        let capitalKeys: [Character: UInt16] = ["O": 31, "S": 1, "I": 34, "T": 17, "D": 2, "H": 4, "E": 14]
+        func commitCapitals(_ word: String, shift: Bool) {
+            for letter in word {
+                check(event(engine, Int32(letter.asciiValue!), capitalKeys[letter]!, String(letter), shift ? 1 : 0),
+                      "Handle \(shift ? "Shift" : "Caps Lock")-typed standalone letter: \(word)")
+            }
+            check(engine.snapshot().candidates.first == word,
+                  "Typed capitals lead standalone (shift \(shift)): \(word) -> \(engine.snapshot().candidates)")
+            check(event(engine, 32, 49, " ", 0) && engine.takeCommit() == word && engine.snapshot().preedit.isEmpty,
+                  "Space commits the typed capitals (shift \(shift)): \(word)")
+        }
+        commitCapitals("OS", shift: false)
+        for word in ["IT", "ID", "THE"] { commitCapitals(word, shift: true) }
+        // Pinyin abbreviations may lead the lowercase page, so compare the English candidates.
+        func lowercaseEnglish() -> [String] {
+            type(engine, "os")
+            defer { engine.clear() }
+            return allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+        }
+        // Learn the lowercase spelling more often than the capitals, from lowercase input.
+        for _ in 0..<3 { selectCandidate("os", input: "os", engine: engine) }
+        check(lowercaseEnglish().first == "os", "Learned lowercase leads English: \(lowercaseEnglish())")
+        commitCapitals("OS", shift: true)
+        check(lowercaseEnglish().first == "os", "Lowercase still leads English: \(lowercaseEnglish())")
         type(engine, "zhefenoffes")
         engine.key(0xff08); type(engine, "r")
         let edited = engine.snapshot().candidates

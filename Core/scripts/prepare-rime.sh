@@ -53,6 +53,9 @@ function emit(word, code, effective, pair) {
   if (effective <= 0 || effective < min_zipf) return
   emitted[pair]=1
   printf "%s\t%s\t%d\n", word,code,int(effective*weight_scale+0.5)
+  # Source codes are lowercase or Capitalized, never ALL-CAPS. A cased letter-only display is also its
+  # own code, so typing it exactly reaches it, as the mixed dictionary below does. Same word, same weight.
+  if (word ~ /^[A-Za-z]*[A-Z][A-Za-z]*$/) emit(word,word)
 }
 BEGIN {
   FS=OFS="\t"

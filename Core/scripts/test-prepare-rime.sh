@@ -205,12 +205,19 @@ boundary	boundary	1000000
 above	above	1002500
 api	api	1125000
 API	api	1125000
+API	API	1125000
 API	Api	1125000
 D	D	1125000
 Alias	alias	1125000
+Alias	Alias	1125000
 foo-bar	foo-bar	1125000
 DATA
 diff -u "$fixture/expected.tsv" "$fixture/english.tsv"
+# A cased display also becomes its own code, so typing it exactly reaches it. This adds a code (API API,
+# Alias Alias), never a display: the set of displayed spellings and every pair stay unique.
+displays=$(cut -f1 "$fixture/english.tsv" | LC_ALL=C sort -u | paste -sd, -)
+[[ $displays == 'API,Alias,D,Email,above,api,boundary,computer,email,emails,foo-bar' ]] || fail
+[[ -z $(cut -f1,2 "$fixture/english.tsv" | LC_ALL=C sort | uniq -d) ]] || fail
 cat > "$fixture/expected-mixed.tsv" <<'DATA'
 email	email	11700
 Email	Email	11700
@@ -252,9 +259,11 @@ boundary	boundary	1000000
 above	above	1002500
 api	api	1125000
 API	api	1125000
+API	API	1125000
 API	Api	1125000
 D	D	1125000
 Alias	alias	1125000
+Alias	Alias	1125000
 foo-bar	foo-bar	1125000
 unrated	unrated	1000250
 DATA
@@ -324,6 +333,7 @@ cat > "$fixture/expected-technology.tsv" <<'DATA'
 computer	computer	1242500
 computer	Computer	1242500
 TechUI	techui	1000000
+TechUI	TechUI	1000000
 TechUI	techuialias	1000000
 C++	cpp	1000000
 computer	laptop	1242500
