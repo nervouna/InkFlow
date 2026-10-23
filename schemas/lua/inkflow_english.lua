@@ -381,6 +381,14 @@ function M.func(input, segment, env)
     if #input >= 3 then
       for _, query in ipairs(queries) do collect_static(query, true) end
     end
+    -- Learning on another case variant (os) must not outrank the exact spelling typed (OS): the
+    -- ranker orders personal evidence before everything else, so clear it for this query.
+    local typed = seen[input]
+    if lower ~= input and typed and typed.exact then
+      for _, entry in ipairs(entries) do
+        if entry ~= typed then entry.personal, entry.commits = false, 0 end
+      end
+    end
     table.sort(entries, function(a, b)
       if a.exact ~= b.exact then return a.exact end
       -- A deliberately cased query offers its exact spelling first.
