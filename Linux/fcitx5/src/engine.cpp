@@ -383,7 +383,9 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
   IFRSnapshot* raw = nullptr;
   status = ifr_session_snapshot(st->session, &raw);
   auto& panel = ic->inputPanel();
-  panel.reset();
+  // empty() ignores the overlay message, so Fcitx5's input-method information survives
+  // the trigger's key releases.
+  if (!panel.empty()) panel.reset();
   if (status != IFR_OK) {
     INKFLOW_WARN() << "snapshot failed: " << status << " " << ifr_last_error();
     st->snapshot.reset();
