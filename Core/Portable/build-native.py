@@ -89,7 +89,8 @@ def main():
     boost = sources / 'boost'
     if not (boost / 'b2').exists():
         run('bash', 'bootstrap.sh', '--with-libraries=regex', cwd=boost)
-    run('./b2', '--with-regex', 'variant=release', 'link=static', 'cxxflags=-fPIC',
+    # Rime does not use ICU regex; without this, Linux librime records system ICU as NEEDED.
+    run('./b2', '--with-regex', '--disable-icu', 'variant=release', 'link=static', 'cxxflags=-fPIC',
         '--layout=system', f'--prefix={PREFIX}', 'install', cwd=boost)
     cmake('rime', '-DBUILD_SHARED_LIBS=ON', '-DBUILD_STATIC=ON', '-DBUILD_TEST=OFF',
           '-DBUILD_MERGED_PLUGINS=ON', '-DENABLE_EXTERNAL_PLUGINS=OFF',
