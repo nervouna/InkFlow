@@ -250,6 +250,87 @@ def replay_fixture(path):
     db.close()
 
 
+REVERT_WINDOW = dict(deletions=2, leadingDeletions=2)
+
+
+def retype_fixture(path):
+    """Reverted decisions for `replay-cases`: each composition's window rides the next one, its retype.
+    `test_replay_cases_relabel_or_exclude_reverted_decisions` works out every composition."""
+    db = empty_db(path)
+    insert(db, 'recording_runs', id='run', started_at=STAMP, status='closed', engine_version='1.17.0',
+           build_metadata_json='{}', metric_rule_version=1, stats_json='{}')
+    insert(db, 'config_revisions', id='rev1', fingerprint='fingerprint-A', created_at=STAMP,
+           applied_config_json='{}', build_metadata_json='{}', engine_version='1.17.0', metric_rule_version=1,
+           ranking_fingerprint='ranking-A', settings_fingerprint='settings-A',
+           measurement_fingerprint='measurement-A', build_identity='build-A')
+    carried = []
+
+    def add(cid, raw, texts, *chosen, end='next_code', **counts):
+        """One commit of the `chosen` texts, one decision each; with `counts`, the window that closes after it."""
+        windows = list(carried)
+        carried.clear()
+        # A second apart, in the order added.
+        started = datetime.fromisoformat(STAMP.replace('Z', '+00:00')) + timedelta(seconds=len(added))
+        stamp = started.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+        added.append(cid)
+        insert(db, 'compositions', id=cid, run_id='run', started_at=stamp, ended_at=stamp, app_bundle_id='app',
+               outcome='committed', page_history_truncated=0, dropped_page_count=0,
+               operations_json=json.dumps(dict(OPS, postCommitWindows=windows) if windows else OPS))
+        text = ''.join(chosen)
+        insert(db, 'commits', id=f'commit-{cid}', composition_id=cid, issued_at=stamp, text=text, kind='candidate',
+               insertion_issued=1, character_count=len(text))
+        if counts:
+            carried.append(window(f'commit-{cid}', end, 1000, **counts))
+        for sequence, word in enumerate(chosen):
+            page = dict(generation=7, rawInput=raw, caret=len(raw), selectedPrefix='', selectedPrefixValid=True,
+                        precedingContext='', configurationRevisionID='rev1', configuration={}, page=0, pageSize=9,
+                        highlightedDisplayIndex=0, presentation='candidates_requested', capturedAt=stamp,
+                        candidates=[dict(text=shown, displayIndex=index, displayRank=index + 1, nativeIndex=index,
+                                         nativeRank=index + 1, type='phrase', corrected=False,
+                                         evidence=f'0,{len(raw)},n,1,0,n,phrase,0')
+                                    for index, shown in enumerate(texts)])
+            insert(db, 'candidate_decisions', id=f'decision-{cid}-{sequence}', composition_id=cid,
+                   config_revision_id='rev1', commit_id=f'commit-{cid}', occurred_at=stamp, sequence=sequence,
+                   trigger='space', outcome='committed', selected_display_index=texts.index(word),
+                   selected_text=word, text_kind='chinese', snapshot_json=json.dumps(page, ensure_ascii=False),
+                   first_page_json=json.dumps(page, ensure_ascii=False), visited_pages_json='[]',
+                   page_history_truncated=0, dropped_page_count=0, operations_json=json.dumps(OPS),
+                   regular_ranked_selection=1, matches_custom_phrase=0, selected_character_count=len(word))
+
+    added = []
+    test = ['试验', '实验']
+    # One Backspace of two characters is not a revert.
+    add('kept', 'nihao', ['你好', '拟好'], '你好', deletions=1, leadingDeletions=1)
+    # Relabelled: the same code retyped, and the code continued to a candidate of the reverted list.
+    add('same', 'shiyan', test, '试验', **REVERT_WINDOW)
+    add('same_retype', 'shiyan', test, '实验')
+    add('early', 'wom', ['我呒', '我们', '我'], '我呒', **REVERT_WINDOW)
+    add('early_retype', 'women', ['我们', '我门'], '我们')
+    # Excluded by the retype: a shorter code (maybe half of a split retype), and a text not on the reverted list.
+    add('split', 'wom', ['我呒', '我们', '我'], '我呒', **REVERT_WINDOW)
+    add('split_retype', 'wo', ['我', '窝'], '我')
+    add('off_list', 'wom', ['我呒', '我们'], '我呒', **REVERT_WINDOW)
+    add('off_list_retype', 'womeng', ['我梦'], '我梦')
+    # Excluded by the window: Cmd+Z, a key typed after the deletions, and a window that timed out.
+    add('undo', 'shiyan', test, '试验', undo=1, leadingUndo=1)
+    add('undo_retype', 'shiyan', test, '实验')
+    add('typed_on', 'shiyan', test, '试验', deletions=2, leadingDeletions=2, directText=1)
+    add('typed_on_retype', 'shiyan', test, '实验')
+    add('late', 'shiyan', test, '试验', end='timeout', **REVERT_WINDOW)
+    add('late_retype', 'shiyan', test, '实验')
+    # A retype reverted in turn is no gold; it is relabelled by its own retype, here the same text again.
+    add('again', 'shiyan', test, '试验', **REVERT_WINDOW)
+    add('again_retype', 'shiyan', test, '实验', **REVERT_WINDOW)
+    add('again_retype2', 'shiyan', test, '实验')
+    # Two decisions on the reverted commit, and a retype with two decisions: which segment was wrong is unknown.
+    add('pair', 'womenqu', ['我们', '去', '我们去'], '我们', '去', deletions=3, leadingDeletions=3)
+    add('pair_retype', 'womenqu', ['我们去'], '我们去')
+    add('busy', 'shiyan', test, '试验', **REVERT_WINDOW)
+    add('busy_retype', 'shiyanshi', ['实验', '室'], '实验', '室')
+    db.commit()
+    db.close()
+
+
 DAY_BEFORE = '2026-09-05T16:00:00.000Z'
 OLDER = '2026-08-20T16:00:00.000Z'
 
@@ -891,6 +972,35 @@ class QueryTests(unittest.TestCase):
         header, cases = self.replay_cases('--kind', 'emoji', db=db, name='emoji.jsonl')
         self.assertEqual([case['composition_id'] for case in cases], ['r8'])
         self.assertEqual(header['text_free_excluded'], 0)
+
+    def test_replay_cases_relabel_or_exclude_reverted_decisions(self):
+        db = Path(self.temp.name) / 'retype.sqlite3'
+        retype_fixture(db)
+        header, cases = self.replay_cases(db=db)
+        counts = ('cases', 'without_evidence', 'reverted_excluded', 'reverted_relabelled')
+        self.assertEqual({key: header[key] for key in counts},
+                         dict(cases=15, without_evidence=0, reverted_excluded=9, reverted_relabelled=3))
+        exported = ['kept-0', 'same-0', 'same_retype-0', 'early-0', 'early_retype-0', 'split_retype-0',
+                    'off_list_retype-0', 'undo_retype-0', 'typed_on_retype-0', 'late_retype-0', 'again_retype-0',
+                    'again_retype2-0', 'pair_retype-0', 'busy_retype-0', 'busy_retype-1']
+        self.assertEqual([case['decision_id'] for case in cases], [f'decision-{name}' for name in exported])
+        # The retype's text, its commit and its place on the reverted list; the raw input stays the reverted one.
+        relabelled = {case['composition_id']: (case['raw_input'], case['selected_display_index'],
+                                               case['selected_text'], case['committed_text'])
+                      for case in cases if case['relabelled']}
+        self.assertEqual(relabelled, {'same': ('shiyan', 1, '实验', '实验'), 'early': ('wom', 1, '我们', '我们'),
+                                      'again_retype': ('shiyan', 1, '实验', '实验')})
+        kept = cases[0]
+        self.assertEqual((kept['selected_display_index'], kept['selected_text'], kept['committed_text'],
+                          kept['relabelled']), (0, '你好', '你好', False))
+        # Exports prefix commit and carrier ids with their source; the rule reads them the same way.
+        export = Path(self.temp.name) / 'retype-export.json'
+        self.run_cli('export', '--output', str(export), db=db)
+        imported, imported_cases = self.replay_cases('--exports-only', '--input', str(export), db=db,
+                                                     name='retype-exchange.jsonl')
+        self.assertEqual({key: imported[key] for key in counts}, {key: header[key] for key in counts})
+        self.assertEqual([(case['selected_text'], case['relabelled']) for case in imported_cases],
+                         [(case['selected_text'], case['relabelled']) for case in cases])
 
     def test_replay_cases_read_exports_too(self):
         db = Path(self.temp.name) / 'replay.sqlite3'
