@@ -36,6 +36,18 @@ fcitx5-remote -s inkflow-pinyin
 
 Installing a new package with the same command upgrades the installation. Reinstalling the same package is a no-op. Releases are stored separately and a `current` symlink selects the active one; an update never overwrites a loaded library. The previous managed release stays available for rollback.
 
+## Update
+
+Run the installed package's updater to fetch the latest GitHub Release for this CPU:
+
+```sh
+python3 ~/.local/share/inkflow/current/install.py update
+# A specific release, or another Fcitx5 service:
+python3 ~/.local/share/inkflow/current/install.py update --tag vX.Y.Z --service NAME
+```
+
+Update uses the network only when you run it; there is no background or automatic check. It downloads the release's package and `SHA256SUMS-linux` over HTTPS, verifies the archive's SHA-256 before extracting it, and then runs that package's own `install.py install`. If the installed version already matches the release, it reports that and downloads nothing else. The exit status is the install's. A package installed before the `version` field existed is replaced by the first update.
+
 ## Roll back or uninstall
 
 ```sh

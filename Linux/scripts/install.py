@@ -14,7 +14,10 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
+import tarfile
 import tempfile
+import urllib.request
 
 
 RELEASE = re.compile(r"[0-9a-f]{12}-[0-9a-f]{12}\Z")
@@ -340,17 +343,122 @@ class Installer:
         print("Uninstalled. Personal dictionaries and conf/inkflow.conf were kept.")
 
 
+RELEASE_API = "https://api.github.com/repos/nervouna/InkFlow"
+# Test-only: update() reads this variable as the API base URL. While it is set, checked_url() also accepts
+# plain http://127.0.0.1 URLs; without it, every URL must be HTTPS.
+TEST_API_VARIABLE = "INKFLOW_TEST_RELEASE_API"
+LOCAL_TEST_PREFIX = "http://127.0.0.1:"
+TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
+SUMS = "SHA256SUMS-linux"
+
+
+def checked_url(url):
+    if url.startswith("https://"):
+        return url
+    if os.environ.get(TEST_API_VARIABLE) and url.startswith(LOCAL_TEST_PREFIX):
+        return url
+    raise ValueError(f"Refusing to fetch a non-HTTPS URL: {url}")
+
+
+class CheckedRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return super().redirect_request(req, fp, code, msg, headers, checked_url(newurl))
+
+
+OPENER = urllib.request.build_opener(CheckedRedirect)
+
+
+def open_url(url):
+    request = urllib.request.Request(checked_url(url), headers={"User-Agent": "inkflow-install.py"})
+    return OPENER.open(request, timeout=60)
+
+
+def fetch(url):
+    with open_url(url) as response:
+        return response.read()
+
+
+def installed_version(data):
+    manifest = data / "inkflow/current/package.json"
+    return json.loads(manifest.read_bytes()).get("version") if manifest.exists() else None
+
+
+def expected_digest(sums, name):
+    for line in sums.splitlines():
+        fields = line.split()
+        if len(fields) == 2 and fields[1].lstrip("*") == name:
+            return fields[0].lower()
+    raise RuntimeError(f"{SUMS} has no entry for {name}; nothing changed")
+
+
+def extract(archive, directory, destination):
+    if not hasattr(tarfile, "data_filter"):
+        raise RuntimeError("This Python lacks tarfile data filters; use Python 3.11.4 or newer")
+    destination.mkdir()
+    try:
+        with tarfile.open(archive, "r:xz") as tar:
+            tar.extractall(destination, filter="data")
+    except tarfile.TarError as error:
+        raise ValueError(f"Refusing unsafe or invalid archive: {error}") from error
+    package = destination / directory
+    if os.listdir(destination) != [directory] or package.is_symlink() or not package.is_dir():
+        raise ValueError(f"Archive must contain exactly one top-level directory: {directory}/")
+    return package
+
+
+def update(data, tag, service):
+    if tag and not TAG.fullmatch(tag):
+        raise ValueError("--tag must look like vX.Y.Z")
+    base = os.environ.get(TEST_API_VARIABLE, RELEASE_API)
+    release = json.loads(fetch(base + (f"/releases/tags/{tag}" if tag else "/releases/latest")))
+    name = release.get("tag_name") or ""
+    if not TAG.fullmatch(name):
+        raise ValueError(f"Release tag is not vX.Y.Z: {name!r}")
+    version = name[1:]
+    directory = f"InkFlow-{version}-linux-{platform.machine()}"
+    archive_name = directory + ".tar.xz"
+    assets = {asset["name"]: asset["browser_download_url"] for asset in release.get("assets", [])}
+    if archive_name not in assets or SUMS not in assets:
+        raise RuntimeError(f"Release {name} lacks {archive_name} or {SUMS}; nothing changed")
+    if installed_version(data) == version:
+        print(f"InkFlow {version} is already up to date.")
+        return 0
+    expected = expected_digest(fetch(assets[SUMS]).decode(), archive_name)
+    with tempfile.TemporaryDirectory(prefix="inkflow-update-") as work:
+        archive = Path(work) / archive_name
+        with open_url(assets[archive_name]) as response, archive.open("wb") as output:
+            shutil.copyfileobj(response, output)
+        with archive.open("rb") as stream:
+            if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
+                raise ValueError(f"SHA-256 mismatch for {archive_name}; nothing installed")
+        package = extract(archive, directory, Path(work) / "extracted")
+        command = [sys.executable, "-I", str(package / "install.py"), "install", str(package)]
+        if service:
+            command += ["--service", service]
+        return subprocess.run(command).returncode
+
+
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["install", "rollback", "uninstall", "recover", "restore-manual", "status"])
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog="update downloads the latest InkFlow GitHub Release for this CPU, or --tag vX.Y.Z, verifies its "
+               "SHA-256 against SHA256SUMS-linux and runs that package's own install.py install, passing --service. "
+               "It uses the network only when run and downloads nothing when the installed version matches.")
+    parser.add_argument("command", choices=["install", "update", "rollback", "uninstall", "recover",
+                                            "restore-manual", "status"])
     parser.add_argument("package", nargs="?", type=Path)
     parser.add_argument("--service", help="existing Fcitx5 user service, stopped and restarted during changes")
+    parser.add_argument("--tag", help="update only: release tag vX.Y.Z instead of the latest release")
     args = parser.parse_args()
     if (args.command == "install") != (args.package is not None):
         parser.error("Only install takes a package directory")
+    if args.tag and args.command != "update":
+        parser.error("--tag applies only to update")
     home = Path.home()
     data = Path(os.environ.get("XDG_DATA_HOME", home / ".local/share")).absolute()
     config = Path(os.environ.get("XDG_CONFIG_HOME", home / ".config")).absolute()
+    if args.command == "update":
+        return update(data, args.tag, args.service)
     installer = Installer(data, config)
     with installer.locked():
         if args.command == "status":
@@ -368,7 +476,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        main()
+        raise SystemExit(main())
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"{error}\nIf installation-backup.json remains, fix the error and run recover; "
                          "Fcitx5 may be stopped until recovery succeeds.")
