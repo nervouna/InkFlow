@@ -70,7 +70,18 @@ database or empty filter result, exits 0. Help is available at each command.
   missing or of another generation, which have no list to replay). A case takes its candidates from
   `snapshot_json` when the snapshot `page` is 0 and from the same-generation `first_page_json` when the user
   paged (`candidates_from`); `selected_display_index` always indexes the snapshot. `selected_text` is the segment
-  gold and `committed_text` the text of the decision's linked commit. The file holds typed text: the path must be
+  gold and `committed_text` the text of the decision's linked commit. A decision whose commit is reverted by the
+  C-rev rule (see `revert_rate` below) is no gold: it is relabelled with its retype when all of these hold, and
+  counted in `reverted_excluded` and left out otherwise. The revert is exact and alone: no Cmd+Z,
+  `leading_deletions = character_count`, no other key in the window, which ended `next_code`. The decision is the
+  only one linked to its commit. The retype is the composition that carries the window: it has one decision and one
+  commit, the decision is regular and committed and its commit is not reverted in turn. Its raw input equals or
+  extends the reverted one (a shorter one may be half of a split retype), and its `selected_text` is on the case's
+  candidate list. A relabelled case (`relabelled: true`, counted in `reverted_relabelled`) takes the retype's
+  `selected_text`, its commit text as `committed_text` and its index on the case's list as
+  `selected_display_index`; it keeps its own raw input and list. Decisions without a window are kept as recorded,
+  so the rule only reaches records with post-commit windows. `without_evidence` counts exported cases only. The
+  file holds typed text: the path must be
   outside the repository and new, and the file is owner-only. The `replay` binary scores it; see
   [Replay and the first-choice target](../../../../Core/Portable/README.md#replay-and-the-first-choice-target).
 - `learning`: the L family over pair identities (design: `docs/input-quality-metrics.md` section 6), for

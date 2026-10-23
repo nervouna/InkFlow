@@ -47,6 +47,8 @@ WINDOW_KEYS = {'commit_id': 'commitID', 'end': 'end', 'elapsed_ms': 'elapsedMill
                'paste': 'paste', 'leading_deletions': 'leadingDeletions',
                'leading_forward_deletions': 'leadingForwardDeletions', 'leading_undo': 'leadingUndo'}
 WINDOW_ENDS = ('next_code', 'client_changed', 'deactivated', 'timeout')
+# C-rev: a window `w` whose commit was taken back at once, by Cmd+Z or by Backspaces over every committed character.
+REVERTED = '(w.leading_undo>=1 OR (character_count>0 AND w.leading_deletions>=character_count))'
 WINDOW_COLUMNS = ', '.join(f'w."{column}" AS window_{column}' for column in WINDOW_KEYS if column != 'commit_id')
 OPERATIONS = {'keypresses': 'keypresses', 'page_requests': 'pageRequests', 'page_turns': 'pageTurns',
               'candidate_moves': 'candidateMoves', 'preedit_edits': 'preeditEdits'}
@@ -216,11 +218,13 @@ def filters(args):
 
 
 def windows_cte(args):
-    """One row per commit, with the commit named as the database names it: exports prefix every id with its source."""
+    """One row per commit, with the commit named as the database names it: exports prefix every id with its source.
+    `carrier_id` is the composition that holds the window, the one that followed the commit."""
     combined = getattr(args, 'input', None) or getattr(args, 'exports_only', False) or getattr(args, 'source', None)
     select = ', '.join(("c.source_id || ':' || " if combined and column == 'commit_id' else '')
                        + f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
-    return f"windows AS (SELECT {select} FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') w)"
+    return (f"windows AS MATERIALIZED (SELECT {select}, c.id AS carrier_id "
+            "FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') w)")
 
 
 def ctes(args):
@@ -305,8 +309,7 @@ def ctes(args):
           SUM(kind IN ('candidate','raw_return','ascii','forced_flush')) AS code_commits,
           SUM(CASE WHEN kind='candidate' THEN length(text) END) AS committed_characters,
           SUM(kind='candidate' AND w.commit_id IS NOT NULL) AS commits_with_window,
-          SUM(kind='candidate' AND w.commit_id IS NOT NULL AND (w.leading_undo>=1
-            OR (character_count>0 AND w.leading_deletions>=character_count))) AS reverted_commits
+          SUM(kind='candidate' AND w.commit_id IS NOT NULL AND {REVERTED}) AS reverted_commits
         FROM commits LEFT JOIN windows w ON w.commit_id=commits.id
         WHERE composition_id IN (SELECT id FROM selected_compositions) GROUP BY composition_id
     ), scored_compositions AS (
@@ -1065,7 +1068,8 @@ def inspect(db, args):
         revisions.append(dict(revision))
     commits = rows(db, 'SELECT * FROM commits WHERE composition_id=:id ORDER BY issued_at,id', parameters)
     # A window is stored on the composition after its commit, so it is found through the commit.
-    windows = rows(db, 'WITH ' + windows_cte(args) + ''' SELECT w.* FROM windows w JOIN commits m ON m.id=w.commit_id
+    columns = ', '.join(f'w."{column}"' for column in WINDOW_KEYS)
+    windows = rows(db, f'''WITH {windows_cte(args)} SELECT {columns} FROM windows w JOIN commits m ON m.id=w.commit_id
         WHERE m.composition_id=:id ORDER BY m.issued_at,m.id''', parameters)
     decoded_revisions = [decode_row(r) for r in revisions]
     return dict(composition=decode_row(dict(raw)), decisions=decoded_decisions,
@@ -1102,11 +1106,30 @@ def replay_candidate(candidate):
 
 def replay_cases(db, args):
     sql, parameters = ctes(args)
-    decisions = db.execute(sql + """SELECT composition_id, id AS decision_id, occurred_at, text_captured,
-        raw_input, preceding_context, page, selected_display_index, selected_text, commit_text,
-        snapshot_json, first_page_json FROM observations WHERE regular_committed
-        ORDER BY composition_started_at, occurred_at, sequence, id""", parameters)
-    counts = dict(cases=0, text_free_excluded=0, without_evidence=0, without_first_page=0)
+    # A reverted commit's retype is the composition that carries its window, read only when the window holds nothing
+    # but the Backspaces that removed the commit and closed at the next code, and the commit has this one decision.
+    decisions = db.execute(sql + f""", retypes AS (
+        SELECT d.composition_id, json_extract(d.snapshot_json,'$.rawInput') AS raw_input, d.selected_text,
+          m.text AS commit_text
+        FROM candidate_decisions d JOIN commits m ON m.id=d.commit_id LEFT JOIN windows w ON w.commit_id=m.id
+        WHERE d.composition_id IN (SELECT carrier_id FROM windows) AND d.regular_ranked_selection=1
+          AND d.trigger IN ('space','digit','panel') AND d.outcome='committed' AND NOT COALESCE({REVERTED},0)
+          AND (SELECT COUNT(*) FROM candidate_decisions x WHERE x.composition_id=d.composition_id)=1
+          AND (SELECT COUNT(*) FROM commits x WHERE x.composition_id=d.composition_id)=1
+    ) SELECT o.composition_id, o.id AS decision_id, o.occurred_at, o.text_captured, o.raw_input,
+        o.preceding_context, o.page, o.selected_display_index, o.selected_text, o.commit_text, o.snapshot_json,
+        o.first_page_json, COALESCE({REVERTED},0) AS reverted, r.raw_input AS retype_raw_input,
+        r.selected_text AS retype_text, r.commit_text AS retype_commit_text
+      FROM observations o LEFT JOIN commits m ON m.id=o.commit_id LEFT JOIN windows w ON w.commit_id=o.commit_id
+      LEFT JOIN retypes r ON r.composition_id=w.carrier_id AND w."end"='next_code' AND w.leading_undo=0
+        AND w.leading_deletions=character_count AND w.deletions=w.leading_deletions AND w.forward_deletions=0
+        AND w.undo=0 AND w.direct_text=0 AND w.paste=0
+        AND (SELECT COUNT(*) FROM candidate_decisions x
+             WHERE x.composition_id=o.composition_id AND x.commit_id=o.commit_id)=1
+      WHERE o.regular_committed
+      ORDER BY o.composition_started_at, o.occurred_at, o.sequence, o.id""", parameters)
+    counts = dict(cases=0, text_free_excluded=0, without_evidence=0, without_first_page=0, reverted_excluded=0,
+                  reverted_relabelled=0)
     cases = []
     for row in decisions:
         if not row['text_captured']:
@@ -1117,14 +1140,24 @@ def replay_cases(db, args):
             counts['without_first_page'] += 1
             continue
         candidates = [replay_candidate(candidate) for candidate in page['candidates']]
+        index, selected, committed = row['selected_display_index'], row['selected_text'], row['commit_text']
+        if row['reverted']:
+            # The retype is the gold only when it reads the same input: the code again or continued, and on the list.
+            retype = row['retype_raw_input']
+            listed = [candidate for candidate in candidates if candidate['text'] == row['retype_text']]
+            if retype is None or not retype.startswith(row['raw_input']) or not listed:
+                counts['reverted_excluded'] += 1
+                continue
+            counts['reverted_relabelled'] += 1
+            index, selected, committed = listed[0]['display_index'], row['retype_text'], row['retype_commit_text']
         if any(candidate['evidence'] is None for candidate in candidates):
             counts['without_evidence'] += 1
         counts['cases'] += 1
         cases.append(dict(composition_id=row['composition_id'], decision_id=row['decision_id'],
                           occurred_at=row['occurred_at'], raw_input=row['raw_input'],
                           preceding_context=row['preceding_context'], page=row['page'], candidates_from=source,
-                          candidates=candidates, selected_display_index=row['selected_display_index'],
-                          selected_text=row['selected_text'], committed_text=row['commit_text']))
+                          candidates=candidates, selected_display_index=index, selected_text=selected,
+                          committed_text=committed, relabelled=bool(row['reverted'])))
     generated_at = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
     header = dict(generated_at=generated_at, window=dict(since=args.since, until=args.until), kind=args.kind,
                   **counts)
