@@ -2,11 +2,17 @@
 """Installer tests use temporary XDG directories and never contact a desktop."""
 import configparser
 import hashlib
+import http.server
 import importlib.util
+import io
 import json
+import os
 from pathlib import Path
 import platform
+import shutil
+import tarfile
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -329,6 +335,179 @@ class DesktopTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     desktop.stop()
             self.assertFalse(any("start" in call.args[0] for call in run.call_args_list))
+
+
+class ReleaseServer:
+    """Serves fixture release JSON and archives on 127.0.0.1; the only HTTP server the tests use."""
+
+    def __init__(self):
+        self.files = {}
+        self.requests = []
+        server = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                server.requests.append(self.path)
+                body = server.files.get(self.path)
+                if body is None:
+                    self.send_error(404)
+                    return
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self.httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+        self.base = f"http://127.0.0.1:{self.httpd.server_port}"
+
+    def close(self):
+        self.httpd.shutdown()
+        self.httpd.server_close()
+
+
+class UpdateTests(unittest.TestCase):
+    """install.py update: a local release server, temporary XDG directories and fake systemctl/pgrep/ldd.
+
+    PATH holds only the fakes, so no real systemctl, pgrep or Fcitx5 service can be reached.
+    """
+
+    def setUp(self):
+        self.scratch = tempfile.TemporaryDirectory()
+        self.addCleanup(self.scratch.cleanup)
+        self.root = Path(self.scratch.name)
+        self.data = self.root / "data"
+        self.log = self.root / "service.log"
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.fake_tool("systemctl", f'echo "$@" >> "{self.log}"\n')
+        self.fake_tool("pgrep", "exit 1\n")
+        self.fake_tool("ldd", "exit 0\n")
+        self.server = ReleaseServer()
+        self.addCleanup(self.server.close)
+        environment = {
+            "XDG_DATA_HOME": str(self.data), "XDG_CONFIG_HOME": str(self.root / "config"),
+            installer.TEST_API_VARIABLE: self.server.base + "/api/repos/nervouna/InkFlow",
+            "PATH": str(self.bin),
+        }
+        patcher = patch.dict(os.environ, environment)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def fake_tool(self, name, body):
+        tool = self.bin / name
+        tool.write_text("#!/bin/sh\n" + body)
+        tool.chmod(0o755)
+
+    def build_archive(self, version, revision="a", directory=None):
+        directory = directory or f"InkFlow-{version}-linux-{platform.machine()}"
+        source = self.root / f"source-{version}-{revision}"
+        package = source / directory
+        for name in installer.REQUIRED:
+            path = package / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(revision + "\n")
+        (package / "share/fcitx5/inputmethod/inkflow-pinyin.conf").write_text(
+            "[InputMethod]\nName=InkFlow Pinyin\nAddon=inkflow\n")
+        shutil.copyfile(Path(__file__).with_name("install.py"), package / "install.py")
+        manifest = {"format": 1, "architecture": platform.machine(), "version": version,
+                    "revision": revision * 40,
+                    "files": {p.relative_to(package).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                              for p in package.rglob("*") if p.is_file()}}
+        (package / "package.json").write_text(json.dumps(manifest))
+        identifier = installer.validate(package)
+        archive = self.root / f"{revision}-{directory}.tar.xz"
+        with tarfile.open(archive, "w:xz") as tar:
+            tar.add(package, arcname=directory)
+        return {"name": directory + ".tar.xz", "bytes": archive.read_bytes(), "identifier": identifier}
+
+    def serve(self, version, assets):
+        """Publish a release whose asset names map to bytes, for both latest and tagged lookups."""
+        for name, body in assets.items():
+            self.server.files[f"/download/{name}"] = body
+        release = {"tag_name": f"v{version}", "assets": [
+            {"name": name, "browser_download_url": f"{self.server.base}/download/{name}"} for name in assets]}
+        body = json.dumps(release).encode()
+        self.server.files["/api/repos/nervouna/InkFlow/releases/latest"] = body
+        self.server.files[f"/api/repos/nervouna/InkFlow/releases/tags/v{version}"] = body
+
+    @staticmethod
+    def sums(*archives):
+        return "".join(f"{hashlib.sha256(a['bytes']).hexdigest()}  {a['name']}\n" for a in archives).encode()
+
+    def assert_nothing_changed(self):
+        self.assertFalse((self.data / "inkflow").exists())
+        self.assertFalse(self.log.exists())
+
+    def test_update_installs_latest_package(self):
+        archive = self.build_archive("0.8.0")
+        self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
+        self.assertEqual(installer.update(self.data, "v0.8.0", "fixture-fcitx5.service"), 0)
+        self.assertIn("/api/repos/nervouna/InkFlow/releases/tags/v0.8.0", self.server.requests)
+        state = json.loads((self.data / "inkflow/installation.json").read_text())
+        self.assertEqual(state, {"current": archive["identifier"], "previous": None})
+        self.assertEqual(json.loads((self.data / "inkflow/current/package.json").read_text())["version"], "0.8.0")
+        log = self.log.read_text()
+        self.assertIn("--user stop fixture-fcitx5.service", log)
+        self.assertIn("--user start fixture-fcitx5.service", log)
+
+    def test_latest_release_is_used_without_tag(self):
+        archive = self.build_archive("0.8.0")
+        self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
+        installer.update(self.data, None, "fixture-fcitx5.service")
+        self.assertIn("/api/repos/nervouna/InkFlow/releases/latest", self.server.requests)
+
+    def test_checksum_mismatch_installs_nothing(self):
+        archive = self.build_archive("0.8.0")
+        sums = f"{'0' * 64}  {archive['name']}\n".encode()
+        self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": sums})
+        with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
+            installer.update(self.data, None, "fixture-fcitx5.service")
+        self.assert_nothing_changed()
+
+    def test_missing_architecture_asset_changes_nothing(self):
+        other = self.build_archive("0.8.0", directory="InkFlow-0.8.0-linux-other-cpu")
+        self.serve("0.8.0", {other["name"]: other["bytes"], "SHA256SUMS-linux": self.sums(other)})
+        with self.assertRaisesRegex(RuntimeError, "lacks"):
+            installer.update(self.data, None, "fixture-fcitx5.service")
+        self.assert_nothing_changed()
+
+    def test_unsafe_archive_member_is_refused(self):
+        archive = self.build_archive("0.8.0")
+        directory = f"InkFlow-0.8.0-linux-{platform.machine()}"
+        path = self.root / "unsafe.tar.xz"
+        with tarfile.open(path, "w:xz") as tar:
+            tar.add(self.root / "source-0.8.0-a" / directory, arcname=directory)
+            member = tarfile.TarInfo("../escape")
+            member.size = 4
+            tar.addfile(member, io.BytesIO(b"evil"))
+        unsafe = {"name": archive["name"], "bytes": path.read_bytes(), "identifier": archive["identifier"]}
+        self.serve("0.8.0", {unsafe["name"]: unsafe["bytes"], "SHA256SUMS-linux": self.sums(unsafe)})
+        with self.assertRaisesRegex(ValueError, "unsafe"):
+            installer.update(self.data, None, "fixture-fcitx5.service")
+        self.assert_nothing_changed()
+
+    def test_installed_matching_version_downloads_no_archive(self):
+        archive = self.build_archive("0.8.0")
+        self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
+        current = self.data / "inkflow/current"
+        current.mkdir(parents=True)
+        (current / "package.json").write_text(json.dumps({"version": "0.8.0"}))
+        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service"), 0)
+        self.assertEqual(self.server.requests, ["/api/repos/nervouna/InkFlow/releases/latest"])
+        self.assertFalse(self.log.exists())
+
+    def test_plain_http_is_refused_without_the_test_variable(self):
+        with patch.dict(os.environ):
+            os.environ.pop(installer.TEST_API_VARIABLE)
+            with self.assertRaises(ValueError):
+                installer.checked_url("http://127.0.0.1:9/api")
+        with self.assertRaises(ValueError):
+            installer.checked_url("http://example.com/api")
+        self.assertEqual(installer.checked_url("https://api.github.com/x"), "https://api.github.com/x")
 
 
 if __name__ == "__main__":
