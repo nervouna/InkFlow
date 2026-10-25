@@ -431,8 +431,12 @@ struct AIAdoptionLearningTests {
             check(request("update\tshared\tcodex\tCodex\t1") == "ok", "Seed one unambiguous ranking record")
             expectEntry("shared", "codex", "Codex", "Ranking seed persists")
             // Pinyin-shaped, so only the technical context can lead it (a technical lead needs a non-Pinyin input).
-            check(request("update\tshared\tcan\tcan\t1") == "ok", "Seed a Pinyin-shaped ranking record")
-            expectEntry("shared", "can", "can", "Pinyin-shaped ranking seed persists")
+            // `agent` is Pinyin up to an unfinished final syllable; `can` is complete Pinyin, which the context
+            // does not lift (rule 14).
+            check(request("update\tshared\tagent\tagent\t1") == "ok", "Seed a Pinyin-shaped ranking record")
+            expectEntry("shared", "agent", "agent", "Pinyin-shaped ranking seed persists")
+            check(request("update\tshared\tcan\tcan\t1") == "ok", "Seed a complete Pinyin ranking record")
+            expectEntry("shared", "can", "can", "Complete Pinyin ranking seed persists")
         case "contract-mixed-seed":
             for (code, text) in [("codex", "Codex"), ("swiftui", "SwiftUI"), ("cpp", "C++"),
                                  ("offline", "offline"), ("can", "can")] {
@@ -551,15 +555,19 @@ struct AIAdoptionLearningTests {
             engine.setPrecedingText("正在使用 Swift ")
             type(engine, "codey"); engine.key(0xff08); type(engine, "x")
             check(engine.snapshot().candidates.first == "Codex", "Editing recomputes bounded evidence ranking")
-            // `codex` is not Pinyin, so it leads in every context (rule 14); `can` is, so only the context lifts it.
-            engine.clear(); engine.setPrecedingText("正在使用 Swift "); type(engine, "can")
-            check(engine.snapshot().candidates.first == "can",
+            // `codex` is not Pinyin, so it leads in every context (rule 14); `agent` is Pinyin only up to an
+            // unfinished final syllable, so only the context lifts it; `can` is complete Pinyin, so nothing does.
+            engine.clear(); engine.setPrecedingText("正在使用 Swift "); type(engine, "agent")
+            check(engine.snapshot().candidates.first == "agent",
                   "Personal exact Pinyin-shaped English leads in bounded technical context: \(engine.snapshot().candidates)")
-            engine.clear(); type(engine, "can")
-            check(engine.snapshot().candidates.first != "can", "Clearing invalidates stale technical context")
+            engine.clear(); type(engine, "agent")
+            check(engine.snapshot().candidates.first != "agent", "Clearing invalidates stale technical context")
             let isolated = IFEngine()!
-            type(isolated, "can")
-            check(isolated.snapshot().candidates.first != "can", "Technical context remains session-local")
+            type(isolated, "agent")
+            check(isolated.snapshot().candidates.first != "agent", "Technical context remains session-local")
+            engine.clear(); engine.setPrecedingText("正在使用 Swift "); type(engine, "can")
+            check(engine.snapshot().candidates.first != "can" && engine.snapshot().candidates.contains("can"),
+                  "Complete Pinyin English stays behind Chinese in technical context: \(engine.snapshot().candidates)")
             return
         }
 

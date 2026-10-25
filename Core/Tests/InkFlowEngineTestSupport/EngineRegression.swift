@@ -1045,6 +1045,7 @@ package enum EngineRegression {
         punctuation(event: event)
         learnedEnglishOverSentence(event: event)
         technicalEnglishLead(event: event)
+        pinyinPersonalEnglish(event: event)
         compositionKeys(event: event)
         forgetCandidate(event: event)
         emojiCandidates()
@@ -1827,6 +1828,100 @@ package enum EngineRegression {
         check(engine.takeCommit() == "马刺欧式", "technical-lead macos: the displayed second candidate commits the Chinese reading")
         engine.clear()
         print("PASS technical English lead: macos/deepseek/ios lead, the Chinese reading stays behind, Pinyin-shaped and short inputs keep their first candidate")
+    }
+
+    /// In a technical context a lowercase input that is complete normal Pinyin keeps its Chinese first candidate
+    /// although the user has chosen its English word, and the word stays on the first page (rule 14). Capitals, a word
+    /// that is not complete Pinyin and the letters i, u and v, which are not syllables, keep the lead. Every record
+    /// is forgotten again.
+    @MainActor package static func pinyinPersonalEnglish(event: Event = rimeEvent) {
+        let engine = IFEngine()!
+        let technical = "正在使用 Swift "
+        func compose(_ input: String, context: String = "") {
+            engine.clear()
+            engine.setPrecedingText(context)
+            for character in input {
+                _ = event(engine, Int32(character.asciiValue!), 0, String(character), character.isUppercase ? 1 : 0)
+            }
+        }
+        func page(_ input: String, context: String = "") -> [String] {
+            compose(input, context: context)
+            return engine.snapshot().candidates
+        }
+        func candidate(_ text: String) -> QualityCandidate? {
+            engine.qualitySnapshot().candidates.first { $0.text == text }
+        }
+        // The `exact` field of a displayed candidate's evidence row: 1 exact English, 2 technical lead,
+        // 4 complete Pinyin.
+        func mark(_ text: String) -> String? {
+            guard let row = candidate(text)?.evidence else { return nil }
+            let fields = row.split(separator: ",", omittingEmptySubsequences: false)
+            return fields.count > 3 ? String(fields[3]) : nil
+        }
+        // Select a candidate, then end the undo window as the next key of a user typing on does.
+        func learn(_ input: String, _ text: String) {
+            guard let index = page(input).firstIndex(of: text) else {
+                check(false, "pinyin-personal fixture: \(text) is missing for \(input)")
+                return
+            }
+            engine.select(index)
+            check(engine.takeCommit() == text, "pinyin-personal fixture: select \(text)")
+            engine.key(0xff09)
+            // The English lookup is cached for the current input; another input drops it, so the record shows.
+            compose("qz")
+        }
+        func forget(_ input: String, _ text: String) {
+            guard let index = page(input).firstIndex(of: text) else {
+                check(false, "pinyin-personal fixture: \(text) is missing for \(input)")
+                return
+            }
+            engine.highlight(index)
+            check(event(engine, 0xff08, 51, "\u{8}", 1), "pinyin-personal fixture: forget \(text)")
+            check(candidate(text)?.source == nil, "pinyin-personal fixture: \(text) is forgotten")
+        }
+
+        // Before anything is learned the Chinese reading leads, with or without a technical signal.
+        let pinyin = [("ne", "ne"), ("o", "o"), ("beijing", "Beijing")]
+        var chinese: [String: String] = [:]
+        for (input, word) in pinyin {
+            let before = page(input, context: technical)
+            let leader = before.first ?? ""
+            check(!leader.isEmpty && leader.unicodeScalars.allSatisfy { $0.value > 127 } && before.contains(word),
+                  "pinyin-personal \(input) fixture: \(before)")
+            chinese[input] = leader
+            learn(input, word)
+        }
+        check(chinese["ne"] == "呢" && chinese["o"] == "哦", "pinyin-personal fixture: \(chinese)")
+        // pinyin-personal: the learned word keeps its evidence and its place directly behind the Chinese reading.
+        for (input, word) in pinyin {
+            let candidates = page(input, context: technical)
+            check(candidates.prefix(2) == [chinese[input]!, word], "pinyin-personal \(input): \(candidates)")
+            check(candidate(word)?.source == "personal_exact_english", "pinyin-personal \(input): still learned")
+            check(mark(word) == "4", "pinyin-personal \(input): not marked: \(engine.qualitySnapshot().candidates)")
+            check(page(input).first == chinese[input], "pinyin-personal \(input): no technical signal, Chinese leads")
+        }
+        // pinyin-personal: Space commits the Chinese reading.
+        compose("ne", context: technical)
+        check(event(engine, 32, 49, " ", 0) && engine.takeCommit() == "呢", "pinyin-personal ne: Space commits 呢")
+        engine.key(0xff09)
+        // pinyin-guard: capitals are explicit English intent.
+        check(page("O", context: technical).first == "O", "pinyin-guard O: \(engine.snapshot().candidates)")
+        // pinyin-guard: a word that is not complete Pinyin still leads, and so do the letters that are no syllable.
+        learn("google", "google")
+        let google = page("google", context: technical)
+        check(google.first == "google" && mark("google") != "4", "pinyin-guard google: \(google)")
+        for (letter, complete) in [("e", true), ("i", false), ("u", false), ("v", false)] {
+            learn(letter, letter)
+            let candidates = page(letter, context: technical)
+            check(mark(letter) == (complete ? "4" : "1"), "pinyin-guard \(letter): \(candidates)")
+            check(complete || candidates.first == letter, "pinyin-guard \(letter): the letter leads: \(candidates)")
+        }
+        for (input, word) in pinyin + [("google", "google"), ("e", "e"), ("i", "i"), ("u", "u"), ("v", "v")] {
+            forget(input, word)
+        }
+        engine.clear()
+        print("PASS complete Pinyin personal English: ne, o and beijing keep their Chinese reading in a technical " +
+              "context, capitals, google and the letters i/u/v keep the lead")
     }
 
     /// Shift+Backspace forgets the learning of the highlighted candidate and nothing else: Rime's own

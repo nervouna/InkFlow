@@ -31,10 +31,14 @@ end
 -- separate words, that covers the whole input is marked 3 in the same field; the ranker lets
 -- a learned English word lead it when it is the page's first candidate.
 --
+-- `pinyin` is set when the native translator found the whole input to be lowercase complete
+-- normal Pinyin. A personal exact standalone English candidate spanning that input is then marked 4
+-- in the same field, and the ranker keeps it behind the best Han candidate in a technical context.
+--
 -- The row ends with two facts the engine records and never ranks on: the Rime `type` of the genuine
 -- candidate (empty unless it starts with a lowercase letter or underscore and continues with lowercase
 -- letters, digits and underscores, at most 32 bytes) and `corrected`.
-local function candidate_metadata(env, candidate, input, technical)
+local function candidate_metadata(env, candidate, input, technical, pinyin)
   local input_length = #input
   local candidate_type = candidate.type or ""
   local source, exact, personal = "n", candidate._end == input_length and 1 or 0, 0
@@ -81,6 +85,10 @@ local function candidate_metadata(env, candidate, input, technical)
       and candidate.start == 0 and candidate._end == input_length then
     exact = 2
   end
+  if pinyin and source == "e" and exact == 1 and personal > 0
+      and candidate.start == 0 and candidate._end == input_length then
+    exact = 4
+  end
   if candidate_type == "sentence" and exact == 1 and candidate.start == 0 then
     exact = 3
   end
@@ -104,13 +112,15 @@ local function input_coverage(env, fields, context)
   -- get_candidate_at can prepare more translations; never request unmaterialized rows.
   if offset + count > menu:candidate_count() then return "failed" end
   local rows = {fields[1] .. "," .. fields[2]}
-  -- The native translator names the input it judged technical; any other value is stale.
+  -- The native translator names the input it judged technical or complete Pinyin; any other value is stale.
   local technical = context:get_property("inkflow_technical_input")
   technical = technical ~= "" and technical == context.input
+  local pinyin = context:get_property("inkflow_pinyin_input")
+  pinyin = pinyin ~= "" and pinyin == context.input
   for index = offset, offset + count - 1 do
     local candidate = menu:get_candidate_at(index)
     if not candidate then return "failed" end
-    rows[#rows + 1] = candidate_metadata(env, candidate, context.input, technical)
+    rows[#rows + 1] = candidate_metadata(env, candidate, context.input, technical, pinyin)
   end
   return "ok", table.concat(rows, ";")
 end

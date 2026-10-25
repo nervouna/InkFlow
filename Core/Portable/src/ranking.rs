@@ -30,6 +30,10 @@ pub struct Metadata {
     /// which native Rime does not read as Pinyin up to an unfinished final syllable. The first
     /// such candidate leads the page. Transported as `exact` = 2.
     pub lead: bool,
+    /// A personal exact standalone English candidate that covers a whole lowercase input which native Rime reads as
+    /// complete normal Pinyin syllables (`ne`, `o`, `beijing`). A technical context does not lift it above the best
+    /// Han candidate. Transported as `exact` = 4.
+    pub pinyin: bool,
     /// A native candidate that the poet composed from separate words and that covers the whole
     /// input. When it is the page's first candidate, the user's own exact standalone English word
     /// leads it. Transported as `exact` = 3.
@@ -75,6 +79,8 @@ impl Metadata {
             3
         } else if self.lead {
             2
+        } else if self.pinyin {
+            4
         } else {
             u8::from(self.exact)
         };
@@ -142,11 +148,12 @@ pub fn parse_metadata(
             "o" => CandidateClass::Other,
             _ => return None,
         };
-        let (exact, lead, sentence) = match fields[3] {
-            "3" => (true, false, true),
-            "2" => (true, true, false),
-            "1" => (true, false, false),
-            "0" => (false, false, false),
+        let (exact, lead, sentence, pinyin) = match fields[3] {
+            "4" => (true, false, false, true),
+            "3" => (true, false, true, false),
+            "2" => (true, true, false, false),
+            "1" => (true, false, false, false),
+            "0" => (false, false, false, false),
             _ => return None,
         };
         let personal = match fields[4] {
@@ -169,6 +176,15 @@ pub fn parse_metadata(
         if lead
             && !(source == Source::English
                 && class == CandidateClass::Ascii
+                && start == 0
+                && end as usize == input_length)
+        {
+            return None;
+        }
+        if pinyin
+            && !(source == Source::English
+                && class == CandidateClass::Ascii
+                && personal > 0
                 && start == 0
                 && end as usize == input_length)
         {
@@ -204,6 +220,7 @@ pub fn parse_metadata(
             personal,
             source,
             lead,
+            pinyin,
             sentence,
             candidate_type,
             corrected,
@@ -472,6 +489,8 @@ impl ContextRanker {
         };
         let native_han = han().next();
         let leading_han = han().min_by_key(|&i| (std::cmp::Reverse(scores[i]), i));
+        // A technical context lifts the user's own exact English word, unless native evidence marks the input as
+        // complete Pinyin: that word stays with the exact English, behind the best Han candidate.
         let is_technical = technical(preceding);
         // The first exact English candidate in English order, when the input is not Pinyin.
         let technical_lead = eligible.iter().copied().find(|&i| rows[i].lead);
@@ -490,7 +509,11 @@ impl ContextRanker {
                 0
             } else if Some(i) == technical_lead
                 || Some(i) == learned_lead
-                || (is_technical && row.exact && row.personal > 0 && row.source == Source::English)
+                || (is_technical
+                    && row.exact
+                    && row.personal > 0
+                    && row.source == Source::English
+                    && !row.pinyin)
             {
                 1
             } else if row.exact && row.personal > 0 && row.source == Source::Mixed {
@@ -536,6 +559,7 @@ mod tests {
             personal,
             source,
             lead: false,
+            pinyin: false,
             sentence: false,
             candidate_type: String::new(),
             corrected: false,

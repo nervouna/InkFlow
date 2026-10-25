@@ -42,6 +42,8 @@ fn swift_ranking_reference() {
                             3
                         } else if row.lead {
                             2
+                        } else if row.pinyin {
+                            4
                         } else {
                             u8::from(row.exact)
                         },
@@ -166,6 +168,7 @@ fn metadata_row_round_trips_through_parse_metadata() {
         "0,7,a,2,0,e,english_exact,0",
         "0,7,m,1,3,m,mixed_personal_3,0",
         "0,7,a,1,2,e,english_personal_2,0",
+        "0,7,a,4,2,e,english_personal_2,0",
         "0,7,m,1,0,m,,0",
         "2,7,o,0,0,c,user_table,0",
     ] {
@@ -193,4 +196,58 @@ fn candidate_facts_do_not_change_the_order() {
         "0,7,n,1,0,n,sentence,1",
     ]);
     assert_eq!(plain, facts);
+}
+
+/// A personal English row the native side marked as complete Pinyin (`exact` = 4) stays behind the best Han
+/// candidate in a technical context. The same row without the mark leads (rule 14).
+#[test]
+fn complete_pinyin_personal_english_stays_behind_han_in_a_technical_context() {
+    let ranker = ContextRanker::from_dictionary("");
+    let candidates: Vec<String> = ["呢", "ne"].map(String::from).to_vec();
+    let order = |english: &str| {
+        let metadata = parse_rows(&["0,2,n,1,0,n,phrase,0", english], 2);
+        ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref())
+    };
+    assert_eq!(order("0,2,a,4,1,e,english_personal_1,0"), [0, 1]);
+    assert_eq!(order("0,2,a,1,1,e,english_personal_1,0"), [1, 0]);
+}
+
+/// A marked row takes the place of exact English behind the Han candidate and keeps its bucket there.
+#[test]
+fn complete_pinyin_personal_english_keeps_its_bucket_among_english() {
+    let ranker = ContextRanker::from_dictionary("");
+    let candidates: Vec<String> = ["哦", "Ne", "o", "O"].map(String::from).to_vec();
+    let metadata = parse_rows(
+        &[
+            "0,1,n,1,0,n,phrase,0",
+            "0,1,a,1,0,e,english_exact,0",
+            "0,1,a,4,1,e,english_personal_1,0",
+            "0,1,a,4,3,e,english_personal_3,0",
+        ],
+        1,
+    );
+    let order = ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref());
+    assert_eq!(order, [0, 3, 2, 1]);
+    // Without a technical signal the order is the same: the mark changes nothing there.
+    assert_eq!(ranker.order(&candidates, "", metadata.as_deref()), order);
+}
+
+/// The mark names a whole-input personal English row; anything else is malformed and returns the page
+/// to native order.
+#[test]
+fn parse_metadata_rejects_a_misplaced_complete_pinyin_mark() {
+    for row in [
+        "0,7,a,4,0,e,english_exact,0",
+        "0,7,m,4,1,m,mixed_personal_1,0",
+        "0,7,n,4,0,n,phrase,0",
+        "0,7,a,4,1,c,user_table,0",
+        "0,7,o,4,1,e,english_personal_1,0",
+        "0,3,a,4,1,e,english_personal_1,0",
+        "1,7,a,4,1,e,english_personal_1,0",
+        "0,7,a,5,1,e,english_personal_1,0",
+    ] {
+        assert!(parse_rows(&[row], 7).is_none(), "{row}");
+    }
+    let rows = parse_rows(&["0,7,a,4,2,e,english_personal_2,0"], 7).unwrap();
+    assert!(rows[0].exact && rows[0].pinyin && !rows[0].lead && !rows[0].sentence);
 }
