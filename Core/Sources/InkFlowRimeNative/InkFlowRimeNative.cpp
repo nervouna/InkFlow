@@ -38,8 +38,10 @@ bool IsPublicEnglish(const string& text) {
   return !text.empty() && std::all_of(text.begin(), text.end(), IsLetter);
 }
 
-// Context property that carries IsTechnicalInput's verdict to the Lua metadata.
+// Context properties that carry the input verdicts to the Lua metadata: IsTechnicalInput's, and whether a
+// lowercase input is complete normal Pinyin.
 const char* const kTechnicalInputProperty = "inkflow_technical_input";
+const char* const kPinyinInputProperty = "inkflow_pinyin_input";
 
 enum class Origin { Chinese, PublicEnglish, PersonalEnglish };
 
@@ -197,12 +199,10 @@ bool BeginsNormalSpelling(Prism& prism, const string& tail) {
 // optionally followed by one unfinished final syllable, as `macos` and
 // `deepseek` are not but `email` (e mai l) and `chin` (chi n) are. The same
 // native normal-spelling evidence as rule 9: abbreviations, fuzzy pairs and
-// typo aliases never make an input look like Pinyin.
-bool IsTechnicalInput(const string& input, Prism& prism, const string& delimiters) {
-  if (input.size() < 4 || !std::all_of(input.begin(), input.end(), IsLetter))
-    return false;
-  const auto reachable = ReachableFromStart(NormalEdges(input, prism, delimiters));
-  if (reachable.back()) return false;
+// typo aliases never make an input look like Pinyin. `reachable` is
+// ReachableFromStart over the input's NormalEdges.
+bool IsTechnicalInput(const string& input, const vector<bool>& reachable, Prism& prism) {
+  if (input.size() < 4 || reachable.back()) return false;
   for (size_t start = 0; start < input.size(); ++start) {
     if (reachable[start] && BeginsNormalSpelling(prism, input.substr(start)))
       return false;
@@ -268,14 +268,25 @@ class MixedPersonalTranslator final : public Translator {
         input.size() <= static_cast<size_t>(std::numeric_limits<int>::max()) &&
         segment.end >= segment.start && input.size() == segment.end - segment.start &&
         pinyin_ && pinyin_->loaded();
-    PublishTechnicalInput(bounded && IsTechnicalInput(input, *pinyin_->prism(), delimiters_)
-                              ? input : string());
+    // Both verdicts read one NormalEdges of the input, which the personal lookup below reuses.
+    Edges normal;
+    string technical;
+    string pinyin;
+    if (bounded && std::all_of(input.begin(), input.end(), IsLetter)) {
+      normal = NormalEdges(input, *pinyin_->prism(), delimiters_);
+      const auto reachable = ReachableFromStart(normal);
+      if (IsTechnicalInput(input, reachable, *pinyin_->prism())) technical = input;
+      // Capitals are explicit English intent (rule 9), so only lowercase input is Pinyin here.
+      if (reachable.back() && !HasUppercase(input)) pinyin = input;
+    }
+    PublishInput(kTechnicalInputProperty, technical);
+    PublishInput(kPinyinInputProperty, pinyin);
     if (!bounded || !mixed_ || !mixed_->loaded() || !personal_ || !personal_->loaded())
       return nullptr;
 
     const auto matches = FindPersonalMatches(input);
     if (matches.empty()) return nullptr;
-    const auto normal = NormalEdges(input, *pinyin_->prism(), delimiters_);
+    if (normal.empty()) normal = NormalEdges(input, *pinyin_->prism(), delimiters_);
     auto context = normal;
     map<string, bool> admitted_runs;
     AddPublicContext(input, &context, &admitted_runs);
@@ -314,14 +325,14 @@ class MixedPersonalTranslator final : public Translator {
   }
 
  private:
-  // The English ranking metadata (inkflow_input_coverage.lua) reads this context
-  // property in the same composition: it holds the input when that input is
-  // technical, otherwise it is empty. Naming the input keeps a stale value from
-  // ever matching another one.
-  void PublishTechnicalInput(const string& value) {
+  // The English ranking metadata (inkflow_input_coverage.lua) reads these context
+  // properties in the same composition: each holds the input when that input is
+  // technical (or lowercase complete Pinyin), otherwise it is empty. Naming the
+  // input keeps a stale value from ever matching another one.
+  void PublishInput(const char* property, const string& value) {
     Context* context = engine_ ? engine_->context() : nullptr;
-    if (context && context->get_property(kTechnicalInputProperty) != value)
-      context->set_property(kTechnicalInputProperty, value);
+    if (context && context->get_property(property) != value)
+      context->set_property(property, value);
   }
 
   vector<PersonalMatch> FindPersonalMatches(const string& input) {
