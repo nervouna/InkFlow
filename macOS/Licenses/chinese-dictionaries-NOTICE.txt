@@ -48,7 +48,7 @@ The small curated Chinese/English vocabulary is updated with the application.
 
 Corresponding source: each release attaches
 InkFlow-<version>-<build>-dictionary-source.tar.gz with the verified pinned
-upstream inputs listed above, the rime-pinyin-simp and rime-easy-en archives,
+upstream inputs listed above, the rime-pinyin-simp archive,
 the Rime Ice emoji table, InkFlow's generator, catalog, corrections, data
 snapshots and preparation scripts at the release commit, and these license
 texts. macOS/scripts/dictionary-source-bundle.sh builds it.

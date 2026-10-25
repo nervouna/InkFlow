@@ -26,6 +26,7 @@ import InkFlowEngineTestSupport
         let schemaBefore = try Data(contentsOf: schemaURL)
         if selected("basic") { EngineRegression.chineseDictionaryCoverage(); try EngineRegression.runCases(); EngineRegression.propertyChannel() }
         if selected("english") {
+            EngineRegression.esdbSpellings()
             try EngineRegression.domainVocabulary()
             EngineRegression.englishAdmission()
             EngineRegression.conservativeChinesePrefixes()

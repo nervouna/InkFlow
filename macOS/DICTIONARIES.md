@@ -12,6 +12,7 @@ count and update actions; provenance and generation details live here.
 | Rime Ice | Base and extended Chinese vocabulary | [`iDvel/rime-ice`](https://github.com/iDvel/rime-ice) |
 | Legacy Pinyin | Compatibility additions retained from the former baseline | [`rime/rime-pinyin-simp`](https://github.com/rime/rime-pinyin-simp) |
 | InkFlow additions | Curated technology and Internet terms plus explicit corrections | [`Core/config/chinese-overrides.tsv`](../Core/config/chinese-overrides.tsv) |
+| English spellings | Spellings and capitalization of the `en_US-large` and `en_GB-large` word lists, weighted by wordfreq | [`Core/Data/README.md`](../Core/Data/README.md) |
 | Technical English | Admitted technology terms and abbreviations | [`Core/Data/TECHNOLOGY.md`](../Core/Data/TECHNOLOGY.md) |
 
 `Core/config/chinese-sources.json` is the source of truth for source commits, file paths, byte

@@ -59,10 +59,24 @@ awk -F '\t' '
   END { if (!rows) exit 1 }
 ' Core/config/english-overrides.tsv
 
+# An override that matches no snapshot or technology display does nothing: delete it.
+awk -F '\t' '
+  /^[[:space:]]*#/ || !NF { next }
+  FILENAME != ARGV[3] {
+    known[$1] = 1
+    next
+  }
+  !($1 in known) {
+    print "FAIL: override matches no display: " $1 > "/dev/stderr"
+    bad = 1
+  }
+  END { exit bad }
+' Core/Data/english-wordfreq.tsv Core/Data/english-technology.tsv Core/config/english-overrides.tsv
+
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 mkdir -p "$fixture/Core/Portable/dictionary/src" "$fixture/Core/Tools/DictionaryGeneratorTool" "$fixture/Core/Sources/InkFlowDomain" "$fixture/Core/scripts" "$fixture/Core/config" "$fixture/Core/Data" "$fixture/schemas" \
-  "$fixture/build/deps/rime-pinyin-simp-fixture" "$fixture/build/deps/rime-easy-en-fixture"
+  "$fixture/build/deps/rime-pinyin-simp-fixture"
 cp Core/scripts/prepare-rime.sh Core/scripts/prepare-spelling.sh "$fixture/Core/scripts/"
 printf 'fixture package\n' > "$fixture/Core/Package.swift"
 printf 'fixture entry\n' > "$fixture/Core/Tools/DictionaryGeneratorTool/main.swift"
@@ -95,38 +109,9 @@ cp -R schemas/. "$fixture/schemas/"
 printf '%s\n' '---' 'name: pinyin_simp' '...' > "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '中文\tzhong wen\t1000\n' >> "$fixture/build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml"
 printf '微笑\t微笑 😊\n' > "$fixture/build/deps/emoji.txt"
-cat > "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml" <<'DATA'
----
-name: easy_en
-version: '0.2'
-sort: by_weight
-use_preset_vocabulary: false
-...
-email	email	0
-Email	Email	0
-emails	emails	0
-computer	computer	998830
-compute	compute	981698
-widget	widget	0
-widget	Widget	1
-Widget	Widget	999999
-novel	novel	980000
-boundary	boundary	1
-above	above	1
-below	below	999999
-api	api	999999
-API	api	999999
-API	Api	999999
-D	D	999999
-Alias	alias	999999
-foo-bar	foo-bar	999999
-unknown	unknown	999999
-unrated	unrated
-DATA
 cat > "$fixture/Core/Data/english-wordfreq.tsv" <<'DATA'
 # Exact source text and observed Zipf; absence means missing evidence.
 email	4.68
-Email	4.68
 emails	4.24
 computer	4.97
 compute	3.41
@@ -140,6 +125,13 @@ API	4.50
 D	4.50
 Alias	4.50
 foo-bar	4.50
+don't	4.50
+John	4.59
+iPhone	4.43
+CEO	4.46
+McDonald's	4.30
+Office	4.20
+office	4.20
 DATA
 configure() {
   printf 'ENGLISH_MIN_ZIPF=%s\nENGLISH_WEIGHT_SCALE=%s\nMIXED_ENGLISH_WEIGHT_DIVISOR=%s\n' "$1" "$2" "$3" \
@@ -199,36 +191,92 @@ done
 cat > "$fixture/expected.tsv" <<'DATA'
 email	email	1170000
 Email	Email	1170000
+EMAIL	EMAIL	1170000
 emails	emails	1060000
+Emails	Emails	1060000
+EMAILS	EMAILS	1060000
 computer	computer	1242500
+Computer	Computer	1242500
+COMPUTER	COMPUTER	1242500
 boundary	boundary	1000000
+Boundary	Boundary	1000000
+BOUNDARY	BOUNDARY	1000000
 above	above	1002500
+Above	Above	1002500
+ABOVE	ABOVE	1002500
 api	api	1125000
-API	api	1125000
+Api	Api	1125000
 API	API	1125000
-API	Api	1125000
+foo-bar	foobar	1125000
+Foo-bar	Foobar	1125000
+FOO-BAR	FOOBAR	1125000
+don't	dont	1125000
+Don't	Dont	1125000
+DON'T	DONT	1125000
+office	office	1050000
+Office	Office	1050000
+OFFICE	OFFICE	1050000
+API	api	1125000
+D	d	1125000
 D	D	1125000
 Alias	alias	1125000
 Alias	Alias	1125000
-foo-bar	foo-bar	1125000
+ALIAS	ALIAS	1125000
+John	john	1147500
+John	John	1147500
+JOHN	JOHN	1147500
+iPhone	iphone	1107500
+iPhone	iPhone	1107500
+CEO	ceo	1115000
+CEO	CEO	1115000
+McDonald's	mcdonalds	1075000
+Office	office	1050000
 DATA
 diff -u "$fixture/expected.tsv" "$fixture/english.tsv"
-# A cased display also becomes its own code, so typing it exactly reaches it. This adds a code (API API,
-# Alias Alias), never a display: the set of displayed spellings and every pair stay unique.
-displays=$(cut -f1 "$fixture/english.tsv" | LC_ALL=C sort -u | paste -sd, -)
-[[ $displays == 'API,Alias,D,Email,above,api,boundary,computer,email,emails,foo-bar' ]] || fail
+# Every row is coded by its lowercase letters. An admitted lowercase display also gets its Capitalized and
+# ALL-CAPS forms, coded by the same case; a Capitalized display gets its ALL-CAPS form; a cased letters-only
+# display is also its own code (iPhone). Lowercase codes reach only source spellings, never a synthesized one,
+# and the gate removes a word with all of its forms (compute, Compute, COMPUTE). Every pair stays unique.
+# Case variants tie and Rime keeps file order among equal weights, so lowercase spellings come first
+# (office before Office, even though the snapshot lists Office first), in the mixed dictionary too.
 [[ -z $(cut -f1,2 "$fixture/english.tsv" | LC_ALL=C sort | uniq -d) ]] || fail
+awk -F '\t' '
+  $2 ~ /^[a-z]+$/ && $1 !~ /^(email|emails|computer|boundary|above|api|API|D|Alias|foo-bar|office)$/ &&
+  $1 !~ /^(don.t|John|iPhone|CEO|McDonald.s|Office)$/ { exit 1 }
+' "$fixture/english.tsv" || fail
+awk -F '\t' 'tolower($1) ~ /^(compute|widget|novel|below)$/ { exit 1 }' "$fixture/english.tsv" || fail
 cat > "$fixture/expected-mixed.tsv" <<'DATA'
 email	email	11700
 Email	Email	11700
+EMAIL	EMAIL	11700
 emails	emails	10600
+Emails	Emails	10600
+EMAILS	EMAILS	10600
 computer	computer	12425
+Computer	Computer	12425
+COMPUTER	COMPUTER	12425
 boundary	boundary	10000
+Boundary	Boundary	10000
+BOUNDARY	BOUNDARY	10000
 above	above	10025
+Above	Above	10025
+ABOVE	ABOVE	10025
+Api	Api	11250
 API	API	11250
-API	Api	11250
+office	office	10500
+Office	Office	10500
+OFFICE	OFFICE	10500
 D	D	11250
+Alias	alias	11250
 Alias	Alias	11250
+ALIAS	ALIAS	11250
+John	john	11475
+John	John	11475
+JOHN	JOHN	11475
+iPhone	iphone	11075
+iPhone	iPhone	11075
+CEO	CEO	11150
+Office	office	10500
 DATA
 diff -u "$fixture/expected-mixed.tsv" "$fixture/mixed.tsv"
 
@@ -239,33 +287,60 @@ awk -F '\t' 'BEGIN {OFS="\t"} {$3=$3/2.5; print}' "$fixture/expected.tsv" > "$fi
 diff -u "$fixture/rescaled.tsv" "$fixture/english.tsv"
 configure 4.0 250000 100
 
-# Overrides cover absent and nonzero evidence, exact text aliases, and exclusion.
+# Overrides cover nonzero evidence, every code of an exact text, and exclusion.
 cat > "$fixture/Core/config/english-overrides.tsv" <<'DATA'
-widget	4.50	Supply missing evidence to every existing code alias
+Widget	4.50	Raise a below-gate observation for every code of this exact display
 novel	4.10	Replace a nonzero observed frequency
-email	0	Explicit exclusion even at a zero gate
-unrated	4.001	Source weights are not used, including absent weights
+email	0	Explicit exclusion even at a zero gate, with every case form
 ghost	9	Never create a missing source word
 DATA
 generate
 cat > "$fixture/expected-overrides.tsv" <<'DATA'
-Email	Email	1170000
 emails	emails	1060000
+Emails	Emails	1060000
+EMAILS	EMAILS	1060000
 computer	computer	1242500
-widget	widget	1125000
-widget	Widget	1125000
+Computer	Computer	1242500
+COMPUTER	COMPUTER	1242500
 novel	novel	1025000
+Novel	Novel	1025000
+NOVEL	NOVEL	1025000
 boundary	boundary	1000000
+Boundary	Boundary	1000000
+BOUNDARY	BOUNDARY	1000000
 above	above	1002500
+Above	Above	1002500
+ABOVE	ABOVE	1002500
 api	api	1125000
-API	api	1125000
+Api	Api	1125000
 API	API	1125000
-API	Api	1125000
+foo-bar	foobar	1125000
+Foo-bar	Foobar	1125000
+FOO-BAR	FOOBAR	1125000
+don't	dont	1125000
+Don't	Dont	1125000
+DON'T	DONT	1125000
+office	office	1050000
+Office	Office	1050000
+OFFICE	OFFICE	1050000
+Widget	widget	1125000
+Widget	Widget	1125000
+WIDGET	WIDGET	1125000
+API	api	1125000
+D	d	1125000
 D	D	1125000
 Alias	alias	1125000
 Alias	Alias	1125000
-foo-bar	foo-bar	1125000
-unrated	unrated	1000250
+ALIAS	ALIAS	1125000
+John	john	1147500
+John	John	1147500
+JOHN	JOHN	1147500
+iPhone	iphone	1107500
+iPhone	iPhone	1107500
+CEO	ceo	1115000
+CEO	CEO	1115000
+McDonald's	mcdonalds	1075000
+Office	office	1050000
 DATA
 diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
 # Only mixed scaling changes; its structural constraints remain independent.
@@ -273,22 +348,24 @@ cp "$fixture/mixed.tsv" "$fixture/mixed-before.tsv"
 configure 4.0 250000 10
 generate
 diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
-awk -F '\t' 'BEGIN {OFS="\t"} {$3=$1=="unrated" ? 100025 : $3*10; print}' "$fixture/mixed-before.tsv" > "$fixture/scaled.tsv"
+awk -F '\t' '
+  BEGIN { OFS = "\t" }
+  {
+    $3 = $3 * 10
+    print
+  }
+' "$fixture/mixed-before.tsv" > "$fixture/scaled.tsv"
 diff -u "$fixture/scaled.tsv" "$fixture/mixed.tsv"
 
 configure 4.6 250000 100
 generate
-printf 'Email\tEmail\t1170000\ncomputer\tcomputer\t1242500\n' > "$fixture/high.tsv"
+printf 'computer\tcomputer\t1242500\nComputer\tComputer\t1242500\nCOMPUTER\tCOMPUTER\t1242500\n' > "$fixture/high.tsv"
 diff -u "$fixture/high.tsv" "$fixture/english.tsv"
 configure 0 250000 100
 generate
-awk -F '\t' '$1 == "email" || $1 == "unknown" || $1 == "ghost" { exit 1 }' "$fixture/english.tsv"
-# Duplicate dictionary rows collapse; distinct aliases get the same observed weight.
-printf 'computer\tcomputer\t999000\ncomputer\tComputer\t1\n' >> "$fixture/build/deps/rime-easy-en-fixture/easy_en.dict.yaml"
+awk -F '\t' 'tolower($1) == "email" || tolower($1) == "ghost" { exit 1 }' "$fixture/english.tsv" || fail
+awk -F '\t' '$1 == "below" { found = 1 } END { exit !found }' "$fixture/english.tsv" || fail
 configure 4.0 250000 100
-generate
-printf 'computer\tComputer\t1242500\n' >> "$fixture/expected-overrides.tsv"
-diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
 configure 9 250000 100
 generate
 test ! -s "$fixture/english.tsv"
@@ -331,23 +408,30 @@ DATA
 generate
 cat > "$fixture/expected-technology.tsv" <<'DATA'
 computer	computer	1242500
-computer	Computer	1242500
+Computer	Computer	1242500
+COMPUTER	COMPUTER	1242500
 TechUI	techui	1000000
 TechUI	TechUI	1000000
 TechUI	techuialias	1000000
 C++	cpp	1000000
 computer	laptop	1242500
+Computer	Laptop	1242500
+COMPUTER	LAPTOP	1242500
 DATA
 diff -u "$fixture/expected-technology.tsv" "$fixture/english.tsv"
 cat > "$fixture/expected-technology-mixed.tsv" <<'DATA'
 computer	computer	12425
-computer	Computer	12425
+Computer	Computer	12425
+COMPUTER	COMPUTER	12425
+TechUI	techui	10000
 TechUI	TechUI	10000
+Computer	Laptop	12425
+COMPUTER	LAPTOP	12425
 DATA
 diff -u "$fixture/expected-technology-mixed.tsv" "$fixture/mixed.tsv"
 configure 4.1 250000 100
 generate
-awk -F '\t' '$1 != "computer" {exit 1} END {if(NR != 3) exit 1}' "$fixture/english.tsv"
+awk -F '\t' 'tolower($1) != "computer" {exit 1} END {if(NR != 6) exit 1}' "$fixture/english.tsv"
 configure 0 250000 100
 printf 'TechUI\t0\tExclude every alias of this exact display form\n' > "$fixture/Core/config/english-overrides.tsv"
 generate
@@ -372,4 +456,5 @@ test ! -s "$fixture/mixed.tsv"
 rm "$fixture/Core/Data/english-wordfreq.tsv"
 expect_failure 'missing snapshot' 'english-wordfreq.tsv'
 
-echo 'PASS Rime policy: observed/missing Zipf, shared inclusive admission, curated technology/aliases/deduplication, exact-case overrides/exclusion, scaling isolation, empty data/rules, malformed/duplicate data, Chinese preservation, failure without fallback'
+echo 'PASS Rime policy: Zipf gate, overrides, lowercase codes with case forms,' \
+  'technology rows, scaling, empty/malformed data, no fallback'

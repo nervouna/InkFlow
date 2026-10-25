@@ -92,7 +92,21 @@ run_unit() {
     preparation) bash macOS/scripts/test-prepare-rime.sh ;;
     deployment)
       build_swift_test deployment-tests build/deployment-tests
-      build/deployment-tests "$PWD/build/test-shared" "$PWD"/build/deps/rime-easy-en-*/easy_en.dict.yaml ;;
+      # The old full English cache: every inventory row coded by its lowercase letters, without the Zipf gate.
+      ungated="$scratch/ungated.dict.yaml"
+      awk -F '\t' '
+        BEGIN {
+          OFS = "\t"
+          print "---\nname: easy_en\nversion: ungated\nsort: by_weight\nuse_preset_vocabulary: false\n..."
+        }
+        /^#/ || NF != 2 { next }
+        {
+          code = tolower($1)
+          gsub(/[^a-z]/, "", code)
+          if (code != "") print $1, code, int($2 * 250000 + 0.5)
+        }
+      ' Core/Data/english-wordfreq.tsv > "$ungated"
+      build/deployment-tests "$PWD/build/test-shared" "$ungated" ;;
     engine-*)
       if ! $engine_built; then build_swift_test engine-tests build/engine-tests; engine_built=true; fi
       mkdir -p "$scratch/$1"

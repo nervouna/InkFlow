@@ -13,8 +13,8 @@ root=$(printf '%s\n' "$scratch"/InkFlow-*-dictionary-source)
 build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; do
   printf '%s  %s\n' "$sha" "$root/upstream/dictionary-sources/$id.yaml" | shasum -a 256 -c - >/dev/null
 done
-for file in upstream/deps/pinyin.tar.gz upstream/deps/english.tar.gz upstream/deps/emoji.txt \
-  LICENSES/rime-frost.txt LICENSES/rime-ice.txt LICENSES/easy-en-LGPL-3.0.txt LICENSES/easy-en-GPL-3.0.txt \
+for file in upstream/deps/pinyin.tar.gz upstream/deps/emoji.txt \
+  LICENSES/rime-frost.txt LICENSES/rime-ice.txt LICENSES/esdb.txt \
   LICENSES/wordfreq.txt LICENSES/pinyin-simp.txt LICENSES/opencc.txt LICENSES/chinese-dictionaries-NOTICE.txt \
   inkflow/LICENSE inkflow/NOTICE inkflow/Core/Package.swift inkflow/Core/Sources/InkFlowDomain/DictionaryGenerator.swift \
   inkflow/Core/config/chinese-sources.json inkflow/Core/Portable/dictionary/Cargo.lock inkflow/Core/config/chinese-overrides.tsv \

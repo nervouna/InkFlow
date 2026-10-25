@@ -332,7 +332,8 @@ package enum EngineRegression {
             selectCandidate(display, input: code, engine: engine)
             engine.key(0xff09)
         }
-        selectCandidate("API", input: "Api", engine: engine) // Existing easy-en case alias remains available.
+        // A query with uppercase letters also looks up its lowercase code (rule 3), so Api reaches API.
+        selectCandidate("API", input: "Api", engine: engine)
         engine.key(0xff09)
         type(engine, "swiftui")
         for prefix in ["swiftui", "swiftu", "swift", "swif", "swi", "sw"] {
@@ -424,6 +425,50 @@ package enum EngineRegression {
                 check(false, "Missing \(resource) must fail before engine startup")
             } catch { check((error as NSError).code == 2) }
         }
+    }
+
+    /// Spellings and casing come from ESDB: brands keep their mixed case, names and acronyms their capitals, and a
+    /// word that has a lowercase form offers it. Learning would lead, so this runs on fresh user data before any
+    /// other test selects an English word.
+    @MainActor package static func esdbSpellings(event: Event = rimeEvent) {
+        let engine = IFEngine()!
+        func firstEnglish(_ input: String) -> String? {
+            engine.clear()
+            type(engine, input)
+            defer { engine.clear() }
+            return allCandidates(engine).first { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
+        }
+        for (input, expected) in [("iphone", "iPhone"), ("ipad", "iPad"), ("youtube", "YouTube"), ("ebay", "eBay"),
+                                  ("phd", "PhD"), ("app", "app"), ("core", "core"), ("demo", "demo"), ("ceo", "CEO"),
+                                  ("john", "John"), ("android", "Android"), ("go", "go"), ("swift", "swift")] {
+            let first = firstEnglish(input)
+            check(first == expected, "ESDB spelling of \(input) leads English as \(expected), got \(first ?? "none")")
+        }
+        // Only `hello` is a source spelling. Its Capitalized and ALL-CAPS forms are generated, so Shift-typed
+        // Hello and Caps Lock HELLO offer themselves first.
+        let keyCodes: [Character: UInt16] = ["H": 4, "E": 14, "e": 14, "L": 37, "l": 37, "O": 31, "o": 31]
+        func send(_ letters: String, shiftFirst: Bool) {
+            for (index, letter) in letters.enumerated() {
+                let shift: Int32 = shiftFirst && index == 0 ? 1 : 0
+                check(event(engine, Int32(letter.asciiValue!), keyCodes[letter]!, String(letter), shift),
+                      "Handle the key of \(letter) in \(letters)")
+            }
+        }
+        send("Hello", shiftFirst: true)
+        check(engine.snapshot().candidates.first == "Hello",
+              "Shift-typed Hello offers Hello first: \(engine.snapshot().candidates)")
+        engine.clear()
+        send("HELLO", shiftFirst: false)
+        check(engine.snapshot().candidates.first == "HELLO",
+              "Caps Lock HELLO offers HELLO first: \(engine.snapshot().candidates)")
+        engine.clear()
+        // A word whose canonical form is cased still joins mixed composition through its lowercase code.
+        type(engine, "woyongiphone")
+        check(engine.snapshot().candidates.contains("我用iPhone"),
+              "woyongiphone offers 我用iPhone on the first page: \(engine.snapshot().candidates)")
+        engine.clear()
+        print("PASS ESDB spellings: brands, acronyms, names and lowercase words lead as spelled, "
+              + "Shift and Caps Lock forms lead, cased mixed composition")
     }
 
     @MainActor package static func mixedEnglishCandidates(event: Event = rimeEvent) {
@@ -1720,11 +1765,11 @@ package enum EngineRegression {
         func pages() -> [(name: String, engine: IFEngine, reordered: Bool)] {
             if !learned {
                 let teacher = composing("wokannetflix")
-                guard let index = teacher.snapshot().candidates.firstIndex(of: "我看netflix") else {
+                guard let index = teacher.snapshot().candidates.firstIndex(of: "我看Netflix") else {
                     check(false, "home fixture: the mixed sentence is missing: \(teacher.snapshot().candidates)"); return []
                 }
                 teacher.select(index)
-                check(teacher.takeCommit() == "我看netflix", "home fixture: select the mixed sentence")
+                check(teacher.takeCommit() == "我看Netflix", "home fixture: select the mixed sentence")
                 teacher.key(0xff09)
                 learned = true
             }
@@ -2001,7 +2046,7 @@ package enum EngineRegression {
         check(personal("docker").isEmpty, "forget English: the next composition has no evidence")
 
         // Mixed: the sentence loses its personal bucket and falls back behind the Chinese reading.
-        let mixed = "wofaleyoutube", sentence = "我发了youtube"
+        let mixed = "wofaleyoutube", sentence = "我发了YouTube"
         check(personal(mixed).isEmpty && personal("youtube").isEmpty, "forget mixed fixture: nothing learned yet")
         let before = candidates(mixed)
         check(before.firstIndex(of: sentence) == 1, "forget mixed fixture: \(before)")
@@ -2012,7 +2057,7 @@ package enum EngineRegression {
               "forget mixed: the learned sentence leads: \(learned)")
         check(learned[0].nativeIndex != learned[0].displayIndex,
               "forget mixed: the highlighted display slot is not its native slot: \(learned)")
-        check(personal("youtube") == ["youtube"], "forget mixed: the run serves standalone English")
+        check(personal("youtube") == ["YouTube"], "forget mixed: the run serves standalone English")
         compose(mixed)
         forgetKeepsComposition("forget mixed")
         check(engine.snapshot().candidates == before && engine.qualitySnapshot().candidates.allSatisfy { $0.source == nil },
@@ -2163,9 +2208,9 @@ package enum EngineRegression {
 
         // learned-guard: a dictionary phrase leads `shanghai` with or without the learned English word.
         let shanghai = candidates("shanghai")
-        check(shanghai.prefix(3) == ["伤害", "Shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
-        learn("shanghai", "Shanghai")
-        check(personal("shanghai") == ["Shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
+        check(shanghai.prefix(3) == ["伤害", "shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
+        learn("shanghai", "shanghai")
+        check(personal("shanghai") == ["shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
         check(candidates("shanghai") == shanghai, "learned-guard shanghai: the phrase keeps its place: \(engine.snapshot().candidates)")
         // learned-guard: a single syllable has no sentence, so a learned `A` stays behind 啊 without a technical context.
         check(candidates("a").first == "啊", "learned-guard a fixture: \(engine.snapshot().candidates)")

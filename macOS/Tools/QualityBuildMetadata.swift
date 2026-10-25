@@ -108,7 +108,7 @@ struct QualityBuildMetadataTool {
         let all = try git(["ls-files", "--cached", "--others", "--exclude-standard", "-z"], root: root)
             .split(separator: 0).map { String(decoding: $0, as: UTF8.self) }
         var paths = all.filter(isBuildInput)
-        for dependency in ["build/deps/pinyin.tar.gz", "build/deps/english.tar.gz", "build/deps/emoji.txt"] {
+        for dependency in ["build/deps/pinyin.tar.gz", "build/deps/emoji.txt"] {
             if FileManager.default.fileExists(atPath: root.appendingPathComponent(dependency).path) { paths.append(dependency) }
         }
         let dictionarySources = root.appendingPathComponent("build/dictionary-sources")

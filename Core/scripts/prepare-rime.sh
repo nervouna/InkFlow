@@ -17,7 +17,7 @@ cleanup() {
 }
 trap cleanup EXIT
 for input_root in rust-toolchain.toml Core/Package.swift Core/Sources Core/Tools Core/scripts Core/Portable/dictionary schemas Core/config Core/Data \
-  build/deps/rime-pinyin-simp-* build/deps/rime-easy-en-* build/dictionary-sources; do
+  build/deps/rime-pinyin-simp-* build/dictionary-sources; do
   [[ -e "$input_root" ]] || continue
   find "$input_root" -type f -print
 done | LC_ALL=C sort | while IFS= read -r file; do "${sha256[@]}" "$file"; done > "$manifest"
@@ -34,28 +34,49 @@ else
 fi
 if [[ -n "$destination" ]]; then
 # Join observed frequencies and explicit overrides by exact displayed text. Never
-# estimate an unknown word or fall back to the upstream dictionary ordinal weight.
+# estimate an unknown word. Every snapshot spelling is coded by its lowercase letters.
 LC_ALL=C awk -v min_zipf="$ENGLISH_MIN_ZIPF" -v weight_scale="$ENGLISH_WEIGHT_SCALE" \
   -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
 function fail(message) {
   print "prepare-rime.sh: " message > "/dev/stderr"
+  failed=1
   exit 1
 }
 function zipf(value) {
   return value ~ /^[0-9]+([.][0-9]+)?$/ && value+0 >= 0 && value+0 <= 9
 }
-function emit(word, code, effective, pair) {
+function letters(word, code) {
+  code=tolower(word)
+  gsub(/[^a-z]/,"",code)
+  return code
+}
+function emit_spelling(word, code) {
+  code=letters(word)
+  if (code != "") emit(word,code)
+}
+function put(word, code, effective, pair) {
   pair=word SUBSEP code
   if (pair in emitted) return
+  emitted[pair]=1
+  printf "%s\t%s\t%d\n", word,code,int(effective*weight_scale+0.5)
+}
+function emit(word, code, effective, head, tail) {
   if (word in overrides) effective=overrides[word]
   else if (word in observed) effective=observed[word]
   else return
   if (effective <= 0 || effective < min_zipf) return
-  emitted[pair]=1
-  printf "%s\t%s\t%d\n", word,code,int(effective*weight_scale+0.5)
-  # Source codes are lowercase or Capitalized, never ALL-CAPS. A cased letter-only display is also its
-  # own code, so typing it exactly reaches it, as the mixed dictionary below does. Same word, same weight.
-  if (word ~ /^[A-Za-z]*[A-Z][A-Za-z]*$/) emit(word,word)
+  put(word,code,effective)
+  # A cased letters-only display is also its own code, so typing it exactly reaches it.
+  if (word ~ /^[A-Za-z]*[A-Z][A-Za-z]*$/) put(word,word,effective)
+  head=toupper(substr(word,1,1))
+  tail=substr(word,2)
+  if (word == tolower(word)) {
+    # The other case forms of an admitted lowercase spelling, each coded by the same case of its code.
+    if (head tail != word) put(head tail,toupper(substr(code,1,1)) substr(code,2),effective)
+    put(toupper(word),toupper(code),effective)
+  } else if (word == head tolower(tail) && toupper(word) != word) {
+    put(toupper(word),toupper(code),effective)
+  }
 }
 BEGIN {
   FS=OFS="\t"
@@ -64,7 +85,7 @@ BEGIN {
     fail("ENGLISH_WEIGHT_SCALE must be a positive integer <= 238609294")
   if (weight_divisor !~ /^[0-9]+([.][0-9]+)?$/ || weight_divisor+0 <= 0)
     fail("MIXED_ENGLISH_WEIGHT_DIVISOR must be positive")
-  print "# Generated from rime-easy-en (LGPL-3.0), curated rime-ice (GPL-3.0) and InkFlow technology entries."
+  print "# Generated from ESDB (permission notice), curated rime-ice (GPL-3.0) and InkFlow technology entries."
   print "# Reweighted with wordfreq (CC BY-SA 4.0) and explicit InkFlow admission policy."
   print "# See bundled Licenses for source attribution and modification details."
   print "---\nname: easy_en\nversion: '\''0.5-inkflow'\''\nsort: by_weight"
@@ -76,6 +97,7 @@ FILENAME == ARGV[1] {
     fail("invalid english-wordfreq.tsv record at line " FNR)
   if ($1 in observed) fail("duplicate english-wordfreq.tsv word at line " FNR ": " $1)
   observed[$1]=$2+0
+  snapshot[++snapshot_rows]=$1
   next
 }
 FILENAME == ARGV[2] {
@@ -86,7 +108,7 @@ FILENAME == ARGV[2] {
   overrides[$1]=$2+0
   next
 }
-FILENAME == ARGV[4] {
+FILENAME == ARGV[3] {
   if ($0 ~ /^[[:space:]]*(#|$)/) next
   if (NF != 3 || $1 !~ /[^[:space:]]/ || $1 ~ /[^ -~]/ || $1 ~ /^ | $/ ||
       $2 !~ /^[a-z]+$/ || ($3 != "rime-ice-en-ext" && $3 != "inkflow-maintained"))
@@ -94,14 +116,22 @@ FILENAME == ARGV[4] {
   pair=$1 SUBSEP $2
   if (pair in supplemental) fail("duplicate english-technology.tsv pair at line " FNR)
   supplemental[pair]=1
-  emit($1,$2)
+  technology_word[++technology_rows]=$1
+  technology_code[technology_rows]=$2
   next
 }
-$0 == "..." { entries=1; next }
-entries && $0 !~ /^[[:space:]]*(#|$)/ && NF >= 2 {
-  emit($1,$2)
-}' Core/Data/english-wordfreq.tsv Core/config/english-overrides.tsv \
-  build/deps/rime-easy-en-*/easy_en.dict.yaml Core/Data/english-technology.tsv > "$staging/easy_en.dict.yaml"
+END {
+  if (failed) exit 1
+  # wordfreq folds case, so case variants tie, and Rime keeps file order among equal weights: lowercase first.
+  for (row=1; row<=snapshot_rows; row++) {
+    if (snapshot[row] == tolower(snapshot[row])) emit_spelling(snapshot[row])
+  }
+  for (row=1; row<=snapshot_rows; row++) {
+    if (snapshot[row] != tolower(snapshot[row])) emit_spelling(snapshot[row])
+  }
+  for (row=1; row<=technology_rows; row++) emit(technology_word[row],technology_code[row])
+}' Core/Data/english-wordfreq.tsv Core/config/english-overrides.tsv Core/Data/english-technology.tsv \
+  > "$staging/easy_en.dict.yaml"
 # Mixed composition adds only its existing structural restrictions and scaling.
 LC_ALL=C awk -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
 function emit(word, code, weight, pair) {
@@ -120,7 +150,7 @@ BEGIN {
 $1 ~ /^[A-Za-z]+$/ && $2 ~ /^[A-Za-z]+$/ {
   # Preserve the conservative lowercase path. Retain admitted uppercase source
   # boundaries; the runtime filter validates the complete emitted ASCII run.
-  if ($1 == $2 && length($1) >= 4) emit($1,$2,$3)
+  if ($2 == tolower($1) && length($1) >= 4) emit($1,$2,$3)
   if ($2 ~ /[A-Z]/) emit($1,$2,$3)
   # Some admitted display forms (API, SwiftUI) have only lowercase/title-case
   # source aliases. Their exact case is still source data, not synthesized text.

@@ -5,19 +5,18 @@ https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/
 Pinned file SHA-256: d0c11afd09443a8a13ddc79c630ae22c6b9a0403031bf0adaa2c301a127f20ea
 See rime-ice.txt for the license.
 
-InkFlow selected 104 exact display spellings from that source, retained their
+InkFlow selected 117 exact display spellings from that source, retained their
 capitalization, spaces and punctuation, and supplied lowercase ASCII lookup
 aliases (including cpp for C++, csharp for C#, and dotnet for .NET).
 Eighteen additional display spellings are explicitly maintained by InkFlow:
 AI, Type-C, eBPF, Swift, AppKit, UIKit, SwiftData, Git, Docker, Docker Compose,
 Python, Rust, Java, Dart, Flutter, React, Gemini and RAG. These are not attributed
-to en_ext. The 122-row source and per-word provenance are Core/Data/english-technology.tsv
+to en_ext. The 135-row source and per-word provenance are Core/Data/english-technology.tsv
 and Core/Data/english-technology-provenance.tsv in the source repository.
 
-The selected text/code pairs are merged with the unchanged rime-easy-en input,
-retaining its existing aliases and deduplicating identical pairs. Admission and
-weights use the shared wordfreq/override policy. Explicit 4.0 policy overrides
-for 111 exact display spellings are product decisions, not measured frequencies.
-Eleven existing observations at or above the gate are preserved. The resulting
-English and mixed dictionaries also carry their existing easy-en/wordfreq
-attribution; see easy-en-LGPL-3.0.txt, easy-en-GPL-3.0.txt and wordfreq.txt.
+The selected text/code pairs are merged with the ESDB spellings, deduplicating
+identical pairs. Admission and weights use the shared wordfreq/override policy.
+Explicit 4.0 policy overrides for the exact display spellings that have no
+sufficient measured frequency are product decisions, not measured frequencies.
+The resulting English and mixed dictionaries also carry their ESDB and wordfreq
+attribution; see esdb.txt and wordfreq.txt.

@@ -70,7 +70,6 @@ Debian	4.0	Product policy: admit this curated technology spelling at the shared 
 CentOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 macOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 iOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
-ios	0	Product policy: exclude the lowercase spelling (issue #105). The case-folding wordfreq snapshot gives it 4.12, which is really the frequency of iOS, and the admitted word is the first candidate for typed ios, ahead of the curated iOS (4.0).
 Python	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 TypeScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 JavaScript	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
@@ -116,3 +115,24 @@ NLP	4.0	Product policy: admit this curated technology spelling at the shared def
 OCR	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 AIGC	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
 AGI	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+iPadOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+watchOS	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+iCloud	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+iMac	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+MacBook	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+AirPods	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+AirDrop	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+FaceTime	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+LinkedIn	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WhatsApp	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+WeChat	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+Wi-Fi	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+USB-C	4.0	Product policy: admit this curated technology spelling at the shared default gate; not a measured frequency.
+HTTPS	4.0	Product policy: admit this curated technology spelling at the shared default gate. ESDB has no such spelling, so the snapshot has no row for it (wordfreq measures 4.42).
+Go	4.0	Product policy: admit this curated technology spelling at the shared default gate. ESDB has no such spelling, so the snapshot has no row for it (wordfreq measures 6.03).
+React	4.0	Product policy: admit this curated technology spelling at the shared default gate. ESDB has no such spelling, so the snapshot has no row for it (wordfreq measures 4.16).
+ai	0	Product policy: the common word ai shares its code with the curated AI; exclude it so AI stays the first candidate for ai. The case-folded wordfreq snapshot cannot tell them apart.
+cd	0	Product policy: the lowercase cd shares its code with the curated CD; exclude it so CD stays the first candidate for cd. The case-folded wordfreq snapshot cannot tell them apart.
+java	0	Product policy: the common word java shares its code with the curated Java; exclude it so Java stays the first candidate for java. The case-folded wordfreq snapshot cannot tell them apart.
+android	0	Product policy: the lowercase android shares its code with the curated Android; exclude it so Android is the first candidate for android. The case-folded wordfreq snapshot cannot tell them apart.
+john	0	Product policy: ESDB lists the rare common noun john beside the name John. Exclude it so John is the first candidate for john. The case-folded wordfreq snapshot cannot tell them apart.

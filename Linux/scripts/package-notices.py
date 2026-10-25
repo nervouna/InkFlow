@@ -87,8 +87,7 @@ def main():
                     revision], cwd=ROOT, check=True)
     for name in ('LICENSE', 'NOTICE'):
         copy(ROOT / name, notices / ('InkFlow-' + name))
-    for name in ('chinese-dictionaries-NOTICE.txt', 'easy-en-GPL-3.0.txt',
-                 'easy-en-LGPL-3.0.txt', 'pinyin-simp.txt', 'rime-frost.txt',
+    for name in ('chinese-dictionaries-NOTICE.txt', 'esdb.txt', 'pinyin-simp.txt', 'rime-frost.txt',
                  'rime-ice.txt', 'technology-english-NOTICE.txt', 'wordfreq.txt', 'opencc.txt'):
         copy(ROOT / 'macOS/Licenses' / name, notices / 'dictionary' / name)
 

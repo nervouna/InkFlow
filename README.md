@@ -74,7 +74,7 @@
 
 - 白霜拼音 rime-frost、雾凇拼音 rime-ice（中文词库、Emoji 表、技术英语选词）：GPL-3.0
 - rime-pinyin-simp 兼容词库与 OpenCC 简繁数据：Apache-2.0
-- rime-easy-en 英文词库：LGPL-3.0
+- ESDB（原 SCOWL）英文拼写词表：宽松许可声明（见 macOS/Licenses/esdb.txt）
 - wordfreq 英文词频快照：CC BY-SA 4.0
 
 每个发布版本附带词库源码包 `InkFlow-<版本>-<构建号>-dictionary-source.tar.gz`，内含上游数据、墨流的修改与生成脚本、许可证全文，可在[发布页面](https://github.com/nervouna/InkFlow/releases)下载；「设置 → 关于」也提供链接。详见 [NOTICE](NOTICE)、[词库说明](macOS/DICTIONARIES.md) 和 [许可证文本](macOS/Licenses/)。
