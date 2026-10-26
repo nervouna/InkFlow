@@ -1,7 +1,7 @@
 #!/bin/bash
 # Corresponding-source bundle for the compiled dictionary resources: the verified
-# pinned upstream inputs (GPL-3.0 rime-frost, rime-ice and emoji data, LGPL-3.0
-# rime-easy-en, Apache-2.0 rime-pinyin-simp), InkFlow's generation recipe as
+# pinned upstream inputs (GPL-3.0 rime-frost, rime-ice and emoji data, Apache-2.0
+# rime-pinyin-simp), InkFlow's generation recipe as
 # committed at HEAD, the license texts and the manifest of the generated dictionary.
 #   dictionary-source-bundle.sh OUTPUT.tar.gz [BUILD]
 set -euo pipefail
@@ -57,22 +57,23 @@ build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; d
 done
 # Pinned archives and files that dependencies.sh downloads and verifies.
 deps=$(sed -nE 's/^fetch ([^ ]+) ([0-9a-f]{64}) (https:[^ ]+)$/\1 \2 \3/p' Core/scripts/resource-dependencies.sh)
-for file in pinyin.tar.gz english.tar.gz emoji.txt; do
+for file in pinyin.tar.gz emoji.txt; do
   url=$(printf '%s\n' "$deps" | awk -v f="$file" '$1 == f {print $3}')
   [[ -n "$url" ]] || { echo "resource-dependencies.sh no longer fetches $file." >&2; exit 1; }
   cp "build/deps/$file" "$root/upstream/deps/$file"
   case "$file" in
     pinyin.tar.gz) record 'Legacy compatibility dictionary (rime/rime-pinyin-simp repository archive)' 'Apache-2.0 (LICENSES/pinyin-simp.txt)' "$url" "upstream/deps/$file" ;;
-    english.tar.gz) record 'English dictionary input (BlindingDark/rime-easy-en repository archive)' 'LGPL-3.0 with GPL-3.0 (LICENSES/easy-en-LGPL-3.0.txt, easy-en-GPL-3.0.txt)' "$url" "upstream/deps/$file" ;;
     emoji.txt) record 'Emoji conversion table (iDvel/rime-ice opencc/emoji.txt)' 'GPL-3.0 (LICENSES/rime-ice.txt)' "$url" "upstream/deps/$file" ;;
   esac
 done
-record 'Technical English selection from iDvel/rime-ice en_dicts/en_ext.dict.yaml (104 spellings) plus InkFlow-maintained spellings' \
+record 'Technical English selection from iDvel/rime-ice en_dicts/en_ext.dict.yaml (117 spellings) plus InkFlow-maintained spellings' \
   'GPL-3.0 (LICENSES/rime-ice.txt, technology-english-NOTICE.txt)' \
   'https://github.com/iDvel/rime-ice/blob/569ff3bc65dd4aec0a26b33c49c8bbdfa8b5fd57/en_dicts/en_ext.dict.yaml' \
   inkflow/Core/Data/english-technology.tsv
-record 'wordfreq 3.1.1 en/large Zipf snapshot for easy-en spellings' 'CC BY-SA 4.0 (LICENSES/wordfreq.txt)' \
-  'https://github.com/rspeer/wordfreq' inkflow/Core/Data/english-wordfreq.tsv
+record 'wordfreq 3.1.1 en/large Zipf snapshot for ESDB 2026.02.25 spellings' \
+  'CC BY-SA 4.0 (LICENSES/wordfreq.txt), ESDB notice (LICENSES/esdb.txt)' \
+  'https://github.com/rspeer/wordfreq and https://github.com/en-wl/wordlist/releases/tag/rel-2026.02.25' \
+  inkflow/Core/Data/english-wordfreq.tsv
 for opencc in STPhrases.txt STCharacters.txt; do
   record "OpenCC simplified-to-traditional data $opencc" 'Apache-2.0 (LICENSES/opencc.txt)' \
     "https://github.com/BYVoid/OpenCC/blob/556ed22496d650bd0b13b6c163be9814637970ae/data/dictionary/$opencc" "inkflow/schemas/opencc/$opencc"
@@ -97,7 +98,7 @@ does not change those obligations.
 
 - \`upstream/dictionary-sources/\`: the pinned Rime Frost, Rime Ice and compatibility
   dictionary files the Chinese generator reads, byte-identical to the verified downloads.
-- \`upstream/deps/\`: the pinned rime-pinyin-simp and rime-easy-en repository archives and
+- \`upstream/deps/\`: the pinned rime-pinyin-simp repository archive and
   the Rime Ice emoji table, as fetched by \`inkflow/Core/scripts/resource-dependencies.sh\`.
 - \`inkflow/\`: the generation recipe at the commit above: the Rust generator
   (\`Core/Portable/dictionary\`), its Swift wrapper (\`Core/Sources/InkFlowDomain\`), the source

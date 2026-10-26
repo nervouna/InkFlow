@@ -8,13 +8,13 @@ licensed under Creative Commons Attribution-ShareAlike 4.0 International:
 https://creativecommons.org/licenses/by-sa/4.0/
 https://creativecommons.org/licenses/by-sa/4.0/legalcode
 
-Modifications by InkFlow: select observed keys for existing rime-easy-en displayed
-spellings, normalize them using wordfreq's English preprocessing, convert their
+Modifications by InkFlow: select observed keys for the ESDB spellings (esdb.txt),
+normalize them using wordfreq's English preprocessing, convert their
 probabilities to two-decimal Zipf scores, and store exact displayed text mappings.
 Builds apply configurable admission/overrides and a linear integer weight mapping
 before adding these weights to the generated English and mixed dictionaries.
 The adapted frequency data is distributed under CC BY-SA 4.0. Dictionary spellings
-retain their separate rime-easy-en license; see easy-en-LGPL-3.0.txt.
+retain their separate ESDB license; see esdb.txt.
 
 wordfreq is used only to regenerate the checked-in data; its Python code and
 package dependencies are not bundled in the application or run by normal builds.

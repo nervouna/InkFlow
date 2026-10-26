@@ -47,6 +47,7 @@ struct EngineTests {
             EngineRegression.propertyChannel()
         }
         if selected("english") {
+            EngineRegression.esdbSpellings(event: nativeEvent)
             try EngineRegression.domainVocabulary()
             EngineRegression.englishAdmission()
             EngineRegression.conservativeChinesePrefixes()

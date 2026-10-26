@@ -1841,13 +1841,14 @@
     {
       "initial" : {
         "committedText" : "API",
-        "first" : "API",
+        "first" : "A皮",
         "inputOperations" : 3,
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 1,
+        "targetRank" : 2,
         "topThree" : [
+          "A皮",
           "API"
         ],
         "totalOperations" : 4
@@ -1861,7 +1862,8 @@
         "selectionOperations" : 1,
         "targetRank" : 1,
         "topThree" : [
-          "API"
+          "API",
+          "A皮"
         ],
         "totalOperations" : 4
       },
@@ -1874,7 +1876,8 @@
         "selectionOperations" : 1,
         "targetRank" : 1,
         "topThree" : [
-          "API"
+          "API",
+          "A皮"
         ],
         "totalOperations" : 4
       },
@@ -1889,13 +1892,14 @@
       "training" : [
         {
           "committedText" : "API",
-          "first" : "API",
+          "first" : "A皮",
           "inputOperations" : 3,
           "pagingOperations" : 0,
           "searchExhausted" : false,
           "selectionOperations" : 1,
-          "targetRank" : 1,
+          "targetRank" : 2,
           "topThree" : [
+            "A皮",
             "API"
           ],
           "totalOperations" : 4
@@ -1909,7 +1913,8 @@
           "selectionOperations" : 1,
           "targetRank" : 1,
           "topThree" : [
-            "API"
+            "API",
+            "A皮"
           ],
           "totalOperations" : 4
         },
@@ -1922,7 +1927,8 @@
           "selectionOperations" : 1,
           "targetRank" : 1,
           "topThree" : [
-            "API"
+            "API",
+            "A皮"
           ],
           "totalOperations" : 4
         },
@@ -1935,7 +1941,8 @@
           "selectionOperations" : 1,
           "targetRank" : 1,
           "topThree" : [
-            "API"
+            "API",
+            "A皮"
           ],
           "totalOperations" : 4
         }

@@ -1,0 +1,47 @@
+ESDB (formerly SCOWL) English spellings
+
+https://github.com/en-wl/wordlist (release rel-2026.02.25)
+https://wordlist.aspell.net
+
+InkFlow takes the spellings and capitalization of its English dictionary from the
+ESDB Hunspell dictionaries en_US-large and en_GB-large, version 2026.02.25 (word
+list size 70):
+
+  hunspell-en_US-large-2026.02.25.zip
+    SHA-256 06ab5a2a12c29033f100988d3b0a5e53dcad40bf2473ccb78270619d1da99321
+  hunspell-en_GB-large-2026.02.25.zip
+    SHA-256 704a49438a3a9d4f11cd76db433a6b230b9ce8770ee13fa28700052c4517ddc1
+
+Modifications by InkFlow: expand the Hunspell prefixes and suffixes of both
+dictionaries into word forms, keep the forms made of ASCII letters, apostrophes,
+hyphens and periods, attach wordfreq frequencies to them
+(Core/Data/english-wordfreq.tsv, see wordfreq.txt), and generate the English and
+mixed dictionaries from the forms that pass the frequency gate, adding the
+Capitalized and ALL-CAPS display forms of admitted lowercase words. The recipe is
+macOS/scripts/snapshot-english-frequency.py and Core/scripts/prepare-rime.sh.
+
+The notice of the ESDB distribution (README_en_US-large.txt and
+README_en_GB-large.txt) follows.
+
+Copyright 2000-2026 by Kevin Atkinson
+
+Permission to use, copy, modify, distribute, and sell any part of SCOWLv2, or
+word lists created from it, is hereby granted without fee, provided that the
+above copyright notice appears in all copies and that both the above
+copyright notice and this notice appear in supporting documentation.  Kevin
+Atkinson makes no representations about the suitability of this database for
+any purpose.  It is provided "as is" without express or implied warranty.
+
+SCOWL is derived from many sources, most of which are in the Public Domain.
+Data from the Corpus of Contemporary American English (COCA) was also used.
+
+All data from COCA comes from 3-gram data that is not freely available;
+however, the usage is within the rights given by the NDA that was signed when
+purchasing the data.  More information on COCA is available at
+https://www.english-corpora.org/coca/.
+
+The primary source of words for SCOWL comes from 12dicts and ENABLE2K.  Both
+are in the Public Domain, but Alan Beale <biljir@pobox.com> deserves special
+credit as he is the author of 12dicts and a major contributor to ENABLE2K.  In
+addition, he gave me an incredible amount of feedback and created a number of
+special lists in order to help improve the overall quality of SCOWL.

@@ -27,7 +27,7 @@ struct AboutSettingsView: View {
         ("白霜拼音 rime-frost 中文词库", "GPL-3.0"),
         ("雾凇拼音 rime-ice 中文词库、Emoji 表与技术英语选词", "GPL-3.0"),
         ("rime-pinyin-simp 兼容词库、OpenCC 简繁数据", "Apache-2.0"),
-        ("rime-easy-en 英文词库", "LGPL-3.0"),
+        ("ESDB（原 SCOWL）英文拼写词表", "许可声明"),
         ("wordfreq 英文词频快照", "CC BY-SA 4.0"),
         ("librime、librime-lua、Lua、Boost、Sparkle、OpenCC、glog、LevelDB、marisa、yaml-cpp、Rust crates", "BSD、MIT、BSL-1.0、Apache-2.0、Unlicense、Zlib"),
     ]
