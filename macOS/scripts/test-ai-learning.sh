@@ -126,7 +126,7 @@ awk -F '\t' -v paged="$paged" '
   $1 == "computer" { if ($2 != "computer" || $3 != 1) exit 1; computer++ }
   $1 == "PrivatePlugin" { if ($2 != "plugin" || $3 != 2) exit 1; private++ }
   $1 == "Hello" { if ($2 != "hello" || $3 != 1) exit 1; caseful++ }
-  $1 == paged { if ($2 != paged || $3 != 1) exit 1; paged_count++ }
+  $1 == paged { if ($2 != tolower(paged) || $3 != 1) exit 1; paged_count++ }
   END { if (hello != 1 || computer != 1 || private != 1 || caseful != 1 || paged_count != 1) exit 1 }
 ' "$english_user/keyboard-english.txt"
 echo 'PASS canonical keyboard English learning: first/repeated/negative/restart, paging/editing, dedup, exact/completion, fidelity, private exact admission, short conflicts, Chinese baseline'
