@@ -136,3 +136,55 @@ cd	0	Product policy: the lowercase cd shares its code with the curated CD; exclu
 java	0	Product policy: the common word java shares its code with the curated Java; exclude it so Java stays the first candidate for java. The case-folded wordfreq snapshot cannot tell them apart.
 android	0	Product policy: the lowercase android shares its code with the curated Android; exclude it so Android is the first candidate for android. The case-folded wordfreq snapshot cannot tell them apart.
 john	0	Product policy: ESDB lists the rare common noun john beside the name John. Exclude it so John is the first candidate for john. The case-folded wordfreq snapshot cannot tell them apart.
+# Case ties: wordfreq folds case, so the case forms ESDB lists for one code share a Zipf and the lowercase form leads.
+# The rows below put the usual spelling back in front: 0 where the other form is rare, 0.01 below the leader where both are common.
+# They come from an offline review of each code, not from measured frequencies.
+aids	4.24	Case tie: aids and AIDS are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.24, 0.01 below AIDS, so AIDS is the first candidate for aids and aids stays available.
+berlin	0	Case tie: ESDB lists the rare lowercase berlin beside the proper Berlin at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Berlin is the first candidate for berlin.
+brazil	0	Case tie: ESDB lists the rare lowercase brazil beside the proper Brazil at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Brazil is the first candidate for brazil.
+capitol	0	Case tie: capitol and Capitol are both common but share the 4.0 gate Zipf, so capitol cannot move below Capitol. Exclude it so Capitol is the first candidate for capitol.
+carl	0	Case tie: ESDB lists the rare lowercase carl beside the proper Carl at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Carl is the first candidate for carl.
+charlie	0	Case tie: ESDB lists the rare lowercase charlie beside the proper Charlie at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Charlie is the first candidate for charlie.
+china	0	Case tie: ESDB lists the rare lowercase china beside the proper China at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so China is the first candidate for china.
+christian	0	Case tie: ESDB lists the rare lowercase christian beside the proper Christian at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Christian is the first candidate for christian.
+colorado	0	Case tie: ESDB lists the rare lowercase colorado beside the proper Colorado at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Colorado is the first candidate for colorado.
+dc	0	Case tie: ESDB lists the lowercase dc beside the abbreviation DC at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so DC is the first candidate for dc.
+dec	0	Case tie: ESDB lists the lowercase dec beside the abbreviation DEC at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so DEC is the first candidate for dec.
+dr	0	Case tie: ESDB lists the lowercase dr beside the abbreviation Dr at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Dr is the first candidate for dr.
+dutch	0	Case tie: ESDB lists the rare lowercase dutch beside the proper Dutch at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Dutch is the first candidate for dutch.
+english	0	Case tie: ESDB lists the rare lowercase english beside the proper English at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so English is the first candidate for english.
+Father's	0	Case tie: ESDB lists the capitalized possessive Father's beside father's, both above the plural fathers. Exclude the rare capitalized form so fathers is the first candidate for fathers.
+father's	4.07	Case tie: the possessive father's outranks the plural fathers for the code fathers, but both are common. Replace its Zipf with 4.07, 0.01 below fathers, so fathers leads and father's stays available.
+fm	0	Case tie: ESDB lists the lowercase fm beside the abbreviation FM at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so FM is the first candidate for fm.
+franklin	0	Case tie: ESDB lists the rare lowercase franklin beside the proper Franklin at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Franklin is the first candidate for franklin.
+geneva	0	Case tie: ESDB lists the rare lowercase geneva beside the proper Geneva at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Geneva is the first candidate for geneva.
+german	0	Case tie: ESDB lists the rare lowercase german beside the proper German at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so German is the first candidate for german.
+harper	0	Case tie: ESDB lists the rare lowercase harper beside the proper Harper at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Harper is the first candidate for harper.
+Here's	0	Case tie: ESDB lists Here's beside here's at one case-folded Zipf, and a query without the apostrophe breaks the tie bytewise to the capitalized form. Exclude the rare capitalized form so here's is the first candidate for heres.
+hp	0	Case tie: ESDB lists the lowercase hp beside the abbreviation HP at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so HP is the first candidate for hp.
+japan	0	Case tie: ESDB lists the rare lowercase japan beside the proper Japan at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Japan is the first candidate for japan.
+kelly	0	Case tie: ESDB lists the rare lowercase kelly beside the proper Kelly at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Kelly is the first candidate for kelly.
+kent	0	Case tie: ESDB lists the rare lowercase kent beside the proper Kent at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Kent is the first candidate for kent.
+ltd	0	Case tie: ESDB lists the lowercase ltd beside the abbreviation Ltd at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Ltd is the first candidate for ltd.
+ma	4.62	Case tie: ma and MA are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.62, 0.01 below MA, so MA is the first candidate for ma and ma stays available.
+manhattan	0	Case tie: ESDB lists the rare lowercase manhattan beside the proper Manhattan at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Manhattan is the first candidate for manhattan.
+maria	0	Case tie: ESDB lists the rare lowercase maria beside the proper Maria at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Maria is the first candidate for maria.
+mars	0	Case tie: ESDB lists the rare lowercase mars beside the proper Mars at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Mars is the first candidate for mars.
+martin	0	Case tie: ESDB lists the rare lowercase martin beside the proper Martin at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Martin is the first candidate for martin.
+oxford	0	Case tie: ESDB lists the rare lowercase oxford beside the proper Oxford at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Oxford is the first candidate for oxford.
+pa	4.45	Case tie: pa and PA are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.45, 0.01 below PA, so PA is the first candidate for pa and pa stays available.
+pc	0	Case tie: ESDB lists the lowercase pc beside the abbreviation PC at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so PC is the first candidate for pc.
+people's	4.25	Case tie: the possessive people's outranks the plural peoples for the code peoples, but both are common. Replace its Zipf with 4.25, 0.01 below peoples, so peoples leads and people's stays available.
+polish	4.28	Case tie: polish and Polish are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.28, 0.01 below Polish, so Polish is the first candidate for polish and polish stays available.
+pr	0	Case tie: ESDB lists the lowercase pr beside the abbreviation PR at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so PR is the first candidate for pr.
+prof	0	Case tie: ESDB lists the lowercase prof beside the abbreviation Prof at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Prof is the first candidate for prof.
+pt	0	Case tie: ESDB lists the lowercase pt beside the abbreviation PT at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so PT is the first candidate for pt.
+roman	4.49	Case tie: roman and Roman are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.49, 0.01 below Roman, so Roman is the first candidate for roman and roman stays available.
+shanghai	0	Case tie: ESDB lists the rare lowercase shanghai beside the proper Shanghai at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Shanghai is the first candidate for shanghai.
+soviet	4.53	Case tie: soviet and Soviet are both common and share one case-folded Zipf, and the tie goes to the lowercase form. Replace the Zipf with 4.53, 0.01 below Soviet, so Soviet is the first candidate for soviet and soviet stays available.
+un	0	Case tie: ESDB lists the lowercase un beside the abbreviation UN at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so UN is the first candidate for un.
+wales	0	Case tie: ESDB lists the rare lowercase wales beside the proper Wales at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Wales is the first candidate for wales.
+welsh	0	Case tie: ESDB lists the rare lowercase welsh beside the proper Welsh at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Welsh is the first candidate for welsh.
+WHO's	0	Case tie: ESDB lists the abbreviation possessive WHO's beside who's at one case-folded Zipf, and a query without the apostrophe breaks the tie bytewise to WHO's. Exclude it so who's is the first candidate for whos.
+World's	0	Case tie: ESDB lists the capitalized possessive World's beside world's, both above the plural worlds. Exclude the rare capitalized form so worlds is the first candidate for worlds.
+world's	4.22	Case tie: the possessive world's outranks the plural worlds for the code worlds, but both are common. Replace its Zipf with 4.22, 0.01 below worlds, so worlds leads and world's stays available.

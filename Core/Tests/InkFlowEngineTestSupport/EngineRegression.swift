@@ -444,6 +444,18 @@ package enum EngineRegression {
             let first = firstEnglish(input)
             check(first == expected, "ESDB spelling of \(input) leads English as \(expected), got \(first ?? "none")")
         }
+        // wordfreq folds case, so case forms ESDB lists side by side tie and the lowercase form wins the tie.
+        // english-overrides.tsv demotes the lowercase form where the other spelling is the usual one.
+        for (input, expected) in [("china", "China"), ("english", "English"), ("pc", "PC"), ("whos", "who's")] {
+            let first = firstEnglish(input)
+            check(first == expected, "Case tie of \(input) leads English as \(expected), got \(first ?? "none")")
+        }
+        // Both spellings are common: polish only moves down, it stays on the first page.
+        type(engine, "polish")
+        let polish = engine.snapshot().candidates
+        engine.clear()
+        check(polish.contains("Polish") && polish.contains("polish"),
+              "Both Polish and polish stay on the first page of polish: \(polish)")
         // Only `hello` is a source spelling. Its Capitalized and ALL-CAPS forms are generated, so Shift-typed
         // Hello and Caps Lock HELLO offer themselves first.
         let keyCodes: [Character: UInt16] = ["H": 4, "E": 14, "e": 14, "L": 37, "l": 37, "O": 31, "o": 31]
@@ -2208,9 +2220,9 @@ package enum EngineRegression {
 
         // learned-guard: a dictionary phrase leads `shanghai` with or without the learned English word.
         let shanghai = candidates("shanghai")
-        check(shanghai.prefix(3) == ["伤害", "shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
-        learn("shanghai", "shanghai")
-        check(personal("shanghai") == ["shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
+        check(shanghai.prefix(3) == ["伤害", "Shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
+        learn("shanghai", "Shanghai")
+        check(personal("shanghai") == ["Shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
         check(candidates("shanghai") == shanghai, "learned-guard shanghai: the phrase keeps its place: \(engine.snapshot().candidates)")
         // learned-guard: a single syllable has no sentence, so a learned `A` stays behind 啊 without a technical context.
         check(candidates("a").first == "啊", "learned-guard a fixture: \(engine.snapshot().candidates)")

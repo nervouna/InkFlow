@@ -694,11 +694,11 @@
         "pagingOperations" : 0,
         "searchExhausted" : false,
         "selectionOperations" : 1,
-        "targetRank" : 4,
+        "targetRank" : 3,
         "topThree" : [
           "伤害",
-          "shanghai",
-          "Shanghai"
+          "Shanghai",
+          "上海"
         ],
         "totalOperations" : 9
       },
@@ -712,8 +712,8 @@
         "targetRank" : 1,
         "topThree" : [
           "上海",
-          "shanghai",
-          "Shanghai"
+          "Shanghai",
+          "伤害"
         ],
         "totalOperations" : 9
       },
@@ -727,8 +727,8 @@
         "targetRank" : 1,
         "topThree" : [
           "上海",
-          "shanghai",
-          "Shanghai"
+          "Shanghai",
+          "伤害"
         ],
         "totalOperations" : 9
       },
@@ -751,8 +751,8 @@
           "targetRank" : 1,
           "topThree" : [
             "上海",
-            "shanghai",
-            "Shanghai"
+            "Shanghai",
+            "伤害"
           ],
           "totalOperations" : 9
         },
@@ -766,8 +766,8 @@
           "targetRank" : 1,
           "topThree" : [
             "上海",
-            "shanghai",
-            "Shanghai"
+            "Shanghai",
+            "伤害"
           ],
           "totalOperations" : 9
         },
@@ -781,8 +781,8 @@
           "targetRank" : 1,
           "topThree" : [
             "上海",
-            "shanghai",
-            "Shanghai"
+            "Shanghai",
+            "伤害"
           ],
           "totalOperations" : 9
         },
@@ -796,8 +796,8 @@
           "targetRank" : 1,
           "topThree" : [
             "上海",
-            "shanghai",
-            "Shanghai"
+            "Shanghai",
+            "伤害"
           ],
           "totalOperations" : 9
         }
