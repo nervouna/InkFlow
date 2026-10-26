@@ -44,6 +44,6 @@ The package is unsigned by default and needs no keychain. `build-pkg.sh APP OUT 
 
 ### Publish a release
 
-Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md). `release-verification.sh` builds once, runs `test.sh all`, runs one deep bundle check, and writes a receipt that freezes the commit and the app build for packaging. Packaging signs and notarizes the app, builds the signed package from the stapled app, notarizes and staples it, and publishes it beside the Sparkle ZIP, the appcast, `SHA256SUMS` and the dictionary source bundle. It needs both a Developer ID Application and a Developer ID Installer certificate in the keychain.
+Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md).
 
 Testing: see [TESTING.md](TESTING.md). Debugging: see [DEBUGGING.md](DEBUGGING.md).

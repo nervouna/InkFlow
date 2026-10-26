@@ -14,7 +14,7 @@ Solo project. Keep changes small and direct; prefer deleting code over adding gu
 
 ## Task-specific guidance
 
-- For shared-core or platform work, read [the migration design](docs/portable-core-migration.md).
+- For shared-core work, read [the portable core README](Core/Portable/README.md). For new-platform work, read [the migration design](docs/portable-core-migration.md).
 - From Linux, use `scripts/mac-remote.py` for Mac builds/tests; it sends committed revisions only. Read [the remote workflow](docs/remote-mac-baseline.md) before remote execution or runner changes.
 
 ## Workflow

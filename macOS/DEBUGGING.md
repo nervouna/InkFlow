@@ -18,7 +18,7 @@ Logs contain only fixed labels, random correlation IDs, status and timing — ne
 
 - **Startup:** one `run` UUID per process; each stage has a paired begin/end `span`. A begin without an end means pending work or a process exit, not necessarily a deadlock.
 - **Input:** per activation, `firstKeyEntered` → `firstKeyCompleted` (with outcome), then `deactivationEntered/BeforeSuper/AfterSuper/Finished`. A missing checkpoint points at that interval; correlate PID/time with `~/Library/Logs/DiagnosticReports/` before blaming InkFlow or macOS.
-- **AI:** gate → `scheduled` → `dispatched` → HTTP status/elapsed → `shown` → `adoptionRequested` → `insertionIssued` → `insertionReturned`, all with the same attempt ID. No dispatch: check the gate reason (config, secure input, candidate visibility, mark). `insertionReturned` doesn't prove the editor displayed the text.
+- **AI:** gate → `scheduled` → `dispatched` → HTTP status/elapsed → `shown` → `adoptionRequested` → `insertionIssued` → `insertionReturned`, all with the same attempt ID. No dispatch: check the gate reason (config, secure input, candidate visibility, mark). `insertionReturned` doesn't prove the editor displayed the text. Paid live check (explicit approval only): `test-ai-headless.sh --live /abs/path/ignored/.env`.
 - **Dictionary:** errors at error level, long payloads split into `part=i/n` chunks sharing an event ID.
 
 **Incident archive:** Settings → 反馈 → **保存问题现场** freezes the preceding 30 minutes; **导出诊断包…** exports a ZIP (open `manifest.json` first, then `events.jsonl`, `summary.json`; timestamps are UTC Unix ms). Stored in `~/Library/Application Support/InkFlow/Diagnostics/`, capped at 7 days / 50 MiB. If InkFlow can't start, copy only that directory plus matching DiagnosticReports. Archives exclude `quality.sqlite3`, preferences, document text and audio. Nothing is uploaded automatically.
@@ -53,7 +53,7 @@ The bundled `RimePrebuilt` engine starts before the IMK server is created, and t
 
 **Cause:** Easy English has many unweighted aliases; a fixed mixed boost outranked Chinese; the standalone English translator queried the full upstream dictionary. Rime compares coverage length before quality.
 
-**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Startup runs full Rime maintenance so older bundled timestamps still replace stale caches; unchanged compiled tables are reused. Rules: the mixed-input skill's `references/rules.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
+**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Resource compilation (packaging, dictionary updates) runs Rime's full content-checking maintenance, so older resource timestamps still replace stale caches and unchanged compiled tables are reused; the app starts from that prepared cache and never compiles at startup. Rules: the mixed-input skill's `references/rules.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
 
 ## AI: local Ollama Qwen reports an incomplete suggestion (GitHub #4)
 
@@ -61,29 +61,11 @@ The bundled `RimePrebuilt` engine starts before the IMK server is created, and t
 
 **Fix:** For those families on loopback port 11434, send `reasoning_effort: "none"` (Ollama maps it to `think: false`). Other hosts, ports and models are unchanged.
 
-## AI: no suggestion when document length is shorter than the mark
-
-**Cause:** The context reader rejected `documentShorterThanMark`, so no request was sent.
-
-**Fix:** Document length is advisory; read surrounding text once at dispatch with bounded fallbacks (256 characters per side). Headless client profiles cover zero/short/negative lengths.
-
 ## AI: Tab removes the Pinyin but the suggestion doesn't appear
 
 **Cause:** Adoption refreshed an empty composition (clearing the client's mark) before inserting at a cached explicit offset; Codex dropped that insertion.
 
 **Fix:** Same order as ordinary commits: clear Rime internally, release mark ownership, `insertText` once with `NSNotFound` while the mark is still present, then refresh.
-
-## AI: candidates become visible after the last refresh
-
-**Cause:** Eligibility discarded the composition if the candidate window was still hidden at the final refresh.
-
-**Fix:** The 0.5 s deadline starts at the last input change; after it, wait for visible candidates while composition/client/config stay valid. Test: `test-ai-headless.sh --delayed-visibility`. Paid live check (explicit approval only): `test-ai-headless.sh --live /abs/path/ignored/.env`.
-
-## Settings window loses its fixed width / minimum height
-
-**Cause:** Default `NSHostingController` sizing options generated min-size constraints from the current page (248 × 112 instead of 700 × 380).
-
-**Fix:** `SettingsHostingController` disables automatic sizing constraints and adds explicit width 700 / height ≥380; the detail group has a flexible minimum height of 0. Test: `test-settings-ui.sh`.
 
 ## Vertical candidate panel minimum width
 

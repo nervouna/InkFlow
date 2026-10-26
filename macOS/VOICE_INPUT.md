@@ -1,6 +1,6 @@
 # Voice input
 
-Shipped in 0.4.0. Experiments and measurements are archived in `docs/archive/VOICE_*.md`.
+Shipped in 0.4.0. Experiments and measurements are in the git history of `docs/archive/`.
 
 ## Usage
 

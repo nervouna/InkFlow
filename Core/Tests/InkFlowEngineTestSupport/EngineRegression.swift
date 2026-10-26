@@ -1454,7 +1454,7 @@ package enum EngineRegression {
         print("PASS punctuation: exact mappings, Shift, independent quotes, apostrophe delimiter, bracket paging, ASCII/shortcut passthrough, decimal/time input")
     }
 
-    /// One block per row of the key table in rules.md ("Keys during composition"). The block's
+    /// One block per row of the key table in keys.md ("Keys during composition"). The block's
     /// first comment is the row id, and every failure message starts with that id. Each block
     /// covers the idle, composing and recognizer-match columns of its row.
     @MainActor package static func compositionKeys(event: Event = rimeEvent) {

@@ -28,22 +28,7 @@ Five fresh processes each type 247 keys over the 21-sample corpus, then repeat t
 
 The five slowest samples are the first key of the first composition in each process, ranging from 9.62 to 10.53 ms. Aggregate p99 does not describe that first-key cost. With five processes, startup/memory p95/p99 equal the maximum.
 
-Measurement boundaries are defined in [the remote workflow](../../../docs/remote-mac-baseline.md#measurement-boundaries). Recapture a Swift reference alongside the new core if the OS or toolchain changes substantially.
-
-### Before and after #53
-
-Same host, same protocol, same session. "Before" is `b128128` with the previous `IFContextRanker` that parsed the whole dictionary at startup; "after" is this capture. The earlier phase-0 numbers (startup 1,995.86 ms, peak RSS 311.84 MiB, first key 16.76–20.08 ms) were taken on an M1 Pro and are not directly comparable to either column.
-
-| Measurement | Before (`b128128`) | After (`c918273`) |
-| --- | ---: | ---: |
-| Headless startup median, ms | 1,225.01 | 252.91 |
-| Peak RSS after startup, max MiB | 289.95 | 37.23 |
-| Peak RSS after input, max MiB | 310.70 | 58.14 |
-| First key of each process, ms | 8.68–10.15 | 9.62–10.53 |
-| First-pass key p95 / p99, ms | 1.125 / 1.393 | 1.190 / 1.571 |
-| Repeated-pass key median / p95, ms | 0.293 / 1.005 | 0.317 / 1.066 |
-
-Where the memory went: the old ranker alone peaked at 181 MiB and took about 960 ms to build its Swift dictionary. The remaining 123 MiB peak was `IFPackagedCache.descriptor` hashing bundled resources through autoreleased `FileHandle` chunks that stayed resident until the pool drained. The prepared index (`pinyin_simp.context.bin`, 18 MB) is read whole into memory when the ranker loads, so lookups never fault pages in from disk on the key-event path; that is the 18 MiB difference between the two RSS rows. First-key cost is Rime's first composition and varies by about 1 ms between runs; a mapped variant of the same index measured 7.0–7.8 ms on one run and 8.4–10.5 ms on another.
+Measurement boundaries are defined in [the remote workflow](../../../docs/remote-mac-baseline.md#measurement-boundaries).
 
 ## Approved review limits
 

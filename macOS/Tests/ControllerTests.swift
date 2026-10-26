@@ -924,7 +924,7 @@ struct ControllerTests {
         print("PASS controller spelling correction: preedit-only updates, corrected candidates, single digit-key commit")
     }
 
-    /// Controller rows of the key table in rules.md ("Keys during composition"). The engine rows are
+    /// Controller rows of the key table in keys.md ("Keys during composition"). The engine rows are
     /// `EngineRegression.compositionKeys`. Every failure message starts with the row id.
     @MainActor static func compositionKeys() {
         let isolated = IsolatedSettings()

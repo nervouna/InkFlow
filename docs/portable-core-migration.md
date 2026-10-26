@@ -2,25 +2,13 @@
 
 ## Decision and scope
 
-InkFlow will share its offline input behavior across Linux, macOS, Android, iOS, and Windows through a Rust core. Keep librime, Lua, OpenCC, and the existing C++ native extensions. Each platform retains a native input-method frontend.
+InkFlow shares its offline input behavior across Linux, macOS, Android, iOS, and Windows through a Rust core. Keep librime, Lua, OpenCC, and the existing C++ native extensions. Each platform retains a native input-method frontend.
 
-The delivery order is Linux/Fcitx5, macOS cutover, mobile, Windows, then the GNOME/IBus adapter. Mobile implementation and device probes start after the macOS cutover; Windows work follows mobile. Android versus iOS order remains undecided. Their known constraints should inform the engine interface now, but desktop delivery does not depend on early mobile or Windows prototypes. This accepts the risk of later platform-specific changes.
+Linux/Fcitx5 and the macOS cutover are done. Mobile comes next, then Windows, then the GNOME/IBus adapter. Android versus iOS order remains undecided.
 
 The migration preserves existing macOS features and personal data. New platforms start with offline typing and portable backup/import; optional-feature parity follows separately. Cloud synchronization is out of scope.
 
-This document records the architecture, rationale, and migration sequence. The phase issues own the execution roadmap and progress: phases 0–4 (#33–#37) are done and recorded in the closed [tracking issue #32](https://github.com/nervouna/InkFlow/issues/32); mobile is #38, Windows #39, Steam Deck #70, and Linux parity with macOS #153. Do not maintain a second progress checklist here.
-
-## Starting point
-
-The existing code already separates much of the engine from the macOS frontend:
-
-- `Core/Sources/InkFlowDomain/`: preferences, custom phrases, ranking, dictionary generation, and learning models.
-- `Core/Sources/InkFlowRime/`: sessions, candidate ordering, learning coordination, dictionary lifecycle, and quality recording.
-- `Core/Sources/InkFlowRimeNative/`: native mixed-input translation and personal dictionary snapshots.
-- `schemas/`: Rime configuration, Lua modules, and OpenCC resources.
-- `Core/Tests/` and `Core/Fixtures/QualityBaseline/`: existing regression coverage and behavioral reference material.
-
-Shared Swift code still imports Apple-specific facilities, and its build scripts assume macOS binaries and toolchains. Dictionary data, configuration, and source preparation now live under `Core/`; the [shared preparation recipe](shared-dictionary-preparation.md) uses the Rust generator on both desktops, and the Swift update worker calls it in-process.
+This document records the architecture, rationale, and remaining work; [Core/Portable/README.md](../Core/Portable/README.md) describes the runtime as built. The issues own the roadmap and progress: phases 0–4 (#33–#37: reproducible baseline, desktop runtime, portable offline behavior, Linux frontend, macOS cutover) are done and recorded in the closed [tracking issue #32](https://github.com/nervouna/InkFlow/issues/32); mobile is #38, Windows #39, Steam Deck #70, and Linux parity with macOS #153. Do not maintain a second progress checklist here.
 
 ## Architecture
 
@@ -38,13 +26,13 @@ Pinned librime, Lua, OpenCC, prepared dictionaries
 
 Use librime's public C API where sufficient. Retain the existing native extension code where it needs C++ internals; do not wrap librime's whole C++ object model. Build native extensions against matching pinned engine sources and dependencies.
 
-Rust is chosen for portable shared logic, explicit ownership, and native-library integration. Faster typing is not an assumed outcome. C++ remains a technically viable alternative if measured integration costs invalidate this choice.
+Rust is chosen for portable shared logic, explicit ownership, and native-library integration. Faster typing is not an assumed outcome.
 
 ### Engine responsibilities
 
 Share composition/session coordination, candidate ordering and selection, input preferences, custom phrases, learning policy, dictionary validation and activation, and portable personal-data formats.
 
-Keep Rime responsible for editing, segmentation, dictionary lookup, paging, and the learning behavior it already supplies. The migration must not introduce a replacement Pinyin engine or change ranking policy merely to fit the new language.
+Keep Rime responsible for editing, segmentation, dictionary lookup, paging, and the learning behavior it already supplies. Do not introduce a replacement Pinyin engine or change ranking policy merely to fit a new language or platform.
 
 The interface should cover runtime/session lifetime, semantic key events and mobile editing operations, immutable composition snapshots, candidate selection, commit delivery, configuration changes, and optional bounded surrounding text.
 
@@ -54,17 +42,17 @@ Run the engine in the frontend process. Serialize access to librime and its shar
 
 ### Frontend responsibilities
 
-| Platform | Proposed frontend |
+| Platform | Frontend |
 | --- | --- |
 | Linux | Fcitx5 for Omarchy/Hyprland and Steam Deck Desktop Mode (KDE Plasma); GNOME/IBus deferred until after Windows |
-| macOS | Existing Swift/InputMethodKit frontend |
+| macOS | Swift/InputMethodKit |
 | Android | Kotlin `InputMethodService` and native keyboard UI |
 | iOS | Swift keyboard extension and containing app |
 | Windows | Native TSF integration |
 
 Frontends own focus, input-context lifetime, preedit/commit delivery, UI, shortcuts or touch gestures, and platform privacy signals. They supply storage/resource paths and access to surrounding text. Missing or invalid context must preserve ordinary offline input and native ordering where context ranking cannot apply.
 
-Use a small C ABI initially, with Swift and JNI adapters as needed. Add binding generation only if it reduces demonstrated maintenance work. A shared settings UI and a separate engine daemon are not part of the initial design.
+Use a small C ABI, with Swift and JNI adapters as needed. Add binding generation only if it reduces demonstrated maintenance work. A shared settings UI and a separate engine daemon are not part of the design.
 
 ### Product and data boundaries
 
@@ -74,88 +62,44 @@ The product rules in [AGENTS.md](../AGENTS.md) apply to every platform. In addit
 - Apply settings and dictionary changes at safe composition boundaries.
 - Credentials and permissions belong to the platform integration.
 - Preserve supported learning data and custom phrases through explicit backup/import. Translate or reject unsupported preferences explicitly; macOS physical shortcut codes are not portable.
-- Tests use isolated data directories. Never run old and new engines against the same live user database concurrently.
+- Tests use isolated data directories.
 - Portable backups do not imply that live databases can be shared or synchronized safely.
 
-## Design ablation
+## Rejected alternatives
 
-| Alternative | Benefit | Cost or limitation | Decision |
-| --- | --- | --- | --- |
-| Keep Swift as the shared core | Reuses the most code immediately | Platform-library work and less natural Windows/Android integration remain | Preserve as the migration reference |
-| Use C++ for all shared logic | Direct Rime integration and fewer language boundaries | More manual ownership and concurrency discipline | Viable fallback; prefer Rust |
-| Ship schemas through stock Rime frontends | Smaller port | Does not preserve all InkFlow ranking, learning, and lifecycle behavior | Insufficient for full migration |
-| Replace Rime with a Rust engine | Removes the native engine dependency eventually | Recreates mature behavior and greatly expands scope | Reject |
-| Add a separate engine daemon | Process isolation | IPC and lifecycle work; poor fit for mobile extensions | Omit |
-| Share UI across platforms | Potential UI reuse | Does not remove native IME integration and adds framework constraints | Native UI first |
-| Generate all bindings immediately | Less handwritten glue | Another tool and abstraction before the interface is proven | Defer |
-| Port every optional feature initially | Earlier feature parity | Expands dependencies and delays offline input | Defer on new platforms; preserve macOS behavior |
-| Probe every platform before Linux | Earlier discovery of platform constraints | Delays the agreed desktop priority | Defer mobile until macOS cutover, then Windows, then GNOME/IBus |
-| Skip old/new behavioral comparisons | Less temporary tooling | Harder to detect rewrite regressions | Retain during migration |
-| Add cloud sync | Automatic cross-device learning transfer | Requires conflict resolution, privacy, and network design | Exclude from this migration |
+| Alternative | Cost or limitation | Decision |
+| --- | --- | --- |
+| Ship schemas through stock Rime frontends | Does not preserve InkFlow's ranking, learning, and lifecycle behavior | Insufficient |
+| Replace Rime with a Rust engine | Recreates mature behavior and greatly expands scope | Reject |
+| Add a separate engine daemon | IPC and lifecycle work; poor fit for mobile extensions | Omit |
+| Share UI across platforms | Does not remove native IME integration and adds framework constraints | Native UI first |
+| Generate all bindings immediately | Another tool and abstraction before the interface is proven | Defer |
+| Port every optional feature initially | Expands dependencies and delays offline input | Defer on new platforms; preserve macOS behavior |
+| Add cloud sync | Requires conflict resolution, privacy, and network design | Exclude from this migration |
 
-## Migration sequence
+## Remaining work
 
-### 0. Reproducible development and baseline
+### Mobile (#38)
 
-Prepare a dedicated checkout on the Mac. Transfer exact revisions, prevent concurrent builds in that checkout, and return logs and exit status. Keep caches and signing credentials on their respective machines. Reject a dirty remote checkout rather than overwrite it.
-
-Pin a common Rust toolchain and native dependency versions. Run the relevant existing macOS tests and preserve behavioral transcripts. Measure startup, resident memory, and representative key-event latency using fixed resources and isolated user data. Agree on performance acceptance criteria after obtaining the baseline.
-
-Completion means Linux can request a reproducible, focused Mac build/test run without installing anything, and the existing engine has a usable behavioral reference. Commands and measurement boundaries are documented in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
-
-### 1. Desktop Rust/Rime feasibility
-
-Build the pinned engine and native extensions on Linux and macOS. Implement the minimum Rust host: initialize, create a session, process input, retrieve snapshots/commits, and destroy the session. Specify the initial ABI and serialized-access contract.
-
-Review dependencies and resource licensing against intended distribution channels.
-
-Completion means the same minimal implementation produces basic composition on both desktop systems. Resolve native linking, extension registration, and resource preparation problems before migrating broader policy.
-
-### 2. Portable offline behavior and personal data
-
-Extract common dictionary sources, generation configuration, and preparation tools from `macOS/` as needed. Maintain one preparation pipeline; generate and verify compiled resources for the target runtime instead of copying macOS caches.
-
-Migrate domain models and offline engine behavior incrementally, including candidate ordering, custom phrases, settings boundaries, personal learning, and the required dictionary lifecycle. Compare old and new implementations against equivalent isolated fixtures. Preserve observable behavior; do not require byte-identical databases or caches.
-
-Define backup/import handling for supported personal data and unsupported platform preferences. Keep optional systems out of the critical input path.
-
-Completion means relevant regression cases pass, learning survives restart, supported data imports safely, and offline input remains independent of optional services. Ranking-policy changes are separate work.
-
-### 3. Linux daily-use frontend
-
-Implement the Fcitx5 adapter, targeting Omarchy/Hyprland first and Steam Deck Desktop Mode with a physical keyboard. Use desktop-native candidate/preedit APIs. Handle focus/reset, modifier events, surrounding-text capabilities, sensitive fields, and exact commit delivery.
-
-Steam Deck Gaming Mode and controller/on-screen keyboard integration are out of scope. Verify the Deck's actual SteamOS session and application compatibility, including Flatpak clients. Evaluate packaging without disabling SteamOS system protection and check persistence across OS updates. GNOME/IBus remains planned after Windows; the GNOME development host does not establish compatibility with either target desktop.
-
-Add minimum daily-use configuration, personal-data import, and packaging for the chosen Linux environment. A minimal frontend may start during phase 2 to expose integration issues early.
-
-Completion means an installable Linux build supports the agreed offline behavior with focused automated coverage.
-
-### 4. macOS cutover
-
-Status: macOS now runs on the shared core. The app, its dictionary worker and the tools call it through `ifr_*` behind the `IFEngine` facade (#81), and the Swift engine and its Swift-only SwiftPM targets are deleted (#85). The recorded Swift results stay as frozen fixtures that the Rust parity tests compare against.
-
-Connect the existing Swift frontend to the shared engine. Preserve settings, candidate presentation, personal data, and existing optional-feature integrations; deferring new-platform AI/voice does not authorize removing them from macOS.
-
-Compare old and new implementations on the same MacBook. Verify real application linkage and data compatibility. Keep a known-good installation available, and install development builds only when explicitly requested.
-
-Completion means macOS and Linux use the same offline core, with no unexplained behavioral or performance regressions. Remove superseded Swift engine code after callers and tests migrate; do not keep two production implementations indefinitely.
-
-### 5. Mobile feasibility and delivery
-
-After macOS cutover, build minimal Android and iOS hosts and test on devices. Measure real-dictionary startup, resident memory, extension/service recreation, and persistent learning. Review current platform restrictions and resource-distribution options before implementing downloads or voice.
+Build minimal Android and iOS hosts and test on devices. Measure real-dictionary startup, resident memory, extension/service recreation, and persistent learning. Review current platform restrictions, resource-distribution options, and dependency licensing before implementing downloads or voice.
 
 An iOS keyboard extension must support offline input without depending on a running containing app or network permission. Its lifecycle, secure-field restrictions, and lack of direct microphone access require platform-specific behavior. Android also requires handling service recreation and limited or sensitive editor context.
 
-If needed, generate mobile resource profiles from shared source policy. Build touch layouts, editing gestures, candidate interaction, accessibility, and minimum settings as platform products. Android versus iOS delivery order will be chosen before this phase.
+If needed, generate mobile resource profiles from shared source policy; compile and verify resources for the target runtime through the one preparation pipeline ([shared preparation recipe](shared-dictionary-preparation.md)) instead of copying macOS caches. Build touch layouts, editing gestures, candidate interaction, accessibility, and minimum settings as platform products. Choose the Android versus iOS order before starting.
 
 Completion is per platform: a usable offline keyboard, validated persistence/import, and measured resource behavior. Desktop feature parity is not required for the first mobile release.
 
-### 6. Windows delivery
+### Windows (#39)
 
 Build the native dependency chain and shared core for Windows, then implement TSF integration, candidate presentation, configuration, and packaging. Validate composition/focus lifetime and data compatibility in real Windows applications.
 
 Completion means a usable offline Windows IME backed by the same core. Windows-specific build and integration risks are intentionally deferred until after mobile.
+
+### Linux
+
+- Steam Deck Desktop Mode (#70) with a physical keyboard: verify the actual SteamOS session and Flatpak client compatibility; package without disabling SteamOS system protection and check persistence across OS updates. Gaming Mode and controller/on-screen keyboard integration are out of scope.
+- GNOME/IBus follows Windows. The GNOME development host does not establish compatibility with either target desktop.
+- Parity with the macOS feature set is backlog #153.
 
 ### Optional follow-up work
 
@@ -163,13 +107,13 @@ Track quality recording/export, dictionary downloads, AI, voice backends, and ad
 
 ## Validation and operating rules
 
-Use old/new behavioral comparisons for preedit and caret position, candidate order, commits, partial selection, paging, cancellation, configuration boundaries, and learning after restart. Preserve useful reference cases as permanent regression tests when the old implementation is removed.
+Check each platform against the shared regression cases for preedit and caret position, candidate order, commits, partial selection, paging, cancellation, configuration boundaries, and learning after restart. The recorded Swift-engine results are frozen references ([Core/Portable/README.md](../Core/Portable/README.md)). Preserve observable behavior; do not require byte-identical databases or caches.
 
-Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines. Use the [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) for the recorded macOS protocol.
+Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines. Use the [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) for the recorded macOS protocol; the measurement boundaries are in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
 
 Build, test and installation follow [AGENTS.md](../AGENTS.md). Keep another keyboard input source enabled for development testing.
 
 ## Remaining choices
 
-- Choose Android versus iOS order after the macOS cutover.
+- Choose Android versus iOS order.
 - Arrange mobile device/toolchain access and, later, Windows development/test access.

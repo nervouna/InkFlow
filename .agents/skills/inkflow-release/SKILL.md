@@ -26,6 +26,6 @@ Input, Settings and installation behavior are the user's responsibility before t
 
 ## If something fails
 
-Every step in `release.sh` is skipped when its output already exists, so fix the cause and rerun the same command. Don't bump the version again to retry. If `package.sh prepare` refuses an existing output directory from a broken attempt, move it aside and rerun prepare. A notarization interrupted mid-upload is simply resubmitted on rerun; a duplicate submission is harmless.
+Every `release.sh` step is skipped when its output already exists, so fix the cause and rerun the same command. Specific failures and their fixes are in [recovery.md](references/recovery.md).
 
 Report the release URL, version/build and what was verified when done.
