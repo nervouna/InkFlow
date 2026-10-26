@@ -3,8 +3,8 @@
 //! `replay list CASES [--context-index PATH] [--json]` reads the cases that
 //! `quality.py replay-cases` exports and scores three arms against what the user chose:
 //! `native` (Rime's first candidate), `displayed` (the candidate shown first when recorded) and
-//! `ranked` (the context ranker run again on the case). The README section "Replay and the
-//! first-choice target" defines the counts and the ship rule.
+//! `ranked` (the context ranker run again on the case). The README section "Replay" defines the
+//! counts; the ship rule is in `docs/input-quality-metrics.md` ("The first-choice target").
 //!
 //! `replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] [--record NAME=FILE ...]
 //! [--json]` runs the real engine once per arm on prepared resources and compares the arms with each other;

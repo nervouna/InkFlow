@@ -24,7 +24,7 @@ The following are adopted and unchanged. This document builds on them and never 
 | Existing | Where | Role here |
 | --- | --- | --- |
 | Regular committed cohort, `known_rank`, top-1 / top-3 / paged rates, selection-length buckets, Wilson intervals | `quality.py trend`, [query contract](../.agents/skills/inkflow-quality-analysis/references/query-contract.md) | R1, R3, R-paged below |
-| Target band adopted 2026-10-20, stability rule, raise rule, ship rule (paired fixed − broken, McNemar) | [Replay and the first-choice target](../Core/Portable/README.md#replay-and-the-first-choice-target) | Targets for the R family; the statistical rule for every paired comparison |
+| Target band adopted 2026-10-20, stability rule, raise rule, ship rule (paired fixed − broken, McNemar) | [The first-choice target](#the-first-choice-target), section 7 | Targets for the R family; the statistical rule for every paired comparison |
 | Replay cases, arms and classes (`dictionary_leader`, `decoder_leader`, `segmentation`, `single_char`, `off_page`, `function_word`) | `replay` binary | The replay source column of the catalog |
 | Measurement-fingerprint cohorts: rates never pooled across metric-rule versions | query contract | Section 8 |
 | Fixed cold/learned baseline (`first`, `topThree`, `targetRank`, operation counts, 5 training selections) | [Core/Fixtures/QualityBaseline](../Core/Fixtures/QualityBaseline/README.md) | Seed of the benchmark layer |
@@ -49,7 +49,7 @@ All metrics are defined over these entities. Names in parentheses are the fields
 | **Decision** | One act that resolves a span of the code into text from a shown list. Action: accept highlighted (Space), pick by digit, pick by pointer, after optional paging and highlight moves. A decision is *whole* when its span ends at the end of the code, *segment* otherwise. | `candidate_decisions` (trigger, outcome, `selected_display_index`, operations) |
 | **Commit** | Text delivered to the application, with its kind: candidate, punctuation, raw letters, ASCII, forced flush, mode toggle. | `commits` (kind, `insertion_issued`) |
 | **Post-commit window** | Keys arriving after a commit until the next code starts, the client or application changes, InkFlow is deactivated, or `W` seconds pass: deletions, forward deletions, Cmd+Z, direct text, paste. The controller sees these keys while InkFlow is the active input source, the same way the voice module's `considerLearningEvent` does, and ends the window on client change as the voice coordinator cancels on `clientDrift`. | `operations_json.postCommitWindows` of the next composition (section 9) |
-| **Pair** | The identity `(normalized code, chosen text)`; **word** is the chosen text alone. Hashed in both modes (section 9, #137); literals additionally in text mode, so one window that spans a mode switch is one identity space. | `codeHash` and the selected candidate's `textHash` in both modes, literals in text mode (section 9) |
+| **Pair** | The identity `(normalized code, chosen text)`; **word** is the chosen text alone. Hashed in both modes (#137); literals additionally in text mode, so one window that spans a mode switch is one identity space. | `codeHash` and the selected candidate's `textHash`; literals in text mode (section 9) |
 | **Learning act** | A user act about learning: forget the highlighted candidate (Shift+Backspace), delete or restore an entry in Settings. | `effectiveness_events` `candidate_learning` as counts (section 9); the pair hash waits for #137 |
 
 Dimensions, usable on any metric, never inside a formula:
@@ -230,24 +230,35 @@ Mapping to terms used elsewhere:
 | L-over, replay ER | 误学率 | — | — | error ratio (Suzuki & Gao 2005) |
 | L-reuse | — | reused-word rate (Tanaka-Ishii 2003) | OOV discovery coverage | — |
 
-Scorecard (per bucket, each with its interval; targets exist today only for the R family):
+### Scorecard
+
+Per bucket, each with its interval; targets exist today only for the R family:
 
 | Headline | Reads | Target |
 | --- | --- | --- |
-| R1 by selected length | ranking accuracy | adopted band: 95.5% aggregate, 93 / 96.5 / 99 by length |
-| R-paged | first-page sufficiency | adopted: ≤ 0.4% |
+| R1 by selected length | ranking accuracy | the target band below |
+| R-paged | first-page sufficiency | the target band below |
 | C-rev | wrong choices the user had to undo | proposal pending data |
 | E-kspc (Chinese) | effort per character | proposal pending data |
 | L-avoid (interim: learned-provenance miss share) | learning recall | proposal pending data |
 | L-over | learning precision | proposal pending data |
 
+### The first-choice target
+
+- **Metric.** R1, R3 and R-paged (section 5) over Chinese decisions, `top1_selected`, `top3_selected` and `paged_selected` over `known_rank`, read from the `chinese` series of `trend --days 28`. Every rate is reported with its 95% Wilson score interval over the 28-day rolling window. A wrong first choice accepted with Space is invisible to them; replay leaves out or relabels such a choice when the user reverted it at once (`replay-cases` in the [query contract](../.agents/skills/inkflow-quality-analysis/references/query-contract.md)).
+- **Target band (adopted 2026-10-20).** 28-day rolling Chinese top-1 at least 95.5% with the Wilson lower bound at least 95.0%; top-3 at least 99.0%; paged selections at most 0.4% of known-rank decisions; by selected length, 1-char at least 93%, 2-char at least 96.5%, 3+ chars at least 99%. The target and PR acceptance are judged per bucket, not on the aggregate: a change that lifts the aggregate while a bucket stays below its line does not meet the target. Reference point when adopted: 94.37% [93.89, 94.82] aggregate, 1-char 90.61%, 2-char 95.02%, 3-char 97.92%.
+- **Stable** means two non-overlapping 28-day windows whose Wilson 95% lower bound is at or above the target line, for the aggregate and for every bucket. That needs 56 days of records written by schema v4 or later, in either text mode.
+- **Raising the bar.** The aggregate target moves to 96.5% only after two non-overlapping 28-day windows with the lower bound at least 96.0% and the 1-char bucket at least 94%. 97% is the long-term goal, not a near-term acceptance line. It is adopted only after a paired replay arm (list or engine mode) holds at least 97% across two such windows.
+- **Ship rule.** Any ranking change ships when paired `fixed - broken > 0` and the McNemar `p < 0.05` on distinct `(raw_input, selected_text)` pairs, in list or engine [replay](../Core/Portable/README.md#replay). Report it with the distinct count and the per-class and per-bucket breakdown, never as a comparison of two unpaired windows.
+- **Sample size.** About 2.4k, 6.3k and 13k decisions are needed to see +1, +0.5 and +0.3 percentage points at disagreement rates of 3%, 2% and 1.5%. This is `n = d * (2.8 / delta)^2` for 80% power at two-sided 0.05, with `d` the share of decisions on which the two arms differ in outcome and `delta` the net gain.
+
 ## 8. Statistics and maintenance
 
 - **Intervals and windows.** Daily, 7-day and 28-day rolling, ratios of summed counts, 95% Wilson interval, as
   `trend` does. A bucket under 200 units reports its interval and no verdict.
-- **Changes are paired.** A ranking change is judged by replay (fixed − broken on distinct pairs, McNemar
-  `p < 0.05`). A learning change is judged the same way on per-pair outcomes between a cold and a trained arm, or
-  between two trained arms with different learning rules. Two unpaired windows are never a verdict.
+- **Changes are paired.** A ranking change is judged by the ship rule of
+  [the first-choice target](#the-first-choice-target). A learning change is judged the same way on per-pair outcomes
+  between a cold and a trained arm, or between two trained arms with different learning rules.
 - **Field, replay and benchmark are never pooled.** Scripted operation counts and live counts have different units.
 - **Metric identity.** IDs in this document are stable. A change to any numerator, denominator or cohort is a new
   metric-rule version: the measurement fingerprint changes, the trend selects the newest cohort and reports the
@@ -261,7 +272,8 @@ Scorecard (per bucket, each with its interval; targets exist today only for the 
   the first choice. It stays outside the regular cohort so the adopted series is unchanged; adopting it is a rule
   version bump, decided on a side-by-side report of both cohorts over one 28-day window.
 - **Review cadence.** The 28-day report lists every headline per bucket with its interval; target changes follow the
-  raise rules in the README. Benchmarks run per release and per ranking or learning PR.
+  raise rule in [the first-choice target](#the-first-choice-target). Benchmarks run per release and per ranking or
+  learning PR.
 
 ## 9. Recording gaps
 
@@ -272,7 +284,7 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | --- | --- | --- |
 | Post-commit window (recorded, #136) | per commit: deletions, forward deletions, undo, direct-text keys and paste counts before the next code, a client change, deactivation or `W` seconds, with the deletions, forward deletions and undo before the first direct-text or paste key, and the end reason; `W` = 10 s | C-rev, C-partial, R-adj, C-total |
 | Character counts | per commit the committed character count (`character_count`), per decision the selected character count (`selected_character_count`), as integers of Unicode scalar values. Recorded since schema v4 in either text mode, so the per-length buckets of the adopted band and the deletion threshold of C-rev no longer need text mode and the 56-day stability rule does not depend on text recording; only text-free records written before v4 lack a length, and `quality.py trend` counts their known-rank decisions as `length_unavailable` | C-rev, C-partial, R1 by length in text-free mode |
-| Pair identity (recorded, #137) | per decision: keyed hash of the normalized code (the span the selected candidate consumed, lowercase, without apostrophes) and of the selected text, hashed in both modes with literals additionally in text mode, so one window that spans a mode switch is one identity space. The key is 32 bytes generated once per device (`quality-pair-key`, beside `quality-source-id`, mode 0600), never exported, and replaced when the records are cleared. **This is a privacy decision, not an instrument detail**, adopted 2026-10-21: the text-free default was adopted deliberately (#54), and a keyed hash of short Chinese words is recoverable by dictionary attack by anyone holding the key on the same machine. Decisions with a selected prefix, and decisions whose span is unknown, carry no hash and are counted `pair_unavailable`. Open question for the user: restricting the hash to text-free records. L-avoid keeps its interim proxy beside the pair-based rate (`quality.py learning`) | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
+| Pair identity (recorded, #137) | per decision: keyed hashes of the code and of the selected text, in both modes. Derivation, device key, and the privacy decision with its open question: [Pair hashes](../macOS/QUALITY-EXPORT.md#pair-hashes). Decisions without a known pair carry no hash and are counted `pair_unavailable`. L-avoid keeps its interim proxy beside the pair-based rate (`quality.py learning`) | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
 | Learning acts (counts recorded, #138) | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, as counts with no text; the pair hash of each act is open with #137 | L-forget |
 | Replay arms for learning (recorded, #140) | cold and trained arms in engine mode (`replay engine --train`, [Learning arms](../Core/Portable/README.md#learning-arms)); ER between them, L-over per arm | L-over, L-cold acceptance |
 
