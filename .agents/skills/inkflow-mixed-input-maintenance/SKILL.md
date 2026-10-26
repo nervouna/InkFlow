@@ -64,4 +64,4 @@ Run `bash macOS/scripts/test.sh quick` plus the units for the changed layer:
 | Dictionary deployment | [DeploymentTests.swift](../../../macOS/Tests/DeploymentTests.swift) (`deployment`): stale English caches replaced, unchanged tables reused, Chinese user data kept |
 | Measurement | `quality`; inspect evidence with [inkflow-quality-analysis](../inkflow-quality-analysis/SKILL.md) |
 
-Rime startup ([bridge.cpp](../../../Core/Portable/native/bridge.cpp)) uses `start_maintenance(1)` for content checks; don't rely on version/mtime changes or delete caches and user dictionaries.
+Resource compilation ([resources.rs](../../../Core/Portable/src/resources.rs) through [bridge.cpp](../../../Core/Portable/native/bridge.cpp)) uses `start_maintenance(1)` for content checks; the app starts from that prepared cache, validated by hash, and never compiles at startup. Don't rely on version/mtime changes or delete caches and user dictionaries.

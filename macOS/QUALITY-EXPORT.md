@@ -68,7 +68,7 @@ python3 "$query" inspect 'DEVICE_UUID:COMPOSITION_ID' \
   --input /path/to/work.json --format json
 ```
 
-`--input` may be repeated on `summary`, `trend`, `ranking-issues`, `inspect` and `timing`. Unless `--exports-only` is present, the local database participates and must exist. The existing `--since`, exclusive `--until`, app, kind and fingerprint filters still apply. Calendar days use the analysis computer's local timezone; persisted record timestamps stay in UTC. Choose the same analysis timezone when comparing reports.
+`--input` may be repeated on `summary`, `trend`, `ranking-issues`, `inspect`, `timing`, `learning` and `replay-cases`. Unless `--exports-only` is present, the local database participates and must exist. The existing `--since`, exclusive `--until`, app, kind and fingerprint filters still apply. Calendar days use the analysis computer's local timezone; persisted record timestamps stay in UTC. Choose the same analysis timezone when comparing reports.
 
 Combined output includes `sources` with each source's retained time range, input file paths, distinct version/build metadata and deduplicated record counts. `by_source` applies the same command and filters separately to each device. `--source` isolates one device. Inspection IDs are namespaced as `SOURCE_ID:ORIGINAL_ID`; use the IDs returned by `ranking-issues`. Local-only commands without exchange flags retain their original output and IDs. Before the first export, an unmarked local database is labeled `local` in joint analysis.
 

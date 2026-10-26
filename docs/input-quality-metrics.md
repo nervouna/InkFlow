@@ -50,7 +50,7 @@ All metrics are defined over these entities. Names in parentheses are the fields
 | **Commit** | Text delivered to the application, with its kind: candidate, punctuation, raw letters, ASCII, forced flush, mode toggle. | `commits` (kind, `insertion_issued`) |
 | **Post-commit window** | Keys arriving after a commit until the next code starts, the client or application changes, InkFlow is deactivated, or `W` seconds pass: deletions, forward deletions, Cmd+Z, direct text, paste. The controller sees these keys while InkFlow is the active input source, the same way the voice module's `considerLearningEvent` does, and ends the window on client change as the voice coordinator cancels on `clientDrift`. | `operations_json.postCommitWindows` of the next composition (section 9) |
 | **Pair** | The identity `(normalized code, chosen text)`; **word** is the chosen text alone. Hashed in both modes (#137); literals additionally in text mode, so one window that spans a mode switch is one identity space. | `codeHash` and the selected candidate's `textHash`; literals in text mode (section 9) |
-| **Learning act** | A user act about learning: forget the highlighted candidate (Shift+Backspace), delete or restore an entry in Settings. | `effectiveness_events` `candidate_learning` as counts (section 9); the pair hash waits for #137 |
+| **Learning act** | A user act about learning: forget the highlighted candidate (Shift+Backspace), delete or restore an entry in Settings. | `effectiveness_events` `candidate_learning` as counts (section 9); no pair hash (#137 hashed decisions only) |
 
 Dimensions, usable on any metric, never inside a formula:
 
@@ -113,8 +113,8 @@ list shown).
 | 16 | Same code typed again right after a revert | next composition's pair identity equals the reverted one | C-retype (confirms an engine miss, not a change of mind) | yes (pair hash, #137, and post-commit window, #136) |
 | 17 | Chosen candidate was a learned entry | provenance learned | L-over, provenance dimension of every R metric | yes |
 | 18 | The same pair chosen again | pair identity recurs in the window | L-ttl, L-futile, L-util, L-avoid, L-reuse | yes (pair hash, #137) |
-| 19 | Shift+Backspace forgets the highlighted candidate | learning act `forgotten` | L-forget | yes as counts; pair hash with #137 |
-| 20 | Entry deleted or restored in Settings | learning act `deleted`, `restored` (English entries) | L-forget | yes as counts; pair hash with #137 |
+| 19 | Shift+Backspace forgets the highlighted candidate | learning act `forgotten` | L-forget | yes as counts; no pair hash |
+| 20 | Entry deleted or restored in Settings | learning act `deleted`, `restored` (English entries) | L-forget | yes as counts; no pair hash |
 | 21 | Custom phrase chosen | `matches_custom_phrase` | provenance dimension | yes |
 | 22 | Fuzzy or abbreviated spelling reached the candidate | `corrected`, code kind | code-kind dimension | yes |
 | 23 | Homophone that depends on context (的/地/得, 他/她/它) | selected text in the function-word set, context present | R-ctx; replay class `function_word` | yes |
@@ -182,7 +182,7 @@ whose first observation is within 7 days of the window start, and exclude nothin
 | L-avoid | Avoidable-miss rate | misses whose pair was already selected earlier in the window / misses | decision | F | none standard | **headline**: the engine had the evidence and missed anyway. Interim proxy without pair identity: misses whose selected candidate has learned provenance / misses, a dimension already recorded ("the engine had learned it and still did not lead"); it undercounts, because a learned word can also be a first-time dictionary miss |
 | L-over | Learned-leader miss rate | decisions whose shown-first has learned provenance and the user chose another candidate / decisions whose shown-first has learned provenance; reported beside the same rate for dictionary-led lists | decision | F P | error ratio (Suzuki & Gao 2005) | a learned leader displacing a right dictionary choice is 误学; replay computes ER directly from cold and trained arms |
 | L-reuse | Learned-word reuse rate | words first chosen in days 1–14 that recur in days 15–28 / words first chosen in days 1–14 | word | F | reused-word rate (Tanaka-Ishii 2003) | low values mean the user dictionary fills with one-off words |
-| L-forget | Forget correctness | after a `forgotten` act: pairs that reappear at rank 1 within the window (forget failed) and pairs the user selects again (forget regretted), each / forgotten pairs | pair | F B | none standard | needs learning acts recorded |
+| L-forget | Forget correctness | after a `forgotten` act: pairs that reappear at rank 1 within the window (forget failed) and pairs the user selects again (forget regretted), each / forgotten pairs | pair | F B | none standard | unavailable: needs a pair hash per learning act, which is not recorded |
 | L-cold | Learning curve | B only: rank of the target cold, after 1, 2 and 5 selections, and after `M` unrelated commits; Eb and U per sample | sample | B | Jiang 2011 | the baseline fixture records cold, after 1-4 selections, learned (after 5 and a restart) and retained |
 
 The learning headline is L-avoid, read with L-over: a low avoidable-miss rate with a low learned-leader miss rate
@@ -285,7 +285,7 @@ stay off the key-event path: counters live in memory and ride the next envelope.
 | Post-commit window (recorded, #136) | per commit: deletions, forward deletions, undo, direct-text keys and paste counts before the next code, a client change, deactivation or `W` seconds, with the deletions, forward deletions and undo before the first direct-text or paste key, and the end reason; `W` = 10 s | C-rev, C-partial, R-adj, C-total |
 | Character counts | per commit the committed character count (`character_count`), per decision the selected character count (`selected_character_count`), as integers of Unicode scalar values. Recorded since schema v4 in either text mode, so the per-length buckets of the adopted band and the deletion threshold of C-rev no longer need text mode and the 56-day stability rule does not depend on text recording; only text-free records written before v4 lack a length, and `quality.py trend` counts their known-rank decisions as `length_unavailable` | C-rev, C-partial, R1 by length in text-free mode |
 | Pair identity (recorded, #137) | per decision: keyed hashes of the code and of the selected text, in both modes. Derivation, device key, and the privacy decision with its open question: [Pair hashes](../macOS/QUALITY-EXPORT.md#pair-hashes). Decisions without a known pair carry no hash and are counted `pair_unavailable`. L-avoid keeps its interim proxy beside the pair-based rate (`quality.py learning`) | L-ttl, L-futile, L-util, L-avoid, L-reuse, C-retype |
-| Learning acts (counts recorded, #138) | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, as counts with no text; the pair hash of each act is open with #137 | L-forget |
+| Learning acts (counts recorded, #138) | `effectiveness_events` source `candidate_learning`, events `forgotten`, `deleted`, `restored`, as counts with no text. A pair hash per act is not recorded (#137 hashed decisions only) and has no issue | L-forget |
 | Replay arms for learning (recorded, #140) | cold and trained arms in engine mode (`replay engine --train`, [Learning arms](../Core/Portable/README.md#learning-arms)); ER between them, L-over per arm | L-over, L-cold acceptance |
 
 ## Sources

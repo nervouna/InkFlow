@@ -53,7 +53,7 @@ The bundled `RimePrebuilt` engine starts before the IMK server is created, and t
 
 **Cause:** Easy English has many unweighted aliases; a fixed mixed boost outranked Chinese; the standalone English translator queried the full upstream dictionary. Rime compares coverage length before quality.
 
-**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Startup runs full Rime maintenance so older bundled timestamps still replace stale caches; unchanged compiled tables are reused. Rules: the mixed-input skill's `references/rules.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
+**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Resource compilation (packaging, dictionary updates) runs Rime's full content-checking maintenance, so older resource timestamps still replace stale caches and unchanged compiled tables are reused; the app starts from that prepared cache and never compiles at startup. Rules: the mixed-input skill's `references/rules.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
 
 ## AI: local Ollama Qwen reports an incomplete suggestion (GitHub #4)
 
