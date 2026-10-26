@@ -162,6 +162,7 @@ german	0	Case tie: ESDB lists the rare lowercase german beside the proper German
 harper	0	Case tie: ESDB lists the rare lowercase harper beside the proper Harper at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Harper is the first candidate for harper.
 Here's	0	Case tie: ESDB lists Here's beside here's at one case-folded Zipf, and a query without the apostrophe breaks the tie bytewise to the capitalized form. Exclude the rare capitalized form so here's is the first candidate for heres.
 hp	0	Case tie: ESDB lists the lowercase hp beside the abbreviation HP at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so HP is the first candidate for hp.
+il	0	Case tie: ESDB lists the lowercase il, which is not an English word, beside the abbreviation IL at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so IL is the first candidate for il.
 japan	0	Case tie: ESDB lists the rare lowercase japan beside the proper Japan at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Japan is the first candidate for japan.
 kelly	0	Case tie: ESDB lists the rare lowercase kelly beside the proper Kelly at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Kelly is the first candidate for kelly.
 kent	0	Case tie: ESDB lists the rare lowercase kent beside the proper Kent at one case-folded Zipf, and the tie goes to the lowercase form. Exclude it so Kent is the first candidate for kent.
