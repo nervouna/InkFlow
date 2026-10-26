@@ -1,6 +1,6 @@
 ## Summary
 
-Closes #
+Fixes #
 
 ## Acceptance
 
