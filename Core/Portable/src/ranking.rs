@@ -1,4 +1,4 @@
-//! Equivalent-span ordering, matching InkFlowDomain/CandidateRanking.swift.
+//! Equivalent-span ordering over native Rime candidates and the prepared context index.
 use std::{collections::HashMap, ops::Range};
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
@@ -42,7 +42,7 @@ pub struct Metadata {
     /// `completion`, `user_table`, ...); empty when the row did not say. Recorded, never ranked on.
     pub candidate_type: String,
     /// The candidate's spelling was reached through a fuzzy or algebra rule: the dictionary syllables of its
-    /// code differ from the typed letters (an abbreviation included). Recorded, never ranked on.
+    /// code differ from the typed letters (an abbreviation included). It bypasses literal reading checks.
     pub corrected: bool,
 }
 
@@ -293,12 +293,13 @@ fn technical(text: &str) -> bool {
 
 /// Exact Han phrase frequencies, read whole into memory before key events.
 enum Phrases {
-    Map(HashMap<String, i64>),
+    Map(HashMap<String, HashMap<String, i64>>),
     /// The prepared `IFCX` index: one sorted fixed-width table per phrase length,
     /// keyed by three bytes per NFC scalar so byte order is table order.
     Index {
         data: Vec<u8>,
         tables: [(usize, usize); PHRASE_LIMIT - 1],
+        reading_bytes: usize,
     },
 }
 const PHRASE_LIMIT: usize = 8;
@@ -314,31 +315,50 @@ fn encode(text: &str) -> Vec<u8> {
 }
 
 impl Phrases {
-    fn frequency(&self, phrase: &str) -> Option<i64> {
+    fn frequency(&self, phrase: &str, input: Option<&str>) -> Option<i64> {
         match self {
-            Phrases::Map(map) => map.get(&normalized(phrase)).copied(),
-            Phrases::Index { data, tables } => {
+            Phrases::Map(map) => map.get(&normalized(phrase)).and_then(|readings| {
+                readings
+                    .iter()
+                    .filter(|(reading, _)| input.is_none_or(|input| reading.starts_with(input)))
+                    .map(|(_, frequency)| *frequency)
+                    .max()
+            }),
+            Phrases::Index {
+                data, tables, reading_bytes,
+            } => {
                 let key = encode(phrase);
                 let length = key.len() / 3;
                 if !(2..=PHRASE_LIMIT).contains(&length) {
                     return None;
                 }
                 let (offset, count) = tables[length - 2];
-                let record = length * 3 + 8;
+                let record = length * 3 + reading_bytes + 8;
                 let (mut low, mut high) = (0, count);
                 while low < high {
                     let mid = (low + high) / 2;
                     let start = offset + mid * record;
-                    match data[start..start + key.len()].cmp(&key[..]) {
-                        std::cmp::Ordering::Less => low = mid + 1,
-                        std::cmp::Ordering::Greater => high = mid,
-                        std::cmp::Ordering::Equal => {
-                            let bytes = &data[start + key.len()..start + record];
-                            return Some(u64::from_le_bytes(bytes.try_into().unwrap()) as i64);
-                        }
+                    if data[start..start + key.len()] < key[..] {
+                        low = mid + 1;
+                    } else {
+                        high = mid;
                     }
                 }
-                None
+                let mut best = None;
+                for position in low..count {
+                    let start = offset + position * record;
+                    if data[start..start + key.len()] != key[..] {
+                        break;
+                    }
+                    let reading = &data[start + key.len()..start + key.len() + reading_bytes];
+                    // Version 1 has no readings. Keep its historical behavior until resources are rebuilt.
+                    if *reading_bytes == 0 || input.is_none_or(|input| reading.starts_with(input.as_bytes())) {
+                        let bytes = &data[start + record - 8..start + record];
+                        let frequency = u64::from_le_bytes(bytes.try_into().unwrap()) as i64;
+                        best = Some(best.unwrap_or(0).max(frequency));
+                    }
+                }
+                best
             }
         }
     }
@@ -357,6 +377,11 @@ impl ContextRanker {
         let field = |position: usize| {
             u32::from_le_bytes(data[4 * position..4 * position + 4].try_into().unwrap()) as usize
         };
+        let reading_bytes = match field(1) {
+            1 => 0,
+            2 => 6,
+            version => return Err(format!("Unsupported context index version {version}")),
+        };
         let mut tables = [(0, 0); PHRASE_LIMIT - 1];
         let mut offset = INDEX_HEADER;
         for length in 2..=PHRASE_LIMIT {
@@ -365,23 +390,25 @@ impl ContextRanker {
             offset = offset
                 .checked_add(
                     count
-                        .checked_mul(length * 3 + 8)
+                        .checked_mul(length * 3 + reading_bytes + 8)
                         .ok_or("Oversized context index")?,
                 )
                 .ok_or("Oversized context index")?;
         }
-        if field(1) != 1 || field(2) > PHRASE_LIMIT || offset != data.len() {
+        if field(2) > PHRASE_LIMIT || offset != data.len() {
             return Err("Unsupported or truncated context index".into());
         }
         Ok(Self {
             longest: field(2),
-            frequencies: Phrases::Index { data, tables },
+            frequencies: Phrases::Index {
+                data, tables, reading_bytes,
+            },
         })
     }
 
     /// Build before accepting key events. Ranking itself does not access storage.
     pub fn from_dictionary(text: &str) -> Self {
-        let mut frequencies = HashMap::<String, i64>::new();
+        let mut frequencies = HashMap::<String, HashMap<String, i64>>::new();
         let mut longest = 0;
         let mut start = 0;
         // Swift splits LF Characters, not the LF inside a CRLF grapheme.
@@ -406,7 +433,21 @@ impl ContextRanker {
             if frequency < 0 || !(2..=8).contains(&count) || !all_han(phrase) {
                 continue;
             }
-            let entry = frequencies.entry(normalized(phrase)).or_default();
+            let syllables: Vec<_> = fields[1].split_whitespace().collect();
+            let reading = syllables.last().copied().unwrap_or("");
+            let reading = if syllables.len() == count
+                && reading.len() <= 6
+                && reading.bytes().all(|byte| byte.is_ascii_lowercase())
+            {
+                reading
+            } else {
+                ""
+            };
+            let entry = frequencies
+                .entry(normalized(phrase))
+                .or_default()
+                .entry(reading.to_string())
+                .or_default();
             *entry = (*entry).max(frequency);
             longest = longest.max(count);
         }
@@ -421,6 +462,7 @@ impl ContextRanker {
         candidates: &[String],
         preceding: &str,
         metadata: Option<&[Metadata]>,
+        input: &str,
     ) -> Vec<usize> {
         let original: Vec<_> = (0..candidates.len()).collect();
         let Some(rows) = metadata else {
@@ -445,6 +487,7 @@ impl ContextRanker {
             .take_while(|g| is_han(g))
             .collect();
         let first_length = candidates[0].graphemes(true).count();
+        let literal_input = !input.is_empty() && input.bytes().all(|byte| byte.is_ascii_lowercase());
         let phrase = |count: usize, tail: &str| -> String {
             prefix[..count]
                 .iter()
@@ -457,7 +500,7 @@ impl ContextRanker {
         // extend that word but not start inside it, as 为时 would after 行为.
         let word_start = (2..=prefix.len())
             .rev()
-            .find(|&count| self.frequencies.frequency(&phrase(count, "")).is_some())
+            .find(|&count| self.frequencies.frequency(&phrase(count, ""), None).is_some())
             .unwrap_or(1);
         let scores: Vec<_> = candidates
             .iter()
@@ -470,11 +513,18 @@ impl ContextRanker {
                 {
                     return (0, 0);
                 }
+                // A single-character continuation must use the phrase's terminal reading.
+                // Prefix spellings still match; corrected/fuzzy candidates keep Rime's evidence.
+                let reading = (first_length == 1
+                    && rows[i].coverage == (0..input.len())
+                    && !rows[i].corrected
+                    && literal_input)
+                    .then_some(input);
                 for count in (word_start..=prefix.len()).rev() {
                     if count + first_length > PHRASE_LIMIT {
                         continue;
                     }
-                    if let Some(frequency) = self.frequencies.frequency(&phrase(count, candidate)) {
+                    if let Some(frequency) = self.frequencies.frequency(&phrase(count, candidate), reading) {
                         return (count, frequency);
                     }
                 }

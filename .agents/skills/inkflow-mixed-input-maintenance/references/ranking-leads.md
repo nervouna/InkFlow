@@ -56,6 +56,18 @@ A first candidate of type `phrase`, `user_phrase` or `user_table`, or any other 
 
 A mixed sentence whose every ASCII run has personal evidence (personal bucket 1-3, rule 8) is placed directly before the best Chinese candidate of equal native coverage, after custom phrases and technical-context personal English and ahead of exact English; a stronger bucket first. A sentence with any unconfirmed run keeps its place among exact English and mixed candidates. Rule 9 still decides which lowercase codes can be personal tokens, so complete Pinyin sequences such as `women` never promote a sentence.
 
+## Single-character phrase readings
+
+The version-2 context index retains each phrase's terminal Pinyin syllable and its frequency for that reading.
+For a full-input single-character candidate, literal lowercase input must prefix-match the terminal syllable.
+Thus a phrase recorded with `di` cannot promote its final character for `de`. This checks the existing dictionary
+reading, without changing frequency weights or adding a homophone preference. Native corrected spellings
+(including abbreviation and fuzzy algebra) and input containing delimiters retain their native evidence;
+longer candidates keep existing text-based context matching. Version-1 resources retain their old behavior until rebuilt.
+
+The ranker reads the native `corrected` fact from candidate metadata. Quality recording remains observational;
+enabling or disabling it does not change these facts or the ranker's result.
+
 ## Limits
 
 - Personal strength is capped at three commits.

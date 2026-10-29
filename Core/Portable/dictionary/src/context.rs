@@ -1,6 +1,7 @@
 //! Context-ranking index, byte-identical to `IFContextRanker.buildIndex` in
 //! InkFlowDomain/CandidateRanking.swift: a sorted, fixed-width table per phrase
-//! length so the ranker reads it whole and never parses the dictionary.
+//! length so the ranker reads it whole and never parses the dictionary. Version 2
+//! keys include a six-byte, zero-padded terminal syllable before the frequency.
 use crate::{Error, Result};
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
@@ -8,7 +9,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 pub const CONTEXT_INDEX_FILENAME: &str = "pinyin_simp.context.bin";
 const MAGIC: &[u8] = b"IFCX";
-const VERSION: u32 = 1;
+const VERSION: u32 = 2;
 const PHRASE_LIMIT: usize = 8;
 
 pub fn context_index(dictionary: &[u8]) -> Result<Vec<u8>> {
@@ -26,16 +27,27 @@ pub fn context_index(dictionary: &[u8]) -> Result<Vec<u8>> {
         if frequency < 0 {
             continue;
         }
-        let Some(key) = encode(fields[0]) else {
+        let Some(mut key) = encode(fields[0]) else {
             continue;
         };
+        let syllables: Vec<_> = fields[1].split_whitespace().collect();
+        let reading = syllables.last().copied().unwrap_or("");
+        let mut terminal = [0; 6];
+        if syllables.len() == fields[0].graphemes(true).count()
+            && reading.len() <= 6
+            && reading.bytes().all(|byte| byte.is_ascii_lowercase())
+        {
+            terminal[..reading.len()].copy_from_slice(reading.as_bytes());
+        }
+        // Unsplit dictionary codes still mark word boundaries and score longer candidates.
+        key.extend_from_slice(&terminal);
         let entry = frequencies.entry(key).or_insert(0);
         *entry = (*entry).max(frequency as u64);
         longest = longest.max(fields[0].graphemes(true).count());
     }
     let mut tables = vec![Vec::new(); PHRASE_LIMIT - 1];
     for (key, frequency) in frequencies {
-        tables[key.len() / 3 - 2].push((key, frequency));
+        tables[(key.len() - 6) / 3 - 2].push((key, frequency));
     }
     let mut data = Vec::new();
     data.extend_from_slice(MAGIC);
@@ -101,16 +113,34 @@ mod tests {
         )
         .unwrap();
         assert_eq!(&index[..4], b"IFCX");
-        assert_eq!(fields(&index), [1, 4, 1, 0, 1, 0, 0, 0, 0]);
-        let record = &index[40..40 + 2 * 3 + 8];
+        assert_eq!(fields(&index), [2, 4, 1, 0, 1, 0, 0, 0, 0]);
+        let record = &index[40..40 + 2 * 3 + 6 + 8];
         assert_eq!(&record[..6], &[0x00, 0x4F, 0x60, 0x00, 0x59, 0x7D]);
-        assert_eq!(u64::from_le_bytes(record[6..].try_into().unwrap()), 9);
-        assert_eq!(index.len(), 40 + (6 + 8) + (12 + 8));
+        assert_eq!(u64::from_le_bytes(record[12..].try_into().unwrap()), 9);
+        assert_eq!(index.len(), 40 + (6 + 6 + 8) + (12 + 6 + 8));
     }
 
     #[test]
     fn empty_dictionary_has_only_a_header() {
         assert_eq!(context_index(b"").unwrap().len(), 40);
         assert_eq!(context_index(&[0xFF]).unwrap_err().code, "context-index");
+    }
+
+    #[test]
+    fn terminal_readings_keep_their_own_frequencies() {
+        let index = context_index("声调\tsheng diao\t100\n声调\tsheng tiao\t1\n".as_bytes()).unwrap();
+        assert_eq!(fields(&index), [2, 2, 2, 0, 0, 0, 0, 0, 0]);
+        let records: Vec<_> = index[40..].chunks_exact(20).collect();
+        assert_eq!(&records[0][6..12], b"diao\0\0");
+        assert_eq!(&records[1][6..12], b"tiao\0\0");
+        assert_eq!(u64::from_le_bytes(records[0][12..].try_into().unwrap()), 100);
+        assert_eq!(u64::from_le_bytes(records[1][12..].try_into().unwrap()), 1);
+    }
+
+    #[test]
+    fn unsplit_codes_keep_text_evidence_without_a_terminal_reading() {
+        let index = context_index("旅行\tlvxing\t5\n".as_bytes()).unwrap();
+        assert_eq!(&index[46..52], &[0; 6]);
+        assert_eq!(u64::from_le_bytes(index[52..60].try_into().unwrap()), 5);
     }
 }
