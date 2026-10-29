@@ -58,6 +58,7 @@ fn swift_ranking_reference() {
             &candidates,
             case["context"].as_str().unwrap(),
             metadata.as_deref(),
+            "",
         );
         assert_eq!(
             json!({"parsed": parsed, "order": order}),
@@ -72,6 +73,67 @@ fn swift_ranking_reference() {
 fn parse_rows(rows: &[&str], input_length: usize) -> Option<Vec<inkflow_rime::ranking::Metadata>> {
     let value = format!("0,{};{}", rows.len(), rows.join(";"));
     parse_metadata(&value, 0, rows.len(), input_length)
+}
+
+#[test]
+fn single_character_context_uses_the_terminal_reading() {
+    let ranker = ContextRanker::from_dictionary("银行\tyin hang\t100\n旅行\tlv xing\t80\n");
+    let candidates = ["型", "行", "星"].map(String::from).to_vec();
+    let rows = parse_rows(&["0,4,n,1,0,n", "0,4,n,1,0,n", "0,4,n,1,0,n"], 4).unwrap();
+    assert_eq!(ranker.order(&candidates, "银", Some(&rows), "xing"), [0, 1, 2]);
+    assert_eq!(ranker.order(&candidates, "旅", Some(&rows), "xing"), [1, 0, 2]);
+    assert_eq!(ranker.order(&candidates, "银", Some(&rows), "hang"), [1, 0, 2]);
+
+    let abbreviated = parse_rows(&["0,1,n,1,0,n", "0,1,n,1,0,n", "0,1,n,1,0,n"], 1).unwrap();
+    assert_eq!(ranker.order(&candidates, "银", Some(&abbreviated), "h"), [1, 0, 2]);
+    let mut corrected = rows.clone();
+    corrected[1].corrected = true;
+    assert_eq!(ranker.order(&candidates, "银", Some(&corrected), "hnag"), [1, 0, 2]);
+    let delimited = parse_rows(&["0,5,n,1,0,n", "0,5,n,1,0,n", "0,5,n,1,0,n"], 5).unwrap();
+    assert_eq!(ranker.order(&candidates, "银", Some(&delimited), "ha'ng"), [1, 0, 2]);
+    let mut partial = rows.clone();
+    partial[1].coverage = 0..2;
+    assert_eq!(ranker.order(&candidates, "旅", Some(&partial), "xing"), [0, 1, 2]);
+    assert_eq!(ranker.order(&candidates, "旅", None, "xing"), [0, 1, 2]);
+}
+
+#[test]
+fn context_frequency_belongs_to_the_matching_reading() {
+    let ranker = ContextRanker::from_dictionary(
+        "声调\tsheng diao\t100\n声调\tsheng tiao\t1\n声条\tsheng tiao\t10\n",
+    );
+    let candidates = ["条", "调"].map(String::from).to_vec();
+    let rows = parse_rows(&["0,4,n,1,0,n", "0,4,n,1,0,n"], 4).unwrap();
+    assert_eq!(ranker.order(&candidates, "声", Some(&rows), "tiao"), [0, 1]);
+    assert_eq!(ranker.order(&candidates, "声", Some(&rows), "diao"), [1, 0]);
+}
+
+#[test]
+fn prepared_index_reads_terminal_syllables_and_accepts_legacy_resources() {
+    let mut index = b"IFCX".to_vec();
+    for value in [2u32, 2, 1, 0, 0, 0, 0, 0, 0] {
+        index.extend(value.to_le_bytes());
+    }
+    index.extend([0x00, 0x94, 0xf6, 0x00, 0x88, 0x4c]);
+    index.extend(b"hang\0\0");
+    index.extend(100u64.to_le_bytes());
+    let ranker = ContextRanker::from_index(index.clone()).unwrap();
+    let candidates = ["型", "行"].map(String::from).to_vec();
+    let rows = parse_rows(&["0,4,n,1,0,n", "0,4,n,1,0,n"], 4).unwrap();
+    assert_eq!(ranker.order(&candidates, "银", Some(&rows), "xing"), [0, 1]);
+    assert_eq!(ranker.order(&candidates, "银", Some(&rows), "hang"), [1, 0]);
+    assert!(ContextRanker::from_index(index[..index.len() - 1].to_vec()).is_err());
+    let mut multiple = index.clone();
+    multiple[12..16].copy_from_slice(&2u32.to_le_bytes());
+    multiple.extend([0x00, 0x94, 0xf6, 0x00, 0x88, 0x4c]);
+    multiple.extend(b"xing\0\0");
+    multiple.extend(2u64.to_le_bytes());
+    let multiple = ContextRanker::from_index(multiple).unwrap();
+    assert_eq!(multiple.order(&candidates, "银", Some(&rows), "xing"), [1, 0]);
+    index[4..8].copy_from_slice(&1u32.to_le_bytes());
+    index.drain(46..52);
+    let legacy = ContextRanker::from_index(index).unwrap();
+    assert_eq!(legacy.order(&candidates, "银", Some(&rows), "xing"), [1, 0]);
 }
 
 #[test]
@@ -179,7 +241,7 @@ fn metadata_row_round_trips_through_parse_metadata() {
     assert_eq!(legacy[0].row(), "0,7,n,1,0,n,,0");
 }
 
-/// Provenance is recorded, not ranked on: the same page orders the same with or without it.
+/// Without a literal spelling check, candidate facts do not change the page's order.
 #[test]
 fn candidate_facts_do_not_change_the_order() {
     let dictionary = "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n";
@@ -187,7 +249,7 @@ fn candidate_facts_do_not_change_the_order() {
     let candidates: Vec<String> = ["惨", "餐", "参"].map(String::from).to_vec();
     let order = |rows: [&str; 3]| {
         let metadata = parse_rows(&rows, 7);
-        ranker.order(&candidates, "准备午", metadata.as_deref())
+        ranker.order(&candidates, "准备午", metadata.as_deref(), "")
     };
     let plain = order(["0,7,n,1,0,n", "0,7,n,1,0,n", "0,7,n,1,0,n"]);
     let facts = order([
@@ -206,7 +268,7 @@ fn complete_pinyin_personal_english_stays_behind_han_in_a_technical_context() {
     let candidates: Vec<String> = ["呢", "ne"].map(String::from).to_vec();
     let order = |english: &str| {
         let metadata = parse_rows(&["0,2,n,1,0,n,phrase,0", english], 2);
-        ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref())
+        ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref(), "")
     };
     assert_eq!(order("0,2,a,4,1,e,english_personal_1,0"), [0, 1]);
     assert_eq!(order("0,2,a,1,1,e,english_personal_1,0"), [1, 0]);
@@ -226,10 +288,10 @@ fn complete_pinyin_personal_english_keeps_its_bucket_among_english() {
         ],
         1,
     );
-    let order = ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref());
+    let order = ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref(), "");
     assert_eq!(order, [0, 3, 2, 1]);
     // Without a technical signal the order is the same: the mark changes nothing there.
-    assert_eq!(ranker.order(&candidates, "", metadata.as_deref()), order);
+    assert_eq!(ranker.order(&candidates, "", metadata.as_deref(), ""), order);
 }
 
 /// The mark names a whole-input personal English row; anything else is malformed and returns the page

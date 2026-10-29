@@ -2,6 +2,12 @@
 
 This crate ports the Chinese dictionary generator, all 32 spelling profiles and the context-ranking index for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The preparation scripts run its CLI; the Swift dictionary update worker calls the same library through its C ABI.
 
+Context index version 2 keeps separate frequencies for a phrase's terminal readings. Each fixed-width record contains
+the NFC phrase key (three bytes per scalar), six bytes of zero-padded lowercase terminal Pinyin and the eight-byte
+little-endian frequency. The 40-byte header and phrase-length tables keep their layout. The ranker also accepts
+version 1; preparing resources upgrades the index. The Swift reference emits the same version-2 bytes.
+An unsplit or unsupported code has an all-zero syllable, retaining its text evidence without claiming a terminal reading.
+
 ## Verify
 
 From the repository root:

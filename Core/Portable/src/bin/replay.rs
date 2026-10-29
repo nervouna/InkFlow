@@ -240,7 +240,7 @@ fn ranked_pick(case: &Case, ranker: &ContextRanker) -> std::result::Result<Strin
         return Err(Verdict::Unparsable);
     };
     let texts: Vec<String> = page.iter().map(|c| c.text.clone()).collect();
-    let order = ranker.order(&texts, &case.preceding, Some(&metadata));
+    let order = ranker.order(&texts, &case.preceding, Some(&metadata), &case.raw_input);
     Ok(texts[order[0]].clone())
 }
 

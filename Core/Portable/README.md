@@ -41,6 +41,12 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 `src/ranking.rs` ports the Swift equivalent-span ranker, including strict metadata parsing, Han phrase context, personal-strength limits, custom-source priority, and native-order fallback; it reads the prepared `pinyin_simp.context.bin` whole into memory and never touches storage from a key event. Its 312 synthetic cases compare against `fixtures/ranking-reference.json`, the Swift ranker's recorded results.
 
+The version-2 context index retains a phrase's terminal syllable and its frequency per reading.
+Full-input single-character candidates with literal lowercase, uncorrected input require that syllable to start with
+the typed spelling. A phrase's other reading cannot promote the character. Corrected spellings and inputs with
+delimiters defer to Rime; longer candidates keep text-based matching. Version-1 indices retain their historical
+text-only behavior until preparation rebuilds them. The index adds no key-event I/O.
+
 `tests/parity.rs` compares the Rust engine with the recorded behavior of the Swift engine on prepared production resources and isolated user directories (`parity.sh`; the tests skip without `INKFLOW_PORTABLE_RESOURCES`):
 
 - The 24 samples of [the quality baseline](../Fixtures/QualityBaseline/README.md) reproduce `baseline.json` exactly: first page, target rank, paging, selection, one-shot commits, five learning commits with the observations before selections 2 to 5 (`training`), the learned state after the runtime restarts on the same user directory, and the retained state after the retention pass of ten unrelated Han commits in that directory.
