@@ -149,6 +149,7 @@ final class IFPersonalLearningWindowController: NSWindowController, NSWindowDele
             self.window = window
             window.center()
         }
+        IFSettingsWindowController.installMainMenu()
         NSApp.setActivationPolicy(.regular)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
