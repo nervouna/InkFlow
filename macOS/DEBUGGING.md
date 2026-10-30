@@ -116,3 +116,11 @@ IMK serialization enables any item with an action. An unavailable item needs bot
 ## Dictionary error details missing from accessibility
 
 An `accessibilityIdentifier` on a SwiftUI `DisclosureGroup` overrides its descendants' identifiers. Put the identifier on the diagnostic text instead.
+
+## quality-store fails only under `test.sh all`
+
+**Symptom:** `entire accepted charge released after drain` in the byte-pressure part of `QualityStoreTests`; the unit passes when run alone.
+
+**Cause (likely):** `close()` waits 1 s by default; under the parallel load of `test.sh all` the ~100 KB-per-record backlog may not drain in time. Seen once, 2026-10-31, v0.7.6 verification.
+
+**Fix:** Rerun `test.sh quality-store`. If it recurs, give that `close()` a longer timeout.
