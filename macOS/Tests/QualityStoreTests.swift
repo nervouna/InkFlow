@@ -269,6 +269,7 @@ struct QualityStoreTests {
         try await recordingControls()
         try await queuedControlBarrier()
         try await retentionAndRollback()
+        try await spaceReclamation()
         try await idleRetention()
         print("PASS quality store: 10 persistence/failure groups")
     }
@@ -422,6 +423,49 @@ private extension QualityStoreTests {
         expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "startup cleanup preserves run identity")
         await reopened.close()
         print("PASS quality retention: cutoff boundaries, rollback and paused startup maintenance")
+    }
+
+    static func spaceReclamation() async throws {
+        let url = try makeURL("vacuum")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
+                                 textCapture: true)
+        for index in 0..<64 {
+            var envelope = fixture("aged-\(index)")
+            envelope.composition.startedAt = maintenanceDate.addingTimeInterval(-29 * 86_400)
+            store.submit(envelope)
+        }
+        await store.flush()
+        let reader = try Reader(url)
+        expect(try reader.scalar("SELECT count(*) FROM compositions") != "0", "aged records were written")
+        await store.maintainRetention()
+        expect(try reader.scalar("SELECT count(*) FROM compositions") == "0", "retention removes aged records")
+        expect(try reader.scalar("PRAGMA auto_vacuum") == "2", "a new database uses incremental auto_vacuum")
+        expect(try reader.scalar("PRAGMA freelist_count") == "0", "maintenance returns pages freed by retention")
+        await store.close()
+        // An existing database without auto_vacuum and with free pages, as written by earlier versions.
+        let writer = try Reader(url, writable: true)
+        try writer.execute("PRAGMA auto_vacuum = NONE")
+        try writer.execute("VACUUM")
+        try writer.execute("""
+            CREATE TABLE filler(x);
+            WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < 500)
+            INSERT INTO filler SELECT randomblob(4000) FROM n;
+            DROP TABLE filler;
+            """)
+        expect(try writer.scalar("PRAGMA auto_vacuum") == "0", "legacy database has no auto_vacuum")
+        expect(Int(try writer.scalar("PRAGMA freelist_count")) ?? 0 >= 500, "legacy database has free pages")
+        let reopened = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata,
+                                    textCapture: true)
+        await reopened.maintainRetention()
+        let converted = try Reader(url)
+        expect(try converted.scalar("PRAGMA auto_vacuum") == "2", "maintenance converts a legacy database once")
+        expect(try converted.scalar("PRAGMA freelist_count") == "0", "conversion returns legacy free pages")
+        expect(reopened.submit(fixture("after-vacuum")) == .accepted, "recording continues after conversion")
+        await reopened.flush()
+        expect(try converted.scalar("SELECT count(*) FROM compositions") == "1", "converted database accepts records")
+        await reopened.close()
+        print("PASS quality space reclamation: incremental vacuum and one-time legacy conversion")
     }
 
     static func recordingControls() async throws {
