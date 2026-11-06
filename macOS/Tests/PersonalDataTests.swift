@@ -25,7 +25,9 @@ import InkFlowRime
             expect(defaults.integer(forKey: "candidateCount") == 9, "cross-process persistence")
             return
         }
-        let suite = "InkFlowPersonalTests." + UUID().uuidString
+        // A path keeps the suite's plist out of ~/Library/Preferences (see temporarySuiteName in TestSupport.swift).
+        let suite = FileManager.default.temporaryDirectory
+            .appending(path: "InkFlowPersonalTests.\(UUID().uuidString)").path
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = IFSettings(defaults: defaults)

@@ -84,7 +84,7 @@ struct SettingsUITests {
 
     /// UI-only preview: no assertions, input engine, permissions, or network services.
     @MainActor static func runPreview() {
-        let suite = "inkflow.settings-preview.\(UUID().uuidString)"
+        let suite = temporarySuiteName("inkflow.settings-preview")
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let settings = IFSettings(defaults: defaults, voiceService: VoiceRecognitionFixture(mode: .preview))
@@ -104,7 +104,7 @@ struct SettingsUITests {
 
     /// Explicit interactive diagnostic: real permission/resources, isolated settings, no recording or IME registration.
     @MainActor static func runMicrophoneReproduction(lifecycleOnly: Bool = false) {
-        let name = "inkflow.microphone-reproduction.\(UUID().uuidString)"
+        let name = temporarySuiteName("inkflow.microphone-reproduction")
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let settings = IFSettings(defaults: defaults)
