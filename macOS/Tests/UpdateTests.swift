@@ -18,7 +18,7 @@ enum UpdateTests {
     }
 
     @MainActor private static func migrationCase(legacyCheck: Any?, expectedChecks: Bool) {
-        let suite = "inkflow.update-migration.\(UUID().uuidString)"
+        let suite = temporarySuiteName("inkflow.update-migration")
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
 

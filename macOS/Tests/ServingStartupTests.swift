@@ -148,7 +148,9 @@ private final class StartupFactory: @unchecked Sendable {
             let during = try store.state()
             check(during.current == saved.current && during.previous == saved.previous && during.bundled == nil,
                   "Transient fallback does not confirm over saved downloaded journal")
-            let defaults = UserDefaults(suiteName: "inkflow.serving.\(UUID())")!
+            let suite = temporarySuiteName("inkflow.serving")
+            let defaults = UserDefaults(suiteName: suite)!
+            defer { defaults.removePersistentDomain(forName: suite) }
             defaults.setVolatileDomain(["candidateCount": 5, "aiEnabled": false, "aiBaseURL": "", "aiModel": "",
                 "customPhrases": Data("[]".utf8)], forName: UserDefaults.argumentDomain)
             let settings = IFSettings(defaults: defaults)
