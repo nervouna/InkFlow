@@ -20,6 +20,7 @@ import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
 REPOSITORY = Path(__file__).resolve().parents[4]
+BUSY_SECONDS = 5  # How long a query waits for a writer that holds the store.
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
 TABLE_COLUMNS = {
     'recording_runs': 'id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code',
@@ -172,7 +173,11 @@ def connect(path):
     # would block the input method's quality writes for as long as the query takes.
     db = sqlite3.connect(':memory:')
     try:
-        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)) as source:
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=BUSY_SECONDS)) as source:
+            # `backup` retries a busy source without limit. Taking the read lock first fails after the timeout, and
+            # the copy then runs under that lock.
+            source.execute('BEGIN')
+            source.execute('SELECT COUNT(*) FROM sqlite_master').fetchone()
             source.backup(db)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')

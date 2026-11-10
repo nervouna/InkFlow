@@ -873,6 +873,15 @@ class QueryTests(unittest.TestCase):
         self.assertTrue(any(step.startswith('SEARCH w USING AUTOMATIC') for step in plan), plan)
         self.assertFalse(any(step.startswith('SCAN w LEFT-JOIN') for step in plan), plan)
 
+    def test_a_store_locked_by_a_writer_fails_after_the_busy_timeout(self):
+        self.addCleanup(setattr, self.quality, 'BUSY_SECONDS', self.quality.BUSY_SECONDS)
+        self.quality.BUSY_SECONDS = 0.1
+        with contextlib.closing(sqlite3.connect(self.db, isolation_level=None)) as writer:
+            writer.execute('BEGIN EXCLUSIVE')
+            self.assertIn('locked', self.run_cli('summary', success=False))
+            writer.execute('ROLLBACK')
+        self.result()
+
     def test_post_commit_windows_are_found_through_their_commit(self):
         args = self.quality.parser().parse_args(['summary', '--db', str(self.db)])
         with contextlib.closing(self.quality.connect(self.db)) as db:
