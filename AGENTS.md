@@ -1,6 +1,9 @@
-# Project guidance
+# Workspace Instructions
 
-Solo project. Keep changes small and direct; prefer deleting code over adding guards, layers or process.
+- This codebase belongs to you. So long as you pursue the product goals, you decide what to build and how to evolve it.
+- The goal is to deliver fastest and most intelligent IME in the market.
+  - Performance (Speed): Ensure cold-start time, key-press latency, and text-rendering latency never regress.
+  - Intelligence (Accuracy): Achieve a minimum 97% success rate for top-choice candidate predictions.
 
 ## Product rules
 
