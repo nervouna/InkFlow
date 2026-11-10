@@ -168,8 +168,12 @@ def connect(path):
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise QueryError(f'Database does not exist: {path}. Record input first, or pass --db PATH.')
-    db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=0.25)
+    # Queries run on a private in-memory copy. The store uses a rollback journal, so a reader on the file itself
+    # would block the input method's quality writes for as long as the query takes.
+    db = sqlite3.connect(':memory:')
     try:
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=5)) as source:
+            source.backup(db)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         if (db.execute('PRAGMA user_version').fetchone()[0] != 4
@@ -221,8 +225,11 @@ def windows_cte(args):
     """One row per commit, with the commit named as the database names it: exports prefix every id with its source.
     `carrier_id` is the composition that holds the window, the one that followed the commit."""
     combined = getattr(args, 'input', None) or getattr(args, 'exports_only', False) or getattr(args, 'source', None)
-    select = ', '.join(("c.source_id || ':' || " if combined and column == 'commit_id' else '')
-                       + f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
+    # `commit_id` is cast so it has the TEXT affinity of the ids it joins: without one, SQLite builds no automatic
+    # index on this table and scans every window for every decision.
+    commit = ("c.source_id || ':' || " if combined else '') + "json_extract(w.value,'$.commitID')"
+    select = ', '.join(f'CAST({commit} AS TEXT) AS commit_id' if column == 'commit_id'
+                       else f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
     return (f"windows AS MATERIALIZED (SELECT {select}, c.id AS carrier_id "
             "FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') w)")
 

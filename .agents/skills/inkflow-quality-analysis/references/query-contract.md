@@ -7,9 +7,10 @@ a result (denominators, cohorts, measurement fingerprints, unavailable evidence,
 ## CLI and output
 
 The entrypoint is `scripts/quality.py`, relative to this skill. It uses stdlib
-`sqlite3`, opens an encoded file URI with `mode=ro`, enables `query_only`, and
-closes a single command's consistent read transaction before rendering. It never
-creates or migrates a local database. Joint analysis of `--input` exports builds
+`sqlite3`, opens an encoded file URI with `mode=ro`, copies the database into memory with SQLite's backup API and
+closes the file, then enables `query_only` and runs the command on that copy. The store uses a rollback journal, so
+a reader on the file would block the input method's quality writes for the length of the query; the copy holds the
+lock for about a second. It never creates or migrates a local database. Joint analysis of `--input` exports builds
 only an ephemeral in-memory database and indexes; it never writes the daily database. Queries aggregate
 history in SQLite; `inspect` reads only one composition's records. A busy or damaged
 database returns a diagnostic and exit 2. Success, including an empty compatible
