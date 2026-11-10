@@ -565,7 +565,11 @@ impl ContextRanker {
                 .copied()
                 .enumerate()
                 .partition(|&(place, i)| place < SYLLABLE_ENGLISH_PLACE && unconfirmed(i));
-            let at = kept.len().min(SYLLABLE_ENGLISH_PLACE);
+            // Exact English still precedes English completions: stop at the first one.
+            let completion = kept
+                .iter()
+                .position(|&(_, i)| !rows[i].exact && rows[i].source == Source::English);
+            let at = completion.unwrap_or(kept.len()).min(SYLLABLE_ENGLISH_PLACE);
             kept.splice(at..at, deferred);
             ranked = kept.into_iter().map(|(_, i)| i).collect();
         }

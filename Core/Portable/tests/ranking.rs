@@ -280,6 +280,24 @@ fn single_syllable_defers_unconfirmed_exact_english_to_the_fourth_place() {
     );
 }
 
+/// Exact English never falls behind an English completion (`den` before `deny`), on a short or a full page.
+#[test]
+fn single_syllable_keeps_exact_english_ahead_of_completions() {
+    let han = "0,3,n,1,0,n,phrase,0";
+    let english = "0,3,a,1,0,e,english_exact,0";
+    let completion = "0,3,a,0,0,e,english_completion,0";
+    assert_eq!(order_of(&["扽", "den", "deny"], &[han, english, completion], 3), [0, 1, 2]);
+    assert_eq!(
+        order_of(&["扽", "den", "deny", "denim", "蹬"], &[han, english, completion, completion, han], 3),
+        [0, 4, 1, 2, 3]
+    );
+    // Characters already order ahead of completions, so they move up and the word stays before `deny`.
+    assert_eq!(
+        order_of(&["扽", "den", "蹬", "deny", "等"], &[han, english, han, completion, han], 3),
+        [0, 2, 4, 1, 3]
+    );
+}
+
 /// The rule leaves alone: confirmed English, input that is not one syllable, and pages without the facts.
 #[test]
 fn single_syllable_rule_keeps_every_other_page() {

@@ -63,7 +63,7 @@ When an uncorrected dictionary or learned single character (`phrase` or `user_ph
 
 - English the user has committed (personal bucket 1-3) keeps its place, so one selection brings the word back to second.
 - An abbreviation, a typo correction or a fuzzy spelling marks every character `corrected`, and typed capitals have no uncorrected reading: those pages keep their order. So do words of two or more characters (`women`), completions, custom phrases and rows without the type and `corrected` facts.
-- A page shorter than four candidates puts the word last.
+- The word stays ahead of every English completion (`den` before `deny`), so it stops at the first one; a page shorter than four candidates otherwise puts it last.
 - Evidence (#181, 2026-10-27 to 2026-11-10, 39,467 recorded first pages): the word in second place was chosen 2 times on such pages and a character behind it 141 times; 42 choices enter the first three and 2 leave (11 against 2 distinct pairs, exact McNemar p = 0.022). The first candidate never changes.
 
 ## Limits
