@@ -32,6 +32,7 @@
 - Stage files by name; don't `git add -A`. Worktrees collect untracked tool output (SwiftPM/SourceKit index, scratch files).
 - Installing or activating an input method requires explicit user approval.
 - Developed with the orchestrate skill: each issue body is the spec; one issue, one branch `<N>-<slug>` from `origin/main`, one PR using `.github/pull_request_template.md`.
+- `main` requires the six CI checks (ruleset "Main Required Checks"; repository admins bypass it). After opening a PR, enable auto-merge with a merge commit: GitHub merges it when the checks pass. Nothing notifies the agent of a green run.
 - Roadmap lives in GitHub Issues. Reference the issue in the PR; use `Fixes #N` only when the PR completes it, otherwise `Refs #N`. GitHub moves the Project item. Don't update Project fields by hand.
 - Release: use the `inkflow-release` skill. It runs the full suite once; don't add extra verification rounds.
 - Known failures: see [macOS/DEBUGGING.md](macOS/DEBUGGING.md).
