@@ -173,6 +173,72 @@ final class IFSettings: ObservableObject {
         } catch { qualityControlMessage = "清除未完成，原有记录可能仍然保留。请稍后重试。" }
     }
 
+    // MARK: Weekly quality export
+
+    /// Off by default. When on, a text-free export of the past week is written to the chosen folder once a week.
+    var qualityAutoExportEnabled: Bool { integer(for: "qualityAutoExportEnabled", allowed: [0, 1], fallback: 0) != 0 }
+    var qualityAutoExportFolder: String? { defaults.string(forKey: "qualityAutoExportFolder") }
+    var qualityAutoExportLastSuccess: Date? { defaults.object(forKey: "qualityAutoExportLastSuccess") as? Date }
+    /// The outcome of the last automatic export, kept across launches.
+    var qualityAutoExportMessage: String? { defaults.string(forKey: "qualityAutoExportMessage") }
+    var qualityDatabase = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Application Support/InkFlow/quality.sqlite3")
+    private var qualityAutoExportTimer: Timer?
+    private var qualityAutoExportRunning = false
+
+    func setQualityAutoExportEnabled(_ enabled: Bool) {
+        objectWillChange.send()
+        defaults.set(enabled ? 1 : 0, forKey: "qualityAutoExportEnabled")
+        scheduleQualityAutoExport()
+    }
+
+    /// A new folder has no file yet, so the next check writes one.
+    func setQualityAutoExportFolder(_ folder: URL) {
+        objectWillChange.send()
+        defaults.set(folder.path, forKey: "qualityAutoExportFolder")
+        defaults.removeObject(forKey: "qualityAutoExportLastSuccess")
+        defaults.removeObject(forKey: "qualityAutoExportMessage")
+        scheduleQualityAutoExport()
+    }
+
+    /// Called at startup and whenever the setting changes: one check now, then a daily check while enabled.
+    /// No timer exists while the setting is off.
+    func scheduleQualityAutoExport() {
+        qualityAutoExportTimer?.invalidate()
+        qualityAutoExportTimer = nil
+        guard qualityAutoExportEnabled else { return }
+        qualityAutoExportTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.checkQualityAutoExport() }
+        }
+        Task { await checkQualityAutoExport() }
+    }
+
+    /// Writes the export on a utility task when it is due. A failure only records its reason; the next check retries.
+    func checkQualityAutoExport(now: Date = .now) async {
+        guard !qualityAutoExportRunning,
+              QualityAutoExport.isDue(enabled: qualityAutoExportEnabled, folder: qualityAutoExportFolder,
+                                      lastSuccess: qualityAutoExportLastSuccess, now: now),
+              let folder = qualityAutoExportFolder else { return }
+        qualityAutoExportRunning = true
+        defer { qualityAutoExportRunning = false }
+        let database = qualityDatabase
+        let lastSuccess = qualityAutoExportLastSuccess
+        let stamp = now.formatted(date: .numeric, time: .shortened)
+        let message: String
+        do {
+            _ = try await Task.detached(priority: .utility) {
+                try QualityAutoExport.run(database: database, folder: URL(fileURLWithPath: folder),
+                                          lastSuccess: lastSuccess, now: now)
+            }.value
+            defaults.set(now, forKey: "qualityAutoExportLastSuccess")
+            message = "上次自动导出：\(stamp)，已保存。"
+        } catch {
+            message = "上次自动导出：\(stamp)，未完成：\(error.localizedDescription)"
+        }
+        objectWillChange.send()
+        defaults.set(message, forKey: "qualityAutoExportMessage")
+    }
+
     init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
          voiceService: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
         self.defaults = defaults

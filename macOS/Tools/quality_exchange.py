@@ -1,5 +1,6 @@
 """Versioned manual exchange; all imported rows live only in memory."""
 from contextlib import closing
+import gzip
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -81,6 +82,15 @@ def load(path, columns):
     if path.stat().st_size > MAX_BYTES:
         raise ValueError(f'Export exceeds 256 MiB: {path}')
     try:
+        if path.suffix == '.gz':
+            # The weekly export is the same document, compressed; the limit is on the document.
+            with gzip.open(path, 'rb') as stream:
+                payload = stream.read(MAX_BYTES + 1)
+            if len(payload) > MAX_BYTES:
+                raise ValueError('Export exceeds 256 MiB.')
+            text = payload.decode('utf-8')
+        else:
+            text = path.read_text()
         def unique(pairs):
             result = {}
             for key, value in pairs:
@@ -90,7 +100,7 @@ def load(path, columns):
             return result
         def reject_number(_):
             raise ValueError('Invalid JSON number.')
-        document = json.loads(path.read_text(), object_pairs_hook=unique, parse_constant=reject_number)
+        document = json.loads(text, object_pairs_hook=unique, parse_constant=reject_number)
         validate(document, columns)
     except (ValueError, TypeError, KeyError, AttributeError, RecursionError) as error:
         raise ValueError(f'Invalid quality export {path}: {error}') from error

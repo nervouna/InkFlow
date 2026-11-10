@@ -1,4 +1,5 @@
 """Query fixtures use the schema of the database created by the Swift capture test."""
+import gzip
 import contextlib
 import csv
 from datetime import datetime, timedelta, timezone
@@ -838,6 +839,96 @@ class QueryTests(unittest.TestCase):
         failure = subprocess.run([executable, str(bad), str(rejected)], capture_output=True)
         self.assertEqual(failure.returncode, 2)
         self.assertFalse(rejected.exists())
+
+    def test_weekly_export_is_text_free_and_written_once_a_week(self):
+        executable = os.environ.get('INKFLOW_QUALITY_EXPORT_FIXTURE')
+        if not executable:
+            self.skipTest('Native export fixture not built; use test-quality-query.sh')
+        import subprocess
+        with sqlite3.connect(self.db) as db:
+            db.execute("UPDATE compositions SET operations_json=json_set(operations_json,'$.inputBeforeDeletion','nihap') "
+                       "WHERE id='a'")
+        folder = Path(self.temp.name) / 'weekly'
+        folder.mkdir()
+        day = 24 * 60 * 60
+        recorded = int(datetime.fromisoformat(STAMP.replace('Z', '+00:00')).timestamp())
+
+        def check(last, now):
+            return subprocess.run([executable, 'auto', str(self.db), str(folder), str(last), str(now)],
+                                  capture_output=True)
+
+        def read(path):
+            return json.loads(gzip.decompress(path.read_bytes()))
+
+        def exports():
+            return sorted(folder.glob('InkFlow-quality-*.json.gz'))
+        first = check('none', recorded + day)
+        self.assertEqual(first.returncode, 0, first.stderr.decode())
+        files = exports()
+        self.assertEqual([f.name[-16:] for f in files], ['20260907.json.gz'])
+        self.assertEqual(check(recorded + day, recorded + 7 * day).stdout.decode().strip(), 'skipped')
+        self.assertEqual(exports(), files)
+        # A week later: a second dated file that reaches back to the last export and one day more.
+        self.assertEqual(check(recorded + day, recorded + 8 * day).returncode, 0)
+        self.assertEqual([f.name[-16:] for f in exports()], ['20260907.json.gz', '20260914.json.gz'])
+        overlap = read(exports()[1])['tables']
+        self.assertEqual(len(overlap['compositions']), len(read(files[0])['tables']['compositions']))
+        # Another week: the records are older than its window, the runs and revisions are still complete.
+        self.assertEqual(check(recorded + 8 * day, recorded + 15 * day).returncode, 0)
+        later = read(exports()[2])['tables']
+        self.assertEqual((later['compositions'], later['commits'], later['candidate_decisions'],
+                          later['effectiveness_events']), ([], [], [], []))
+        self.assertTrue(later['recording_runs'] and later['config_revisions'])
+        # Files of this device older than 35 days go; anything else in the folder stays.
+        strangers = [folder / 'InkFlow-quality-00000000-0000-0000-0000-000000000000-20200101.json.gz',
+                     folder / 'notes.txt']
+        for stranger in strangers:
+            stranger.write_text('{}')
+        self.assertEqual(check(recorded + 15 * day, recorded + 44 * day).returncode, 0)
+        self.assertEqual([f.name[-16:] for f in exports() if f not in strangers],
+                         ['20260921.json.gz', '20261020.json.gz'])
+        self.assertTrue(all(stranger.exists() for stranger in strangers))
+        for stranger in strangers:
+            stranger.unlink()
+        self.assertEqual(check('none', recorded + day).returncode, 0)
+        files = [f for f in exports() if f.name.endswith('20260907.json.gz')]
+        document = read(files[0])
+        tables = document['tables']
+        self.assertTrue(tables['commits'] and all(r['text'] == '' for r in tables['commits']))
+        self.assertEqual({r['character_count'] for r in tables['commits']}, {1, 3})
+        self.assertTrue(all(r['selected_text'] is None for r in tables['candidate_decisions']))
+        self.assertTrue(any(r['selected_display_index'] is not None for r in tables['candidate_decisions']))
+        for table in ('compositions', 'candidate_decisions'):
+            self.assertTrue(all('inputBeforeDeletion' not in json.loads(r['operations_json']) for r in tables[table]))
+        pages = []
+        for r in tables['candidate_decisions']:
+            pages.append(json.loads(r['snapshot_json']))
+            pages += [json.loads(r['first_page_json'])] if r['first_page_json'] else []
+            self.assertEqual(r['visited_pages_json'], '[]')
+        self.assertTrue(pages)
+        for page in pages:
+            self.assertEqual((page['rawInput'], page['precedingContext'], page['textCaptured']), ('', '', False))
+            self.assertIn(page.get('selectedPrefix', ''), ('',))
+            self.assertNotIn('configuration', page)
+            self.assertTrue(all(c['text'] == '' and 'comment' not in c for c in page['candidates']))
+        self.assertTrue(any('displayRank' in c for page in pages for c in page['candidates']))
+        self.assertNotIn(b'nihap', gzip.decompress(files[0].read_bytes()))
+        # A folder stands for the exports in it.
+        result = self.result('summary', '--exports-only', '--input', str(folder))
+        self.assertEqual([s['source_id'] for s in result['sources']], [document['source_id']])
+        self.assertIn('No InkFlow-quality-', self.run_cli('summary', '--exports-only', '--input', self.temp.name,
+                                                          success=False))
+        # The manual export of the same database keeps its text.
+        manual = Path(self.temp.name) / 'manual.json'
+        subprocess.run([executable, str(self.db), str(manual)], check=True, capture_output=True)
+        self.assertIn('nihap', manual.read_text())
+        self.assertTrue(any(r['text'] for r in json.loads(manual.read_text())['tables']['commits']))
+        # A folder that cannot be written reports the failure and leaves nothing behind.
+        missing = Path(self.temp.name) / 'absent'
+        failed = subprocess.run([executable, 'auto', str(self.db), str(missing), 'none', str(recorded + day)],
+                                capture_output=True)
+        self.assertEqual(failed.returncode, 2)
+        self.assertFalse(missing.exists())
 
     def test_inspect_compact_and_legacy_page_revisions(self):
         with sqlite3.connect(self.db) as db:
