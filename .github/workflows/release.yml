@@ -1,0 +1,307 @@
+name: Release
+
+# The inkflow-release skill on a GitHub-hosted Mac, with credentials from secrets instead of one Mac's Keychain.
+# Secrets, one-time setup and the dry run: .agents/skills/inkflow-release/references/configuration.md
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version component to increase
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      draft:
+        description: Dry run - stop before tag, push and publish, leaving a GitHub draft (wins over pre-release)
+        type: boolean
+        default: true
+      prerelease:
+        description: Publish as a GitHub pre-release; the Sparkle feed keeps serving the previous stable release
+        type: boolean
+        default: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Release
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    # Secrets may be scoped to this environment and the environment restricted to main.
+    environment: release
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Check the release secrets
+        env:
+          DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
+          DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
+          DEVELOPER_ID_INSTALLER_P12: ${{ secrets.DEVELOPER_ID_INSTALLER_P12 }}
+          DEVELOPER_ID_INSTALLER_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_PASSWORD }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+          RELEASE_DEPLOY_KEY: ${{ secrets.RELEASE_DEPLOY_KEY }}
+        run: |
+          missing=()
+          for name in DEVELOPER_ID_APPLICATION_P12 DEVELOPER_ID_APPLICATION_PASSWORD \
+            DEVELOPER_ID_INSTALLER_P12 DEVELOPER_ID_INSTALLER_PASSWORD NOTARY_API_KEY_P8 NOTARY_API_KEY_ID \
+            SPARKLE_ED_PRIVATE_KEY RELEASE_DEPLOY_KEY; do
+            [[ -n ${!name} ]] || missing+=("$name")
+          done
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error title=Missing release secrets::${missing[*]}"
+            exit 1
+          fi
+
+      # The deploy key pushes the bump commit and tag; the Main Required Checks ruleset lets deploy keys bypass.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
+
+      # A job keychain holds both Developer ID identities; key files are owner-only. Checked before the long
+      # verification so a wrong password or key fails in a minute.
+      - name: Import the signing, notarization and Sparkle credentials
+        env:
+          DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
+          DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
+          DEVELOPER_ID_INSTALLER_P12: ${{ secrets.DEVELOPER_ID_INSTALLER_P12 }}
+          DEVELOPER_ID_INSTALLER_PASSWORD: ${{ secrets.DEVELOPER_ID_INSTALLER_PASSWORD }}
+          NOTARY_API_KEY_P8: ${{ secrets.NOTARY_API_KEY_P8 }}
+          NOTARY_API_KEY_ID: ${{ secrets.NOTARY_API_KEY_ID }}
+          NOTARY_API_ISSUER_ID: ${{ secrets.NOTARY_API_ISSUER_ID }}
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          umask 077
+          credentials="$RUNNER_TEMP/inkflow-credentials"
+          keychain="$RUNNER_TEMP/inkflow-release.keychain-db"
+          mkdir "$credentials"
+          keychain_password=$(openssl rand -base64 32)
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$DEVELOPER_ID_APPLICATION_P12" | base64 --decode > "$credentials/application.p12"
+          printf '%s' "$DEVELOPER_ID_INSTALLER_P12" | base64 --decode > "$credentials/installer.p12"
+          security import "$credentials/application.p12" -k "$keychain" -f pkcs12 \
+            -P "$DEVELOPER_ID_APPLICATION_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          security import "$credentials/installer.p12" -k "$keychain" -f pkcs12 \
+            -P "$DEVELOPER_ID_INSTALLER_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productbuild
+          rm -f "$credentials/application.p12" "$credentials/installer.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" \
+            > /dev/null
+          # Search the job keychain first; the cleanup step restores the saved list.
+          security list-keychains -d user | sed -E 's/^[[:space:]]*"(.*)"$/\1/' > "$credentials/search-list"
+          search=("$keychain")
+          while IFS= read -r entry; do
+            search+=("$entry")
+          done < "$credentials/search-list"
+          security list-keychains -d user -s "${search[@]}"
+          # The image normally trusts Apple's Developer ID intermediates; add them if an identity is not valid.
+          # Here-string, not a pipe: grep -q exits at the match and pipefail would count the writer's SIGPIPE.
+          identities=$(security find-identity -v -p codesigning "$keychain")
+          if ! grep -Fq '"Developer ID Application: ' <<< "$identities"; then
+            for ca in DeveloperIDG2CA DeveloperIDCA; do
+              curl -fsSL "https://www.apple.com/certificateauthority/$ca.cer" -o "$credentials/$ca.cer"
+              security import "$credentials/$ca.cer" -k "$keychain"
+            done
+          fi
+
+          # Exactly one identity of each kind: two matches would not form a 40-digit hash.
+          application=$(security find-identity -v -p codesigning "$keychain" |
+            awk 'index($0, "\"Developer ID Application: ") {print $2}')
+          installer=$(security find-identity -v -p basic "$keychain" |
+            awk 'index($0, "\"Developer ID Installer: ") {print $2}')
+          if [[ ! $application =~ ^[[:xdigit:]]{40}$ || ! $installer =~ ^[[:xdigit:]]{40}$ ]]; then
+            echo '::error::Expected one Developer ID Application and one Developer ID Installer identity.'
+            exit 1
+          fi
+          echo "::add-mask::$application"
+          echo "::add-mask::$installer"
+
+          printf '%s\n' "$NOTARY_API_KEY_P8" > "$credentials/notary.p8"
+          printf '%s\n' "$SPARKLE_ED_PRIVATE_KEY" > "$credentials/sparkle-ed25519.key"
+          key_type=team
+          if [[ -z $NOTARY_API_ISSUER_ID ]]; then
+            key_type=individual
+          fi
+          {
+            echo "INKFLOW_SIGN_IDENTITY=$application"
+            echo "INKFLOW_INSTALLER_IDENTITY=$installer"
+            echo 'INKFLOW_NOTARY_AUTH=api-key'
+            echo "INKFLOW_NOTARY_KEY_FILE=$credentials/notary.p8"
+            echo "INKFLOW_NOTARY_KEY_ID=$NOTARY_API_KEY_ID"
+            echo "INKFLOW_NOTARY_KEY_TYPE=$key_type"
+            echo "INKFLOW_NOTARY_ISSUER=$NOTARY_API_ISSUER_ID"
+            echo "INKFLOW_SPARKLE_KEY_FILE=$credentials/sparkle-ed25519.key"
+          } >> "$GITHUB_ENV"
+
+      - name: Check the credentials
+        run: bash .agents/skills/inkflow-release/scripts/check-credentials.sh
+
+      # Toolchain and caches as in macos.yml. Restore only: every input is verified, so a stale cache costs a rebuild.
+      - name: Install CMake and Ninja
+        run: |
+          pipx install cmake==3.31.6
+          pipx install ninja==1.11.1.4
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Restore dictionaries and prepared Rime data
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            build/deps
+            build/dictionary-sources
+            build/rime-cache
+          key: macos-inputs-${{ hashFiles('macOS/scripts/dependencies.sh', 'Core/**', 'schemas/**') }}
+          restore-keys: macos-inputs-
+      - name: Restore the native runtime build
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            build/portable
+            !build/portable/resources.*
+          key: >-
+            portable-${{ runner.os }}-macos-26-${{ hashFiles('Core/Portable/native-sources.lock.json',
+            'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock',
+            'rust-toolchain.toml', 'macOS/Info.plist') }}
+          restore-keys: portable-${{ runner.os }}-macos-26-
+
+      - name: Bump the version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          # A fresh runner has no build counter and macOS/Info.plist holds only the floor. Continue after the
+          # highest build attached to any release, drafts included, so Sparkle sees the build increase.
+          highest=$(gh api --paginate "repos/$GH_REPO/releases" --jq '.[].assets[].name' |
+            sed -nE 's/^InkFlow-[0-9]+\.[0-9]+\.[0-9]+-([0-9]+)-arm64\.(pkg|zip)$/\1/p' | sort -n | tail -1)
+          if [[ -n $highest ]]; then
+            mkdir -p build/build-number
+            printf '%s\n' "$highest" > build/build-number/last
+          fi
+          # A run that failed after pushing its tag left main on the tagged release commit. Rebuild and finish that
+          # release from it; bumping again would skip a version.
+          current="v$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)"
+          tagged=$(git rev-parse -q --verify "refs/tags/$current^{commit}" || true)
+          published=$(gh release view "$current" --json isDraft --jq '.isDraft | not' 2> /dev/null || echo false)
+          if [[ $tagged == "$(git rev-parse HEAD)" && $published != true ]]; then
+            echo "::notice::$current is tagged on main but not published; finishing it without a bump."
+            echo "RELEASE_TAG=$current" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          bash .agents/skills/inkflow-release/scripts/bump-version.sh "$BUMP"
+          tag="v$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)"
+          floor=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" > /dev/null; then
+            echo "::error::$tag already exists."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add macOS/Info.plist
+          git commit -qm "chore(release): $tag (build $floor)"
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+
+      - name: Verify once (build, test.sh all, deep bundle check)
+        run: |
+          mkdir -p build
+          bash macOS/scripts/release-verification.sh 2>&1 | tee build/release-verification.log
+      - name: Record unit timings and name the failed unit
+        if: always()
+        run: |
+          [[ -f build/release-verification.log ]] || exit 0
+          {
+            echo '```'
+            grep -E '^(END|FAIL) ' build/release-verification.log || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -E '^FAIL ' build/release-verification.log | sed 's/^/::error title=test.sh all::/' || true
+
+      - name: Sign the release payload
+        run: bash .agents/skills/inkflow-release/scripts/package.sh prepare
+
+      # CI cannot write the Chinese notes. A publishing run takes them from a draft release created beforehand;
+      # a dry run without one gets marked placeholder notes, which a publishing run refuses.
+      - name: Take the public notes from the draft release
+        env:
+          DRAFT: ${{ inputs.draft }}
+        run: |
+          notes=build/public-release-notes.md
+          marker='<!-- inkflow-ci-placeholder-notes -->'
+          : > "$notes"
+          if is_draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2> /dev/null); then
+            if [[ $is_draft != true ]]; then
+              echo "::error::$RELEASE_TAG is already published."
+              exit 1
+            fi
+            gh release view "$RELEASE_TAG" --json body --jq '.body // ""' > "$notes"
+            # This run uploads a new build; an earlier attempt's assets would fail release.sh's asset check.
+            gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
+              gh release delete-asset "$RELEASE_TAG" "$asset" --yes
+            done
+          fi
+          if [[ $DRAFT != true ]]; then
+            if ! grep -q '[^[:space:]]' "$notes" || grep -Fq "$marker" "$notes"; then
+              echo "::error::Write the public notes into draft release $RELEASE_TAG before publishing."
+              exit 1
+            fi
+          elif ! grep -q '[^[:space:]]' "$notes"; then
+            previous=$(git tag --merged HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
+              grep -vx "$RELEASE_TAG" | head -1)
+            {
+              echo "$marker"
+              echo 'Placeholder from a CI dry run. Replace it with the public notes before publishing.'
+              echo
+              bash .agents/skills/inkflow-release/scripts/release-note-candidates.sh "$previous" HEAD
+            } > "$notes"
+          fi
+
+      - name: Notarize, package and publish
+        env:
+          DRAFT: ${{ inputs.draft }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          mode=()
+          if [[ $DRAFT == true ]]; then
+            mode=(--draft)
+          elif [[ $PRERELEASE == true ]]; then
+            mode=(--prerelease)
+          fi
+          bash .agents/skills/inkflow-release/scripts/release.sh ${mode[@]+"${mode[@]}"} 2>&1 | tee build/release.log
+          grep -E '^PASS (draft|release) ' build/release.log >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Keep the logs of a failed release
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: release-logs
+          path: |
+            build/release-verification.log
+            build/release.log
+            build/releases/*/*-notary.plist*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Delete the job keychain and key files
+        if: always()
+        run: |
+          credentials="$RUNNER_TEMP/inkflow-credentials"
+          if [[ -f $credentials/search-list ]]; then
+            search=()
+            while IFS= read -r entry; do
+              search+=("$entry")
+            done < "$credentials/search-list"
+            security list-keychains -d user -s "${search[@]}"
+          fi
+          security delete-keychain "$RUNNER_TEMP/inkflow-release.keychain-db" 2> /dev/null || true
+          rm -rf "$credentials"
