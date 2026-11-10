@@ -436,20 +436,20 @@
             "consumedInputStart" : null,
             "displayIndex" : 2,
             "displayRank" : 3,
-            "nativeIndex" : 1,
-            "nativeRank" : 2,
+            "nativeIndex" : 3,
+            "nativeRank" : 4,
             "source" : null,
-            "text" : "can"
+            "text" : "残"
           },
           {
             "consumedInputEnd" : null,
             "consumedInputStart" : null,
             "displayIndex" : 3,
             "displayRank" : 4,
-            "nativeIndex" : 3,
-            "nativeRank" : 4,
+            "nativeIndex" : 1,
+            "nativeRank" : 2,
             "source" : null,
-            "text" : "残"
+            "text" : "can"
           },
           {
             "consumedInputEnd" : null,

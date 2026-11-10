@@ -9,6 +9,7 @@ The detail behind rule 14 in [rules.md](rules.md). It concerns candidates of equ
 3. A [learned mixed sentence](#learned-mixed-sentences).
 4. The single best contextual Han candidate, which keeps the neutral Chinese-first prior.
 5. Admitted exact English, then other native candidates in stable order. Exact candidates precede English completions.
+6. [Single syllable](#single-syllable): exact English the user never confirmed moves from the first three places to the fourth.
 
 ## Metadata marks
 
@@ -55,6 +56,15 @@ A first candidate of type `phrase`, `user_phrase` or `user_table`, or any other 
 ## Learned mixed sentences
 
 A mixed sentence whose every ASCII run has personal evidence (personal bucket 1-3, rule 8) is placed directly before the best Chinese candidate of equal native coverage, after custom phrases and technical-context personal English and ahead of exact English; a stronger bucket first. A sentence with any unconfirmed run keeps its place among exact English and mixed candidates. Rule 9 still decides which lowercase codes can be personal tokens, so complete Pinyin sequences such as `women` never promote a sentence.
+
+## Single syllable
+
+When an uncorrected dictionary or learned single character (`phrase` or `user_phrase`, `corrected` 0) covers the input at the page's coverage, the input is one complete syllable and the user is choosing among homophones. Exact English without personal evidence that the order above put in the first three places then takes the fourth place, and the candidates behind it move up. For `ba` the page reads 吧 把 八 `BA` instead of 吧 `BA` 把 八.
+
+- English the user has committed (personal bucket 1-3) keeps its place, so one selection brings the word back to second.
+- An abbreviation, a typo correction or a fuzzy spelling marks every character `corrected`, and typed capitals have no uncorrected reading: those pages keep their order. So do words of two or more characters (`women`), completions, custom phrases and rows without the type and `corrected` facts.
+- The word stays ahead of every English completion (`den` before `deny`), so it stops at the first one; a page shorter than four candidates otherwise puts it last.
+- Evidence (#181, 2026-10-27 to 2026-11-10, 39,467 recorded first pages): the word in second place was chosen 2 times on such pages and a character behind it 141 times; 42 choices enter the first three and 2 leave (11 against 2 distinct pairs, exact McNemar p = 0.022). The first candidate never changes.
 
 ## Limits
 
