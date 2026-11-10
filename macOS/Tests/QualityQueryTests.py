@@ -857,6 +857,31 @@ class QueryTests(unittest.TestCase):
             db.execute("UPDATE candidate_decisions SET visited_pages_json=? WHERE composition_id='a'", (json.dumps([visited]),))
         self.assertIn('missing configuration', self.run_cli('inspect', 'a', success=False))
 
+    def test_queries_leave_the_database_file_writable_and_join_windows_by_index(self):
+        args = self.quality.parser().parse_args(['summary', '--db', str(self.db)])
+        with contextlib.closing(self.quality.connect(self.db)) as db:
+            db.execute('BEGIN')
+            before = db.execute('SELECT COUNT(*) FROM effectiveness_events').fetchone()[0]
+            # The recorder must be able to commit while a query is open (rollback journal: no reader on the file).
+            with contextlib.closing(sqlite3.connect(self.db, timeout=0)) as writer:
+                writer.execute('DELETE FROM effectiveness_events')
+                writer.commit()
+            self.assertEqual(db.execute('SELECT COUNT(*) FROM effectiveness_events').fetchone()[0], before)
+            sql, parameters = self.quality.ctes(args)
+            explain = 'EXPLAIN QUERY PLAN ' + sql + 'SELECT * FROM observations'
+            plan = [row[3] for row in db.execute(explain, parameters)]
+        self.assertTrue(any(step.startswith('SEARCH w USING AUTOMATIC') for step in plan), plan)
+        self.assertFalse(any(step.startswith('SCAN w LEFT-JOIN') for step in plan), plan)
+
+    def test_a_store_locked_by_a_writer_fails_after_the_busy_timeout(self):
+        self.addCleanup(setattr, self.quality, 'BUSY_SECONDS', self.quality.BUSY_SECONDS)
+        self.quality.BUSY_SECONDS = 0.1
+        with contextlib.closing(sqlite3.connect(self.db, isolation_level=None)) as writer:
+            writer.execute('BEGIN EXCLUSIVE')
+            self.assertIn('locked', self.run_cli('summary', success=False))
+            writer.execute('ROLLBACK')
+        self.result()
+
     def test_post_commit_windows_are_found_through_their_commit(self):
         args = self.quality.parser().parse_args(['summary', '--db', str(self.db)])
         with contextlib.closing(self.quality.connect(self.db)) as db:
