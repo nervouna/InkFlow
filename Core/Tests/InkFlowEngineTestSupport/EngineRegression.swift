@@ -618,7 +618,7 @@ package enum EngineRegression {
                 engine.clear()
                 continue
             }
-            check(index < 3, "Keep exact ambiguous English in Top-3: \(input) -> \(snapshot.candidates)")
+            check(index < 4, "Keep exact ambiguous English in the first four: \(input) -> \(snapshot.candidates)")
             engine.select(index)
             check(engine.takeCommit() == input && engine.snapshot().preedit.isEmpty,
                   "Select the exact displayed English candidate: \(input)")
@@ -1226,7 +1226,7 @@ package enum EngineRegression {
                 check(false, "Context keeps exact short English on the first page: \(candidates)")
                 continue
             }
-            check(index < 3, "Context keeps exact short English in Top-3 for \(count) candidates: \(candidates)")
+            check(index < 4, "Context keeps exact short English in the first four for \(count) candidates: \(candidates)")
             engine.select(index)
             check(engine.takeCommit() == "can" && engine.snapshot().preedit.isEmpty,
                   "Context selection commits the displayed short English exactly")

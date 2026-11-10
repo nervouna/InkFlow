@@ -39,10 +39,12 @@ pub struct Metadata {
     /// leads it. Transported as `exact` = 3.
     pub sentence: bool,
     /// Rime's own `candidate.type` of the genuine candidate (`phrase`, `user_phrase`, `sentence`,
-    /// `completion`, `user_table`, ...); empty when the row did not say. Recorded, never ranked on.
+    /// `completion`, `user_table`, ...); empty when the row did not say. Recorded; ranking reads it only to find a
+    /// single-syllable page (`ContextRanker::order`).
     pub candidate_type: String,
     /// The candidate's spelling was reached through a fuzzy or algebra rule: the dictionary syllables of its
-    /// code differ from the typed letters (an abbreviation included). Recorded, never ranked on.
+    /// code differ from the typed letters (an abbreviation included). Recorded; ranking reads it only to find a
+    /// single-syllable page.
     pub corrected: bool,
 }
 
@@ -302,6 +304,8 @@ enum Phrases {
     },
 }
 const PHRASE_LIMIT: usize = 8;
+/// The zero-based place unconfirmed exact English takes on a single-syllable page: the fourth candidate.
+const SYLLABLE_ENGLISH_PLACE: usize = 3;
 const INDEX_HEADER: usize = 12 + (PHRASE_LIMIT - 1) * 4;
 
 fn encode(text: &str) -> Vec<u8> {
@@ -539,6 +543,32 @@ impl ContextRanker {
                 i,
             )
         });
+        // One complete syllable: an uncorrected dictionary or learned single character covers the input. Exact
+        // English the user never confirmed then waits behind the first three candidates instead of taking the
+        // second place, where it stood between the homophones the user is choosing from.
+        let syllable = eligible.iter().any(|&i| {
+            let row = &rows[i];
+            row.source == Source::Native
+                && row.exact
+                && !row.corrected
+                && matches!(row.candidate_type.as_str(), "phrase" | "user_phrase")
+                && candidates[i].graphemes(true).count() == 1
+                && all_han(&candidates[i])
+        });
+        if syllable {
+            let unconfirmed = |i: usize| {
+                let row = &rows[i];
+                row.exact && row.personal == 0 && row.source == Source::English && tier(i) == 4
+            };
+            let (deferred, mut kept): (Vec<_>, Vec<_>) = ranked
+                .iter()
+                .copied()
+                .enumerate()
+                .partition(|&(place, i)| place < SYLLABLE_ENGLISH_PLACE && unconfirmed(i));
+            let at = kept.len().min(SYLLABLE_ENGLISH_PLACE);
+            kept.splice(at..at, deferred);
+            ranked = kept.into_iter().map(|(_, i)| i).collect();
+        }
         let mut result = original;
         for (slot, candidate) in eligible.into_iter().zip(ranked) {
             result[slot] = candidate;
