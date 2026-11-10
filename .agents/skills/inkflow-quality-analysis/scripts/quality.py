@@ -1268,6 +1268,11 @@ def main(argv=None):
         if args.input or args.exports_only or args.source:
             if args.exports_only and not args.input:
                 raise QueryError('--exports-only requires at least one --input file.')
+            # A folder stands for the weekly exports in it, one file per device.
+            args.input = [file for path in args.input
+                          for file in (sorted(path.glob('InkFlow-quality-*.json*')) if path.is_dir() else [path])]
+            if not args.input and args.exports_only:
+                raise QueryError('No InkFlow-quality-* export in the --input folder.')
             documents = [quality_exchange.load(path, TABLE_COLUMNS) for path in args.input]
             if not args.exports_only:
                 local = quality_exchange.snapshot(args.db, connect, TABLE_COLUMNS)

@@ -177,6 +177,7 @@ let package = Package(
                 .linkedFramework("Carbon"),
                 .linkedFramework("QuartzCore"),
                 .linkedLibrary("sqlite3"),
+                .linkedLibrary("z"),
             ]
         ),
         .executableTarget(

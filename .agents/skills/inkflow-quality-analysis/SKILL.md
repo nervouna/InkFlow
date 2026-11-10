@@ -57,7 +57,8 @@ rules are under `replay-cases` in the query contract; scoring and the
 Records are text-free by default: see [what that leaves out](references/interpretation.md#text-free-records), and say
 so in the report when `coverage.text_free` is nonzero.
 
-For cross-device analysis, add repeatable `--input /path/to/export.json`; see
+For cross-device analysis, add repeatable `--input /path/to/export.json`, or `--input FOLDER` for a folder of
+weekly exports; see
 [export and joint analysis](../../../macOS/QUALITY-EXPORT.md). Export itself
 (`python3 "$query" export --output NEW.json --format json`) writes the user's raw
 input history to a file: run it only when explicitly asked.

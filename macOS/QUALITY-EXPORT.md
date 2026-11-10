@@ -19,6 +19,19 @@ python3 "$query" export --output /path/to/InkFlow-quality-work.json --format jso
 
 CLI export requires a new path and refuses to overwrite files. `--db PATH` selects another local v4 database. Exports always include all retained records; apply date and other filters during analysis.
 
+## Weekly export to a folder
+
+Settings → 「输入质量记录」 → 「每周自动导出」 (off by default) writes an export to a folder the user chose, so several Macs can deliver their records without a manual export on each. InkFlow writes a local file and nothing else; moving it (iCloud Drive, a synced directory, a copy job) is the user's.
+
+- **File.** `InkFlow-quality-<source-id>-<YYYYMMDD>.json.gz`, the format v1 document compressed with gzip, dated in UTC. One file per export.
+- **Always text-free**, whatever the text-recording setting: no raw input, candidate, selected or committed text, preceding context or input before a deletion, as the recorder stores records with text recording off. Visited pages are left out too (`visited_pages_json` is `[]`; only `inspect` reads them). Ranks, indices, counts, timings, fingerprints, evidence rows and the keyed hashes stay.
+- **Window.** The compositions since the last successful export plus one day of overlap, at most 14 days; the first export covers 8 days. Runs and configuration revisions are always complete. Overlapping files of one device merge without duplicates.
+- **Schedule.** Checked at startup and once a day while InkFlow runs; an export is written when the last successful one is 7 days old or there is none. It runs on a utility task, row by row, so memory stays flat (about 33 MB for a week of 30,000 compositions; the file was 16.8 MiB).
+- **Cleanup.** After a successful export, this device's dated files older than 35 days are removed from the folder. Other files are never touched.
+- **Failure.** A missing or unwritable folder, a busy database or a document over 256 MiB leaves recording and input alone; Settings shows the reason and the next daily check retries.
+
+Analysis takes the folder as an input: `python3 "$query" trend --days 28 --exports-only --input /path/to/folder`. Do not combine a device's text-free weekly files with a manual text export of the same device: the same record differs between them and the merge is refused.
+
 ## Storage protection
 
 `quality.sqlite3` is a plain SQLite file under `~/Library/Application Support/InkFlow/` with `0600` file mode and `secure_delete` on. The directory is created `0700`, but an existing directory keeps its mode and can be `0755`, so the file mode is what protects the records. It is not encrypted, by decision:
