@@ -1058,7 +1058,8 @@ private extension QualityStoreTests {
         expect(accepted < 128 && pressure.statistics().buffered == accepted, "byte cap binds before count cap")
         expect(pressure.statistics().bufferedBytes <= QualityLimits.bufferedBytes, "pending plus in-flight byte cap")
         gate.release.signal()
-        await pressure.close()
+        // About 8 MiB of 100 KB records: the default one-second close can end before a loaded machine drains them.
+        await pressure.close(timeout: 30)
         expect(pressure.statistics().written == accepted && pressure.statistics().bufferedBytes == 0, "entire accepted charge released after drain")
         print("PASS quality configuration: matrix, Unicode, compact/legacy/mixed reopen, reference integrity, logical/encoded config limits, 8 MiB in-flight queue bound")
     }

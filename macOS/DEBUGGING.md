@@ -117,10 +117,10 @@ IMK serialization enables any item with an action. An unavailable item needs bot
 
 An `accessibilityIdentifier` on a SwiftUI `DisclosureGroup` overrides its descendants' identifiers. Put the identifier on the diagnostic text instead.
 
-## quality-store fails only under `test.sh all`
+## quality-store failed under load
 
-**Symptom:** `entire accepted charge released after drain` in the byte-pressure part of `QualityStoreTests`; the unit passes when run alone.
+**Symptom:** `entire accepted charge released after drain` in the byte-pressure part of `QualityStoreTests`; the unit passed when run alone.
 
-**Cause (likely):** `close()` waits 1 s by default; under the parallel load of `test.sh all` the ~100 KB-per-record backlog may not drain in time. Seen once, 2026-10-31, v0.7.6 verification.
+**Cause:** `close()` waits 1 s by default; on a loaded machine the ~100 KB-per-record backlog did not drain in time. Seen under `test.sh all` (2026-10-31) and in CI `test.sh quick` (2026-11-10).
 
-**Fix:** Rerun `test.sh quality-store`. If it recurs, give that `close()` a longer timeout.
+**Fix:** that test closes with a 30 s timeout. The production default is unchanged.
