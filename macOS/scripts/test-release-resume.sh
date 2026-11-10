@@ -74,7 +74,14 @@ chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH"
 sparkle=build/swiftpm/artifacts/sparkle/Sparkle/bin
 mkdir -p "$sparkle"
-for tool in generate_appcast sign_update; do printf '#!/bin/bash\nexit 0\n' > "$sparkle/$tool"; chmod +x "$sparkle/$tool"; done
+printf '#!/bin/bash\nexit 0\n' > "$sparkle/generate_appcast"
+# sign_update records how it was given the EdDSA key.
+export FIXTURE_SPARKLE_ARGS="$fixture/sparkle-args"
+cat > "$sparkle/sign_update" <<'MOCK'
+#!/bin/bash
+printf '%s\n' "$@" > "$FIXTURE_SPARKLE_ARGS"
+MOCK
+chmod +x "$sparkle/generate_appcast" "$sparkle/sign_update"
 signature=$(printf '%086d==' 0)
 minimum=$(plutil -extract LSMinimumSystemVersion raw macOS/Info.plist)
 cat > "$release/appcast.xml" <<XML
@@ -109,6 +116,18 @@ check_release() {
   echo "PASS release resume: $name"
 }
 check_release 'unchanged candidate reaches publication boundary' FIXTURE_PUBLICATION_BOUNDARY
+grep -Fxq -- --account "$FIXTURE_SPARKLE_ARGS" || { echo 'FAIL Sparkle key: Keychain account not used'; exit 1; }
+# CI signs the appcast with an owner-only key file instead of the Keychain account.
+key_file="$fixture/sparkle.key"
+printf key > "$key_file"
+chmod 600 "$key_file"
+INKFLOW_SPARKLE_KEY_FILE="$key_file" check_release 'Sparkle key file' FIXTURE_PUBLICATION_BOUNDARY
+sparkle_args=$(cat "$FIXTURE_SPARKLE_ARGS")
+[[ $sparkle_args == *$'--ed-key-file\n'"$key_file"* ]] || { echo 'FAIL Sparkle key file not used'; exit 1; }
+! grep -Fxq -- --account "$FIXTURE_SPARKLE_ARGS" || { echo 'FAIL Sparkle key file also used the account'; exit 1; }
+chmod 644 "$key_file"
+INKFLOW_SPARKLE_KEY_FILE="$key_file" check_release 'readable Sparkle key file' 'Restrict the Sparkle key file'
+INKFLOW_SPARKLE_KEY_FILE=sparkle.key check_release 'relative Sparkle key file' 'must be an existing absolute path'
 plutil -replace sourceCommit -string stale "$release/verified/receipt.plist"
 check_release 'stale prepared candidate' 'Release receipt commit does not match current source.'
 cp build/release-verification/receipt.plist "$release/verified/receipt.plist"

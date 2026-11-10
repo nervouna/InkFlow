@@ -33,6 +33,16 @@ sign_tool="$PWD/build/swiftpm/artifacts/sparkle/Sparkle/bin/sign_update"
 [[ -d "$release_dir" && ! -L "$release_dir" && -d "$app" && ! -L "$app" ]] || fail 'Missing verified release app.'
 [[ -f "$update_zip" && ! -L "$update_zip" ]] || fail 'Missing Sparkle update ZIP.'
 [[ "$account" =~ ^[A-Za-z0-9._-]+$ ]] || fail 'Invalid Sparkle signing account.'
+# The EdDSA private key comes from the Keychain account unless a key file is configured (the CI release).
+sparkle_key=(--account "$account")
+if [[ -n ${INKFLOW_SPARKLE_KEY_FILE:-} ]]; then
+  key_file=$INKFLOW_SPARKLE_KEY_FILE
+  [[ "$key_file" == /* && -f "$key_file" && -r "$key_file" ]] ||
+    fail 'Sparkle key file must be an existing absolute path.'
+  key_permissions=$(stat -f %Lp "$key_file")
+  (( (8#$key_permissions & 077) == 0 )) || fail 'Restrict the Sparkle key file to owner-only access (chmod 600).'
+  sparkle_key=(--ed-key-file "$key_file")
+fi
 [[ -x "$tool" && -x "$sign_tool" && -f Package.resolved && ! -L Package.resolved ]] || fail 'Missing pinned Sparkle appcast/signing tool.'
 
 python3 - "$PWD/Package.resolved" "$sparkle_version" "$sparkle_revision" <<'PY'
@@ -95,7 +105,8 @@ validate_appcast() {
   [[ "$first_url" == "$download_prefix$(basename "$zip")" ]] || fail 'Appcast enclosure URL does not point to this versioned GitHub Release asset.'
   [[ "$first_length" == "$zip_length" ]] || fail 'Appcast enclosure length differs from the update ZIP.'
   [[ "$first_signature" =~ ^[A-Za-z0-9+/]{86}==$ ]] || fail 'Appcast update is missing a valid EdDSA signature.'
-  "$sign_tool" --verify --account "$account" "$zip" "$first_signature" >/dev/null || fail 'Sparkle EdDSA signature does not verify for the versioned update ZIP.'
+  "$sign_tool" --verify "${sparkle_key[@]}" "$zip" "$first_signature" >/dev/null ||
+    fail 'Sparkle EdDSA signature does not verify for the versioned update ZIP.'
   if [[ -n "$expected_previous" ]]; then
     previous_count=$(xmllint --xpath "count(/rss/channel/item[*[local-name()='version']='$expected_previous'])" "$feed" 2>/dev/null)
     [[ "$previous_count" =~ ^[1-9][0-9]*(\.0+)?$ ]] || fail 'The latest previously published Sparkle update was dropped from the feed.'
@@ -153,7 +164,7 @@ case "$http_status" in
 esac
 
 cp "$update_zip" "$work/$(basename "$update_zip")"
-"$tool" --account "$account" --maximum-versions 3 --maximum-deltas 0 --download-url-prefix "$download_prefix" "$work"
+"$tool" "${sparkle_key[@]}" --maximum-versions 3 --maximum-deltas 0 --download-url-prefix "$download_prefix" "$work"
 [[ -f "$work/appcast.xml" && ! -L "$work/appcast.xml" ]] || fail 'Sparkle did not create appcast.xml.'
 validate_appcast "$work/appcast.xml" "$update_zip" "$previous_build"
 
