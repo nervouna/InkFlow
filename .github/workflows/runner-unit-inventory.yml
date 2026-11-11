@@ -1,0 +1,81 @@
+name: Runner unit inventory
+
+# Temporary (#199): run every test.sh unit on the release runner image without stopping at the first failure.
+# Lives only on a draft pull request; never merged.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/runner-unit-inventory.yml
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  inventory:
+    name: Inventory
+    runs-on: macos-26
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install CMake and Ninja
+        run: |
+          pipx install cmake==3.31.6
+          pipx install ninja==1.11.1.4
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Restore dictionaries and prepared Rime data
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            build/deps
+            build/dictionary-sources
+            build/rime-cache
+          key: macos-inputs-${{ hashFiles('macOS/scripts/dependencies.sh', 'Core/**', 'schemas/**') }}
+          restore-keys: macos-inputs-
+      - name: Restore the native runtime build
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            build/portable
+            !build/portable/resources.*
+          key: >-
+            portable-${{ runner.os }}-macos-26-${{ hashFiles('Core/Portable/native-sources.lock.json',
+            'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock',
+            'rust-toolchain.toml', 'macOS/Info.plist') }}
+          restore-keys: portable-${{ runner.os }}-macos-26-
+      - name: Build
+        run: bash macOS/scripts/build.sh
+      - name: Run every unit, keep going
+        run: |
+          mkdir -p build/inventory
+          units=$(bash macOS/scripts/test.sh --help | sed -n 's/^Units: //p')
+          failed=()
+          for unit in $units; do
+            began=$SECONDS
+            if bash macOS/scripts/test.sh "$unit" > "build/inventory/$unit.log" 2>&1; then
+              echo "PASS $unit ($((SECONDS - began))s)"
+            else
+              echo "FAIL $unit ($((SECONDS - began))s)"
+              failed+=("$unit")
+              echo "::group::$unit tail"
+              tail -60 "build/inventory/$unit.log"
+              echo '::endgroup::'
+            fi
+          done
+          {
+            echo '### Failed units'
+            echo '```'
+            printf '%s\n' "${failed[@]-none}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf 'FAILED: %s\n' "${failed[*]-}"
+      - name: Keep the unit logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: unit-logs
+          path: build/inventory
+          retention-days: 7
