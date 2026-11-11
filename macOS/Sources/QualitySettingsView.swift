@@ -32,8 +32,8 @@ struct QualitySettingsView: View {
             Toggle("每周自动导出", isOn: Binding(get: { settings.qualityAutoExportEnabled },
                                              set: { settings.setQualityAutoExportEnabled($0) }))
                 .accessibilityIdentifier("settings.quality.autoExport")
-            Text("开启后，墨流每周把不含任何输入文本的质量数据写到你选择的文件夹，每台设备一个文件，"
-                + "新文件替换旧文件。墨流不联网上传；文件如何同步到其他设备由你决定。")
+            Text("开启后，墨流每周把不含任何输入文本的质量数据写到你选择的文件夹，每台设备每周一个带日期的文件；"
+                + "该文件夹里本设备超过 35 天的旧文件会被自动删除。墨流不联网上传；文件如何同步到其他设备由你决定。")
             if settings.qualityAutoExportEnabled {
                 HStack {
                     Button("选择文件夹…", action: chooseAutoExportFolder)
