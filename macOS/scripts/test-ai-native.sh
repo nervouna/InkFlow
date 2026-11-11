@@ -24,4 +24,7 @@ user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-native.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 echo "Temporary user root: $user_dir"
 "$app/Contents/MacOS/AINativeHarness" "$PWD/build/test-shared" "$user_dir" "$@" 2>&1 | tee "$run_dir/check.log"
-rg -q '^PASS native AI final run=' "$run_dir/check.log" || { echo 'Native harness exited before its final acceptance result.' >&2; exit 1; }
+grep -Eq '^PASS native AI final run=' "$run_dir/check.log" || {
+  echo 'Native harness exited before its final acceptance result.' >&2
+  exit 1
+}
