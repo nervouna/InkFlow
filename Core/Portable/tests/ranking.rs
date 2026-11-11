@@ -303,16 +303,14 @@ fn single_syllable_keeps_exact_english_ahead_of_completions() {
 fn single_syllable_rule_keeps_every_other_page() {
     let han = "0,2,n,1,0,n,phrase,0";
     let english = "0,2,a,1,0,e,english_exact,0";
+    let page = ["吧", "BA", "把", "八", "爸"];
     let same = [0, 1, 2, 3, 4];
     // The user's own word keeps the second place.
     let personal = "0,2,a,1,1,e,english_personal_1,0";
-    assert_eq!(order_of(&["吧", "BA", "把", "八", "爸"], &[han, personal, han, han, han], 2), same);
+    assert_eq!(order_of(&page, &[han, personal, han, han, han], 2), same);
     // An abbreviation or a typo correction reached every character: not a complete syllable.
     let corrected = "0,2,n,1,0,n,phrase,1";
-    assert_eq!(
-        order_of(&["吧", "BA", "把", "八", "爸"], &[corrected, english, corrected, corrected, corrected], 2),
-        same
-    );
+    assert_eq!(order_of(&page, &[corrected, english, corrected, corrected, corrected], 2), same);
     // Words, not single characters.
     let word = "0,5,n,1,0,n,phrase,0";
     let word_english = "0,5,a,1,0,e,english_exact,0";
@@ -323,12 +321,12 @@ fn single_syllable_rule_keeps_every_other_page() {
     // A completion is not evidence of a complete syllable.
     let completion = "0,2,n,1,0,n,completion,0";
     assert_eq!(
-        order_of(&["吧", "BA", "把", "八", "爸"], &[completion, english, completion, completion, completion], 2),
+        order_of(&page, &[completion, english, completion, completion, completion], 2),
         same
     );
     // Rows without the type and corrected facts.
     let legacy = ["0,2,n,1,0,n", "0,2,a,1,0,e", "0,2,n,1,0,n", "0,2,n,1,0,n", "0,2,n,1,0,n"];
-    assert_eq!(order_of(&["吧", "BA", "把", "八", "爸"], &legacy, 2), same);
+    assert_eq!(order_of(&page, &legacy, 2), same);
     // English already at or behind the fourth place stays there.
     assert_eq!(order_of(&["吧", "把", "八", "BA", "爸"], &[han, han, han, english, han], 2), same);
 }
