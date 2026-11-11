@@ -451,11 +451,12 @@ struct AIHeadlessPipelineTests {
 
     @MainActor static func delayedVisibility(_ settings: IFSettings) async throws {
         let service = AIHeadlessService()
-        let (controller, client, endpoint) = fixture(settings: settings, service: service, delay: .milliseconds(160))
+        // The show delay runs from the first key, so it must outlast typing all five keys on a loaded runner.
+        let (controller, client, endpoint) = fixture(settings: settings, service: service, delay: .milliseconds(500))
         defer { controller.engine?.clear(); controller.refresh(client) }
         _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
         check(!endpoint.candidatesVisible, "Window show has not completed when final input refresh returns")
-        await wait(0.85)
+        await expectSuggestion(endpoint)
         check(endpoint.candidatesVisible, "Window endpoint becomes visible on a later main-actor turn")
         let calls = await service.captured()
         print("OBSERVED delayed visibility: visible=\(endpoint.candidatesVisible) requests=\(calls.count) suggestion=\(endpoint.suggestionVisible)")
