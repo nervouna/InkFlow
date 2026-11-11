@@ -543,6 +543,9 @@ struct VoiceControllerTests {
                     h.focused = RecordingClient(document: "another target")
                 }
             }
+            // The readback waits for a core-owned deadline, which a loaded runner can overshoot by far more than
+            // a fixed sleep. Wait for the transition itself, then give any read that would follow it time to happen.
+            for _ in 0..<500 where readsAtTransition == nil { try? await Task.sleep(for: .milliseconds(10)) }
             try? await Task.sleep(for: .milliseconds(100))
 
             check(learned.isEmpty && !events.contains { $0.source == .voiceCorrection && $0.event == .learned },

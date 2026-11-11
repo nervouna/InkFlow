@@ -11,6 +11,6 @@ user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-headless.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 result_log="$user_dir/ai-headless-check.log"
 build/ai-headless-tests "$PWD/build/test-shared" "$user_dir" "$@" | tee "$result_log"
-rg -q '^PASS headless AI (pipeline|delayed visibility)' "$result_log" || {
+grep -Eq '^PASS headless AI (pipeline|delayed visibility)' "$result_log" || {
   echo 'Headless harness exited before its final acceptance result.' >&2; exit 1;
 }

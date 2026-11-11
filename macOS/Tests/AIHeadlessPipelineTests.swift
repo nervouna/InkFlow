@@ -43,12 +43,12 @@ struct AIHeadlessPipelineTests {
     }
 
     @MainActor static func fixture(settings: IFSettings, service: any AISuggestionServing,
-                                   delay: Duration = .zero, secure: @escaping () -> Bool = { false },
+                                   manualShow: Bool = false, secure: @escaping () -> Bool = { false },
                                    thunderPresentation: (any ThunderPresenting)? = nil) ->
         (InkFlowInputController, RecordingClient, HeadlessAIInputPresentation) {
         let client = RecordingClient(document: preceding + following)
         client.selection = NSRange(location: preceding.utf16.count, length: 0)
-        let endpoint = HeadlessAIInputPresentation(showDelay: delay)
+        let endpoint = HeadlessAIInputPresentation(manualShow: manualShow)
         let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
             settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
             smartService: service, secureInput: secure, presentation: endpoint,
@@ -451,11 +451,13 @@ struct AIHeadlessPipelineTests {
 
     @MainActor static func delayedVisibility(_ settings: IFSettings) async throws {
         let service = AIHeadlessService()
-        let (controller, client, endpoint) = fixture(settings: settings, service: service, delay: .milliseconds(160))
+        let (controller, client, endpoint) = fixture(settings: settings, service: service, manualShow: true)
         defer { controller.engine?.clear(); controller.refresh(client) }
         _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
         check(!endpoint.candidatesVisible, "Window show has not completed when final input refresh returns")
-        await wait(0.85)
+        // The show completes before the trigger delay ends, on a later main-actor turn than the final refresh.
+        endpoint.completeShow()
+        await expectSuggestion(endpoint)
         check(endpoint.candidatesVisible, "Window endpoint becomes visible on a later main-actor turn")
         let calls = await service.captured()
         print("OBSERVED delayed visibility: visible=\(endpoint.candidatesVisible) requests=\(calls.count) suggestion=\(endpoint.suggestionVisible)")
@@ -466,10 +468,11 @@ struct AIHeadlessPipelineTests {
         // The deadline expires before show completes. No context read or request may
         // occur while hidden, and paging must not introduce a new debounce deadline.
         let service = AIHeadlessService(), records = AIDiagnosticCapture()
-        let (controller, client, endpoint) = fixture(settings: settings, service: service, delay: .milliseconds(900))
+        let (controller, client, endpoint) = fixture(settings: settings, service: service, manualShow: true)
         await AIDiagnostics.$observe.withValue({ records.append($0) }) {
-            let lastKey = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
+            _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
             let reads = client.requests.count
+            // Past the 500 ms trigger delay; the show is still pending.
             await wait(0.62)
             let calls = await service.captured()
             check(calls.isEmpty && !endpoint.candidatesVisible && client.requests.count == reads, "Pending native show never captures surrounding text or requests")
@@ -477,9 +480,12 @@ struct AIHeadlessPipelineTests {
             check(controller.handle(AIHeadlessKeyboard.event(121), client: client))
             check(controller.handle(AIHeadlessKeyboard.event(116), client: client))
             check(records.records.filter { $0.event == .scheduled }.count == scheduled)
+            let shown = ContinuousClock.now
+            endpoint.completeShow()
             await expectSuggestion(endpoint)
             let readyCalls = await service.captured()
-            check(readyCalls.count == 1 && lastKey.duration(to: readyCalls[0].started) < .milliseconds(1100),
+            // Readiness is polled every 100 ms; another 500 ms trigger delay would exceed the bound.
+            check(readyCalls.count == 1 && shown.duration(to: readyCalls[0].started) < .milliseconds(450),
                   "A late show requests on readiness without an extra debounce after paging")
             controller.engine?.clear(); controller.refresh(client)
         }
@@ -489,9 +495,15 @@ struct AIHeadlessPipelineTests {
                 var secure = false
                 let service = DelayedAIService()
                 let (controller, client, endpoint) = fixture(settings: settings, service: service,
-                    delay: phase == "pending" ? .seconds(2) : .zero, secure: { secure })
+                    manualShow: phase == "pending", secure: { secure })
                 _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
-                await wait(0.6)
+                if phase == "pending" {
+                    await wait(0.6)
+                } else {
+                    // The request follows the 500 ms trigger delay, which a loaded runner can overshoot.
+                    let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+                    while await service.count() == 0, ContinuousClock.now < deadline { await wait(0.01) }
+                }
                 let count = await service.count()
                 check(count == (phase == "pending" ? 0 : 1))
                 switch action {
