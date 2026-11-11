@@ -39,7 +39,7 @@ let inkFlowCoreSources = [
     "DictionaryWorkerRunner.swift", "InputController.swift",
     "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",
     "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift",
-    "UpdateSettingsView.swift",
+    "UpdateIdleInstaller.swift", "UpdateSettingsView.swift",
 ]
 let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "quality_exchange.py"]
 let testSwiftSources = [

@@ -24,7 +24,7 @@ struct UpdateSettingsView: View {
                     .help("启用后每日检查一次新版本")
                     .accessibilityIdentifier("settings.updates.check")
                 Toggle("自动下载并安装更新", isOn: automaticInstall)
-                    .help("启用后自动下载更新，并在墨流退出时安装")
+                    .help("启用后自动下载更新，在 Mac 闲置时安装")
                     .accessibilityIdentifier("settings.updates.download")
                     .disabled(!updaterAccess.allowsAutomaticUpdates)
                 Button("立即检查更新…") {
