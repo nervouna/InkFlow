@@ -93,7 +93,7 @@ private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate 
     }
 
     func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
-        idleInstaller.cancel()
+        // Sparkle calls this before it asks the app to terminate; a denied termination may need the handler again.
         let knownCorrelation = scheduledInstallCorrelation ?? currentUpdateCorrelation ?? activeCorrelation
         let correlation = knownCorrelation ?? UUID()
         scheduledInstallCorrelation = correlation
