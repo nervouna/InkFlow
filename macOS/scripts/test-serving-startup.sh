@@ -24,7 +24,13 @@ fi
 stage_started=$(inkflow_test_timing_now)
 "$binary" "$scratch" "$PWD/build/InkFlow.app" "$@" 2>&1 | tee "$run_dir/run.log"
 inkflow_test_timing_report serving-startup execute "$stage_started"
-rg -q '^PASS serving startup:' "$run_dir/run.log" || { echo 'Startup harness exited without final acceptance.' >&2; exit 1; }
+grep -Eq '^PASS serving startup:' "$run_dir/run.log" || {
+  echo 'Startup harness exited without final acceptance.' >&2
+  exit 1
+}
 if [[ "${1:-}" == --native ]]; then
-  rg -q '^PASS native serving startup:' "$run_dir/run.log" || { echo 'Native startup acceptance marker missing.' >&2; exit 1; }
+  grep -Eq '^PASS native serving startup:' "$run_dir/run.log" || {
+    echo 'Native startup acceptance marker missing.' >&2
+    exit 1
+  }
 fi
