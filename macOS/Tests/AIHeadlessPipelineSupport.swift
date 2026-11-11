@@ -16,12 +16,13 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
     package private(set) var refreshCount = 0
     package private(set) var showCount = 0
     package private(set) var hideCount = 0
-    package let showDelay: Duration
-    private var showTask: Task<Void, Never>?
+    /// A late native show: candidates stay hidden until the test calls completeShow(), whatever the host speed.
+    package let manualShow: Bool
+    package private(set) var showPending = false
     private var suggestionWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     package var suggestionVisible: Bool { suggestion != nil }
 
-    package init(showDelay: Duration = .zero) { self.showDelay = showDelay }
+    package init(manualShow: Bool = false) { self.manualShow = manualShow }
 
     package func refreshCandidates(_ candidates: [String], highlight: Int) {
         refreshCount += 1
@@ -29,19 +30,24 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
         self.highlight = highlight
         guard !candidates.isEmpty else { hideCandidates(); return }
         showCount += 1
-        guard !candidatesVisible, showTask == nil else { return }
-        if showDelay == .zero { candidatesVisible = true; return }
-        showTask = Task { [weak self, showDelay] in
-            do { try await Task.sleep(for: showDelay) } catch { return }
-            guard let self, !self.candidates.isEmpty else { return }
-            self.candidatesVisible = true
-            self.showTask = nil
+        guard !candidatesVisible else { return }
+        if manualShow {
+            showPending = true
+            return
         }
+        candidatesVisible = true
+    }
+
+    /// Completes a pending show on this main-actor turn, as a native window that finishes showing later.
+    package func completeShow() {
+        guard showPending, !candidates.isEmpty else { return }
+        showPending = false
+        candidatesVisible = true
     }
 
     package func hideCandidates() {
         hideCount += 1
-        showTask?.cancel(); showTask = nil
+        showPending = false
         candidatesVisible = false
         hideSuggestion()
     }
