@@ -11,6 +11,7 @@ private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate 
     private var currentUpdateCorrelation: UUID?
     private var scheduledInstallCorrelation: UUID?
     private var reportedTerminalOutcome = false
+    private let idleInstaller = IFUpdateIdleInstaller()
 
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         activeCorrelation = UUID()
@@ -83,10 +84,16 @@ private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate 
         record("sparkleInstall", outcome: .ready,
                reason: knownCorrelation == nil ? "correlationUnknown" : "scheduledOnQuit",
                correlation: correlation)
-        return false
+        // The input method rarely quits, so install while the Mac is idle. Sparkle still installs on quit.
+        idleInstaller.schedule { [weak self] in
+            self?.record("sparkleInstall", outcome: .handled, reason: "idle", correlation: correlation)
+            immediateInstallationBlock()
+        }
+        return true
     }
 
     func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
+        idleInstaller.cancel()
         let knownCorrelation = scheduledInstallCorrelation ?? currentUpdateCorrelation ?? activeCorrelation
         let correlation = knownCorrelation ?? UUID()
         scheduledInstallCorrelation = correlation
@@ -106,6 +113,7 @@ private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate 
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: any Error) {
+        idleInstaller.cancel()
         record("sparkleCheck", outcome: .failed, error: error)
         reportedTerminalOutcome = true
     }
