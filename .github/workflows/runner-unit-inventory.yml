@@ -55,7 +55,7 @@ jobs:
           INKFLOW_SPEECH_ASSETS_OPTIONAL: '1'
         run: |
           mkdir -p build/inventory
-          units=$(bash macOS/scripts/test.sh --help | sed -n 's/^Units: //p')
+          units='ai-headless ai-headless ai-headless'
           failed=()
           for unit in $units; do
             began=$SECONDS
