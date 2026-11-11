@@ -213,6 +213,9 @@ jobs:
           echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
 
       - name: Verify once (build, test.sh all, deep bundle check)
+        env:
+          # A hosted runner has no Speech support; apple-voice checks the audio feed against a fixed format.
+          INKFLOW_SPEECH_ASSETS_OPTIONAL: '1'
         run: |
           mkdir -p build
           bash macOS/scripts/release-verification.sh 2>&1 | tee build/release-verification.log
