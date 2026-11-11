@@ -549,10 +549,10 @@ def revert_fixture(path):
 
 
 @contextlib.contextmanager
-def utc():
-    """The local calendar days of a window are the UTC days."""
+def local_timezone(name):
+    """The local calendar days of a window are those of `name`, whatever the host's timezone."""
     previous = os.environ.get('TZ')
-    os.environ['TZ'] = 'UTC'
+    os.environ['TZ'] = name
     time.tzset()
     try:
         yield
@@ -562,6 +562,16 @@ def utc():
         else:
             os.environ['TZ'] = previous
         time.tzset()
+
+
+def utc():
+    """The local calendar days of a window are the UTC days."""
+    return local_timezone('UTC')
+
+
+def utc8():
+    """STAMP (2026-09-06T16:00Z) falls on 2026-09-07, the last day of a trend until 2026-09-08."""
+    return local_timezone('Asia/Taipei')
 
 
 LEARNING_START = datetime(2026, 9, 3, 12, tzinfo=timezone.utc)
@@ -1873,7 +1883,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(group['top3_selected'], 3)
         self.assertAlmostEqual(group['top1_rate'], 1/9)
         self.assertAlmostEqual(group['top3_rate'], 3/9)
-        trend = self.result('trend', '--days', '7', '--until', '2026-09-08')
+        with utc8():
+            trend = self.result('trend', '--days', '7', '--until', '2026-09-08')
         daily = trend['series']['overall'][-1]['daily']
         self.assertEqual(daily['top3_selected'], result['coverage']['top3_selected'])
         self.assertAlmostEqual(daily['top3_rate'], result['coverage']['top3_rate'])
@@ -1910,7 +1921,8 @@ class QueryTests(unittest.TestCase):
     def test_trend_uses_latest_measurement_and_reports_exclusions(self):
         with sqlite3.connect(self.db) as db:
             db.execute("UPDATE config_revisions SET measurement_fingerprint='measurement-B' WHERE id='rev2'")
-        result = self.result('trend', '--days', '7', '--until', '2026-09-08')
+        with utc8():
+            result = self.result('trend', '--days', '7', '--until', '2026-09-08')
         daily = result['series']['overall'][-1]['daily']
         self.assertIsNotNone(daily['top1_rate'])
         self.assertEqual(daily['quality_rate_status'], 'available_within_measurement_fingerprint')
