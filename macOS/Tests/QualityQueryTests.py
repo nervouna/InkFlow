@@ -853,8 +853,8 @@ class QueryTests(unittest.TestCase):
         day = 24 * 60 * 60
         recorded = int(datetime.fromisoformat(STAMP.replace('Z', '+00:00')).timestamp())
 
-        def check(last, now):
-            return subprocess.run([executable, 'auto', str(self.db), str(folder), str(last), str(now)],
+        def check(last, now, target=folder):
+            return subprocess.run([executable, 'auto', str(self.db), str(target), str(last), str(now)],
                                   capture_output=True)
 
         def read(path):
@@ -925,9 +925,7 @@ class QueryTests(unittest.TestCase):
         self.assertTrue(any(r['text'] for r in json.loads(manual.read_text())['tables']['commits']))
         # A folder that cannot be written reports the failure and leaves nothing behind.
         missing = Path(self.temp.name) / 'absent'
-        failed = subprocess.run([executable, 'auto', str(self.db), str(missing), 'none', str(recorded + day)],
-                                capture_output=True)
-        self.assertEqual(failed.returncode, 2)
+        self.assertEqual(check('none', recorded + day, missing).returncode, 2)
         self.assertFalse(missing.exists())
 
     def test_inspect_compact_and_legacy_page_revisions(self):
