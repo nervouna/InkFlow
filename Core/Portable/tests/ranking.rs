@@ -318,7 +318,7 @@ fn order_of(candidates: &[&str], rows: &[&str], input_length: usize) -> Vec<usiz
     let candidates: Vec<String> = candidates.iter().map(|text| text.to_string()).collect();
     let metadata = parse_rows(rows, input_length);
     assert!(metadata.is_some());
-    ContextRanker::from_dictionary("").order(&candidates, "", metadata.as_deref())
+    ContextRanker::from_dictionary("").order(&candidates, "", metadata.as_deref(), "")
 }
 
 /// One complete syllable (an uncorrected single character covers the input): exact English the user never

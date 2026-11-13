@@ -71,7 +71,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             let id = sample["id"].as_str().ok_or("sample")?;
             let input = sample["input"].as_str().ok_or("sample")?;
             session.clear()?;
-            session.set_preceding_text("")?;
+            session.set_preceding_text(sample["precedingContext"].as_str().unwrap_or(""))?;
             for (offset, byte) in input.bytes().enumerate() {
                 let began = Instant::now();
                 let handled = session.key(i32::from(byte), i32::from(byte.is_ascii_uppercase()))?;
