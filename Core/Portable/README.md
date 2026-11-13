@@ -85,6 +85,9 @@ rm "$TMPDIR/cases.jsonl"
 
 Without `--context-index` the `ranked` arm is not run. The checked-in fixture ranks with its own small dictionary.
 
+Delayed correction chains are collapsed by the exporter and explicitly marked as inferred context returns.
+Report direct and inferred chain counts separately; the inference is not document readback.
+
 ### Replay files
 
 Case files hold typed text. They stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off. The record files of engine mode follow the same rules.

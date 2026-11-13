@@ -97,6 +97,22 @@ database or empty filter result, exits 0. Help is available at each command.
   outside the repository and new, and the file is owner-only. The `replay` binary scores it; see
   [Replay](../../../../Core/Portable/README.md#replay), and its
   [replay files](../../../../Core/Portable/README.md#replay-files) for how to handle the file.
+  Correction attempts are now collapsed after export selection: a directly relabelled decision keeps its original
+  list and replaces its successful retry, so the two are not independent cases. Header counters
+  `correction_chains_direct`, `correction_chains_inferred`, and `correction_attempts_collapsed` describe this step.
+  `cases` and `without_evidence` describe the final emitted cohort; reverted counters describe pre-collapse decisions.
+  A delayed return is an **inference**, recorded as `correction_evidence: inferred_context_return`: within ten seconds
+  of the original attempt, the same run, application, configuration, nonempty preceding context and same or extended
+  raw code must return after an intervening cancelled or committed next-word attempt. Both endpoints must have one
+  decision and one commit, a complete caret and no selected prefix. Exactly one whole-input original candidate must
+  prefix the replacement text and differ from the earlier selection. Intervening replay cases must extend the earlier
+  mistaken text; they and the replacement are removed from scoring. Repeated corrections within the same bounded
+  chain update the original case once. Ambiguous prefixes, empty context, changed identity and unrelated intervening
+  cases remain separate. The original segment is the gold even if the retry commits a longer phrase.
+  Client IDs are per-composition tokens and do not prove document identity. Context returns cannot distinguish every
+  cursor movement or repeated phrase: report inferred-chain results separately from direct evidence and never call
+  these verified document corrections. This rule changes offline replay only, not collection, live metrics or ranking.
+
 - `learning`: the L family over pair identities (design: `docs/input-quality-metrics.md` section 6), for
   known-rank regular committed decisions that carry a `pair_id`, ordered by composition start, decision time and
   sequence. It takes the shared filters (`--kind` defaults to all kinds), `--input` and `--days` (default 28, a window

@@ -1103,10 +1103,10 @@ class QueryTests(unittest.TestCase):
         header, cases = self.replay_cases(db=db)
         counts = ('cases', 'without_evidence', 'reverted_excluded', 'reverted_relabelled')
         self.assertEqual({key: header[key] for key in counts},
-                         dict(cases=15, without_evidence=0, reverted_excluded=9, reverted_relabelled=3))
-        exported = ['kept-0', 'same-0', 'same_retype-0', 'early-0', 'early_retype-0', 'split_retype-0',
+                         dict(cases=12, without_evidence=0, reverted_excluded=9, reverted_relabelled=3))
+        exported = ['kept-0', 'same-0', 'early-0', 'split_retype-0',
                     'off_list_retype-0', 'undo_retype-0', 'typed_on_retype-0', 'late_retype-0', 'again_retype-0',
-                    'again_retype2-0', 'pair_retype-0', 'busy_retype-0', 'busy_retype-1']
+                    'pair_retype-0', 'busy_retype-0', 'busy_retype-1']
         self.assertEqual([case['decision_id'] for case in cases], [f'decision-{name}' for name in exported])
         # The retype's text, its commit and its place on the reverted list; the raw input stays the reverted one.
         relabelled = {case['composition_id']: (case['raw_input'], case['selected_display_index'],
@@ -1125,6 +1125,86 @@ class QueryTests(unittest.TestCase):
         self.assertEqual({key: imported[key] for key in counts}, {key: header[key] for key in counts})
         self.assertEqual([(case['selected_text'], case['relabelled']) for case in imported_cases],
                          [(case['selected_text'], case['relabelled']) for case in cases])
+
+    def test_replay_delayed_correction_uses_composition_timeline(self):
+        db = Path(self.temp.name) / 'delayed.sqlite3'
+        retype_fixture(db)
+        with sqlite3.connect(db) as connection:
+            connection.execute("UPDATE compositions SET operations_json='{}' WHERE id='same_retype'")
+            for cid in ('same', 'same_retype'):
+                snapshot = json.loads(connection.execute(
+                    'SELECT snapshot_json FROM candidate_decisions WHERE composition_id=?', (cid,)).fetchone()[0])
+                snapshot['precedingContext'] = '开展'
+                connection.execute('UPDATE candidate_decisions SET snapshot_json=?,first_page_json=? '
+                                   'WHERE composition_id=?', (json.dumps(snapshot), json.dumps(snapshot), cid))
+            stamp = '2026-09-06T16:00:01.500Z'
+            insert(connection, 'compositions', id='cancelled-next', run_id='run', started_at=stamp, ended_at=stamp,
+                   app_bundle_id='app', outcome='cancelled', page_history_truncated=0, dropped_page_count=0,
+                   operations_json='{"inputBeforeDeletion":"j"}')
+        header, cases = self.replay_cases(db=db)
+        original = next(case for case in cases if case['composition_id'] == 'same')
+        self.assertEqual(original['selected_text'], '实验')
+        self.assertEqual(original['correction_evidence'], 'inferred_context_return')
+        self.assertNotIn('same_retype', [case['composition_id'] for case in cases])
+        self.assertEqual(header['correction_chains_inferred'], 1)
+        self.assertEqual(header['correction_chains_direct'], 2)
+
+    def test_delayed_corrections_are_bounded_inferences_and_count_once(self):
+        def fixture():
+            cases = []
+            timeline = {}
+            for index, selected in ((0, '试验'), (2, '实验'), (4, '实言')):
+                stamp = f'2026-09-06T16:00:0{index}.000Z'
+                cid = str(index)
+                cases.append(dict(decision_id=cid, composition_id=cid, occurred_at=stamp,
+                    raw_input='shiyan', preceding_context='开展', selected_text=selected,
+                    selected_display_index=index // 2, committed_text=selected, relabelled=False,
+                    candidates=[dict(text=text, display_index=i, evidence='0,6,n,1,0,n,phrase,0')
+                                for i, text in enumerate(('试验', '实验', '实言'))]))
+                timeline[cid] = dict(started=stamp, identity=('run', 'app', 'config'), eligible=True,
+                                     cancelled=False, committed=True)
+            for index in (1, 3):
+                timeline[str(index)] = dict(started=f'2026-09-06T16:00:0{index}.000Z',
+                    identity=('run', 'app', None), eligible=False, cancelled=True, committed=False)
+            return cases, timeline
+
+        cases, timeline = fixture()
+        result, counts = self.quality.collapse_replay_corrections(cases, timeline)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['selected_text'], '实言')
+        self.assertEqual(result[0]['correction_evidence'], 'inferred_context_return')
+        self.assertEqual(counts['correction_chains_inferred'], 1)
+        self.assertEqual(counts['correction_attempts_collapsed'], 2)
+        for failure in ('time', 'context', 'app', 'run', 'config', 'partial', 'missing', 'ambiguous'):
+            with self.subTest(failure=failure):
+                cases, timeline = fixture()
+                cases = cases[:2]
+                if failure == 'time':
+                    cases[1]['occurred_at'] = '2026-09-06T16:00:12.000Z'
+                if failure == 'context':
+                    cases[1]['preceding_context'] = '另一个位置'
+                if failure in ('app', 'run', 'config'):
+                    identity = list(timeline['2']['identity'])
+                    identity[{'run': 0, 'app': 1, 'config': 2}[failure]] = 'different'
+                    timeline['2']['identity'] = tuple(identity)
+                if failure == 'partial':
+                    timeline['2']['eligible'] = False
+                if failure == 'missing':
+                    cases[0]['preceding_context'] = ''
+                if failure == 'ambiguous':
+                    cases[0]['candidates'].append(dict(text='实', display_index=3,
+                                                       evidence='0,6,n,1,0,n,phrase,0'))
+                result, counts = self.quality.collapse_replay_corrections(cases, timeline)
+                self.assertEqual(len(result), 2)
+                self.assertEqual(counts['correction_chains_inferred'], 0)
+        cases, timeline = fixture()
+        cases = cases[:2]
+        cases[1]['raw_input'] = 'shiyanjieguo'
+        cases[1]['selected_text'] = '实验结果'
+        result, _ = self.quality.collapse_replay_corrections(cases, timeline)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['selected_text'], '实验')
+        self.assertEqual(result[0]['committed_text'], '实验')
 
     def test_replay_cases_read_exports_too(self):
         db = Path(self.temp.name) / 'replay.sqlite3'
