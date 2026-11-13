@@ -2,6 +2,7 @@ import Foundation
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowAITestSupport
+import InkFlowTestSupport
 #endif
 
 @main
@@ -31,7 +32,7 @@ struct AISuggestionTests {
     }
 
     @MainActor static func configuration() throws {
-        let suite = "inkflow.ai-test.\(UUID().uuidString)"
+        let suite = temporarySuiteName("inkflow.ai-test")
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let keys = MemoryAICredentialStore()

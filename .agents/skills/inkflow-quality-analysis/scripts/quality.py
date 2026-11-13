@@ -20,6 +20,7 @@ import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
 REPOSITORY = Path(__file__).resolve().parents[4]
+BUSY_SECONDS = 5  # How long a query waits for a writer that holds the store.
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
 TABLE_COLUMNS = {
     'recording_runs': 'id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code',
@@ -168,8 +169,16 @@ def connect(path):
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise QueryError(f'Database does not exist: {path}. Record input first, or pass --db PATH.')
-    db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=0.25)
+    # Queries run on a private in-memory copy. The store uses a rollback journal, so a reader on the file itself
+    # would block the input method's quality writes for as long as the query takes.
+    db = sqlite3.connect(':memory:')
     try:
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=BUSY_SECONDS)) as source:
+            # `backup` retries a busy source without limit. Taking the read lock first fails after the timeout, and
+            # the copy then runs under that lock.
+            source.execute('BEGIN')
+            source.execute('SELECT COUNT(*) FROM sqlite_master').fetchone()
+            source.backup(db)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         if (db.execute('PRAGMA user_version').fetchone()[0] != 4
@@ -221,8 +230,11 @@ def windows_cte(args):
     """One row per commit, with the commit named as the database names it: exports prefix every id with its source.
     `carrier_id` is the composition that holds the window, the one that followed the commit."""
     combined = getattr(args, 'input', None) or getattr(args, 'exports_only', False) or getattr(args, 'source', None)
-    select = ', '.join(("c.source_id || ':' || " if combined and column == 'commit_id' else '')
-                       + f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
+    # `commit_id` is cast so it has the TEXT affinity of the ids it joins: without one, SQLite builds no automatic
+    # index on this table and scans every window for every decision.
+    commit = ("c.source_id || ':' || " if combined else '') + "json_extract(w.value,'$.commitID')"
+    select = ', '.join(f'CAST({commit} AS TEXT) AS commit_id' if column == 'commit_id'
+                       else f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
     return (f"windows AS MATERIALIZED (SELECT {select}, c.id AS carrier_id "
             "FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') w)")
 
@@ -1256,6 +1268,11 @@ def main(argv=None):
         if args.input or args.exports_only or args.source:
             if args.exports_only and not args.input:
                 raise QueryError('--exports-only requires at least one --input file.')
+            # A folder stands for the weekly exports in it, one file per device.
+            args.input = [file for path in args.input
+                          for file in (sorted(path.glob('InkFlow-quality-*.json*')) if path.is_dir() else [path])]
+            if not args.input and args.exports_only:
+                raise QueryError('No InkFlow-quality-* export in the --input folder.')
             documents = [quality_exchange.load(path, TABLE_COLUMNS) for path in args.input]
             if not args.exports_only:
                 local = quality_exchange.snapshot(args.db, connect, TABLE_COLUMNS)

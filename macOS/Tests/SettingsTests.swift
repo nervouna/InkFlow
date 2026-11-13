@@ -9,6 +9,40 @@ import InkFlowTestSupport
 
 @main
 struct SettingsTests {
+    /// The checks are driven with an injected clock. The setting and folder are stored directly so that no check
+    /// with the real clock is scheduled beside them.
+    @MainActor static func weeklyQualityExport(settings: IFSettings, defaults: UserDefaults, directory: URL) async {
+        settings.qualityDatabase = directory.appendingPathComponent("quality.sqlite3")
+        let folder = directory.appendingPathComponent("weekly")
+        let exports = { (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] }
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let day: TimeInterval = 24 * 60 * 60
+        check(!settings.qualityAutoExportEnabled && settings.qualityAutoExportFolder == nil,
+              "weekly export is off by default")
+        defaults.set(folder.path, forKey: "qualityAutoExportFolder")
+        await settings.checkQualityAutoExport(now: start)
+        check(settings.qualityAutoExportMessage == nil && exports().isEmpty, "off: nothing is written or reported")
+        defaults.set(1, forKey: "qualityAutoExportEnabled")
+        await settings.checkQualityAutoExport(now: start)
+        check(settings.qualityAutoExportMessage?.contains("未完成") == true && settings.qualityAutoExportLastSuccess == nil,
+              "a missing folder reports the failure and keeps the export due")
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        await settings.checkQualityAutoExport(now: start + day)
+        check(exports().count == 1 && exports()[0].hasPrefix("InkFlow-quality-") && exports()[0].hasSuffix(".json.gz")
+              && settings.qualityAutoExportLastSuccess == start + day
+              && settings.qualityAutoExportMessage?.contains("已保存") == true,
+              "the next check succeeds once the folder is writable: \(exports())")
+        await settings.checkQualityAutoExport(now: start + 7 * day)
+        check(settings.qualityAutoExportLastSuccess == start + day, "six days later nothing is written")
+        await settings.checkQualityAutoExport(now: start + 8 * day)
+        check(settings.qualityAutoExportLastSuccess == start + 8 * day && exports().count == 2,
+              "seven days later a second dated file is written: \(exports())")
+        settings.setQualityAutoExportEnabled(false)
+        check(!IFSettings(defaults: defaults).qualityAutoExportEnabled, "turning it off persists")
+        await settings.checkQualityAutoExport(now: start + 30 * day)
+        check(settings.qualityAutoExportLastSuccess == start + 8 * day, "off again: no export")
+    }
+
     @MainActor static func main() async throws {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
@@ -35,6 +69,7 @@ struct SettingsTests {
         check(!IFSettings(defaults: defaults).qualityTextCapture && settings.qualityControlMessage?.contains("删除") == true,
               "text opt-out persists and reports deletion")
         await qualityStore.close()
+        await weeklyQualityExport(settings: settings, defaults: defaults, directory: qualityDirectory)
         check(settings.candidateCount == 5 && !settings.vertical && settings.fontSize == 14 && !settings.thunderMode)
         check(settings.inputPreferences[.bracketPaging] && !settings.inputPreferences[.minusEqualPaging],
               "Only square brackets page by default")

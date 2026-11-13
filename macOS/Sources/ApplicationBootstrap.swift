@@ -22,6 +22,7 @@ package enum InkFlowApplicationBootstrap {
                 textCapture: IFSettings.sharedSettings.qualityTextCapture)
             IFSettings.sharedSettings.qualityStore = qualityStore
             IFEngine.configureQualityRecording(qualityStore)
+            IFSettings.sharedSettings.scheduleQualityAutoExport()
             let dictionaries = IFDictionaryCoordinator(backendFactory: {
                 let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
                 let runtime = IFDictionaryRuntime.bundled(helper: helper)

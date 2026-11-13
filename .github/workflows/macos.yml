@@ -1,12 +1,13 @@
 name: macOS
 
-# Docs-only changes must not spend macOS minutes.
+# Docs-only changes must not spend macOS minutes. Both jobs are required checks on main, so a pull request
+# always starts this workflow: for a docs-only one the `changes` job reports no code and the two jobs are
+# skipped, which a required check counts as passed.
 on:
   push:
     branches: [main]
     paths-ignore: ['**.md', 'docs/**']
   pull_request:
-    paths-ignore: ['**.md', 'docs/**']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,9 +17,29 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          code=true
+          if [[ -n "$BASE" ]] && ! git diff --name-only "$BASE...HEAD" | grep -qvE '(\.md$|^docs/)'; then
+            code=false
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
   quick:
     # Only the quick group. `test.sh all` stays a manual release step.
     name: test.sh quick
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:
@@ -67,6 +88,8 @@ jobs:
     # librime built from source, the Rust core tests, old/new parity on production resources and
     # the Swift link smoke test. Not part of `quick`; runs beside it.
     name: test.sh portable
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: macos-26
     timeout-minutes: 90
     steps:

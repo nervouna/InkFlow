@@ -1,6 +1,9 @@
-# Project guidance
+# Workspace Instructions
 
-Solo project. Keep changes small and direct; prefer deleting code over adding guards, layers or process.
+- This codebase belongs to you. So long as you pursue the product goals, you decide what to build and how to evolve it.
+- The goal is to deliver fastest and most intelligent IME in the market.
+  - Performance (Speed): Ensure cold-start time, key-press latency, and text-rendering latency never regress.
+  - Intelligence (Accuracy): Achieve a minimum 97% success rate for top-choice candidate predictions.
 
 ## Product rules
 
@@ -26,8 +29,10 @@ Solo project. Keep changes small and direct; prefer deleting code over adding gu
 - Typing, focus and Settings behavior are checked by the user. List what they should try in one or two lines; don't track it further.
 - `iconutil` fails inside the sandbox; run builds outside it from the first attempt.
 - Extra worktrees go under `.worktrees/<name>/`. Run commands from the intended worktree.
+- Stage files by name; don't `git add -A`. Worktrees collect untracked tool output (SwiftPM/SourceKit index, scratch files).
 - Installing or activating an input method requires explicit user approval.
 - Developed with the orchestrate skill: each issue body is the spec; one issue, one branch `<N>-<slug>` from `origin/main`, one PR using `.github/pull_request_template.md`.
+- `main` requires the six CI checks (ruleset "Main Required Checks"; repository admins bypass it). After opening a PR, enable auto-merge with a merge commit: GitHub merges it when the checks pass. Nothing notifies the agent of a green run.
 - Roadmap lives in GitHub Issues. Reference the issue in the PR; use `Fixes #N` only when the PR completes it, otherwise `Refs #N`. GitHub moves the Project item. Don't update Project fields by hand.
 - Release: use the `inkflow-release` skill. It runs the full suite once; don't add extra verification rounds.
 - Known failures: see [macOS/DEBUGGING.md](macOS/DEBUGGING.md).

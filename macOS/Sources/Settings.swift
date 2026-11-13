@@ -173,6 +173,72 @@ final class IFSettings: ObservableObject {
         } catch { qualityControlMessage = "清除未完成，原有记录可能仍然保留。请稍后重试。" }
     }
 
+    // MARK: Weekly quality export
+
+    /// Off by default. When on, a text-free export of the past week is written to the chosen folder once a week.
+    var qualityAutoExportEnabled: Bool { integer(for: "qualityAutoExportEnabled", allowed: [0, 1], fallback: 0) != 0 }
+    var qualityAutoExportFolder: String? { defaults.string(forKey: "qualityAutoExportFolder") }
+    var qualityAutoExportLastSuccess: Date? { defaults.object(forKey: "qualityAutoExportLastSuccess") as? Date }
+    /// The outcome of the last automatic export, kept across launches.
+    var qualityAutoExportMessage: String? { defaults.string(forKey: "qualityAutoExportMessage") }
+    var qualityDatabase = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Application Support/InkFlow/quality.sqlite3")
+    private var qualityAutoExportTimer: Timer?
+    private var qualityAutoExportRunning = false
+
+    func setQualityAutoExportEnabled(_ enabled: Bool) {
+        objectWillChange.send()
+        defaults.set(enabled ? 1 : 0, forKey: "qualityAutoExportEnabled")
+        scheduleQualityAutoExport()
+    }
+
+    /// A new folder has no file yet, so the next check writes one.
+    func setQualityAutoExportFolder(_ folder: URL) {
+        objectWillChange.send()
+        defaults.set(folder.path, forKey: "qualityAutoExportFolder")
+        defaults.removeObject(forKey: "qualityAutoExportLastSuccess")
+        defaults.removeObject(forKey: "qualityAutoExportMessage")
+        scheduleQualityAutoExport()
+    }
+
+    /// Called at startup and whenever the setting changes: one check now, then a daily check while enabled.
+    /// No timer exists while the setting is off.
+    func scheduleQualityAutoExport() {
+        qualityAutoExportTimer?.invalidate()
+        qualityAutoExportTimer = nil
+        guard qualityAutoExportEnabled else { return }
+        qualityAutoExportTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.checkQualityAutoExport() }
+        }
+        Task { await checkQualityAutoExport() }
+    }
+
+    /// Writes the export on a utility task when it is due. A failure only records its reason; the next check retries.
+    func checkQualityAutoExport(now: Date = .now) async {
+        guard !qualityAutoExportRunning,
+              QualityAutoExport.isDue(enabled: qualityAutoExportEnabled, folder: qualityAutoExportFolder,
+                                      lastSuccess: qualityAutoExportLastSuccess, now: now),
+              let folder = qualityAutoExportFolder else { return }
+        qualityAutoExportRunning = true
+        defer { qualityAutoExportRunning = false }
+        let database = qualityDatabase
+        let lastSuccess = qualityAutoExportLastSuccess
+        let stamp = now.formatted(date: .numeric, time: .shortened)
+        let message: String
+        do {
+            _ = try await Task.detached(priority: .utility) {
+                try QualityAutoExport.run(database: database, folder: URL(fileURLWithPath: folder),
+                                          lastSuccess: lastSuccess, now: now)
+            }.value
+            defaults.set(now, forKey: "qualityAutoExportLastSuccess")
+            message = "上次自动导出：\(stamp)，已保存。"
+        } catch {
+            message = "上次自动导出：\(stamp)，未完成：\(error.localizedDescription)"
+        }
+        objectWillChange.send()
+        defaults.set(message, forKey: "qualityAutoExportMessage")
+    }
+
     init(defaults: UserDefaults, aiCredentials: any AICredentialStore = MemoryAICredentialStore(),
          voiceService: any VoiceRecognitionServing = AppleVoiceRecognizer()) {
         self.defaults = defaults
@@ -621,19 +687,38 @@ final class SettingsHostingController: NSHostingController<SettingsView> {
 @MainActor
 final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     static let sharedController = IFSettingsWindowController(settings: .sharedSettings)
-    private static let editingMenuItem: NSMenuItem = {
-        let menu = NSMenu(title: "编辑")
-        menu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
-        menu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
+    private static let mainMenuItems: [NSMenuItem] = {
+        let application = NSMenu(title: "墨流")
+        application.addItem(withTitle: "隐藏墨流", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        application.addItem(withTitle: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)),
+                            keyEquivalent: "h").keyEquivalentModifierMask = [.command, .option]
+        application.addItem(withTitle: "全部显示", action: #selector(NSApplication.unhideAllApplications(_:)),
+                            keyEquivalent: "")
+
+        let file = NSMenu(title: "文件")
+        file.addItem(withTitle: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+
+        let edit = NSMenu(title: "编辑")
+        edit.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "z")
             .keyEquivalentModifierMask = [.command, .shift]
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        menu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        menu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        menu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        let item = NSMenuItem(title: "编辑", action: nil, keyEquivalent: "")
-        item.submenu = menu
-        return item
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        let window = NSMenu(title: "窗口")
+        window.addItem(withTitle: "最小化", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        window.addItem(withTitle: "缩放", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        window.addItem(.separator())
+        window.addItem(withTitle: "前置全部窗口", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: "")
+
+        return [application, file, edit, window].map { menu in
+            let item = NSMenuItem(title: menu.title, action: nil, keyEquivalent: "")
+            item.submenu = menu
+            return item
+        }
     }()
     var dictionaries: IFDictionaryCoordinator?
     var updaterAccess: IFUpdaterAccess?
@@ -672,17 +757,22 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         window.center()
     }
 
+    static func installMainMenu() {
+        // The accessory app has no storyboard menu. Standard nil-target actions let
+        // AppKit route shortcuts to the active window or focused field editor.
+        let mainMenu = NSApp.mainMenu ?? NSMenu()
+        for (index, item) in mainMenuItems.enumerated() where !mainMenu.items.contains(where: { $0 === item }) {
+            item.menu?.removeItem(item)
+            mainMenu.insertItem(item, at: index)
+        }
+        NSApp.mainMenu = mainMenu
+        NSApp.windowsMenu = mainMenuItems.last?.submenu
+    }
+
     func present() {
         dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
-        // The accessory app has no storyboard menu. Standard nil-target actions let
-        // AppKit route editing shortcuts to the focused native or secure field editor.
-        let mainMenu = NSApp.mainMenu ?? NSMenu()
-        if !mainMenu.items.contains(where: { $0 === Self.editingMenuItem }) {
-            Self.editingMenuItem.menu?.removeItem(Self.editingMenuItem)
-            mainMenu.addItem(Self.editingMenuItem)
-        }
-        NSApp.mainMenu = mainMenu
+        Self.installMainMenu()
         // TCC can return focus to another app when an accessory app's permission
         // alert closes. Keep Settings a regular window, including Dock/Cmd-Tab
         // reachability, until it closes; ordinary input remains accessory-only.

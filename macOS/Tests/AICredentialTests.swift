@@ -1,13 +1,14 @@
 import Foundation
 #if SWIFT_PACKAGE
 @testable import InkFlowCore
+import InkFlowTestSupport
 #endif
 
 @main
 struct AICredentialTests {
     @MainActor static func main() {
         // This adapter check owns a random service and synthetic keys; never access the real service.
-        let suite = "inkflow.ai-keychain-test.\(UUID().uuidString)"
+        let suite = temporarySuiteName("inkflow.ai-keychain-test")
         let store = KeychainAICredentialStore(service: "io.damao.inkflow.ai-test.\(UUID().uuidString)")
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }

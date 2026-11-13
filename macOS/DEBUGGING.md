@@ -105,9 +105,9 @@ The switch waits until every live session (including inactive clients) has no co
 
 Run in a logged-in, unlocked session with Accessibility access. SwiftUI builds its accessibility tree lazily, so the harness reads it from a short-lived child process. A timeout reports the foreground app's bundle ID/PID.
 
-## Settings fields ignore Command-V
+## Settings windows ignore standard Command shortcuts
 
-Accessory apps have no main Edit menu. Settings presentation installs one standard Edit menu (nil-target actions). Test: `test-settings-ui.sh --smart-only`.
+Accessory apps have no storyboard main menu. An Edit-only menu handles Command-V but leaves Command-W and Command-M unbound. Settings and personal-learning presentation install the application, File, Edit and Window menus with standard nil-target actions, so AppKit routes commands to the active window or field editor. Repeated presentation reuses the same menu items. The background input method has no Quit command. Check closing, minimizing, hiding and field editing in the app.
 
 ## Disabled prediction item looks clickable in the input menu
 
@@ -116,3 +116,11 @@ IMK serialization enables any item with an action. An unavailable item needs bot
 ## Dictionary error details missing from accessibility
 
 An `accessibilityIdentifier` on a SwiftUI `DisclosureGroup` overrides its descendants' identifiers. Put the identifier on the diagnostic text instead.
+
+## quality-store failed under load
+
+**Symptom:** `entire accepted charge released after drain` in the byte-pressure part of `QualityStoreTests`; the unit passed when run alone.
+
+**Cause:** `close()` waits 1 s by default; on a loaded machine the ~100 KB-per-record backlog did not drain in time. Seen under `test.sh all` (2026-10-31) and in CI `test.sh quick` (2026-11-10).
+
+**Fix:** that test closes with a 30 s timeout. The production default is unchanged.

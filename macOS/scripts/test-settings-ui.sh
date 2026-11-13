@@ -31,7 +31,7 @@ if [[ "${1:-}" == --microphone-reproduction || "${1:-}" == --settings-window-lif
   open -n -W -a "$app" --stdout "$run_dir/output.log" \
     --stderr "$run_dir/error.log" --args "$1"
   cat "$run_dir/output.log" "$run_dir/error.log"
-  if ! rg -q "$marker" "$run_dir/output.log"; then
+  if ! grep -Eq "$marker" "$run_dir/output.log"; then
     echo 'Diagnostic exited without its completion marker; inspect the log and crash report.' >&2
     exit 1
   fi
@@ -57,7 +57,7 @@ trap 'rm -rf "$user_dir"' EXIT
 if [[ "${1:-}" == --preview ]]; then
   exit 0
 fi
-if ! rg -q '^PASS settings UI suite: complete$' "$user_dir/output.log"; then
+if ! grep -Eq '^PASS settings UI suite: complete$' "$user_dir/output.log"; then
   echo "FAIL settings UI harness exited without completing all requested cases" >&2
   exit 1
 fi

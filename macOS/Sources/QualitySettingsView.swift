@@ -29,6 +29,21 @@ struct QualitySettingsView: View {
                 .disabled(exporting)
             if exporting { ProgressView("正在导出质量数据…") }
             if let exportMessage { Text(exportMessage).textSelection(.enabled) }
+            Toggle("每周自动导出", isOn: Binding(get: { settings.qualityAutoExportEnabled },
+                                             set: { settings.setQualityAutoExportEnabled($0) }))
+                .accessibilityIdentifier("settings.quality.autoExport")
+            Text("开启后，墨流每周把不含任何输入文本的质量数据写到你选择的文件夹，每台设备每周一个带日期的文件；"
+                + "该文件夹里本设备超过 35 天的旧文件会被自动删除。墨流不联网上传；文件如何同步到其他设备由你决定。")
+            if settings.qualityAutoExportEnabled {
+                HStack {
+                    Button("选择文件夹…", action: chooseAutoExportFolder)
+                        .accessibilityIdentifier("settings.quality.autoExport.folder")
+                    Text(settings.qualityAutoExportFolder ?? "尚未选择文件夹").textSelection(.enabled)
+                }
+                if let message = settings.qualityAutoExportMessage {
+                    Text(message).accessibilityIdentifier("settings.quality.autoExport.result")
+                }
+            }
             if settings.qualityCommandPending { ProgressView("正在处理…") }
             if let message = settings.qualityControlMessage { Text(message).accessibilityIdentifier("settings.quality.result") }
             if settings.qualityStore == nil { Text("质量记录服务尚未启动。") }
@@ -63,16 +78,27 @@ struct QualitySettingsView: View {
             guard response == .OK, let destination = panel.url else { return }
             exporting = true
             exportMessage = nil
+            let database = settings.qualityDatabase
             Task { @MainActor in
                 defer { exporting = false }
                 do {
                     exportMessage = try await Task.detached(priority: .utility) {
-                        let database = URL(fileURLWithPath: NSHomeDirectory())
-                            .appendingPathComponent("Library/Application Support/InkFlow/quality.sqlite3")
-                        return try QualityExport.write(database: database, destination: destination)
+                        try QualityExport.write(database: database, destination: destination)
                     }.value
                 } catch { exportMessage = "导出未完成：\(error.localizedDescription)" }
             }
+        }
+    }
+
+    private func chooseAutoExportFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.message = "选择保存每周质量数据的文件夹。文件不含输入文本。"
+        panel.begin { response in
+            guard response == .OK, let folder = panel.url else { return }
+            settings.setQualityAutoExportFolder(folder)
         }
     }
 

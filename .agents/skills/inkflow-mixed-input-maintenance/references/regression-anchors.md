@@ -22,7 +22,7 @@ Fixtures behind the rules in [rules.md](rules.md). They describe the current def
 | `tin`, `chin`, `email`, `banana`, `shanghai` | Complete Pinyin, or Pinyin up to an unfinished final syllable: Chinese stays first and exact English follows; the technical lead does not apply |
 | `python`, `google`, `offer`, `world` | Not Pinyin-shaped: the exact English word leads (rule 14). Their Chinese readings stay on the page |
 | `ne`, `o`, `beijing` with a learned `ne`, `o`, `Beijing` and a technical context | Complete Pinyin: 呢, 哦 and 背景 lead and the learned word is behind them. Shift-typed `O`, `google` and the letters `i`, `u`, `v` keep the lead (rule 14) |
-| `can`, `you`, `she`, `he`, `man`, `bug` | Chinese stays first; exact English is second and commits exactly. `canpin`, `youxi`, `sheji`, and `hezuo` keep their Chinese first candidates |
+| `can`, `you`, `she`, `he`, `man`, `bug` | Chinese stays first; exact English is in the first four and commits exactly. On a single-syllable page (`can`, `you`, `she`, `he`, `man`) unconfirmed exact English is fourth, behind three characters; once the user has committed it, it is second. `canpin`, `youxi`, `sheji`, and `hezuo` keep their Chinese first candidates |
 | `offline`, `plugin` | Default exclusion is an accepted baseline limit, not a runtime-gate defect |
 
 Frequency cannot choose between case variants (wordfreq folds case), infer spellings ESDB lacks, or add missing public words such as `haha`, `lmao`, `wtf`, `idk` and `tbh`.

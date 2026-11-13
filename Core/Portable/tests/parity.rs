@@ -502,8 +502,8 @@ fn swift_engine_regressions() {
             .position(|c| c == "can")
             .expect("exact short English on the first page");
         assert!(
-            index < 3,
-            "exact short English stays in the top three: {candidates:?}"
+            index < 4,
+            "exact short English stays in the first four: {candidates:?}"
         );
         let page = session.snapshot().unwrap();
         session.select(&page, index).unwrap();

@@ -305,7 +305,12 @@ package final class QualityStore: @unchecked Sendable {
         lastMaintenance = now
         let purgeText = lock.withLock { !textCapture }
         do { try database.removeRecords(before: rawCutoff(now), now: now, textRecords: purgeText) }
-        catch { handle(error, count: 0) }
+        catch {
+            handle(error, count: 0)
+            return
+        }
+        // Best effort: a busy database is compacted at the next maintenance.
+        try? database.reclaimSpace()
     }
 
     private func rawCutoff(_ now: Date) -> Date { now.addingTimeInterval(-Double(QualityLimits.rawRetentionDays) * 86_400) }
@@ -840,6 +845,16 @@ private final class QualityDatabase: @unchecked Sendable {
             try inject(.beforeMaintenanceCommit)
             try execute("COMMIT")
         } catch { rollback(); throw error }
+    }
+
+    /// Returns pages freed by retention to the filesystem. A database without incremental auto_vacuum is rebuilt once.
+    package func reclaimSpace() throws {
+        if try scalar("PRAGMA auto_vacuum") != "2" {
+            try execute("PRAGMA auto_vacuum = INCREMENTAL")
+            try execute("VACUUM")
+        } else {
+            try execute("PRAGMA incremental_vacuum")
+        }
     }
 
     private func eventBytes(_ envelope: QualityEnvelope) throws -> Int {
