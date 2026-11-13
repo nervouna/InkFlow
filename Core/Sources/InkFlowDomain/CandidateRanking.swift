@@ -6,7 +6,7 @@ import Foundation
 package enum IFContextRanker {
     package static let contextLimit = 16
     private static let magic = Array("IFCX".utf8)
-    private static let version: UInt32 = 1
+    private static let version: UInt32 = 2
     private static let phraseLimit = 8
 
     /// Builds the index the preparation worker and build scripts ship beside the dictionary.
@@ -14,20 +14,26 @@ package enum IFContextRanker {
         guard let text = String(data: dictionary, encoding: .utf8) else {
             throw IFDictionaryError("context-index", "Expected a UTF-8 dictionary")
         }
-        var frequencies: [String: Int] = [:]
+        var frequencies: [Data: Int] = [:]
         var longest = 0
         for line in text.split(separator: "\n") {
             let fields = line.split(separator: "\t")
             guard fields.count >= 3, let frequency = Int(fields[2]), frequency >= 0 else { continue }
             let phrase = String(fields[0])
             guard (2...phraseLimit).contains(phrase.count), phrase.allSatisfy(Self.isHan) else { continue }
-            frequencies[phrase] = max(frequencies[phrase] ?? 0, frequency)
+            let syllables = fields[1].split(whereSeparator: { $0.isWhitespace })
+            var terminal = Array((syllables.last ?? "").utf8)
+            if syllables.count != phrase.count || terminal.count > 6
+                || !terminal.allSatisfy({ (97...122).contains($0) }) {
+                terminal = []
+            }
+            let key = Data(encode(phrase) + terminal + Array(repeating: 0, count: 6 - terminal.count))
+            frequencies[key] = max(frequencies[key] ?? 0, frequency)
             longest = max(longest, phrase.count)
         }
         var tables = Array(repeating: [(key: [UInt8], frequency: UInt64)](), count: phraseLimit - 1)
-        for (phrase, frequency) in frequencies {
-            let key = encode(phrase)
-            tables[key.count / 3 - 2].append((key, UInt64(frequency)))
+        for (key, frequency) in frequencies {
+            tables[(key.count - 6) / 3 - 2].append((Array(key), UInt64(frequency)))
         }
         var data = Data()
         data.append(contentsOf: magic)

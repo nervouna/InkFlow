@@ -1166,6 +1166,14 @@ package enum EngineRegression {
             engine.setPrecedingText(prefix); type(engine, input)
             return engine
         }
+        let particle = prepared("山", "de")
+        check(particle.snapshot().candidates.first == "的", "The di reading in 山地 must not promote 地 for de")
+        check(particle.key(32))
+        check(particle.takeCommit() == "的", "The retained native leader commits through its displayed index")
+        let terrain = prepared("山", "di", count: 9)
+        check(terrain.snapshot().candidates.first == "地", "The matching di reading still completes 山地")
+        check(terrain.key(32))
+        check(terrain.takeCommit() == "地", "The promoted matching reading keeps display-to-native selection")
         // `nia` is ni + a: the complete phrase 你啊 leads and the partial 你 consumes only `ni`. A consonant-only
         // tail such as the ng of `neng` is erased from the spelling profiles, so it leaves no partial choices.
         let coverage = prepared("谢谢", "nia", count: 9)

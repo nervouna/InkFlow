@@ -750,7 +750,7 @@ impl Engine {
                 Self::input_ranking_metadata(core, raw.page, raw.candidates.len(), input.len())?;
             if let Some(ranker) = self.ranker.as_ref().filter(|_| !at_start) {
                 let texts: Vec<String> = raw.candidates.iter().map(|c| c.text.clone()).collect();
-                core.order = ranker.order(&texts, &core.preceding, metadata.as_deref());
+                core.order = ranker.order(&texts, &core.preceding, metadata.as_deref(), &input);
             }
             core.metadata = metadata;
         }

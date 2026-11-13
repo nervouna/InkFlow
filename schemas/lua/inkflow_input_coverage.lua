@@ -35,11 +35,11 @@ end
 -- normal Pinyin. A personal exact standalone English candidate spanning that input is then marked 4
 -- in the same field, and the ranker keeps it behind the best Han candidate in a technical context.
 --
--- The row ends with two facts the engine records. The ranker reads them for one rule only: an uncorrected
--- `phrase` or `user_phrase` single character covering the input marks one complete syllable, and exact English
--- the user never confirmed then takes the fourth place. The facts are the Rime `type` of the genuine
+-- The row ends with native facts used for single-syllable English deferral and literal reading checks:
+-- the Rime `type` of the genuine
 -- candidate (empty unless it starts with a lowercase letter or underscore and continues with lowercase
--- letters, digits and underscores, at most 32 bytes) and `corrected`.
+-- letters, digits and underscores, at most 32 bytes) and `corrected`. The ranker uses `corrected`
+-- to defer nonliteral spellings to Rime instead of checking a literal context-index reading.
 local function candidate_metadata(env, candidate, input, technical, pinyin)
   local input_length = #input
   local candidate_type = candidate.type or ""
