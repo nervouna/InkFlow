@@ -1116,13 +1116,123 @@ def replay_candidate(candidate):
                 evidence=candidate.get('evidence'), source=candidate.get('source'))
 
 
+def collapse_replay_corrections(cases, timeline):
+    """Count one attempt per correction chain; delayed context returns are explicitly inferred.
+
+    Client tokens are per composition, not stable document identities. A bounded return to the same
+    context is evidence, not document readback. Keep that distinction in each exported case.
+    """
+    by_id = {case['decision_id']: case for case in cases}
+    removed = set()
+    direct = 0
+    inferred = 0
+    for case in cases:
+        replacement = case.pop('_replacement_id', None)
+        if replacement in by_id:
+            removed.add(replacement)
+            case['correction_evidence'] = 'immediate_deletion'
+            direct += 1
+    roots = []
+    for current in cases:
+        if current['decision_id'] in removed:
+            continue
+        meta = timeline.get(current['composition_id'])
+        if not meta or not meta['eligible'] or not current['preceding_context'] or current['relabelled']:
+            roots.append(current)
+            continue
+        now = datetime.fromisoformat(current['occurred_at'].replace('Z', '+00:00'))
+        for previous in reversed(roots):
+            if previous['decision_id'] in removed:
+                continue
+            before = datetime.fromisoformat(previous['occurred_at'].replace('Z', '+00:00'))
+            if (now - before).total_seconds() > 10:
+                break
+            old = timeline.get(previous['composition_id'])
+            inferred_before = previous.get('correction_evidence') == 'inferred_context_return'
+            if (not old or not old['eligible'] or (previous['relabelled'] and not inferred_before)
+                    or previous['preceding_context'] != current['preceding_context']
+                    or not current['raw_input'].startswith(previous['raw_input'])
+                    or not previous['raw_input'] or old['identity'] != meta['identity']):
+                continue
+            between = [item for item in timeline.values() if old['started'] < item['started'] < meta['started']]
+            # A next-word attempt must exist. Crossing a different application/run is not a correction chain.
+            if not between or any(item['identity'][:2] != old['identity'][:2] for item in between):
+                continue
+            if not any(item['cancelled'] or item['committed'] for item in between):
+                continue
+            choices = []
+            for candidate in previous['candidates']:
+                fields = (candidate.get('evidence') or '').split(',')
+                if (len(fields) >= 6 and fields[0] == '0'
+                        and fields[1] == str(len(previous['raw_input'].encode()))
+                        and candidate['text'] and current['selected_text'].startswith(candidate['text'])):
+                    choices.append(candidate)
+            texts = {choice['text'] for choice in choices}
+            if len(texts) != 1:
+                continue
+            choice = choices[0]
+            if choice['text'] == previous['selected_text']:
+                continue
+            # Reject unrelated intervening commits: their contexts must extend the original mistaken text.
+            prefix = previous['preceding_context'] + previous['selected_text']
+            intervening = [case for case in roots if case['decision_id'] not in removed
+                           and old['started'] < timeline[case['composition_id']]['started'] < meta['started']]
+            if any(not (prefix.endswith(case['preceding_context'])
+                        or case['preceding_context'].startswith(prefix)) for case in intervening):
+                continue
+            was_inferred = previous.get('correction_evidence') == 'inferred_context_return'
+            previous['selected_text'] = choice['text']
+            previous['selected_display_index'] = choice['display_index']
+            previous['committed_text'] = choice['text']
+            previous['relabelled'] = True
+            previous['correction_evidence'] = 'inferred_context_return'
+            removed.add(current['decision_id'])
+            removed.update(case['decision_id'] for case in intervening)
+            inferred += not was_inferred
+            break
+        else:
+            roots.append(current)
+            continue
+        if current['decision_id'] not in removed:
+            roots.append(current)
+    return [case for case in cases if case['decision_id'] not in removed], dict(
+        correction_chains_direct=direct, correction_chains_inferred=inferred,
+        correction_attempts_collapsed=len(removed))
+
+
+def replay_timeline(db, cases):
+    if not cases:
+        return {}
+    start = min(case['occurred_at'] for case in cases)
+    end = max(case['occurred_at'] for case in cases)
+    records = db.execute("""WITH decision_counts AS (
+        SELECT composition_id, COUNT(*) AS decisions FROM candidate_decisions GROUP BY composition_id
+        ), commit_counts AS (
+        SELECT composition_id, COUNT(*) AS commits FROM commits GROUP BY composition_id
+        ) SELECT c.*, d.config_revision_id, d.snapshot_json, dc.decisions, COALESCE(cc.commits,0) AS commits
+        FROM compositions c LEFT JOIN candidate_decisions d ON d.composition_id=c.id
+        LEFT JOIN decision_counts dc ON dc.composition_id=c.id
+        LEFT JOIN commit_counts cc ON cc.composition_id=c.id
+        WHERE c.ended_at>=? AND c.started_at<=? ORDER BY c.started_at""", (start, end))
+    result = {}
+    for row in records:
+        snapshot = json.loads(row['snapshot_json']) if row['snapshot_json'] else {}
+        result[row['id']] = dict(started=row['started_at'],
+            identity=(row['run_id'], row['app_bundle_id'], row['config_revision_id']),
+            eligible=(row['decisions'] == 1 and row['commits'] == 1 and bool(row['app_bundle_id'])
+                      and snapshot.get('selectedPrefix') == '' and snapshot.get('selectedPrefixValid') is True
+                      and snapshot.get('caret') == len(snapshot.get('rawInput', ''))),
+            cancelled=row['outcome'] == 'cancelled', committed=row['commits'] > 0)
+    return result
+
+
 def replay_cases(db, args):
     sql, parameters = ctes(args)
     # A reverted commit's retype is the composition that carries its window, read only when the window holds nothing
     # but the Backspaces that removed the commit and closed at the next code, and the commit has this one decision.
     decisions = db.execute(sql + f""", retypes AS (
-        SELECT d.composition_id, json_extract(d.snapshot_json,'$.rawInput') AS raw_input, d.selected_text,
-          m.text AS commit_text
+        SELECT d.id AS replacement_id, d.composition_id,
+          json_extract(d.snapshot_json,'$.rawInput') AS raw_input, d.selected_text, m.text AS commit_text
         FROM candidate_decisions d JOIN commits m ON m.id=d.commit_id LEFT JOIN windows w ON w.commit_id=m.id
         WHERE d.composition_id IN (SELECT carrier_id FROM windows) AND d.regular_ranked_selection=1
           AND d.trigger IN ('space','digit','panel') AND d.outcome='committed' AND NOT COALESCE({REVERTED},0)
@@ -1131,7 +1241,7 @@ def replay_cases(db, args):
     ) SELECT o.composition_id, o.id AS decision_id, o.occurred_at, o.text_captured, o.raw_input,
         o.preceding_context, o.page, o.selected_display_index, o.selected_text, o.commit_text, o.snapshot_json,
         o.first_page_json, COALESCE({REVERTED},0) AS reverted, r.raw_input AS retype_raw_input,
-        r.selected_text AS retype_text, r.commit_text AS retype_commit_text
+        r.selected_text AS retype_text, r.commit_text AS retype_commit_text, r.replacement_id
       FROM observations o LEFT JOIN commits m ON m.id=o.commit_id LEFT JOIN windows w ON w.commit_id=o.commit_id
       LEFT JOIN retypes r ON r.composition_id=w.carrier_id AND w."end"='next_code' AND w.leading_undo=0
         AND w.leading_deletions=character_count AND w.deletions=w.leading_deletions AND w.forward_deletions=0
@@ -1169,7 +1279,12 @@ def replay_cases(db, args):
                           occurred_at=row['occurred_at'], raw_input=row['raw_input'],
                           preceding_context=row['preceding_context'], page=row['page'], candidates_from=source,
                           candidates=candidates, selected_display_index=index, selected_text=selected,
-                          committed_text=committed, relabelled=bool(row['reverted'])))
+                          committed_text=committed, relabelled=bool(row['reverted']),
+                          _replacement_id=row['replacement_id'] if row['reverted'] else None))
+    cases, corrections = collapse_replay_corrections(cases, replay_timeline(db, cases))
+    counts.update(corrections)
+    counts['cases'] = len(cases)
+    counts['without_evidence'] = sum(any(c['evidence'] is None for c in case['candidates']) for case in cases)
     generated_at = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
     header = dict(generated_at=generated_at, window=dict(since=args.since, until=args.until), kind=args.kind,
                   **counts)
