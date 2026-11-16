@@ -8,7 +8,8 @@ import sqlite3
 import uuid
 
 FORMAT = 'inkflow-quality'
-MAX_BYTES = 256 * 1024 * 1024
+# On the document, compressed or not: `load` holds a whole document in memory.
+MAX_BYTES = 1024 * 1024 * 1024
 
 
 def source_id(path, create=False):
@@ -65,8 +66,9 @@ def export(path, output, connect, columns):
     # CLI refuses to overwrite any file; Settings uses the save panel's overwrite choice.
     payload = json.dumps(document, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
     if len(payload.encode('utf-8')) > MAX_BYTES:
-        raise ValueError('Export exceeds 256 MiB; no output file written.')
-    with output.open('x') as stream:
+        raise ValueError('Export exceeds 1 GiB; no output file written.')
+    # A `.gz` path holds the same document compressed, as the Settings export writes it.
+    with (gzip.open(output, 'xt', encoding='utf-8') if output.suffix == '.gz' else output.open('x')) as stream:
         try:
             stream.write(payload)
         except BaseException:
@@ -80,14 +82,14 @@ def export(path, output, connect, columns):
 def load(path, columns):
     path = path.expanduser().resolve()
     if path.stat().st_size > MAX_BYTES:
-        raise ValueError(f'Export exceeds 256 MiB: {path}')
+        raise ValueError(f'Export exceeds 1 GiB: {path}')
     try:
         if path.suffix == '.gz':
-            # The weekly export is the same document, compressed; the limit is on the document.
+            # The same document, compressed; the limit is on the document.
             with gzip.open(path, 'rb') as stream:
                 payload = stream.read(MAX_BYTES + 1)
             if len(payload) > MAX_BYTES:
-                raise ValueError('Export exceeds 256 MiB.')
+                raise ValueError('Export exceeds 1 GiB.')
             text = payload.decode('utf-8')
         else:
             text = path.read_text()
