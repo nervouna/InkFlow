@@ -4,7 +4,7 @@ Manual quality exports let you analyze the records retained on several computers
 
 ## Export and transfer
 
-In InkFlow Settings, open 「备份与恢复」 and choose 「导出质量数据」 under 「输入质量记录」. Choose a JSON file location. The result reports the saved path, composition and learning-event counts, and the earliest/latest retained record time in UTC. An empty database exports an explicit empty range and zero counts.
+In InkFlow Settings, open 「备份与恢复」 and choose 「导出质量数据」 under 「输入质量记录」. Choose a file location; the file is the JSON document compressed with gzip (`.json.gz`), because a month of records with text is several hundred megabytes of JSON (about 370 MB for 74,000 compositions). The result reports the saved path, composition and learning-event counts, and the earliest/latest retained record time in UTC. An empty database exports an explicit empty range and zero counts.
 
 The file includes candidate ranks and indices, selections by index, text kinds, app/client identifiers, operations/timing, content-free learning-effectiveness events (learning acts among them, as counts only: Shift+Backspace forgets and Settings deletions and restores of English entries), build/version metadata, statistical fingerprints, and record timestamps. Each candidate the engine ranked also carries three content-free facts, `type`, `corrected` and `evidence`, and each decision with a known pair carries two keyed hashes, `codeHash` and `textHash`. Text-free records keep all of them; older records lack them ([candidate facts](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format), [pair hashes](#pair-hashes)). Each commit and each selection also carries its length, `character_count` and `selected_character_count`: the number of Unicode scalar values of the text (`❤️` is 2), kept in text-free records too and null in records written before schema v4. Each commit also has a content-free post-commit window: counts of the keys typed after it and how the window ended ([details](../.agents/skills/inkflow-quality-analysis/references/interpretation.md#deletions-and-post-commit-windows)). Input codes/text, input before the first deletion, candidate text, committed text, preceding text and custom-phrase codes/text in the stored applied configuration are present only in records saved while 「同时保存输入文本」 was on; by default those strings are empty or null, each page carries `textCaptured: false`, and the configuration revision ID ends in `/text-free`. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
 
@@ -14,10 +14,10 @@ A command-line alternative uses the same file contract (Python standard library 
 
 ```sh
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
-python3 "$query" export --output /path/to/InkFlow-quality-work.json --format json
+python3 "$query" export --output /path/to/InkFlow-quality-work.json.gz --format json
 ```
 
-CLI export requires a new path and refuses to overwrite files. `--db PATH` selects another local v4 database. Exports always include all retained records; apply date and other filters during analysis.
+CLI export requires a new path and refuses to overwrite files; a path ending in `.gz` is written compressed, any other as plain JSON. `--db PATH` selects another local v4 database. Exports always include all retained records; apply date and other filters during analysis.
 
 ## Weekly export to a folder
 
@@ -28,7 +28,7 @@ Settings → 「输入质量记录」 → 「每周自动导出」 (off by defau
 - **Window.** The compositions since the last successful export plus one day of overlap, at most 14 days; the first export covers 8 days. Runs and configuration revisions are always complete. Overlapping files of one device merge without duplicates.
 - **Schedule.** Checked at startup and once a day while InkFlow runs; an export is written when the last successful one is 7 days old or there is none. It runs on a utility task, row by row, so memory stays flat (about 33 MB for a week of 30,000 compositions; the file was 16.8 MiB).
 - **Cleanup.** After a successful export, this device's dated files older than 35 days are removed from the folder. Other files are never touched.
-- **Failure.** A missing or unwritable folder, a busy database or a document over 256 MiB leaves recording and input alone; Settings shows the reason and the next daily check retries.
+- **Failure.** A missing or unwritable folder, a busy database or a document over 1 GiB leaves recording and input alone; Settings shows the reason and the next daily check retries.
 
 Analysis takes the folder as an input: `python3 "$query" trend --days 28 --exports-only --input /path/to/folder`. Do not combine a device's text-free weekly files with a manual text export of the same device: the same record differs between them and the merge is refused.
 
@@ -109,7 +109,7 @@ Record timestamps use the writer's UTC millisecond form (`YYYY-MM-DDTHH:MM:SS.ss
 
 Deduplication keys are `(source_id, table, original_id)`. Learning-effectiveness events additionally use `run_id` and `occurred_at`, because their integer IDs may be reused after retention cleanup. Identical repeated files and overlapping exports count each record once. Records from different devices remain separate even if their original IDs match. Different JSON key order/whitespace does not change equality. A recording run's cumulative counters/status come from its latest snapshot and are never summed repeatedly. Conflicting immutable records with the same identity reject the whole command instead of choosing silently.
 
-Each file is limited to 256 MiB. Unknown format/schema versions, broken JSON, duplicate keys/IDs, missing required fields, invalid types/timestamps, broken parent/page links and conflicting overlapping records fail with a diagnostic and exit status 2. Empty compatible files are valid and report zero coverage and unavailable rates.
+Each document is limited to 1 GiB, measured uncompressed, because analysis loads a whole document into memory. Unknown format/schema versions, broken JSON, duplicate keys/IDs, missing required fields, invalid types/timestamps, broken parent/page links and conflicting overlapping records fail with a diagnostic and exit status 2. Empty compatible files are valid and report zero coverage and unavailable rates.
 
 ## Tests
 

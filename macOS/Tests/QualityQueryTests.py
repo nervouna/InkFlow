@@ -841,6 +841,17 @@ class QueryTests(unittest.TestCase):
                          (4, {1, 3}))
         self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
         self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
+        # A `.gz` destination holds the same document compressed, and the CLI writes one too.
+        packed = Path(self.temp.name) / 'native.json.gz'
+        subprocess.run([executable, str(self.db), str(packed)], check=True, capture_output=True)
+        with gzip.open(packed, 'rt', encoding='utf-8') as stream:
+            self.assertEqual(json.load(stream)['tables'], document['tables'])
+        self.assertEqual(self.result('summary', '--exports-only', '--input', str(packed))['coverage'],
+                         result['coverage'])
+        cli = Path(self.temp.name) / 'cli.json.gz'
+        self.run_cli('export', '--output', str(cli), '--format', 'json')
+        self.assertEqual(cli.read_bytes()[:2], b'\x1f\x8b')
+        self.assertEqual(self.result('summary', '--exports-only', '--input', str(cli))['coverage'], result['coverage'])
         # Invalid native source schemas are rejected before any output is saved.
         bad = Path(self.temp.name) / 'bad-native.sqlite3'; bad.write_bytes(self.db.read_bytes())
         with sqlite3.connect(bad) as db:

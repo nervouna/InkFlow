@@ -71,8 +71,10 @@ struct QualitySettingsView: View {
 
     private func exportRecords() {
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "InkFlow-quality-\(Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))).json"
+        // Compressed: a month of records with text is several hundred megabytes of JSON.
+        panel.allowedContentTypes = [.gzip]
+        let day = Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))
+        panel.nameFieldStringValue = "InkFlow-quality-\(day).json.gz"
         panel.message = settings.qualityTextCapture ? "文件包含输入内容、候选及前文，请选择保存位置。" : "文件只含排名、时序、学习效果事件和哈希，请选择保存位置。"
         panel.begin { response in
             guard response == .OK, let destination = panel.url else { return }

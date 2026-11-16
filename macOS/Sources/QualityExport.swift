@@ -21,16 +21,19 @@ enum QualityExport {
         init(_ message: String) { errorDescription = message }
     }
 
+    /// The largest document, uncompressed, that an export writes and the reader accepts.
+    static let documentLimit = 1024 * 1024 * 1024
+
     /// `textFree` writes every record the way the recorder stores it with text recording off: positions, ranks,
     /// counts, timings, evidence rows and keyed hashes stay; raw input, candidate, selected, committed and context
     /// text and the input before a deletion go, and so do the visited pages, which only `inspect` reads. The
     /// automatic export always uses it.
     /// `since` keeps the compositions that started at or after it, with their commits and decisions, and the
     /// learning events from then on; runs and configuration revisions are always complete.
-    /// Rows go from SQLite to the file one at a time, so memory does not grow with the store. `gzip` compresses
-    /// the same document. The limit is on the document's own size either way.
-    static func write(database: URL, destination: URL, textFree: Bool = false, since: Date? = nil,
-                      gzip: Bool = false) throws -> String {
+    /// Rows go from SQLite to the file one at a time, so memory does not grow with the store. A destination ending
+    /// in `.gz` holds the same document compressed, which is how the reader tells them apart. The limit is on the
+    /// document's own size either way: the reader loads a whole document into memory.
+    static func write(database: URL, destination: URL, textFree: Bool = false, since: Date? = nil) throws -> String {
         guard database.standardizedFileURL != destination.standardizedFileURL,
               !["quality-source-id", "quality-pair-key"].contains(destination.lastPathComponent) else {
             throw ExportError("请选择新的 JSON 文件，不能覆盖质量数据库、来源标识或配对密钥。")
@@ -101,7 +104,8 @@ enum QualityExport {
         // The document is written beside its destination and moved into place when complete.
         let partial = destination.deletingLastPathComponent()
             .appendingPathComponent("." + destination.lastPathComponent + ".partial")
-        let sink = try Sink(url: partial, gzip: gzip, limit: 256 * 1024 * 1024)
+        let gzip = destination.pathExtension.lowercased() == "gz"
+        let sink = try Sink(url: partial, gzip: gzip, limit: documentLimit)
         var counts: [String: Int] = [:]
         var first: String?, last: String?
         do {
@@ -211,7 +215,7 @@ enum QualityExport {
 
         func write(_ data: Data) throws {
             bytes += data.count
-            guard bytes <= limit else { throw ExportError("导出文件超过 256 MiB，未保存文件。") }
+            guard bytes <= limit else { throw ExportError("导出内容超过 1 GiB，未保存文件。") }
             if let compressed {
                 let written = data.withUnsafeBytes { gzwrite(compressed, $0.baseAddress, UInt32($0.count)) }
                 guard written == Int32(data.count) else { throw ExportError("写入导出文件失败。") }
@@ -317,7 +321,7 @@ enum QualityAutoExport {
         let prefix = "InkFlow-quality-\(try QualityExport.sourceID(beside: database))-"
         let destination = folder.appendingPathComponent(prefix + stamp(now) + suffix)
         let result = try QualityExport.write(database: database, destination: destination, textFree: true,
-                                             since: cutoff(lastSuccess: lastSuccess, now: now), gzip: true)
+                                             since: cutoff(lastSuccess: lastSuccess, now: now))
         // Only this device's dated files, and only after the new one is in place.
         let oldest = stamp(now - kept)
         for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
