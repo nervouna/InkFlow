@@ -1180,7 +1180,6 @@ def collapse_replay_corrections(cases, timeline):
             if any(not (prefix.endswith(case['preceding_context'])
                         or case['preceding_context'].startswith(prefix)) for case in intervening):
                 continue
-            was_inferred = previous.get('correction_evidence') == 'inferred_context_return'
             previous['selected_text'] = choice['text']
             previous['selected_display_index'] = choice['display_index']
             previous['committed_text'] = choice['text']
@@ -1188,11 +1187,8 @@ def collapse_replay_corrections(cases, timeline):
             previous['correction_evidence'] = 'inferred_context_return'
             removed.add(current['decision_id'])
             removed.update(case['decision_id'] for case in intervening)
-            inferred += not was_inferred
+            inferred += not inferred_before
             break
-        else:
-            roots.append(current)
-            continue
         if current['decision_id'] not in removed:
             roots.append(current)
     return [case for case in cases if case['decision_id'] not in removed], dict(
