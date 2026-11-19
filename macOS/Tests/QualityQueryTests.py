@@ -812,6 +812,38 @@ class QueryTests(unittest.TestCase):
         self.assertNotIn(secret, keyed.read_bytes())
         self.assertNotIn(secret.hex().encode(), keyed.read_bytes())
 
+    def test_cli_export_roundtrip_with_case_insensitive_gzip_suffix(self):
+        plain = self.export_file('cli.json')
+        payload = plain.read_bytes()
+        document = json.loads(payload)
+        coverage = self.result()['coverage']
+        for suffix in ('.json', '.json.gz', '.JSON.GZ', '.json.gZ'):
+            with self.subTest(suffix=suffix):
+                output = self.export_file(f'roundtrip{suffix}')
+                data = output.read_bytes()
+                if suffix != '.json':
+                    self.assertEqual(data[:2], b'\x1f\x8b')
+                    data = gzip.decompress(data)
+                self.assertEqual(json.loads(data)['tables'], document['tables'])
+                self.assertEqual(self.result('summary', '--exports-only', '--input', str(output))['coverage'], coverage)
+
+        legacy = Path(self.temp.name) / 'legacy.JSON.GZ'
+        legacy.write_bytes(payload)
+        self.assertEqual(self.result('summary', '--exports-only', '--input', str(legacy))['coverage'], coverage)
+
+    def test_mixed_case_gzip_respects_uncompressed_size_limit(self):
+        exchange = self.quality.quality_exchange
+        self.assertEqual(exchange.MAX_BYTES, 1024 ** 3)
+        payload = self.export_file().read_bytes()
+        packed = Path(self.temp.name) / 'limited.JSON.GZ'
+        packed.write_bytes(gzip.compress(payload))
+        with mock.patch.object(exchange, 'MAX_BYTES', len(payload)):
+            self.result('summary', '--exports-only', '--input', str(packed))
+            packed.write_bytes(gzip.compress(payload + b' '))
+            self.assertLess(packed.stat().st_size, len(payload))
+            error = self.run_cli('summary', '--exports-only', '--input', str(packed), success=False)
+            self.assertIn('Export exceeds 1 GiB', error)
+
     def test_native_settings_export_is_readable_and_preserves_database(self):
         executable = os.environ.get('INKFLOW_QUALITY_EXPORT_FIXTURE')
         if not executable:
@@ -841,17 +873,14 @@ class QueryTests(unittest.TestCase):
                          (4, {1, 3}))
         self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
         self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
-        # A `.gz` destination holds the same document compressed, and the CLI writes one too.
-        packed = Path(self.temp.name) / 'native.json.gz'
-        subprocess.run([executable, str(self.db), str(packed)], check=True, capture_output=True)
-        with gzip.open(packed, 'rt', encoding='utf-8') as stream:
-            self.assertEqual(json.load(stream)['tables'], document['tables'])
-        self.assertEqual(self.result('summary', '--exports-only', '--input', str(packed))['coverage'],
-                         result['coverage'])
-        cli = Path(self.temp.name) / 'cli.json.gz'
-        self.run_cli('export', '--output', str(cli), '--format', 'json')
-        self.assertEqual(cli.read_bytes()[:2], b'\x1f\x8b')
-        self.assertEqual(self.result('summary', '--exports-only', '--input', str(cli))['coverage'], result['coverage'])
+        for suffix in ('.json.gz', '.JSON.GZ', '.json.gZ'):
+            with self.subTest(suffix=suffix):
+                packed = Path(self.temp.name) / f'native{suffix}'
+                subprocess.run([executable, str(self.db), str(packed)], check=True, capture_output=True)
+                with gzip.open(packed, 'rt', encoding='utf-8') as stream:
+                    self.assertEqual(json.load(stream)['tables'], document['tables'])
+                self.assertEqual(self.result('summary', '--exports-only', '--input', str(packed))['coverage'],
+                                 result['coverage'])
         # Invalid native source schemas are rejected before any output is saved.
         bad = Path(self.temp.name) / 'bad-native.sqlite3'; bad.write_bytes(self.db.read_bytes())
         with sqlite3.connect(bad) as db:

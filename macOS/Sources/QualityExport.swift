@@ -31,8 +31,8 @@ enum QualityExport {
     /// `since` keeps the compositions that started at or after it, with their commits and decisions, and the
     /// learning events from then on; runs and configuration revisions are always complete.
     /// Rows go from SQLite to the file one at a time, so memory does not grow with the store. A destination ending
-    /// in `.gz` holds the same document compressed, which is how the reader tells them apart. The limit is on the
-    /// document's own size either way: the reader loads a whole document into memory.
+    /// in `.gz` (case-insensitive) holds the same document compressed, matching the Python exchange tool.
+    /// The limit is on the document's own size either way: the reader loads a whole document into memory.
     static func write(database: URL, destination: URL, textFree: Bool = false, since: Date? = nil) throws -> String {
         guard database.standardizedFileURL != destination.standardizedFileURL,
               !["quality-source-id", "quality-pair-key"].contains(destination.lastPathComponent) else {
