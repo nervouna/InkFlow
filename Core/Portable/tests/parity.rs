@@ -282,6 +282,69 @@ fn all_candidates(session: &InputSession) -> Vec<String> {
     panic!("candidate enumeration must reach the final page");
 }
 
+/// An opt-in host supplies context before composition. Rime owns the reordered
+/// menu, so a candidate brought across a page boundary survives every input path.
+#[test]
+fn document_context_across_pages() {
+    let Some((resources, _runtime)) = resources() else { return };
+    let user = scratch("document-context");
+    let engine = engine(&resources, &user);
+    for count in 3..=9 {
+        let session = engine.session().unwrap();
+        session.set_candidate_count(count).unwrap();
+        for (prefix, input, expected) in [
+            ("正式宣", "bu", "布"),
+            ("非常感", "xie", "谢"),
+            ("准备午", "can", "餐"),
+            ("最新软", "jian", "件"),
+        ] {
+            session.start_document_context(prefix).unwrap();
+            type_keys(&session, input);
+            let shown = session.snapshot().unwrap();
+            assert_eq!(shown.texts()[0], expected, "{prefix} + {input}, page size {count}");
+            assert_eq!(shown.candidates.len(), count);
+            assert_eq!(shown.highlighted, 0);
+            session.clear().unwrap();
+        }
+    }
+
+    let session = engine.session().unwrap();
+    let pages = |context: &str| {
+        session.start_document_context(context).unwrap();
+        type_keys(&session, "xie");
+        let first = session.snapshot().unwrap();
+        let mut all = all_candidates(&session);
+        assert_eq!(session.snapshot().unwrap().texts(), first.texts());
+        assert_eq!(session.select(&first, 0), Err(inkflow_rime::Error::StaleSnapshot));
+        all.sort();
+        session.clear().unwrap();
+        all
+    };
+    assert_eq!(pages("非常感"), pages(""), "every candidate remains reachable exactly as often");
+
+    for action in [0, 1, 2, 3] {
+        session.start_document_context("非常感").unwrap();
+        type_keys(&session, "xie");
+        let shown = session.snapshot().unwrap();
+        let index = usize::from(action == 3);
+        match action {
+            0 => assert!(session.select(&shown, index).unwrap()),
+            1 => assert!(session.key(49, 0).unwrap()),
+            2 => assert!(session.key(32, 0).unwrap()),
+            _ => {
+                assert!(session.key(0xff54, 0).unwrap());
+                assert_eq!(session.snapshot().unwrap().highlighted, index);
+                assert!(session.key(32, 0).unwrap());
+            }
+        }
+        assert_eq!(session.take_commit().unwrap(), shown.texts()[index]);
+        assert!(session.take_commit().unwrap().is_empty());
+    }
+    drop(session);
+    drop(engine);
+    fs::remove_dir_all(user).unwrap();
+}
+
 /// Expectations copied from Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift:
 /// runCases, contextReranking, contextCustomPhrasePriority, customPhrases and inputSettings.
 #[test]

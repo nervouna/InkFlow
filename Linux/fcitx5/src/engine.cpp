@@ -10,6 +10,7 @@
 #include <fcitx/userinterface.h>
 #include <sys/stat.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <fstream>
 #include <iterator>
@@ -264,10 +265,11 @@ void Engine::refreshContext(fcitx::InputContext* ic, State* state) {
   if (!sensitive(ic) && ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText)) {
     const auto& surrounding = ic->surroundingText();
     if (surrounding.isValid()) {
-      preceding = preceding_text(surrounding.text(), surrounding.cursor(), kPrecedingCodePoints);
+      const auto start = std::min(surrounding.cursor(), surrounding.anchor());
+      preceding = preceding_text(surrounding.text(), start, kPrecedingCodePoints);
     }
   }
-  ifr_session_set_preceding_text(state->session, preceding.c_str());
+  ifr_session_start_document_context(state->session, preceding.c_str());
 }
 
 void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {

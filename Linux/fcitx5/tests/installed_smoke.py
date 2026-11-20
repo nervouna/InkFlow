@@ -112,6 +112,22 @@ async def main():
             await context.call_reset()
             print("PASS installed addon: password/sensitive pass-through and recovery")
 
+            await context.call_set_capability(capabilities | (1 << 6))
+            for prefix, code, expected in (("准备午", "can", "餐"), ("最新软", "jian", "件"),
+                                           ("正式宣", "bu", "布"), ("非常感", "xie", "谢")):
+                first, last = len(prefix), len(prefix) + 2
+                shown = None
+                for cursor, anchor in ((last, first), (first, last)):
+                    await context.call_set_surrounding_text(prefix + "占位", cursor, anchor)
+                    await type_text(code)
+                    assert len(panels[-1]) == 5 and panels[-1][0][1] == expected, panels[-1]
+                    if shown is not None:
+                        assert shown == panels[-1], "selection direction changed the candidate page"
+                    shown = panels[-1]
+                    await context.call_reset()
+            await context.call_set_capability(capabilities)
+            print("PASS installed addon: five-candidate context ranking at both selection boundaries")
+
             config = Path(os.environ["XDG_CONFIG_HOME"]) / "fcitx5/conf/inkflow.conf"
             config.parent.mkdir(exist_ok=True)
             marker = "fixture-phrase-must-not-appear-in-logs"

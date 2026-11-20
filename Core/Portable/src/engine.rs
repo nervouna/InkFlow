@@ -208,6 +208,7 @@ struct Core {
     buffered_commit: String,
     error: Option<ConfigurationError>,
     preceding: String,
+    document_context_window: bool,
     ordered_content: Option<crate::Snapshot>,
     order: Vec<usize>,
     metadata: Option<Vec<Metadata>>,
@@ -227,6 +228,7 @@ impl Core {
             buffered_commit: String::new(),
             error: None,
             preceding: String::new(),
+            document_context_window: false,
             ordered_content: None,
             order: Vec::new(),
             metadata: None,
@@ -722,6 +724,44 @@ impl Engine {
             .and_then(|reply| parse_metadata(&reply.body, offset, count, input_length)))
     }
 
+    // Read beyond a short first page only for a document continuation. If the wider
+    // ranker's preferred Han word is off-page, bring its native handle to the last
+    // visible slot. Ordinary equivalent-span ranking, selection and paging then apply.
+    fn page_for_ranking(
+        core: &mut Core,
+        raw: &crate::Snapshot,
+        ranker: Option<&ContextRanker>,
+        input: &str,
+    ) -> Result<(Vec<String>, Option<Vec<Metadata>>)> {
+        let size = raw.candidates.len();
+        if let Some(ranker) = ranker
+            && core.document_context_window
+            && raw.page == 0
+            && !raw.last_page
+            && (3..9).contains(&size)
+            && core.preceding.graphemes(true).next_back().is_some_and(crate::ranking::is_han)
+            && raw.candidates[0].text.graphemes(true).all(crate::ranking::is_han)
+        {
+            let mut words = core.session.as_ref().unwrap().context_window()?;
+            if words.len() > size
+                && let Some(mut rows) = Self::input_ranking_metadata(core, 0, words.len(), input.len())?
+            {
+                let first = ranker.order(&words, &core.preceding, Some(&rows), input)[0];
+                if first >= size && words[first].graphemes(true).all(crate::ranking::is_han) {
+                    core.session.as_mut().unwrap().promote_context_candidate(first, size - 1)?;
+                    words[size - 1..=first].rotate_right(1);
+                    rows[size - 1..=first].rotate_right(1);
+                }
+                words.truncate(size);
+                rows.truncate(size);
+                return Ok((words, Some(rows)));
+            }
+        }
+        let words = raw.candidates.iter().map(|candidate| candidate.text.clone()).collect();
+        let rows = Self::input_ranking_metadata(core, raw.page, size, input.len())?;
+        Ok((words, rows))
+    }
+
     fn update_ordering(&self, state: &mut State, id: u64, force: bool) -> Result<()> {
         let loaded_phrases = &state.loaded_phrases;
         let core = state.sessions.get_mut(&id).unwrap();
@@ -746,10 +786,9 @@ impl Engine {
         core.order = (0..raw.candidates.len()).collect();
         core.metadata = None;
         if raw.selection_bytes.start == 0 && !has_custom_code {
-            let metadata =
-                Self::input_ranking_metadata(core, raw.page, raw.candidates.len(), input.len())?;
-            if let Some(ranker) = self.ranker.as_ref().filter(|_| !at_start) {
-                let texts: Vec<String> = raw.candidates.iter().map(|c| c.text.clone()).collect();
+            let ranker = self.ranker.as_ref().filter(|_| !at_start);
+            let (texts, metadata) = Self::page_for_ranking(core, &raw, ranker, &input)?;
+            if let Some(ranker) = ranker {
                 core.order = ranker.order(&texts, &core.preceding, metadata.as_deref(), &input);
             }
             core.metadata = metadata;
@@ -767,29 +806,31 @@ impl Engine {
 
     fn perform_key(&self, state: &mut State, id: u64, key: i32, modifiers: i32) -> Result<bool> {
         let core = state.sessions.get_mut(&id).unwrap();
-        let displayed = Self::display(core)?;
         if modifiers == 0 && (49..=57).contains(&key) {
             let index = (key - 49) as usize;
-            if index < displayed.candidates.len() {
+            if index < Self::display(core)?.candidates.len() {
                 self.select_display(state, id, index)?;
                 return Ok(true);
             }
         }
-        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !displayed.candidates.is_empty() {
+        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !Self::display(core)?.candidates.is_empty() {
             let delta = if key == 0xff54 { 1 } else { -1 };
             return self.move_highlight(state, id, delta, key);
         }
         // Shift+Backspace forgets the highlighted candidate's learning. Without candidates it stays
         // Rime's key, so an idle press still reaches the application.
-        if modifiers == 1 && key == 0xff08 && !displayed.candidates.is_empty() {
-            return self.forget_highlighted(state, id, &displayed);
+        if modifiers == 1 && key == 0xff08 {
+            let displayed = Self::display(core)?;
+            if !displayed.candidates.is_empty() {
+                return self.forget_highlighted(state, id, &displayed);
+            }
         }
         // Rime's selector takes Home, and End at the end of the input, while its highlight is not its
         // first candidate, which is where a reordered page keeps it. Highlight that candidate so the
         // navigator moves the caret, then rank the new page again: the highlight moved even when the
         // caret did not.
         let caret_key =
-            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !displayed.candidates.is_empty();
+            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !Self::display(core)?.candidates.is_empty();
         if caret_key {
             core.session.as_mut().unwrap().highlight(0)?;
         }
@@ -1272,11 +1313,25 @@ impl InputSession {
 
     /// Bounded document text before the caret; applied to the live composition.
     pub fn set_preceding_text(&self, text: &str) -> Result<()> {
+        self.set_context(text, false)
+    }
+
+    /// Begin a composition with document context. The first page can draw its Han
+    /// continuation from the first nine native candidates for the whole composition.
+    pub fn start_document_context(&self, text: &str) -> Result<()> {
+        self.set_context(text, true)
+    }
+
+    fn set_context(&self, text: &str, document_window: bool) -> Result<()> {
         let graphemes: Vec<&str> = text.graphemes(true).collect();
         let start = graphemes.len().saturating_sub(CONTEXT_LIMIT);
         let prefix: String = graphemes[start..].concat();
         let mut state = self.engine.lock()?;
         let core = state.sessions.get_mut(&self.id).unwrap();
+        if document_window && core.ordered_content.as_ref().is_some_and(|page| !page.preedit.is_empty()) {
+            return Ok(());
+        }
+        core.document_context_window = document_window;
         if prefix == core.preceding {
             return Ok(());
         }

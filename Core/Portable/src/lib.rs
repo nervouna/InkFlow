@@ -334,6 +334,21 @@ impl Session {
         Ok(caret)
     }
 
+    pub(crate) fn context_window(&self) -> Result<Vec<String>> {
+        let _lock = lock()?;
+        let mut raw = ffi::Snapshot::default();
+        check(unsafe { ffi::ifp_context_window(self.id, &mut raw) })?;
+        (0..raw.candidate_count)
+            .map(|i| unsafe { copy((*raw.candidates.add(i)).text) })
+            .collect()
+    }
+
+    pub(crate) fn promote_context_candidate(&mut self, source: usize, destination: usize) -> Result<()> {
+        let _lock = lock()?;
+        self.published = None;
+        check(unsafe { ffi::ifp_promote_context_candidate(self.id, source, destination) })
+    }
+
     pub(crate) fn highlight(&mut self, index: usize) -> Result<bool> {
         let _lock = lock()?;
         self.published = None;

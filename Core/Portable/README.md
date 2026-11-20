@@ -41,6 +41,12 @@ The test copies the tiny checked-in source fixture into a fresh temporary direct
 
 `src/ranking.rs` ports the Swift equivalent-span ranker, including strict metadata parsing, Han phrase context, personal-strength limits, custom-source priority, and native-order fallback; it reads the prepared `pinyin_simp.context.bin` whole into memory and never touches storage from a key event. Its 312 synthetic cases compare against `fixtures/ranking-reference.json`, the Swift ranker's recorded results.
 
+Fcitx5 supplies the preceding document text through `ifr_session_start_document_context` while idle.
+For a Han continuation on a short first page, the ranker examines up to nine native Rime candidates. When
+the preferred Han candidate lies beyond the displayed page, a Rime filter moves its existing handle to
+the last visible slot before ordinary page ordering. The native menu keeps the remaining candidates,
+selection and learning. The existing `ifr_session_set_preceding_text` keeps its current-page behavior.
+
 The version-2 context index retains a phrase's terminal syllable and its frequency per reading.
 Full-input single-character candidates with literal lowercase, uncorrected input require that syllable to start with
 the typed spelling. A phrase's other reading cannot promote the character. Corrected spellings and inputs with
