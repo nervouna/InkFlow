@@ -1,5 +1,4 @@
 #!/bin/bash
-# Exercise the release entry point with real receipts/archives and synthetic platform tools.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-resume.XXXXXX")
@@ -10,7 +9,6 @@ scripts=.agents/skills/inkflow-release/scripts
 cp "$scripts/release.sh" "$scripts/release-appcast.sh" "$fixture/repo/$scripts/"
 cp macOS/scripts/release-receipt.sh macOS/scripts/release-build.sh "$fixture/repo/macOS/scripts/"
 cd "$fixture/repo"
-# The real corresponding-source bundle downloads pinned inputs; the source-bundle unit covers it.
 printf '#!/bin/bash\nprintf bundle > "$1"\n' > macOS/scripts/dictionary-source-bundle.sh
 git add "$scripts" macOS/scripts/dictionary-source-bundle.sh macOS/scripts/release-receipt.sh macOS/scripts/release-build.sh
 git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'fixture release scripts'
@@ -30,7 +28,6 @@ pkg="$release/InkFlow-$version-$build-arm64.pkg"
 printf pkg > "$pkg"
 zip="$release/InkFlow-$version-$build-arm64.zip"
 ditto -c -k --keepParent "$app" "$zip"
-# What pkgutil --expand-full yields for the package, built from the prepared app.
 export FIXTURE_PKG_TREE="$fixture/pkg-tree"
 component="$FIXTURE_PKG_TREE/InkFlow-component.pkg"
 mkdir -p "$component/Payload" "$component/Scripts"
@@ -68,14 +65,12 @@ case "$1" in
 esac
 MOCK
 for tool in xcrun spctl; do printf '#!/bin/bash\nexit 0\n' > "$fixture/bin/$tool"; done
-# No fixture can submit a notarization or make a network request.
 for tool in curl; do printf '#!/bin/bash\nexit 91\n' > "$fixture/bin/$tool"; done
 chmod +x "$fixture/bin/"*
 export PATH="$fixture/bin:$PATH"
 sparkle=build/swiftpm/artifacts/sparkle/Sparkle/bin
 mkdir -p "$sparkle"
 printf '#!/bin/bash\nexit 0\n' > "$sparkle/generate_appcast"
-# sign_update records how it was given the EdDSA key.
 export FIXTURE_SPARKLE_ARGS="$fixture/sparkle-args"
 cat > "$sparkle/sign_update" <<'MOCK'
 #!/bin/bash
@@ -117,7 +112,6 @@ check_release() {
 }
 check_release 'unchanged candidate reaches publication boundary' FIXTURE_PUBLICATION_BOUNDARY
 grep -Fxq -- --account "$FIXTURE_SPARKLE_ARGS" || { echo 'FAIL Sparkle key: Keychain account not used'; exit 1; }
-# CI signs the appcast with an owner-only key file instead of the Keychain account.
 key_file="$fixture/sparkle.key"
 printf key > "$key_file"
 chmod 600 "$key_file"

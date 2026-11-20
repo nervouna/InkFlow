@@ -42,6 +42,41 @@ The package is unsigned by default and needs no keychain. `build-pkg.sh APP OUT 
 
 `test-pkg.sh` (part of `test.sh workflow`) builds packages from a fixture app and checks the domain, the non-relocatable app, the app-only payload, the scripts and the `--sign` wiring with stand-in `codesign` and `security` tools; it installs nothing and touches no keychain.
 
+### Build identity and package details
+
+The build verifies the generator's declared dictionary inputs before taking the identity snapshot.
+It bootstraps the snapshot tool with SwiftPM and re-enters SwiftPM afterward so a source edit during
+bootstrap cannot leave the embedded metadata tool out of sync. Bundle checks require one source-built
+librime with Lua merged into it. Bundled librime license texts are outside the dynamic-library closure.
+
+Installer scripts run as the logged-in user with that user's home directory. Preinstall requests a
+graceful application shutdown through the lifecycle tool so the incumbent app can run its termination
+handler. Postinstall can remove the staging directory after either swap outcome. It contains the old
+app after success or the staged app after a failure. The atomic swap keeps the registered path
+continuously present, which macOS 27's input menu requires. The package distribution's minimum
+system version matches `LSMinimumSystemVersion` and is checked by `test-pkg.sh`.
+
+Package assembly filters AppleDouble `._` entries produced from local provenance attributes out of
+the payload, bill of materials and scripts before flattening the component. Developer ID Application
+signing covers the embedded Mach-O tools with hardened runtime for notarization. Sparkle is signed
+inside out, preserving any upstream Downloader entitlements. The signing checks use here-strings
+with `grep -q` so a successful early match cannot give a pipe producer SIGPIPE under `pipefail`.
+Developer ID Installer certificates use the basic policy for identity search because they lack
+code-signing usage. Identity verification exports public certificates for inspection.
+
+Local update checks process and input-source observations in the real login session. It checks for
+an installed-app replacement even when the helper exits before confirming success. It preserves the
+menu agent during the upgrade because restarting that agent can make the input menu disappear.
+`refresh-menu.sh` is a separate current-user diagnostic for that agent.
+
+The dictionary corresponding-source script accepts `OUTPUT.tar.gz [BUILD]`. It archives the
+recipe as committed at HEAD along with pinned upstream data, notices and the generation manifest.
+It writes `git archive` to a file before extraction because reading from a pipe could stop at
+tar's end marker and deliver SIGPIPE upstream. Chinese inputs are verified against the generator
+catalog, and other archive inputs against the pinned dependency digests. Frequency snapshotting
+looks up exact stored wordfreq keys. The provider's estimated multi-token, punctuation and digit
+frequencies are outside the data snapshot.
+
 ### Publish a release
 
 Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md).

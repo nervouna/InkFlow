@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-# Requires a logged-in macOS GUI session; deliberately separate from headless logic tests.
 macOS/scripts/dependencies.sh
 bash macOS/scripts/prepare-rime.sh build/test-shared
 source macOS/scripts/swift-test.sh

@@ -1,11 +1,5 @@
--- The only Swift–Lua bridge. Swift writes one request property; the module that
--- owns the operation answers in one result property, synchronously, on the same
--- thread. Protocol version 1:
---   request = "1\t<op>\t<field>\t<field>..."  fields carry no tab, CR or LF
---   result  = "1\t<op>\t<status>\n<body>"      status: ok, failed, unknown or conflict
 local M = { version = "1", request = "inkflow_request", result = "inkflow_result" }
 
--- Returns op and fields, or nil for another version or a malformed request.
 function M.parse(request)
   local version, op, rest = request:match("^(%d+)\t([a-z_]+)(.*)$")
   if version ~= M.version then return nil end
@@ -17,9 +11,6 @@ function M.parse(request)
   return op, fields
 end
 
--- Observer for property_update_notifier. handlers[op](fields, context) returns a
--- status and an optional body; a Lua error answers "failed". Requests for other
--- modules' operations are left unanswered.
 function M.observer(handlers)
   return function(context, name)
     if name ~= M.request then return end

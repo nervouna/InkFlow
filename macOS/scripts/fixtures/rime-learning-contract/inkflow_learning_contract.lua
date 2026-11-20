@@ -1,6 +1,3 @@
--- Test-only executable contract for the merged librime-lua. Production translators
--- do not load this module. It answers the channel operation `learning_contract`
--- (fields: operation, namespace, code, text, extra), as the engine's `call` delivers it.
 local channel = require("inkflow_channel")
 local M = {}
 
@@ -53,11 +50,9 @@ local function update(memory, code, text, commits)
   local wrote, updated = pcall(function()
     local entry = DictEntry()
     entry.text = text
-    -- UserDictionary custom codes are token streams terminated by a space.
     entry.custom_code = code .. " "
     return memory:update_userdict(entry, commits, "")
   end)
-  -- A successful update is not durable until the transaction closes cleanly.
   local finished = memory:finish_session()
   return wrote and updated and finished
 end
@@ -86,8 +81,6 @@ function M.init(env)
   env.voice = Memory(env.engine, env.engine.schema, "inkflow_contract_voice")
   for namespace, memory in pairs({ shared = env.shared, voice = env.voice }) do
     memory:memorize(function(commits)
-      -- Multiple Memory instances observe commits. Only the namespace that
-      -- produced this Phrase is allowed to adopt it.
       if env.selection_namespace ~= namespace then return false end
       local learned = commits:update(1)
       env.selection_namespace = nil
@@ -98,7 +91,6 @@ function M.init(env)
   env.connection = env.engine.context.property_update_notifier:connect(channel.observer({
     learning_contract = function(fields)
       local operation, namespace, code, text, extra = fields[1], fields[2], fields[3], fields[4] or "", fields[5] or ""
-      -- The status of the last Memory.memorize callback, then forgotten.
       if operation == "selection" then
         local selection = env.selection or "failed"
         env.selection = nil
@@ -148,8 +140,6 @@ function M.func(input, segment, env)
   if not candidate or candidate.code ~= input then return end
   local memory = memory_for(env, candidate.namespace)
   if not memory then return end
-  -- Phrase learning needs the compiled DictEntry code, not only custom_code.
-  -- Explicit arbitrary-code writes use custom_code through update_userdict above.
   memory:dict_lookup(input, false, 0)
   for entry in memory:iter_dict() do
     if entry.text == candidate.text then

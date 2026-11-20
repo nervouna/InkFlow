@@ -1,4 +1,3 @@
--- Use Rime's compiled English dictionary, but rank across completion lengths.
 local channel = require("inkflow_channel")
 local M = {}
 
@@ -71,8 +70,6 @@ local function apply_records(memory, records, direction)
       entry.text = row.text
       entry.custom_code = row.code .. " "
       applied[index] = { entry = entry, count = 0 }
-      -- librime's native undo contract is one commit per update. Replay that
-      -- proven primitive so an arbitrary accumulated count is removed exactly.
       for _ = 1, row.commits do
         if not memory:update_userdict(entry, direction, "") then return false end
         applied[index].count = applied[index].count + 1
@@ -81,7 +78,6 @@ local function apply_records(memory, records, direction)
     return true
   end)
   if not called or not result then
-    -- Keep a mid-session update failure from leaving one namespace half-cleared.
     for index = #applied, 1, -1 do
       local row = applied[index]
       for _ = 1, row.count do memory:update_userdict(row.entry, -direction, "") end
@@ -91,8 +87,6 @@ local function apply_records(memory, records, direction)
   return called and result and finished
 end
 
--- Management is invoked only at the host's idle boundary, after native undo
--- expires. Transport is bounded; failure must never masquerade as an empty list.
 local function manage_learning(env, payload)
   local action, source, code, text, count = payload:match("^(%a+)\t(%a+)\t([a-z]+)\t([^\t\n]+)\t(%d+)$")
   if payload ~= "list" and (not action or (action ~= "delete" and action ~= "restore")
@@ -117,8 +111,6 @@ local function manage_learning(env, payload)
     if (action == "delete" and current ~= tonumber(count)) or (action == "restore" and current ~= 0) then
       return "conflict"
     end
-    -- Native negative updates tombstone the positive count. A single positive
-    -- confirmation revives it and adds one; never replay N negative updates.
     if action == "restore" and tonumber(count) == 2147483647 then return "failed" end
     return update(memory, code, text, action == "delete" and -1 or 1) and "ok" or "failed"
   end
@@ -141,7 +133,6 @@ local function clear_learning(env)
     if not aliases then return false end
     if not apply_records(env.memory, shared, -1) then return false end
     if apply_records(voice, aliases, -1) then return true end
-    -- The namespaces are independent. Restore the first if the second fails.
     apply_records(env.memory, shared, 1)
     return false
   end)
@@ -164,11 +155,6 @@ local function normalized_code(memory, entry, fallback)
   return code and code:lower() or nil
 end
 
--- Selecting a mixed candidate confirms each of its ASCII runs like selecting the same
--- words on their own. The native personal-mixed translator lists its runs as
--- "display<TAB>code" lines in the entry's custom code. The public mixed translator
--- yields only admitted letter runs, whose code is their lowercase spelling.
--- A custom phrase that shares the text is the user's own and learns nothing.
 local function mixed_runs(candidate)
   local runs, public = {}, candidate.type == "mixed_exact"
   for _, item in ipairs(candidate:get_genuines()) do
@@ -188,8 +174,6 @@ local function mixed_runs(candidate)
   return runs
 end
 
--- Rime's Memory has already opened the commit transaction when this runs, so Backspace
--- undoes these updates and Return or cancel never reach them, as with standalone words.
 local function learn_mixed(env, context)
   for _, segment in ipairs(context.composition:toSegmentation():get_segments()) do
     local candidate = segment:get_selected_candidate()
@@ -202,7 +186,6 @@ local function learn_mixed(env, context)
   end
 end
 
--- Whether the user dictionary holds a positive record for exactly this run.
 local function learned(memory, run)
   if not memory.user_dict or not memory.user_dict.loaded or not memory:user_lookup(run.code, false) then return false end
   for entry in memory:iter_user() do
@@ -212,10 +195,6 @@ local function learned(memory, run)
   return false
 end
 
--- Rime's delete_candidate (Shift+Backspace) reaches here for the highlighted candidate. Rime's own
--- Memory has already marked a Chinese or standalone English record deleted. A mixed sentence belongs
--- to no Memory, so forget the runs it learned, one negative update each. Either way the cached
--- English lookup is stale, and the composition is rebuilt from the dictionaries.
 local function forget(env, context)
   local candidate = context:get_selected_candidate()
   for _, run in ipairs(candidate and mixed_runs(candidate) or {}) do
@@ -225,11 +204,6 @@ local function forget(env, context)
   context:refresh_non_confirmed_composition()
 end
 
--- Rime's poet makes a Chinese sentence from learned words, so deleting the sentence's own record leaves
--- it leading: it is made again from the same words. The core calls this while the highlighted sentence
--- keeps its place; forget the learned word that weighs most in it and remember it, `step` counting the
--- words this press has forgotten. A Memory hooks every commit, which would end the commit transaction
--- early, so each use lives for one call and is disconnected at once.
 local function forget_sentence(env, context, text, step)
   local candidate = context:get_selected_candidate()
   if not candidate or candidate.text ~= text then return "failed" end
@@ -249,8 +223,6 @@ local function forget_sentence(env, context, text, step)
   return forgotten and "ok" or "failed"
 end
 
--- The text kept its place although the words were forgotten, so they were not what led it: one positive
--- update each revives them (a record forgotten at N commits comes back at N + 1).
 local function unforget_sentence(env, context)
   local words = env.forgotten or {}
   env.forgotten = {}
@@ -266,9 +238,6 @@ end
 function M.init(env)
   env.memory = Memory(env.engine, env.engine.schema, "english")
   env.memory:memorize(function(commits)
-    -- Memory callbacks observe commits from every translator. CommitEntry keeps
-    -- the selected Phrase's native language, so update() writes only that source
-    -- dictionary; the current emitted-text guard excludes unrelated commits.
     for _, entry in ipairs(commits:get()) do
       if env.learnable and env.learnable[entry.text] then return commits:update(1) end
     end
@@ -306,7 +275,6 @@ function M.init(env)
         return update(memory, source, text, 1)
       end)
       if not voiceCalled or not voiceUpdated then
-        -- Best-effort compensation avoids strengthening only the shared record.
         update(env.memory, canonical, text, -1)
         return "failed"
       end
@@ -322,9 +290,6 @@ function M.fini(env)
   env.memory:disconnect()
 end
 
--- Every Rime menu queries this translator before applying its filters. Report once
--- per query, before any yield or early return; paused translations never overwrite a
--- newer menu's answer. The property is schema-local, and its value contains no input.
 local function report_conflict_lookup(context, possible)
   local absent = possible and "" or "1"
   if context:get_property("_inkflow_no_exact_english") ~= absent then
@@ -382,18 +347,12 @@ function M.func(input, segment, env)
         end
       end
     end
-    -- Exact code lookup is separate from completion lookup so aliases such as
-    -- cpp -> C++ rank with exact words. One- and two-letter inputs stay exact-only.
-    -- Source aliases keep their case (Api) while technology codes and personal
-    -- records are lowercase (api, swiftui), so a Shift-typed query reaches both.
     local queries = lower == input and { input } or { input, lower }
     for _, query in ipairs(queries) do collect_static(query, false) end
     collect_personal_exact()
     if #input >= 3 then
       for _, query in ipairs(queries) do collect_static(query, true) end
     end
-    -- Learning on another case variant (os) must not outrank the exact spelling typed (OS): the
-    -- ranker orders personal evidence before everything else, so clear it for this query.
     local typed = seen[input]
     if lower ~= input and typed and typed.exact then
       for _, entry in ipairs(entries) do
@@ -402,7 +361,6 @@ function M.func(input, segment, env)
     end
     table.sort(entries, function(a, b)
       if a.exact ~= b.exact then return a.exact end
-      -- A deliberately cased query offers its exact spelling first.
       if lower ~= input and (a.text == input) ~= (b.text == input) then return a.text == input end
       if a.personal ~= b.personal then return a.personal end
       if a.commits ~= b.commits then return a.commits > b.commits end
@@ -411,27 +369,21 @@ function M.func(input, segment, env)
       if (a.text == input) ~= (b.text == input) then return a.text == input end
       return a.text < b.text
     end)
-    -- Retain only one lookup per translator/session, including while paging.
     env.input, env.entries, env.learnable = input, entries, {}
     for _, entry in ipairs(entries) do
       if entry.code then env.learnable[entry.text] = entry end
     end
   end
-  -- An exact record sorts before every completion. Personal records are always exact.
   local first = env.entries[1]
   local whole = segment.start == 0 and segment._end == #env.engine.context.input
   report_conflict_lookup(env.engine.context, whole and first and first.exact)
   for _, entry in ipairs(env.entries) do
     local dictionary_entry = entry.static_entry or entry.user_entry
-    -- Preserve the compiled internal code required by Phrase, while making the
-    -- native memorize transaction persist the canonical lowercase lookup code.
     if entry.code then dictionary_entry.custom_code = entry.code .. " " end
     local phrase = Phrase(env.memory, "english", segment.start, segment._end, dictionary_entry)
     local candidate_type = entry.exact and "english_exact" or "english_completion"
     if entry.personal then candidate_type = "english_personal_" .. tostring(math.min(3, entry.commits)) end
     local candidate = ShadowCandidate(phrase:toCandidate(), candidate_type, entry.text, "", true)
-    -- Native Chinese wins equal input coverage, including an unfinished final
-    -- syllable. This entire stream still keeps its source-frequency order.
     candidate.quality = -1
     yield(candidate)
   end

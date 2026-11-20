@@ -1,5 +1,4 @@
 #!/bin/bash
-# Read the completed artifact; this report never allocates or changes its identity.
 set -euo pipefail
 [[ $# == 1 ]] || { echo 'Usage: build-summary.sh APP' >&2; exit 2; }
 app=$1

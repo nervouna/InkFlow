@@ -1,6 +1,4 @@
 #!/bin/bash
-# Build the clean release candidate once, run the full suite once, deep-check the bundle,
-# and freeze the commit and build that packaging consumes.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

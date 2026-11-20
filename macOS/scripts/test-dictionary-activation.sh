@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-# Requires a previously built app/worker. Uses only a synthetic temporary user root, never the user's data.
 source macOS/scripts/swift-test.sh
 source macOS/scripts/test-timing.sh
 [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }

@@ -1,5 +1,3 @@
-# Test-only patch for the bundled librime learning contract. Production schemas
-# do not load this translator or enable these user dictionaries in Task 1.
 patch:
   schema/dependencies/+:
     - inkflow_learning_contract

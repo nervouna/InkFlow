@@ -47,7 +47,14 @@ or `#` line is a separate node.
 | Stale | 5 | Deleted |
 | Decision record | 151 | Captured in the project docs below or already recorded there |
 
-The remaining 2,424 nodes are inventoried for future review. Component decisions are in the
+The next batches cover the 2,424 nodes that remained after the first pass.
+
+- [Portable runtime #229](https://github.com/nervouna/InkFlow/issues/229)
+- [Shared Swift #230](https://github.com/nervouna/InkFlow/issues/230)
+- [macOS application #231](https://github.com/nervouna/InkFlow/issues/231)
+- [Rime and tooling #232](https://github.com/nervouna/InkFlow/issues/232)
+
+Component decisions are in the
 [Fcitx5 adapter guide](../Linux/fcitx5/README.md), [Linux guide](../Linux/README.md),
 [dictionary generation contract](../Core/Portable/dictionary/README.md) and
 [release configuration](../.agents/skills/inkflow-release/references/configuration.md).

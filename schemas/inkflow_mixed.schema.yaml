@@ -1,4 +1,3 @@
-# Compilation dependency for the supplemental mixed-sentence translator.
 schema:
   schema_id: inkflow_mixed
   name: Mixed dictionary

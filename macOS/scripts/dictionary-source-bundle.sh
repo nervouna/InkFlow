@@ -1,9 +1,4 @@
 #!/bin/bash
-# Corresponding-source bundle for the compiled dictionary resources: the verified
-# pinned upstream inputs (GPL-3.0 rime-frost, rime-ice and emoji data, Apache-2.0
-# rime-pinyin-simp), InkFlow's generation recipe as
-# committed at HEAD, the license texts and the manifest of the generated dictionary.
-#   dictionary-source-bundle.sh OUTPUT.tar.gz [BUILD]
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 output=${1:?Usage: dictionary-source-bundle.sh OUTPUT.tar.gz [BUILD]}
@@ -35,9 +30,6 @@ bash Core/scripts/prepare-chinese.sh "$staging/chinese" >/dev/null
 cp "$staging/chinese/dictionary-manifest.json" "$root/generated/"
 content_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["contentVersion"])' "$root/generated/dictionary-manifest.json")
 
-# InkFlow-authored recipe exactly as committed: generator, catalog, corrections,
-# data snapshots, schemas, preparation scripts and documentation. Written to a file
-# first: tar stops at the end-of-archive marker, and a pipe would SIGPIPE git archive.
 git archive --format=tar -o "$staging/recipe.tar" HEAD LICENSE NOTICE Core schemas macOS/Licenses macOS/DICTIONARIES.md macOS/DEPENDENCIES.md \
   docs/shared-dictionary-preparation.md macOS/scripts/dependencies.sh macOS/scripts/prepare-rime.sh \
   macOS/scripts/prepare-chinese.sh macOS/scripts/prepare-spelling.sh macOS/scripts/build-dictionary-generator.sh \
@@ -48,14 +40,12 @@ cp macOS/Licenses/* "$root/LICENSES/"
 sources="$root/SOURCES.tsv"
 printf 'component\tlicense\torigin\tbundled path\tsha256\tbytes\n' > "$sources"
 record() { printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$(sha256 "$root/$4")" "$(wc -c < "$root/$4" | tr -d ' ')" >> "$sources"; }
-# Chinese dictionary catalog inputs, byte-verified against the pinned catalog.
 build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; do
   repository=$(printf '%s' "$url" | sed -E 's|https://raw.githubusercontent.com/([^/]+/[^/]+)/.*|\1|')
   cp "build/dictionary-sources/$id.yaml" "$root/upstream/dictionary-sources/$id.yaml"
   printf '%s  %s\n' "$sha" "$root/upstream/dictionary-sources/$id.yaml" | shasum -a 256 -c - >/dev/null
   record "Chinese dictionary source $id" "$(license_for "$repository")" "$url" "upstream/dictionary-sources/$id.yaml"
 done
-# Pinned archives and files that dependencies.sh downloads and verifies.
 deps=$(sed -nE 's/^fetch ([^ ]+) ([0-9a-f]{64}) (https:[^ ]+)$/\1 \2 \3/p' Core/scripts/resource-dependencies.sh)
 for file in pinyin.tar.gz emoji.txt; do
   url=$(printf '%s\n' "$deps" | awk -v f="$file" '$1 == f {print $3}')

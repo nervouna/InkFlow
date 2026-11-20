@@ -1,5 +1,3 @@
-# Compile the English dictionary with literal spellings, independently of Pinyin algebra.
-# Dependency only; the input-source list still exposes one Pinyin mode.
 schema:
   schema_id: easy_en
   name: English dictionary

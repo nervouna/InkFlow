@@ -3,7 +3,6 @@ set -euo pipefail
 [[ $# -eq 2 || $# -eq 3 ]] || { echo 'Usage: verify-developer-id.sh CERTIFICATE_SHA1 TEAM_ID [application|installer]' >&2; exit 2; }
 identity=$(printf '%s' "$1" | tr '[:lower:]' '[:upper:]')
 team=$2
-# Installer certificates lack the code-signing usage, so only the basic policy lists them.
 case "${3:-application}" in
   application) label='Developer ID Application'; policy=codesigning ;;
   installer) label='Developer ID Installer'; policy=basic ;;
@@ -18,7 +17,6 @@ awk -v id="$identity" -v label="$label:" '$2 == id && index($0, label) {found=1}
   echo "Selected identity is not an available valid $label certificate." >&2; exit 1;
 }
 
-# Export public certificates only; private keys and Keychain credentials never leave Keychain.
 security find-certificate -a -c "$label" -p > "$scratch/certificates.pem"
 awk -v dir="$scratch" '/-----BEGIN CERTIFICATE-----/ {n++; file=dir "/cert-" n ".pem"} file {print > file} /-----END CERTIFICATE-----/ {close(file); file=""}' "$scratch/certificates.pem"
 matched=false

@@ -17,6 +17,7 @@ Two paths run the same scripts. The local path below needs the signing identitie
 
 1. **Preflight.** On a clean, up-to-date `main` (`git fetch origin --tags`; fast-forward only). Check `gh auth status` and `bash scripts/check-credentials.sh` (credentials: [configuration.md](references/configuration.md)). Confirm the tag doesn't exist yet.
 2. **Bump.** `bash scripts/bump-version.sh major|minor|patch`, then commit only `macOS/Info.plist` as `chore(release): vX.Y.Z (build N)`.
+   The bump helper bounds each numeric input component to nine digits before shell arithmetic.
 3. **Verify once.** `bash macOS/scripts/release-verification.sh` — build, `test.sh all`, deep bundle check, release receipt (commit and app build). If a unit fails: fix it and commit, or rerun that unit if it was flaky, then rerun verification. No extra rounds.
 4. **Prepare.** `bash scripts/package.sh prepare` signs a copy of the app and its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
 5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md` ([public-notes.md](references/public-notes.md)).
