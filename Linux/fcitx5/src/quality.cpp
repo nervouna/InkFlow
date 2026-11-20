@@ -114,15 +114,14 @@ void QualityComposition::reset() {
 }
 
 void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* before, const IFRSnapshot* after,
-                                 const char* commit, std::optional<std::size_t> selection, bool punctuation,
-                                 std::size_t pageSize) {
+                                 const char* commit, std::optional<QualityChoice> choice) {
   if (!started_) return;
-  if (!before || !after) {
+  if (!after) {
     reset();
     return;
   }
   const auto nextInput = view(ifr_snapshot_input(after));
-  if (!selection && !count_) {
+  if (!before || (!choice && !count_)) {
     if (nextInput.empty()) reset();
     return;
   }
@@ -131,27 +130,30 @@ void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* befor
   const auto oldInput = view(ifr_snapshot_input(before));
   std::string_view chosen;
   const int page = ifr_snapshot_page(before);
-  if (selection && *selection < ifr_snapshot_candidate_count(before) && *selection < pageSize && page >= 0) {
-    chosen = view(ifr_snapshot_candidate_text(before, *selection));
+  if (choice && choice->pageSize >= 3 && choice->pageSize <= 9 && page >= 0 &&
+      choice->index < ifr_snapshot_candidate_count(before) && choice->index < choice->pageSize) {
+    chosen = view(ifr_snapshot_candidate_text(before, choice->index));
   }
-  if (!chosen.empty() && pageSize >= 3 && pageSize <= 9) {
+  if (!chosen.empty()) {
+    const bool punctuation = choice->punctuation;
     const auto length = punctuation ? 0 : writer.chineseLength(chosen);
     if (length && count_ == maxSegments) {
       reset();
       return;
     }
     if (length) {
-      const auto bin = page > 0 ? RankBin::Paged : *selection == 0 ? RankBin::First :
-                       *selection < 3 ? RankBin::TopThreeOther : RankBin::FirstPageOther;
-      segments_[count_++] = {{started_, static_cast<uint8_t>(length), static_cast<uint8_t>(pageSize), context_, bin},
-                             oldPrefix.size() + chosen.size()};
+      const auto bin = page > 0 ? RankBin::Paged : choice->index == 0 ? RankBin::First :
+                       choice->index < 3 ? RankBin::TopThreeOther : RankBin::FirstPageOther;
+      QualityDecision decision{started_, static_cast<uint8_t>(length), static_cast<uint8_t>(choice->pageSize),
+                               context_, bin};
+      segments_[count_++] = {decision, oldPrefix.size() + chosen.size()};
     }
     if (!nextInput.empty() && oldInput == nextInput && equalsParts(nextPrefix, oldPrefix, chosen) && !punctuation) {
       return;
     }
     auto delivered = view(commit);
     // The punctuation itself is excluded. Earlier segment choices are proven only
-    // if the commit consists of the exact selected prefix, candidate and punctuation.
+    // if the commit consists of the exact selected prefix, candidate and optional punctuation.
     if (punctuation && delivered.starts_with(oldPrefix)) {
       auto tail = delivered.substr(oldPrefix.size());
       if (tail.starts_with(chosen)) {

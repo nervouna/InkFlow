@@ -42,9 +42,7 @@ public:
   SnapshotRef snapshot;
   ShiftToggle shiftToggle;
   QualityComposition quality;
-  std::optional<std::size_t> qualitySelection;
-  bool qualityPunctuation = false;
-  std::size_t qualityPageSize = 0;
+  std::optional<QualityChoice> qualityChoice;
 };
 
 class Engine final : public fcitx::InputMethodEngineV2 {

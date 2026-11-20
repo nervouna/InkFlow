@@ -15,19 +15,23 @@ namespace inkflow {
 namespace {
 class Backend final : public QualityBackend {
 public:
+  explicit Backend(const char* directory) : directory_(directory) {
+    // Initialize the properties used by both event-thread classification methods on this worker.
+    volatile auto emoji = u_hasBinaryProperty(0x1f600, UCHAR_EMOJI_PRESENTATION);
+    volatile auto category = u_charType('!');
+    (void)emoji;
+    (void)category;
+  }
+
   ~Backend() override {
     sqlite3_finalize(upsert_);
     sqlite3_close(db_);
   }
 
-  bool open(const std::filesystem::path& directory) {
-    // Warm ICU property data here too: classification of an eligible selection
-    // on the Fcitx event loop must only consult already initialized tables.
-    volatile auto emoji = u_hasBinaryProperty(0x1f600, UCHAR_EMOJI_PRESENTATION);
-    (void)emoji;
-    std::filesystem::create_directories(directory.parent_path());
-    if (mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST) return false;
-    auto file = directory / "counts.sqlite3";
+  bool open() {
+    std::filesystem::create_directories(directory_.parent_path());
+    if (mkdir(directory_.c_str(), 0700) != 0 && errno != EEXIST) return false;
+    auto file = directory_ / "counts.sqlite3";
     int fd = ::open(file.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return false;
     close(fd);
@@ -40,7 +44,6 @@ public:
               " n INTEGER NOT NULL, PRIMARY KEY(day,length,context,page_size,rank_bin)) WITHOUT ROWID")) return false;
     const char* sql = "INSERT INTO counts_v1 VALUES(date(?1,'unixepoch','localtime'),?2,?3,?4,?5,1)"
                       " ON CONFLICT(day,length,context,page_size,rank_bin) DO UPDATE SET n=n+1";
-    if (!exec("DELETE FROM counts_v1 WHERE day < date('now','localtime','-27 days')")) return false;
     return sqlite3_prepare_v2(db_, sql, -1, &upsert_, nullptr) == SQLITE_OK;
   }
 
@@ -73,6 +76,7 @@ public:
   }
 
   bool write(std::span<const QualityDecision> batch) override {
+    if (!db_ && !open()) return false;
     if (!exec("BEGIN IMMEDIATE")) return false;
     for (const auto& decision : batch) {
       sqlite3_bind_int64(upsert_, 1, decision.started);
@@ -94,13 +98,13 @@ public:
 
 private:
   bool exec(const char* sql) { return sqlite3_exec(db_, sql, nullptr, nullptr, nullptr) == SQLITE_OK; }
+  std::filesystem::path directory_;
   sqlite3* db_ = nullptr;
   sqlite3_stmt* upsert_ = nullptr;
 };
 }  // namespace
 
 extern "C" __attribute__((visibility("default"))) QualityBackend* inkflow_quality_open(const char* directory) {
-  auto backend = std::make_unique<Backend>();
-  return backend->open(directory) ? backend.release() : nullptr;
+  return new Backend(directory);
 }
 }  // namespace inkflow

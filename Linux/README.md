@@ -102,8 +102,8 @@ An empty denominator is shown as unavailable. A selection accepted with Space st
 later corrects the inserted text.
 
 The optional worker writes only daily counts by length, context availability, page size and rank group
-to `$XDG_DATA_HOME/inkflow/quality/counts.sqlite3` (default `~/.local/share`). It prunes older days
-when the writer starts and on updates. Text, key sequences, times of day and application identifiers
+to `$XDG_DATA_HOME/inkflow/quality/counts.sqlite3` (default `~/.local/share`). The first proven selection creates the database.
+The writer prunes older days on updates. Text, key sequences, times of day and application identifiers
 are never stored. Measurements are best effort during worker startup, storage failures and queue overload.
 Typing keeps working if the worker or its SQLite/ICU libraries are unavailable. Restore writable storage
 and toggle recording off and on to retry. `--json` prints all counts, their denominators and joint groups.

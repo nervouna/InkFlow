@@ -23,7 +23,8 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     def counts():
         with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as db:
             return dict(((length, has_context, page, rank), n) for length, has_context, page, rank, n in db.execute(
-                "SELECT length,context,page_size,rank_bin,n FROM counts_v1"))
+                "SELECT length,context,page_size,rank_bin,sum(n) FROM counts_v1 "
+                "GROUP BY length,context,page_size,rank_bin"))
 
     await recording(False)
     baseline = counts()
@@ -54,7 +55,11 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     index = next(i for i, item in enumerate(panels[-1]) if item[1] == "你")
     await context.call_select_candidate(index)
     await key(0xff08)
-    await context.call_reset()
+    assert panels[-1][0][1] == "你啊", panels[-1]
+    await key(32)
+    assert commits[-1] == "你啊"
+    await type_text("nihao")
+    await key(ord(","))
     for code in ("zzqx", "zzqe"):
         await type_text(code)
         await key(32)
@@ -66,14 +71,17 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     await type_text("zzqs")
     await context.call_set_capability(capabilities | (1 << 36))
     await context.call_select_candidate(0)
+    await controller.call_set_current_im("keyboard-us")
     await context.call_set_capability(capabilities)
+    await controller.call_set_current_im("inkflow-pinyin")
+    await controller.call_activate()
     await context.call_reset()
     await controller.call_set_current_im("inkflow-pinyin")
     await controller.call_activate()
     await recording(False)
     after = counts()
     expected = dict(baseline)
-    for cell in ((3, 1, 8, 0), (2, 0, 8, 0), (1, 0, 8, 3), (1, 0, 8, partial_bin), (1, 0, 8, 0)):
+    for cell in ((3, 1, 8, 0), (2, 0, 8, 0), (1, 0, 8, 3), (1, 0, 8, partial_bin), (1, 0, 8, 0), (2, 0, 8, 0)):
         expected[cell] = expected.get(cell, 0) + 1
     assert expected == after, (expected, after)
 
@@ -98,6 +106,17 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
         path.rmdir()
         private_db.rename(path)
     assert counts() == after
+    if os.geteuid() != 0:
+        path.chmod(0o400)
+        try:
+            await recording(True)
+            await type_text("zzqs")
+            assert await key(32)
+            assert commits[-1] == marker
+            await recording(False)
+        finally:
+            path.chmod(0o600)
+        assert counts() == after
     for file in (path, log):
         contents = file.read_bytes()
         assert marker.encode() not in contents and b"SecretPhrase" not in contents

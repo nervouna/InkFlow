@@ -57,12 +57,18 @@ private:
   std::thread worker_;
 };
 
+struct QualityChoice {
+  std::size_t index;
+  std::size_t pageSize;
+  bool punctuation = false;
+};
+
 class QualityComposition {
 public:
   void begin(bool context);
   void reset();
   void observe(QualityWriter& writer, const IFRSnapshot* before, const IFRSnapshot* after, const char* commit,
-               std::optional<std::size_t> selection, bool punctuation, std::size_t pageSize);
+               std::optional<QualityChoice> choice);
 
 private:
   struct Segment {

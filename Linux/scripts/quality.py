@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import tempfile
 
 
 def wilson(hits, total):
@@ -92,6 +93,21 @@ def display(data):
             row(f"{label} {key}", values)
 
 
+def export(data, destination):
+    # link() publishes only a complete, private file and cannot clobber a racing export.
+    with tempfile.NamedTemporaryFile(mode="w", dir=destination.parent, prefix=".inkflow-quality-", delete=False) as out:
+        temporary = Path(out.name)
+        try:
+            json.dump(data, out, indent=2)
+            out.write("\n")
+            out.flush()
+            os.fsync(out.fileno())
+            out.close()
+            os.link(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     output = parser.add_mutually_exclusive_group()
@@ -102,10 +118,7 @@ def main():
     try:
         data = report(Path(data_home) / "inkflow/quality/counts.sqlite3", date.today())
         if args.export:
-            fd = os.open(args.export, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(fd, "w") as out:
-                json.dump(data, out, indent=2)
-                out.write("\n")
+            export(data, args.export)
             print(f"Exported {args.export}")
         elif args.json:
             print(json.dumps(data, indent=2))

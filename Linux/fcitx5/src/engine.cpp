@@ -318,15 +318,14 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
   }
   if (!st->composing()) refreshContext(ic, st);
   const auto modifiers = rime_modifiers(key.states(), event.isRelease());
-  if (quality_ && !modifiers && st->composing()) {
+  if (quality_ && !modifiers && st->snapshot) {
     const auto sym = static_cast<uint32_t>(key.sym());
     if (sym >= '1' && sym <= '9') {
-      st->qualitySelection = sym - '1';
+      st->qualityChoice = QualityChoice{sym - '1', ifr_session_candidate_count(st->session)};
     } else if (sym == ' ' || (sym > ' ' && sym <= '~' && std::ispunct(static_cast<unsigned char>(sym)))) {
-      st->qualityPunctuation = sym != ' ';
-      st->qualitySelection = ifr_snapshot_highlighted(st->snapshot.get());
+      st->qualityChoice = QualityChoice{ifr_snapshot_highlighted(st->snapshot.get()),
+                                        ifr_session_candidate_count(st->session), sym != ' '};
     }
-    if (st->qualitySelection) st->qualityPageSize = ifr_session_candidate_count(st->session);
   }
   IFRStatus status = ifr_session_key(st->session, static_cast<int32_t>(key.sym()),
                                      static_cast<int32_t>(modifiers),
@@ -335,7 +334,7 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
     failed(ic, st, "key", status);
     return;
   }
-  if (!handled) st->qualitySelection.reset();
+  if (!handled) st->qualityChoice.reset();
   refresh(ic, st);
   if (handled) event.filterAndAccept();
 }
@@ -388,8 +387,7 @@ void Engine::selectCandidate(fcitx::InputContext* ic, const SnapshotRef& snapsho
     return;
   }
   if (quality_ && handled) {
-    st->qualitySelection = index;
-    st->qualityPageSize = pageSize;
+    st->qualityChoice = QualityChoice{index, pageSize};
   }
   refresh(ic, st);
 }
@@ -427,13 +425,11 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
   IFRSnapshot* raw = nullptr;
   status = ifr_session_snapshot(st->session, &raw);
   if (quality_ && !sensitive(ic)) {
-    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, st->qualitySelection,
-                        st->qualityPunctuation, st->qualityPageSize);
+    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, st->qualityChoice);
   } else {
     st->quality.reset();
   }
-  st->qualitySelection.reset();
-  st->qualityPunctuation = false;
+  st->qualityChoice.reset();
   ifr_string_free(commit);
   auto& panel = ic->inputPanel();
   // empty() ignores the overlay message, so Fcitx5's input-method information survives
@@ -473,8 +469,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
 
 void Engine::clear(fcitx::InputContext* ic, State* st) {
   st->quality.reset();
-  st->qualitySelection.reset();
-  st->qualityPunctuation = false;
+  st->qualityChoice.reset();
   IFRStatus status = ifr_session_clear(st->session);
   if (status != IFR_OK) {
     INKFLOW_WARN() << "clear failed: " << status << " " << ifr_last_error();

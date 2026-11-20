@@ -9,11 +9,25 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import quality
 
 
 class QualityReport(unittest.TestCase):
+    def test_incomplete_export_can_be_retried(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            dest = Path(temporary) / "quality.json"
+            with patch.object(quality.os, "fsync", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    quality.export({"count": 5}, dest)
+            self.assertEqual(list(dest.parent.iterdir()), [])
+            quality.export({"count": 7}, dest)
+            with self.assertRaises(FileExistsError):
+                quality.export({"count": 0}, dest)
+            self.assertEqual(list(dest.parent.iterdir()), [dest])
+            self.assertEqual(json.loads(dest.read_text()), {"count": 7})
+
     def test_window_buckets_and_privacy(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
