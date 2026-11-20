@@ -31,9 +31,9 @@ is `COPYING.md`, which contains the BSD-2-Clause and LGPL-2.1-or-later texts.
 
 ## Contracts and tests
 
-- [Swift engine facade and learning](Sources/InkFlowRime/README.md)
-- [Dictionary preparation and activation](Sources/InkFlowRime/dictionary-lifecycle.md)
-- [Local quality recording](Sources/InkFlowRime/quality-recording.md)
+- [Swift engine facade and learning](Docs/engine-facade.md)
+- [Dictionary preparation and activation](Docs/dictionary-lifecycle.md)
+- [Local quality recording](Docs/quality-recording.md)
 - [Shared regression fixtures](Tests/README.md)
 
 ## Prepared resources

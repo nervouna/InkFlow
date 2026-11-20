@@ -1,6 +1,6 @@
 # Swift engine facade and learning
 
-[`IFEngine`](Engine.swift) owns the Swift side of the [portable Rime runtime](../../Portable/README.md).
+[`IFEngine`](../Sources/InkFlowRime/Engine.swift) owns the Swift side of the [portable Rime runtime](../Portable/README.md).
 The main actor accesses the process-global engine. Editing, paging, ranking, selection, commits and
 Rime configuration belong to the Rust core. Swift owns platform delivery leases, deferred idle
 notifications, voice lexicon refresh, quality capture and Settings-facing errors.
@@ -70,7 +70,7 @@ learning uses this edit-distance acceptance gate. Recommendation display can rej
 expansion when a proper output prefix consumes the full spelling and the complete output has
 no valid alignment.
 
-The [VoiceLearning coordinator](../InkFlowDomain/VoiceLearningCoordinator.swift) owns correction
+The [VoiceLearning coordinator](../Sources/InkFlowDomain/VoiceLearningCoordinator.swift) owns correction
 policy, deadlines and generation-bound tickets. A stale or early callback cannot touch the client.
 The adapter supplies immutable document evidence before a bounded native read, and qualification is
 rechecked on submission. An automatic polish is excluded from user correction evidence. The
@@ -94,11 +94,11 @@ the fixed prefix, so unrelated personal entries cannot affect scoring.
 ## Rime channel and mixed translator
 
 Swift and Lua exchange one versioned request/reply pair through the core's
-[`InputSession::call`](../../Portable/README.md#interface-contract). Lua replies synchronously
+[`InputSession::call`](../Portable/README.md#interface-contract). Lua replies synchronously
 through a context property with a status and body. Unavailable sessions, unanswered operations,
 oversized replies and invalid framing yield no result. Use the channel outside key callbacks.
 
-The [mixed-input rules](../../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md)
+The [mixed-input rules](../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md)
 describe admission, boundaries and ranking. The C++ extension registers after Rime initialization
 and before sessions are created. It enumerates normal lexical spans through the native prism before
 the Syllabifier prunes paths. This keeps viable syllable boundaries that a winning homophone could

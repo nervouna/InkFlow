@@ -1,7 +1,7 @@
 # Dictionary preparation and activation
 
-The [shared recipe](../../../docs/shared-dictionary-preparation.md) builds the immutable source tree.
-The [Rust generator](../../Portable/dictionary/README.md) owns the production Chinese dictionary,
+The [shared recipe](../../docs/shared-dictionary-preparation.md) builds the immutable source tree.
+The [Rust generator](../Portable/dictionary/README.md) owns the production Chinese dictionary,
 spelling profiles and context index. Swift's `IFContextRanker.buildIndex` remains a byte-level
 reference used by tests. It builds sorted keys from three bytes per canonically normalized scalar.
 Live ranking belongs to the Rust core. A descriptor identifies the prepared index, which the engine

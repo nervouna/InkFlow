@@ -1,11 +1,11 @@
 # Local quality recording
 
-[`QualityRecorder`](QualityRecorder.swift) captures bounded memory on the event thread. The store's
+[`QualityRecorder`](../Sources/InkFlowRime/QualityRecorder.swift) captures bounded memory on the event thread. The store's
 worker owns JSON, disk and SQLite. The process owns the recorder's store across runtime recovery
 and dictionary replacement. Effectiveness counters from outside a composition, including explicit
 learning management, use the same utility worker with a separate bounded buffer. Measurement
 failures do not affect typing. The persisted fields and privacy controls are defined in the
-[query contract](../../../.agents/skills/inkflow-quality-analysis/references/query-contract.md).
+[query contract](../../.agents/skills/inkflow-quality-analysis/references/query-contract.md).
 
 ## Capture and evidence
 
