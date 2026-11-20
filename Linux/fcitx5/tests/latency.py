@@ -14,7 +14,7 @@ def percentiles(samples):
     }
 
 
-async def measure_latency(context, controller, include_samples):
+async def measure_latency(context, controller, capabilities, include_samples):
     signals = 0
     first_candidate = asyncio.get_running_loop().create_future()
 
@@ -38,11 +38,15 @@ async def measure_latency(context, controller, include_samples):
         "first_activation_to_first_candidate_signal_ms": round((received - start) / 1_000_000, 3),
         "words": {},
     }
-    for word in ("nihao", "jintiantianqihenhao", "niyebuxiangnidepengyoushangxin"):
+
+    async def measure_spelling(word, preceding_text=""):
         durations = [[], []]
         panel_counts = [0, 0]
         for trial in range(13):
             await context.call_reset()
+            if preceding_text:
+                cursor = len(preceding_text)
+                await context.call_set_surrounding_text(preceding_text, cursor, cursor)
             for letter in word:
                 for release in (False, True):
                     before = signals
@@ -55,14 +59,27 @@ async def measure_latency(context, controller, include_samples):
                     if trial:
                         durations[release].append(elapsed)
                         panel_counts[release] += signals - before
-        result["words"][word] = {
+        measurements = {
             label: {"events": len(samples), "panel_signals": count, **percentiles(samples)}
             for label, samples, count in zip(("press", "release"), durations, panel_counts)
         }
         if include_samples:
             for label, samples in zip(("press", "release"), durations):
-                result["words"][word][label]["samples_ns"] = samples
+                measurements[label]["samples_ns"] = samples
+        return measurements
+
+    long_word = "niyebuxiangnidepengyoushangxin"
+    for word in ("nihao", "jintiantianqihenhao", long_word):
+        result["words"][word] = await measure_spelling(word)
+
+    preceding_text = "今天"
+    await context.call_set_capability(capabilities | (1 << 6))  # Fcitx5 SurroundingText
+    contextual = await measure_spelling(long_word, preceding_text)
+    result["long_with_context"] = {"word": long_word, "preceding_text": preceding_text, **contextual}
     await context.call_reset()
+    await context.call_set_surrounding_text("", 0, 0)
+    await context.call_set_capability(capabilities)
+
     commits = []
     context.on_commit_string(commits.append)
     commit_times = []
