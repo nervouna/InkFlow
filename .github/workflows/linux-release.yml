@@ -53,7 +53,7 @@ jobs:
           Server = https://arm-stable-mirror.omarchy.org/$arch/$repo
           PACMAN
           pacman --config /tmp/inkflow-pacman.conf --disable-sandbox -Syyuu --noconfirm --needed \
-            base-devel git rustup fcitx5 extra-cmake-modules python-pip python-dbus-next dbus
+            base-devel git rustup fcitx5 extra-cmake-modules python-pip python-dbus-next dbus sqlite icu
       - uses: actions/checkout@v5
         with:
           persist-credentials: false

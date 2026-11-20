@@ -72,6 +72,16 @@ client-side D-Bus key-call round trips in milliseconds (nearest-rank p50/p95/p99
 presses and releases separately. Repeat invocations to compare first activations across fresh processes.
 Use `--latency-samples` to include each completed key-call duration in nanoseconds for pooled percentiles.
 
+The latency probe also types and confirms 120 instances of `nihao` with Space after the spelling-only
+measurements. Its `space_commit` percentiles time the confirming key until the client receives its D-Bus
+reply. Compare recording on and off with the same package and disposable profile:
+
+```sh
+export PYTHON=/path/to/test-venv/bin/python
+INKFLOW_BENCH_RECORD_QUALITY=False bash Linux/fcitx5/test-installed.sh PREFIX --latency
+INKFLOW_BENCH_RECORD_QUALITY=True bash Linux/fcitx5/test-installed.sh PREFIX --latency
+```
+
 ## Target verification
 
 On ARM64 Arch Linux/Omarchy with Hyprland, Fcitx5 5.1.23 and GCC 16.1.1, the native build, Rust runtime tests, 291 ranking cases, production resource preparation, 21-sample learned baseline, engine/personal-data parity, C ABI consumers, addon build, helper tests and installed-addon test passed. The desktop service loaded InkFlow and reported `inkflow-pinyin` as selected; the existing US keyboard and Pinyin entries were retained.

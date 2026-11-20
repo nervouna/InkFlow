@@ -18,6 +18,16 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-installed.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/config/fcitx5" "$scratch/data" "$scratch/cache" "$scratch/runtime"
 chmod 700 "$scratch/runtime"
+if [[ $mode == --latency* ]]; then
+  recording=${INKFLOW_BENCH_RECORD_QUALITY:-True}
+  case "$recording" in
+    True|False) ;;
+    *) echo 'INKFLOW_BENCH_RECORD_QUALITY requires True or False' >&2
+       exit 2 ;;
+  esac
+  mkdir -p "$scratch/config/fcitx5/conf"
+  printf 'RecordQuality=%s\n' "$recording" > "$scratch/config/fcitx5/conf/inkflow.conf"
+fi
 # Let standalone left Shift reach the addon instead of Fcitx5's default global AltTriggerKeys.
 printf '[Hotkey/AltTriggerKeys]\n0=Control+Alt+F12\n' > "$scratch/config/fcitx5/config"
 cat > "$scratch/config/fcitx5/profile" <<PROFILE

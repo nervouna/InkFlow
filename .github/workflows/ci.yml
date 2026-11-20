@@ -44,7 +44,8 @@ jobs:
       - name: Install Fcitx5 development dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libfcitx5core-dev extra-cmake-modules
+          sudo apt-get install -y --no-install-recommends \
+            libfcitx5core-dev extra-cmake-modules libsqlite3-dev libicu-dev
       - name: Cache the native runtime build
         uses: actions/cache@v5
         with:
@@ -95,4 +96,5 @@ jobs:
       - name: Test Linux installer and frontend helpers
         run: |
           python3 -B Linux/scripts/test_install.py
+          python3 -B Linux/scripts/test_quality.py
           bash Linux/fcitx5/test.sh
