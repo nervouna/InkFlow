@@ -166,6 +166,10 @@ int ifr_session_available(const IFRSession* session);
 /* handled is 1 when the engine consumed the key. Output pointers may be NULL. */
 IFRStatus ifr_session_key(const IFRSession* session, int32_t key, int32_t modifiers, int* handled);
 IFRStatus ifr_session_snapshot(const IFRSession* session, IFRSnapshot** snapshot);
+/* On success, returns a new owned snapshot, or sets *snapshot to NULL when previous still has
+ * the same contents and selection identity. Pass NULL for previous to always request a snapshot. */
+IFRStatus ifr_session_snapshot_if_changed(const IFRSession* session, const IFRSnapshot* previous,
+                                          IFRSnapshot** snapshot);
 void ifr_snapshot_free(IFRSnapshot* snapshot);
 const char* ifr_snapshot_input(const IFRSnapshot* snapshot);   /* Rime's raw input. */
 const char* ifr_snapshot_preedit(const IFRSnapshot* snapshot);

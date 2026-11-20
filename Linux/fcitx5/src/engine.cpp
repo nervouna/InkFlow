@@ -335,7 +335,7 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
     return;
   }
   if (!handled) st->qualityChoice.reset();
-  refresh(ic, st);
+  refresh(ic, st, event.isRelease());
   if (handled) event.filterAndAccept();
 }
 
@@ -414,22 +414,27 @@ void Engine::moveHighlight(fcitx::InputContext* ic, bool backward) {
   refresh(ic, st);
 }
 
-void Engine::refresh(fcitx::InputContext* ic, State* st) {
+void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
   char* commit = nullptr;
   IFRStatus status = ifr_session_take_commit(st->session, &commit);
   if (status != IFR_OK) {
     INKFLOW_WARN() << "take_commit failed: " << status << " " << ifr_last_error();
   } else if (commit) {
     ic->commitString(commit);
+    reuseUnchanged = false;
   }
   IFRSnapshot* raw = nullptr;
-  status = ifr_session_snapshot(st->session, &raw);
+  const auto capabilities = ic->capabilityFlags();
+  const auto* previous = reuseUnchanged && capabilities == st->presentedCapabilities ? st->snapshot.get() : nullptr;
+  status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
+  const auto choice = std::exchange(st->qualityChoice, std::nullopt);
+  // A retained page is still selectable. No commit or quality decision occurs on an unchanged release.
+  if (status == IFR_OK && !raw) return;
   if (quality_ && !sensitive(ic)) {
-    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, st->qualityChoice);
+    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, choice);
   } else {
     st->quality.reset();
   }
-  st->qualityChoice.reset();
   ifr_string_free(commit);
   auto& panel = ic->inputPanel();
   // empty() ignores the overlay message, so Fcitx5's input-method information survives
@@ -440,6 +445,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
     st->snapshot.reset();
   } else {
     st->snapshot = SnapshotRef(raw, ifr_snapshot_free);
+    st->presentedCapabilities = capabilities;
     const char* preedit = ifr_snapshot_preedit(raw);
     if (preedit && *preedit) {
       PreeditLayout layout = preedit_layout(preedit, ifr_snapshot_caret(raw),
@@ -453,7 +459,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
         text.append(segment.text, flags);
       }
       text.setCursor(static_cast<int>(layout.cursor));
-      if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) {
+      if (capabilities.test(fcitx::CapabilityFlag::Preedit)) {
         panel.setClientPreedit(text);
       } else {
         panel.setPreedit(text);
