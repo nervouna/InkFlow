@@ -17,4 +17,4 @@ env -u DISPLAY -u WAYLAND_DISPLAY -u FCITX_CONFIG_HOME -u FCITX_DATA_HOME \
   XDG_CONFIG_HOME="$scratch/config" XDG_DATA_HOME="$scratch/data" \
   XDG_CACHE_HOME="$scratch/cache" XDG_RUNTIME_DIR="$scratch/runtime" \
   FCITX_DATA_DIRS="$prefix/share/fcitx5:/usr/share/fcitx5" \
-  dbus-run-session -- "${PYTHON:-python3}" Linux/fcitx5/tests/installed_smoke.py
+  dbus-run-session -- "${PYTHON:-python3}" -B Linux/fcitx5/tests/installed_smoke.py

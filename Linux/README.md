@@ -79,6 +79,35 @@ If a write or service restart fails, the installer restores the prior descriptor
 
 Uninstall removes managed releases, InkFlow's Fcitx5 descriptors and its profile entries. It keeps personal dictionaries, custom phrases and settings. If InkFlow was the default input method, another remaining entry becomes the default. Files from an earlier manual CMake installation are not owned or removed by this installer.
 
+## Local Chinese selection quality
+
+Run the packaged reporter from your installed release. It shows the last 28 local calendar days,
+including today, and can export the same aggregate data to a new private JSON file.
+
+```sh
+python3 ~/.local/share/inkflow/current/quality.py
+python3 ~/.local/share/inkflow/current/quality.py --export inkflow-quality.json
+```
+
+The Fcitx5 **Record local Chinese selection counts** option is on by default. Uncheck it in the addon
+configuration to pause recording, or set `RecordQuality=False` in `conf/inkflow.conf` and reload
+the addon. Pausing and resuming discards evidence from an in-progress composition.
+
+The report counts displayed ranks for Chinese choices made with Space, a digit or a click, including
+segment selections that survive through a proven commit to the client. It shows top-1, top-3 and paged
+choices over known-rank decisions with Wilson 95% intervals. Length counts Unicode scalars. The context
+group means the client supplied a usable prefix at composition start. Page size is the active setting
+when the candidate was chosen. Unknown selections, interrupted input and sensitive contexts are excluded.
+An empty denominator is shown as unavailable. A selection accepted with Space still counts if the user
+later corrects the inserted text.
+
+The optional worker writes only daily counts by length, context availability, page size and rank group
+to `$XDG_DATA_HOME/inkflow/quality/counts.sqlite3` (default `~/.local/share`). It prunes older days
+when the writer starts and on updates. Text, key sequences, times of day and application identifiers
+are never stored. Measurements are best effort during worker startup, storage failures and queue overload.
+Typing keeps working if the worker or its SQLite/ICU libraries are unavailable. Restore writable storage
+and toggle recording off and on to retry. `--json` prints all counts, their denominators and joint groups.
+
 ## Files
 
 Paths below use the default XDG directories; `XDG_DATA_HOME` and `XDG_CONFIG_HOME` are supported.

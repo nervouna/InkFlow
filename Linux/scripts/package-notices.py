@@ -68,7 +68,7 @@ def main():
     if command('git', 'status', '--porcelain', '--untracked-files=normal'):
         raise SystemExit('Commit tracked changes before packaging')
     revision = command('git', 'rev-parse', 'HEAD')
-    for name in ('lib/fcitx5/libinkflow.so', 'lib/inkflow/librime.so',
+    for name in ('lib/fcitx5/libinkflow.so', 'lib/fcitx5/libinkflow-quality.so', 'lib/inkflow/librime.so',
                  'lib/inkflow/librime.so.1',
                  'share/inkflow/rime/prepared/complete',
                  'share/inkflow/rime/shared/pinyin_simp.context.bin',
@@ -78,6 +78,7 @@ def main():
         if not (package / name).is_file():
             raise SystemExit(f'Missing staged payload: {name}')
     copy(ROOT / 'Linux/scripts/install.py', package / 'install.py')
+    copy(ROOT / 'Linux/scripts/quality.py', package / 'quality.py')
     notices = package / 'share/inkflow/Licenses'
     version = sys.argv[2]
     source = package.parent / 'SOURCE' if version else package / 'share/inkflow/SOURCE'

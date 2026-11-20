@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from dbus_next.aio import MessageBus
+from quality_smoke import check_quality
 
 
 async def main():
@@ -152,6 +153,7 @@ async def main():
             assert commits[-1] == "备份测试"
             assert "imported personal data from" in log.read_text()
             print("PASS installed addon: explicit backup import, engine restart, restored phrase")
+            await check_quality(context, controller, key, type_text, panels, commits, config, capabilities, log)
         finally:
             if context:
                 await context.call_destroy_ic()

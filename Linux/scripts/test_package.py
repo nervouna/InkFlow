@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -49,6 +50,10 @@ def main():
 
             manager.install(package, desktop)
             check()
+            report = subprocess.check_output(
+                [sys.executable, str(manager.paths["current"] / "quality.py"), "--json"],
+                env={**os.environ, "XDG_DATA_HOME": str(scratch / "empty-quality-data")}, text=True)
+            assert json.loads(report)["overall"]["top1_rate"] is None
             # A distinct test-only package exercises replacement using the same target binaries.
             newer = scratch / "upgrade-fixture"
             shutil.copytree(package, newer)

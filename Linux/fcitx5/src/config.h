@@ -14,6 +14,7 @@ FCITX_CONFIGURATION(
     Config,
     fcitx::Option<int, fcitx::IntConstrain> candidateCount{this, "CandidateCount", "Candidates per page",
                                                            5, fcitx::IntConstrain(3, 9)};
+    fcitx::Option<bool> recordQuality{this, "RecordQuality", "Record local Chinese selection counts", true};
     fcitx::Option<bool> abbreviation{this, "Abbreviation", "Abbreviated pinyin", true};
     fcitx::Option<bool> typoTolerance{this, "TypoTolerance", "Typo tolerance", true};
     fcitx::Option<bool> fuzzyZ{this, "FuzzyZ", "Fuzzy z/zh", false};
