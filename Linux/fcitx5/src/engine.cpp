@@ -300,7 +300,7 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
     failed(ic, st, "key", status);
     return;
   }
-  refresh(ic, st);
+  refresh(ic, st, event.isRelease());
   if (handled) event.filterAndAccept();
 }
 
@@ -371,7 +371,7 @@ void Engine::moveHighlight(fcitx::InputContext* ic, bool backward) {
   refresh(ic, st);
 }
 
-void Engine::refresh(fcitx::InputContext* ic, State* st) {
+void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
   char* commit = nullptr;
   IFRStatus status = ifr_session_take_commit(st->session, &commit);
   if (status != IFR_OK) {
@@ -379,9 +379,14 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
   } else if (commit) {
     ic->commitString(commit);
     ifr_string_free(commit);
+    reuseUnchanged = false;
   }
   IFRSnapshot* raw = nullptr;
-  status = ifr_session_snapshot(st->session, &raw);
+  bool clientPreedit = ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
+  const auto* previous = reuseUnchanged && clientPreedit == st->clientPreedit ? st->snapshot.get() : nullptr;
+  status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
+  // The published list still owns a selectable token. A change of token alone requires a fresh list.
+  if (status == IFR_OK && !raw) return;
   auto& panel = ic->inputPanel();
   // empty() ignores the overlay message, so Fcitx5's input-method information survives
   // the trigger's key releases.
@@ -391,6 +396,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
     st->snapshot.reset();
   } else {
     st->snapshot = SnapshotRef(raw, ifr_snapshot_free);
+    st->clientPreedit = clientPreedit;
     const char* preedit = ifr_snapshot_preedit(raw);
     if (preedit && *preedit) {
       PreeditLayout layout = preedit_layout(preedit, ifr_snapshot_caret(raw),
@@ -404,7 +410,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
         text.append(segment.text, flags);
       }
       text.setCursor(static_cast<int>(layout.cursor));
-      if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) {
+      if (clientPreedit) {
         panel.setClientPreedit(text);
       } else {
         panel.setPreedit(text);

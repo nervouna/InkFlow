@@ -38,6 +38,7 @@ public:
   }
   IFRSession* session = nullptr;
   SnapshotRef snapshot;
+  bool clientPreedit = false;
   ShiftToggle shiftToggle;
 };
 
@@ -66,7 +67,7 @@ private:
   bool sensitive(const fcitx::InputContext* ic) const;
   void refreshContext(fcitx::InputContext* ic, State* state);
   // Drain the commit exactly once, then rebuild preedit and candidates from a fresh snapshot.
-  void refresh(fcitx::InputContext* ic, State* state);
+  void refresh(fcitx::InputContext* ic, State* state, bool reuseUnchanged = false);
   void clear(fcitx::InputContext* ic, State* state);
   void failed(fcitx::InputContext* ic, State* state, const char* what, IFRStatus status);
   void createEngine();

@@ -374,6 +374,10 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(ifr_snapshot_candidate_comment(shown, 0) != NULL);
   assert(ifr_snapshot_candidate_text(shown, 9) == NULL && ifr_snapshot_highlighted(shown) == 0);
   int handled = 0;
+  IFRSnapshot* changed = NULL;
+  expect(ifr_session_key(session, 'o', 1 << 30, &handled), IFR_OK, "letter release");
+  expect(ifr_session_snapshot_if_changed(session, shown, &changed), IFR_OK, "unchanged release");
+  assert(changed == NULL);
   expect(ifr_session_select(session, shown, 9, &handled), IFR_INVALID_CANDIDATE, "out of range");
   expect(ifr_session_select(session, shown, 0, &handled), IFR_OK, "select");
   assert(handled == 1);
@@ -397,9 +401,14 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(strcmp(ifr_snapshot_candidate_text(next, 0), ifr_snapshot_candidate_text(first, 0)) != 0);
   ifr_snapshot_free(next);
   expect(ifr_session_change_page(session, 1, &handled), IFR_OK, "page up");
-  expect(ifr_session_snapshot(session, &next), IFR_OK, "back on first page");
+  expect(ifr_session_snapshot_if_changed(session, first, &next), IFR_OK, "revisited page needs a new token");
+  assert(next != NULL);
+  expect(ifr_session_select(session, first, 0, &handled), IFR_STALE_SNAPSHOT, "old page stays stale");
   assert(ifr_snapshot_page(next) == 0);
   expect(ifr_session_highlight(session, next, 2), IFR_OK, "highlight");
+  expect(ifr_session_snapshot_if_changed(session, next, &changed), IFR_OK, "changed highlight");
+  assert(changed != NULL && ifr_snapshot_highlighted(changed) == 2);
+  ifr_snapshot_free(changed);
   ifr_snapshot_free(next);
   expect(ifr_session_snapshot(session, &next), IFR_OK, "highlighted");
   assert(ifr_snapshot_highlighted(next) == 2);
