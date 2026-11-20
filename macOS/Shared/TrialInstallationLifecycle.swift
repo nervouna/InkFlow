@@ -1,7 +1,6 @@
 import AppKit
 import Darwin
 
-/// Keep the installed path present throughout an update; the old app remains at candidate.
 package enum IFAtomicAppReplacement {
     package static func replace(candidate: URL, target: URL) throws {
         let flags = UInt32(FileManager.default.fileExists(atPath: target.path) ? RENAME_SWAP : RENAME_EXCL)
@@ -32,8 +31,6 @@ package enum IFInstallationTerminationError: Error {
                                       Darwin.kill(pid, 0) == 0 ? 0 : errno
                                   }) -> Bool {
         if applicationTerminated { return true }
-        // AppKit's observable state can lag behind process exit. Signal zero
-        // only queries existence; ESRCH is the sole fallback proof of exit.
         guard processID > 0 else { return false }
         return probe(processID) == ESRCH
     }
@@ -45,7 +42,6 @@ package enum IFInstallationTerminationError: Error {
     package static func terminate(_ processes: [any IFInstallationProcess],
                                   timeout: Duration = terminationTimeout) async throws {
         for process in processes where !hasExited(process) {
-            // A process can exit between observation and the normal quit request.
             guard process.terminate() || hasExited(process) else {
                 throw IFInstallationTerminationError.declined(process.processIdentifier)
             }
@@ -64,13 +60,11 @@ struct IFTrialInstallationState: Codable {
     let enabledIDs: [String]
     let selectedID: String
     let oldPIDs: [Int32]
-    /// No InkFlow input source was registered and no InkFlow process ran, so there is no state to restore.
     let firstInstall: Bool
 }
 
 struct IFTrialFinish {
     let pid: Int32
-    /// False when the system did not confirm enablement or selection: the new build runs, but the user must add it.
     let confirmed: Bool
 }
 
@@ -144,7 +138,6 @@ struct IFTrialFinish {
             if !(try sources.snapshot().isEnabled(id)) { try sources.enable(id) }
             confirmed = try await confirms { $0.isEnabled(id) }
         }
-        // Unconfirmed enablement or selection is reported, not fatal: the new build still runs and the user adds InkFlow back.
         let pid = try await processes.launchAndVerify(at: target, excluding: state.oldPIDs)
         if confirmed {
             try sources.select(selectedID)
@@ -182,7 +175,6 @@ extension NSRunningApplication: IFTrialInstalledProcess {}
     }
 
     static func executablePath(_ pid: Int32) -> String? {
-        // SDK's PROC_PIDPATHINFO_MAXSIZE is (4 * MAXPATHLEN), unavailable as a Swift macro.
         var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
         guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
         return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
@@ -214,8 +206,6 @@ extension NSRunningApplication: IFTrialInstalledProcess {}
                     if Self.owns(path: path, target: target) { pids.append(app.processIdentifier) }
                     continue
                 }
-                // A prior installer may already have removed the old image. Launch Services
-                // still identifies its original installed URL, allowing a graceful quit only.
                 guard let cached = app.executableURL ?? app.bundleURL else {
                     throw IFInputError.unavailable("cannot identify InkFlow process \(app.processIdentifier); installation unchanged")
                 }

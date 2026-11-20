@@ -2,7 +2,6 @@ import Foundation
 import SQLite3
 import zlib
 
-/// Manual export runs on a separate utility task, never on the recorder or key-event queue.
 enum QualityExport {
     static let columns: [String: String] = [
         "recording_runs": "id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code",
@@ -21,18 +20,8 @@ enum QualityExport {
         init(_ message: String) { errorDescription = message }
     }
 
-    /// The largest document, uncompressed, that an export writes and the reader accepts.
     static let documentLimit = 1024 * 1024 * 1024
 
-    /// `textFree` writes every record the way the recorder stores it with text recording off: positions, ranks,
-    /// counts, timings, evidence rows and keyed hashes stay; raw input, candidate, selected, committed and context
-    /// text and the input before a deletion go, and so do the visited pages, which only `inspect` reads. The
-    /// automatic export always uses it.
-    /// `since` keeps the compositions that started at or after it, with their commits and decisions, and the
-    /// learning events from then on; runs and configuration revisions are always complete.
-    /// Rows go from SQLite to the file one at a time, so memory does not grow with the store. A destination ending
-    /// in `.gz` holds the same document compressed, which is how the reader tells them apart. The limit is on the
-    /// document's own size either way: the reader loads a whole document into memory.
     static func write(database: URL, destination: URL, textFree: Bool = false, since: Date? = nil) throws -> String {
         guard database.standardizedFileURL != destination.standardizedFileURL,
               !["quality-source-id", "quality-pair-key"].contains(destination.lastPathComponent) else {
@@ -52,7 +41,6 @@ enum QualityExport {
                 throw ExportError("质量数据库格式不兼容或读取失败。")
             }
             defer { sqlite3_finalize(statement) }
-            // One pool per row: the JSON objects of a row are released before the next one is read.
             while try autoreleasepool(invoking: { () throws -> Bool in
                 let code = sqlite3_step(statement)
                 if code == SQLITE_DONE { return false }
@@ -98,10 +86,8 @@ enum QualityExport {
         }
         let source = try sourceID(beside: database)
         let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        // Stored times are UTC ISO-8601 with milliseconds, so they compare as text.
         let cutoff = since.map { "'" + formatter.string(from: $0) + "'" }
         let recent = cutoff.map { "(SELECT id FROM compositions WHERE started_at >= \($0))" }
-        // The document is written beside its destination and moved into place when complete.
         let partial = destination.deletingLastPathComponent()
             .appendingPathComponent("." + destination.lastPathComponent + ".partial")
         let gzip = destination.pathExtension.lowercased() == "gz"
@@ -168,7 +154,6 @@ enum QualityExport {
                 "source_id": source, "exported_at": formatter.string(from: Date()),
                 "range": ["first": first.map { $0 as Any } ?? NSNull(), "last": last.map { $0 as Any } ?? NSNull()]]
             let fields = try JSONSerialization.data(withJSONObject: head, options: [.sortedKeys])
-            // `head` is an object: its fields follow the tables inside the same braces.
             try sink.write("},")
             try sink.write(fields.dropFirst())
             try sink.close()
@@ -187,7 +172,6 @@ enum QualityExport {
         return "已保存到 \(destination.path)\n\(count) 段输入、\(events) 条学习效果事件。记录时间（UTC）：\(range)。"
     }
 
-    /// The export file being written: plain or gzip, counted in document bytes.
     private final class Sink {
         private let url: URL
         private let limit: Int
@@ -242,20 +226,17 @@ enum QualityExport {
         }
     }
 
-    /// The device's export identity, created beside the database on first use.
     static func sourceID(beside database: URL) throws -> String {
         let sourceFile = database.deletingLastPathComponent().appendingPathComponent("quality-source-id")
         if !FileManager.default.fileExists(atPath: sourceFile.path) {
             do { try Data(UUID().uuidString.lowercased().utf8).write(to: sourceFile, options: .withoutOverwriting) }
-            catch where FileManager.default.fileExists(atPath: sourceFile.path) { /* Another export created it. */ }
+            catch where FileManager.default.fileExists(atPath: sourceFile.path) { }
         }
         let source = try String(contentsOf: sourceFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
         guard UUID(uuidString: source) != nil else { throw ExportError("质量数据来源标识损坏，原文件已保留。") }
         return source.lowercased()
     }
 
-    /// A stored page as the export carries it: never its configuration, and without its strings when text-free
-    /// (the fields `QualityPageSnapshot.redactingText` clears).
     private static func exported(_ page: [String: Any], textFree: Bool) -> [String: Any] {
         var page = page
         page.removeValue(forKey: "configuration")
@@ -284,14 +265,9 @@ enum QualityExport {
     }
 }
 
-/// The weekly export to a folder the user chose. It writes a local file and nothing else: the user's own sync moves
-/// it. Always text-free. Each export is one dated file per device that holds the records since the last export plus
-/// a day of overlap, and the device's own files older than `kept` are removed, so the folder covers the retention
-/// window without one file outgrowing the export limit.
 enum QualityAutoExport {
     static let interval: TimeInterval = 7 * 24 * 60 * 60
     private static let day: TimeInterval = 24 * 60 * 60
-    /// The first export, and the most any export reaches back.
     static let firstWindow = 8 * day
     static let longestWindow = 14 * day
     static let kept = 35 * day
@@ -322,7 +298,6 @@ enum QualityAutoExport {
         let destination = folder.appendingPathComponent(prefix + stamp(now) + suffix)
         let result = try QualityExport.write(database: database, destination: destination, textFree: true,
                                              since: cutoff(lastSuccess: lastSuccess, now: now))
-        // Only this device's dated files, and only after the new one is in place.
         let oldest = stamp(now - kept)
         for name in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] {
             guard name.hasPrefix(prefix), name.hasSuffix(suffix) else { continue }

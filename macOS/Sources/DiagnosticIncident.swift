@@ -18,7 +18,6 @@ enum DiagnosticFeedbackError: Error, LocalizedError {
     }
 }
 
-// Dates are compared in the archive's canonical Unix-millisecond time base.
 enum DiagnosticTime {
     static func milliseconds(_ date: Date) -> Double { (date.timeIntervalSince1970 * 1_000).rounded() }
     static func canonical(_ date: Date) -> Date { Date(timeIntervalSince1970: milliseconds(date) / 1_000) }
@@ -78,7 +77,6 @@ enum DiagnosticExportSelection: Sendable {
     case lastThirtyMinutes, lastDay, retainedHistory, incident(UUID)
 }
 
-/// Service injection keeps the Settings UI independent of the store, filesystem and GitHub reporter.
 struct DiagnosticFeedbackService: Sendable {
     let store: LocalDiagnosticStore?
     let crashReader: DiagnosticCrashReader

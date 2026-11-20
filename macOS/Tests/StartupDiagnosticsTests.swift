@@ -57,7 +57,6 @@ private final class InputCapture: @unchecked Sendable {
         precondition(events.allSatisfy { $0.contains("run=\(trace.run) pid=42") && $0.utf8.count < 300 })
         precondition(!events.joined().contains("secretContent"))
         precondition(events.contains { $0.contains("stage=indexes") && $0.contains("status=failed") })
-        // Every completion retains its begin span ID. Repeated stages receive distinct IDs.
         for pair in stride(from: 0, to: events.count, by: 2) where pair >= 6 {
             let beginSpan = events[pair].split(separator: " ")[2]
             precondition(events[pair + 1].contains(beginSpan))

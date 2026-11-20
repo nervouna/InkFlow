@@ -84,7 +84,6 @@ private struct ShortcutRecorder: NSViewRepresentable {
     }
 }
 
-/// Keep the native button below the SwiftUI representable's accessibility proxy.
 private final class ShortcutRecorderContainer: NSView {
     let button = ShortcutRecorderButton()
 
@@ -103,7 +102,6 @@ private final class ShortcutRecorderContainer: NSView {
     }
 }
 
-/// Captures only while this button is the first responder. No global event monitor.
 private final class ShortcutRecorderButton: NSButton {
     var bindingTitle = "未设置"
     var save: (ShortcutBinding) -> Bool = { _ in false }

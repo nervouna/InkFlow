@@ -2,7 +2,6 @@ import Foundation
 import Observation
 import AVFoundation
 
-/// Settings instances are inert until explicit preparation or the shared production startup task.
 @MainActor @Observable
 final class VoicePreparation {
     enum Action { case authorize, openSettings, retry }

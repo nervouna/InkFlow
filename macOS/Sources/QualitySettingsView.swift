@@ -71,7 +71,6 @@ struct QualitySettingsView: View {
 
     private func exportRecords() {
         let panel = NSSavePanel()
-        // Compressed: a month of records with text is several hundred megabytes of JSON.
         panel.allowedContentTypes = [.gzip]
         let day = Date.now.formatted(.iso8601.year().month().day().dateSeparator(.dash))
         panel.nameFieldStringValue = "InkFlow-quality-\(day).json.gz"

@@ -1,8 +1,6 @@
 #import "include/NativeTestSupport.h"
 #import <objc/runtime.h>
 
-// Test-only inspection of the actual dictionary sent to the input-source menu host.
-// This private diagnostic must fail explicitly if a future OS removes it.
 @interface IMKServer (MenuSerializationInspection)
 - (NSDictionary *)menusDictionary_CommonWithController:(IMKInputController *)controller;
 @end
@@ -12,8 +10,6 @@ NSDictionary *IFSerializedInputSourceMenu(IMKServer *server, IMKInputController 
     return [server menusDictionary_CommonWithController:controller];
 }
 
-// Intercept only framework initialization/teardown and the supplied test client lookup. The Swift subclass's real initializer
-// still initializes every stored property. Never class_createInstance a Swift class.
 static char testClientKey;
 static id initializeWithoutServer(id object, SEL selector, id server, id delegate, id client) {
     (void)selector; (void)server; (void)delegate;
@@ -39,7 +35,6 @@ BOOL IFSendMouseDown(IMKInputController *controller, NSUInteger index, id<IMKTex
 }
 
 NSFont *IFNativeCandidateFont(IMKCandidates *panel) {
-    // Test-only private inspection requires Objective-C exception handling.
     @try {
         Ivar field=class_getInstanceVariable(panel.class,"_private");
         id implementation=field ? object_getIvar(panel,field) : nil;
@@ -60,8 +55,6 @@ NSFont *IFNativeCandidateFont(IMKCandidates *panel) {
 @end
 
 static void collectAccessibility(id object, NSMutableArray *result, NSHashTable *visited) {
-    // SwiftUI accessibility objects expose these public selectors without necessarily
-    // declaring NSAccessibility protocol conformance. Do not discard those children.
     if ([visited containsObject:object]) return;
     [visited addObject:object];
     id<NSAccessibility> element=object;

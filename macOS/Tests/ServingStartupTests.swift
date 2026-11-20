@@ -108,7 +108,6 @@ private final class StartupFactory: @unchecked Sendable {
             let savedDate = Date(timeIntervalSince1970: 1234)
             try store.confirmActivation(version, now: savedDate)
             let saved = try store.state()
-            // Current has valid inert sources but an unusable cache, forcing the actual recovery rebuild path.
             try Data("corrupt fixture".utf8).write(to: store.root.appendingPathComponent(version.directory + "/cache/pinyin_simp.table.bin"))
             let worker = IFDictionaryWorkerRunner(runtime: runtime, protectedUserRoot: user,
                 candidatesRoot: store.root.appendingPathComponent("candidates"))
@@ -129,7 +128,6 @@ private final class StartupFactory: @unchecked Sendable {
             }
             coordinator.bootstrapForServing(runtime: runtime, user: user)
             check(coordinator.engineAvailable && coordinator.active?.isBundled == true, "Shipped fallback serves before downloaded recovery")
-            // The context index loads with the engine: no later publication, and the first key already uses it.
             check(IFEngine.contextRankingReady, "The shipped fallback starts with its context index")
             if !native {
                 let ranked = IFEngine()!
@@ -137,7 +135,6 @@ private final class StartupFactory: @unchecked Sendable {
                 check(ranked.snapshot().candidates.first == "餐", "The first key after startup ranks by context")
                 ranked.clear()
             }
-            // IMK owns one process server connection. Reuse it across isolated coordinator cases.
             if retainedServer == nil { retainedServer = IMKServer(name: "inkflow.serving.\(UUID())", bundleIdentifier: Bundle.main.bundleIdentifier ?? "inkflow.serving.tests")! }
             let server = retainedServer!
             if candidateLifetime == nil { candidateLifetime = NativeCandidateLifetime(server: server) }
@@ -228,8 +225,6 @@ private final class StartupFactory: @unchecked Sendable {
             fflush(stdout)
         }
         if !native {
-            // #95: an older-recipe artifact without raw sources can never rebuild. Recovery confirms the
-            // shipped dictionary instead of keeping a retry that fails the same way forever.
             let user = root.appendingPathComponent("obsolete")
             let store = try IFDictionaryStore(root: user.appendingPathComponent("Dictionaries"))
             let version = try adoptTemplate(store)
@@ -307,7 +302,6 @@ private final class StartupFactory: @unchecked Sendable {
             let after = try IFDictionaryFiles.hashes(in: cache)
             check(before == after, "All cache hashes unchanged after profiles/phrases/reopen \(reopen)")
         }
-        // The index loads with the engine, so one it cannot read fails the start instead of serving unranked.
         let indexBytes = try Data(contentsOf: contextIndex)
         try Data("not a context index".utf8).write(to: contextIndex)
         var indexRejected = false
@@ -347,7 +341,6 @@ private final class StartupFactory: @unchecked Sendable {
         try await malformed.shutdown(); IFEngine.stop()
 
         for entry in entries { try fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: entry.path) }
-        // A self-consistent receipt cannot excuse a manifest whose dictionary digest is false.
         let manifestURL = resources.appendingPathComponent(IFDictionaryManifest.filename)
         let receiptURL = cache.appendingPathComponent(IFPackagedCache.filename)
         let manifestBytes = try Data(contentsOf: manifestURL), receiptBytes = try Data(contentsOf: receiptURL)
@@ -371,8 +364,6 @@ private final class StartupFactory: @unchecked Sendable {
         absent.bootstrapForServing(runtime: isolatedRuntime, user: missingUser)
         check(!IFEngine.ready && !absent.engineAvailable && absent.canRetry)
         check(!fm.fileExists(atPath: missingUser.appendingPathComponent("build").path), "Missing packaged cache never triggers synchronous maintenance")
-        // Engine loss may overwrite the retry reason after startup. Production must still
-        // retry the packaged serving path, never the legacy maintenance-capable bootstrap.
         absent.recordUnavailable(IFDictionaryUpdateError(.recovery, "fixture-engine-loss"))
         absent.retry()
         check(!absent.isBusy && !IFEngine.ready && absent.canRetry,

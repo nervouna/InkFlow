@@ -25,7 +25,6 @@ import InkFlowRime
             expect(defaults.integer(forKey: "candidateCount") == 9, "cross-process persistence")
             return
         }
-        // A path keeps the suite's plist out of ~/Library/Preferences (see temporarySuiteName in TestSupport.swift).
         let suite = FileManager.default.temporaryDirectory
             .appending(path: "InkFlowPersonalTests.\(UUID().uuidString)").path
         let defaults = UserDefaults(suiteName: suite)!
@@ -73,8 +72,6 @@ import InkFlowRime
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
         rejects("symlink") { _ = try PersonalBackupDocument.read(link) }
         do {
-            // Each native row and snapshot fits its own limits. Quoted phrase text
-            // doubles during JSON escaping, making the final three-library file too large.
             let phrase = String(repeating: "\"", count: 60_000)
             let rows = (0..<512).map { "ni hao \t\($0)\(phrase)\tc=7 d=0.123456789 t=42\n" }.joined()
             let snapshots = Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map {

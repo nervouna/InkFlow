@@ -30,7 +30,6 @@ enum UpdateTests {
               "A composition, voice session or open window postpones the install")
         state.inputIdle = true
         check(installer.check() && state.installs == 1, "An idle Mac installs the staged update")
-        // The process is still running here, as after a termination that cleanup denied.
         state.uptime += IFUpdateIdleInstaller.quietPeriod - 1
         check(!installer.check() && state.installs == 1 && installer.isScheduled,
               "A denied termination keeps the handler without retrying at once")

@@ -95,8 +95,6 @@ final class IFSettings: ObservableObject {
     }
 
     static let sharedSettings: IFSettings = {
-        // Only a process-local argument-domain flag isolates the exact-initializer harness.
-        // Persisted preferences can never select this credential store.
         let isolated = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["IFIsolatedAICredentials"] as? Bool == true
         let credentials: any AICredentialStore = isolated ? MemoryAICredentialStore() : KeychainAICredentialStore()
         let service: any VoiceRecognitionServing
@@ -127,7 +125,6 @@ final class IFSettings: ObservableObject {
     @Published private(set) var qualityControlMessage: String?
 
     var qualityRecordingPaused: Bool { integer(for: "qualityRecordingPaused", allowed: [0, 1], fallback: 0) != 0 }
-    /// Off by default: ranking, timing and learning events only. Text is an explicit opt-in.
     var qualityTextCapture: Bool { integer(for: "qualityTextCapture", allowed: [0, 1], fallback: 0) != 0 }
     var qualityRecordingStatus: String {
         guard qualityStore != nil else { return "未启动" }
@@ -139,7 +136,6 @@ final class IFSettings: ObservableObject {
         guard !qualityCommandPending, let qualityStore else { return }
         qualityCommandPending = true
         qualityControlMessage = nil
-        // Preserve the user's choice even if the optional writer has failed for this launch.
         objectWillChange.send()
         defaults.set(paused ? 1 : 0, forKey: "qualityRecordingPaused")
         defer { qualityCommandPending = false }
@@ -173,13 +169,10 @@ final class IFSettings: ObservableObject {
         } catch { qualityControlMessage = "清除未完成，原有记录可能仍然保留。请稍后重试。" }
     }
 
-    // MARK: Weekly quality export
 
-    /// Off by default. When on, a text-free export of the past week is written to the chosen folder once a week.
     var qualityAutoExportEnabled: Bool { integer(for: "qualityAutoExportEnabled", allowed: [0, 1], fallback: 0) != 0 }
     var qualityAutoExportFolder: String? { defaults.string(forKey: "qualityAutoExportFolder") }
     var qualityAutoExportLastSuccess: Date? { defaults.object(forKey: "qualityAutoExportLastSuccess") as? Date }
-    /// The outcome of the last automatic export, kept across launches.
     var qualityAutoExportMessage: String? { defaults.string(forKey: "qualityAutoExportMessage") }
     var qualityDatabase = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent("Library/Application Support/InkFlow/quality.sqlite3")
@@ -192,7 +185,6 @@ final class IFSettings: ObservableObject {
         scheduleQualityAutoExport()
     }
 
-    /// A new folder has no file yet, so the next check writes one.
     func setQualityAutoExportFolder(_ folder: URL) {
         objectWillChange.send()
         defaults.set(folder.path, forKey: "qualityAutoExportFolder")
@@ -201,8 +193,6 @@ final class IFSettings: ObservableObject {
         scheduleQualityAutoExport()
     }
 
-    /// Called at startup and whenever the setting changes: one check now, then a daily check while enabled.
-    /// No timer exists while the setting is off.
     func scheduleQualityAutoExport() {
         qualityAutoExportTimer?.invalidate()
         qualityAutoExportTimer = nil
@@ -213,7 +203,6 @@ final class IFSettings: ObservableObject {
         Task { await checkQualityAutoExport() }
     }
 
-    /// Writes the export on a utility task when it is due. A failure only records its reason; the next check retries.
     func checkQualityAutoExport(now: Date = .now) async {
         guard !qualityAutoExportRunning,
               QualityAutoExport.isDue(enabled: qualityAutoExportEnabled, folder: qualityAutoExportFolder,
@@ -397,7 +386,6 @@ final class IFSettings: ObservableObject {
             if let value = decoded[key] { defaults.set(value, forKey: key) }
             else { defaults.removeObject(forKey: key) }
         }
-        // The committed journal remains authoritative until the next process startup.
     }
 
     private func set(_ value: Int, for key: String) {
@@ -456,7 +444,6 @@ final class IFSettings: ObservableObject {
 
     var inputPreferences: InputPreferences {
         var values = Dictionary(uniqueKeysWithValues: InputOption.allCases.map { ($0, inputValue($0)) })
-        // Canonicalize legacy independent choices before exposing a composition snapshot.
         for option: InputOption in [.fuzzyZ, .fuzzyC, .fuzzyS] { values[option] = fuzzyEnabled }
         values[.bracketPaging] = pagingKeys == .brackets
         values[.minusEqualPaging] = pagingKeys == .minusEqual
@@ -673,7 +660,6 @@ struct SettingsView: View {
 final class SettingsHostingController: NSHostingController<SettingsView> {
     override init(rootView: SettingsView) {
         super.init(rootView: rootView)
-        // Explicit AppKit constraints own sizing instead of each SwiftUI page.
         sizingOptions = []
         NSLayoutConstraint.activate([
             view.widthAnchor.constraint(equalToConstant: 700),
@@ -758,8 +744,6 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     static func installMainMenu() {
-        // The accessory app has no storyboard menu. Standard nil-target actions let
-        // AppKit route shortcuts to the active window or focused field editor.
         let mainMenu = NSApp.mainMenu ?? NSMenu()
         for (index, item) in mainMenuItems.enumerated() where !mainMenu.items.contains(where: { $0 === item }) {
             item.menu?.removeItem(item)
@@ -773,9 +757,6 @@ final class IFSettingsWindowController: NSWindowController, NSWindowDelegate {
         dictionaries?.presentationOpened()
         if window == nil { loadWindow() }
         Self.installMainMenu()
-        // TCC can return focus to another app when an accessory app's permission
-        // alert closes. Keep Settings a regular window, including Dock/Cmd-Tab
-        // reachability, until it closes; ordinary input remains accessory-only.
         NSApp.setActivationPolicy(.regular)
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)

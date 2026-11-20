@@ -13,8 +13,6 @@ protocol ThunderPanelPresenting: AnyObject {
     func hide()
 }
 
-/// A reusable, click-through screen overlay. Each input action adds only a
-/// handful of Core Animation layers; no window or view is created per keypress.
 @MainActor
 final class ThunderPanel: ThunderPanelPresenting {
     private let panel: ThunderWindow

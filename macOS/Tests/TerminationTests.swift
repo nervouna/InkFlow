@@ -15,7 +15,6 @@ import InkFlowTestSupport
             let old = (try? String(contentsOf: trace, encoding: .utf8)) ?? ""
             try! (old + event + "\n").write(to: trace, atomically: true, encoding: .utf8)
         }
-        // Exits only this synthetic subprocess if either AppKit or the test driver stalls.
         DispatchQueue.global().asyncAfter(deadline: .now() + 15) { exit(99) }
         let app = NSApplication.shared
         let gate = DispatchSemaphore(value: 0)
@@ -27,11 +26,9 @@ import InkFlowTestSupport
             throw CocoaError(.fileReadUnknown)
         })
         coordinator.recordUnavailable(CocoaError(.fileReadUnknown))
-        coordinator.retry() // A real owned detached factory is in flight when termination begins.
+        coordinator.retry()
         let storeURL = root.appendingPathComponent("quality.sqlite3")
         if mode == "disabled" { try FileManager.default.createDirectory(at: storeURL, withIntermediateDirectories: true) }
-        // Success mode flushes a real pending composition; its synthetic build
-        // identity must satisfy the same persistence contract as production.
         let metadata = QualityBuildMetadata(sourceRevision: "termination-fixture",
             sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
             bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
@@ -72,9 +69,6 @@ import InkFlowTestSupport
                 check(sqlite3_exec(writer, "BEGIN IMMEDIATE", nil, nil, nil) == SQLITE_OK)
                 check(store.submit(.init(composition: .init(outcome: .interrupted))) == .accepted)
                 let closed = await store.close()
-                // The first close may return at its production timeout while the serial
-                // worker still owns the SQLite attempt. A second close waits behind that
-                // worker and makes its final failure accounting observable to the test.
                 let settled = await store.close()
                 check(!closed && !settled && store.statistics().droppedBusy == 1,
                       "Real SQLite lock must fail pending close")
@@ -96,7 +90,6 @@ import InkFlowTestSupport
         _ = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: false) { _ in
             MainActor.assumeIsolated { app.terminate(nil) }
         }
-        // A second actual termination while draining must not create another cleanup task.
         _ = Timer.scheduledTimer(withTimeInterval: 0.13, repeats: false) { _ in
             MainActor.assumeIsolated {
                 if mode == "success" { app.terminate(nil) }

@@ -1,6 +1,5 @@
 import Foundation
 
-/// Independent voice transport: no document context, Pinyin prompt, or prediction statistics.
 struct VoiceCorrectionClient: Sendable {
     enum Failure: Error, Equatable { case invalidConfiguration, invalidResponse, empty, incomplete, network, http(Int) }
     private let session: URLSession
@@ -43,7 +42,6 @@ struct VoiceCorrectionClient: Sendable {
         var data = Data()
         do {
             let (bytes, response) = try await session.bytes(for: request)
-            // Cancelling the underlying task also stops oversized or non-success bodies.
             defer { bytes.task.cancel() }
             try Task.checkCancellation()
             guard let http = response as? HTTPURLResponse else { throw Failure.invalidResponse }

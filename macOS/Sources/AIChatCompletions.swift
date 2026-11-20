@@ -70,15 +70,12 @@ struct AIChatCompletionsClient: AISuggestionServing {
     private static func ollamaThinkingDisabled(_ configuration: AISuggestionConfiguration) -> Bool {
         let components = URLComponents(string: configuration.baseURL)
         let family = configuration.model.lowercased().split(separator: ":").first.map(String.init)
-        // Ollama's OpenAI endpoint maps reasoning_effort=none to think=false.
-        // Limit this inference to its default local endpoint and known Qwen families.
         return ["http", "https"].contains(components?.scheme?.lowercased() ?? "") && isLoopback(components?.host) &&
             components?.port == 11434 && ["qwen3", "qwen3.5"].contains(family ?? "")
     }
     static func isLoopback(_ host: String?) -> Bool {
         ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host?.lowercased() ?? "")
     }
-    /// Bearer keys and document text travel in clear only to a loopback host such as local Ollama.
     static func secureTransport(scheme: String?, host: String?) -> Bool {
         switch scheme?.lowercased() {
         case "https": true
@@ -86,7 +83,6 @@ struct AIChatCompletionsClient: AISuggestionServing {
         default: false
         }
     }
-    /// Settings call this before persisting; an empty or unparseable value is left to request-time validation.
     static func validateBaseURL(_ baseURL: String) throws {
         guard let components = URLComponents(string: baseURL), let scheme = components.scheme else { return }
         if scheme.lowercased() == "http", !isLoopback(components.host) { throw AIEndpointError.insecure }
@@ -104,7 +100,6 @@ struct AIChatCompletionsClient: AISuggestionServing {
     }()
 
     init(session: URLSession? = nil) {
-        // Controllers share one process-lifetime session; their tasks remain independently cancellable.
         self.session = session ?? Self.defaultSession
     }
 

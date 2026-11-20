@@ -2,7 +2,6 @@
 import Carbon
 import InkFlowDomain
 
-/// A bounded, disposable prefix from the active document. All ranges are UTF-16.
 enum IFPrecedingText {
     static let limit = IFContextRanker.contextLimit
 
@@ -24,7 +23,6 @@ enum IFPrecedingText {
                   NSMaxRange(selection) <= NSMaxRange(mark) else { return "" }
             anchor = mark.location
         } else {
-            // Another owner's composition is not committed surrounding text.
             guard !valid(mark) || mark.length == 0 else { return "" }
             anchor = selection.location
         }
@@ -36,8 +34,6 @@ enum IFPrecedingText {
               actual.location >= max(0, request.location - 1), actual.location < anchor,
               NSMaxRange(actual) >= anchor, NSMaxRange(actual) - anchor <= 1
         else { return "" }
-        // The client may expand a request to include a complete surrogate pair.
-        // Only text strictly before the anchor is eligible, never selection/marked text.
         let units = text.utf16
         let end = units.index(units.startIndex, offsetBy: anchor - actual.location)
         guard end == units.endIndex || !(0xDC00...0xDFFF).contains(units[end]) else { return "" }

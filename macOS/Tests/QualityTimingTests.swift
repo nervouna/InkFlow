@@ -50,7 +50,7 @@ private func near(_ value: Double?, _ expected: Double) -> Bool {
         time.now = 100.8; recorder.observeCandidateVisibility(true)
         time.now = 101.0
         recorder.willMutate(page("ni"), revision: revision, action: .key(32, 0))
-        time.now = 103.0 // Engine / client processing must not count as the user's wait.
+        time.now = 103.0
         recorder.didMutate(page(""), handled: true)
         recorder.commitDrained("你", insertionIssued: true, clientID: nil)
         expect(recorder.activeCompositionID == nil, "completed composition detaches correlation")
@@ -117,7 +117,6 @@ private func near(_ value: Double?, _ expected: Double) -> Bool {
         time.now = 160.2
         recorder.willMutate(page("n"), revision: revision, action: .toggle(true))
         recorder.didMutate(page("n"), handled: true)
-        // Cmd+Z (-3) and Cmd+V (-4) are shortcut keys like every other chord, so key timing is unchanged.
         time.now = 160.3
         action(-3, page("n"), page("n"))
         action(-4, page("n"), page("n"))

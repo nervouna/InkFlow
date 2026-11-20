@@ -1,7 +1,5 @@
 import Foundation
 
-/// `DATABASE DESTINATION` writes the manual export. `auto DATABASE FOLDER LAST NOW` runs one check of the weekly
-/// export with `LAST` (seconds since 1970, or `none`) and `NOW`, printing `skipped` when it is not due.
 @main
 struct QualityExportFixture {
     static func main() {

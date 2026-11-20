@@ -563,7 +563,6 @@ struct ControllerTests {
     }
 
     @MainActor static func deliveryAndRecovery(settings: IFSettings, shared: String, user: String) throws {
-        // Earlier headless IMK fixtures can remain autoreleased with deliberate test compositions.
         for engine in IFEngine.liveSessions { engine.clear(); _ = engine.takeCommit() }
         check(IFEngine.allSessionsIdle, "Delivery fixture has no other composing or pending session")
         let client = RecordingClient()
@@ -573,7 +572,6 @@ struct ControllerTests {
         client.onMutation = {
             callbacks += 1
             check(!IFEngine.allSessionsIdle, "Delivery lease blocks activation inside insert/mark callback")
-            // Native clients may pump a nested event loop before returning the commit callback.
             RunLoop.current.run(until: Date().addingTimeInterval(0.01))
             check(!IFEngine.allSessionsIdle, "Lease remains owned across nested client run loop")
         }
@@ -614,7 +612,6 @@ struct ControllerTests {
             handled = controller.handle(keyEvent(0, "d"), client: client)
             retained = settings.inputSettingsError == warning && engine.configurationError == warning
         }
-        // Check after the defer restored permissions, including on the expected RED run.
         check(warning != nil, "An unwritable phrase directory must produce a settings warning")
         check(handled && !engine.snapshot().preedit.isEmpty)
         check(retained, "CP-001: typing must retain the warning of a failed save")
@@ -647,7 +644,6 @@ struct ControllerTests {
     }
 
     @MainActor static func customPhrases(settings: IFSettings) throws {
-        // Phrases reload in every session at once; earlier autoreleased fixtures must not keep composing.
         for engine in IFEngine.liveSessions { engine.clear(); _ = engine.takeCommit() }
         let client = RecordingClient()
         let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
@@ -754,7 +750,6 @@ struct ControllerTests {
     @MainActor static func contextReranking(settings: IFSettings) {
         func prepared(_ prefix: String = "准备午") -> (InkFlowInputController, RecordingClient) {
             let client = RecordingClient(document: prefix)
-            // Ordinary synthetic context is independent of the desktop's secure-input state.
             let controller = InkFlowInputController(server: nil, delegate: nil, client: client,
                                                     settings: settings, settingsWindow: IFSettingsWindowController(settings: settings),
                                                     secureInput: { false })!
@@ -924,8 +919,6 @@ struct ControllerTests {
         print("PASS controller spelling correction: preedit-only updates, corrected candidates, single digit-key commit")
     }
 
-    /// Controller rows of the key table in keys.md ("Keys during composition"). The engine rows are
-    /// `EngineRegression.compositionKeys`. Every failure message starts with the row id.
     @MainActor static func compositionKeys() {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
@@ -950,7 +943,6 @@ struct ControllerTests {
         let space = keyEvent(49, " "), enter = keyEvent(36, "\r"), escape = keyEvent(53, "\u{1b}")
         let url = "www.example.com", mail = "name@example.com"
 
-        // shift-tap
         do {
             let (idle, idleClient) = session()
             tapLeftShift(idle, idleClient, row: "shift-tap idle")
@@ -967,7 +959,6 @@ struct ControllerTests {
                       "shift-tap \(label): the composition commits \(committed), then the mode switches")
             }
         }
-        // chords
         do {
             for (name, flags) in [("Command", NSEvent.ModifierFlags.command), ("Control", .control), ("Option", .option)] {
                 let (idle, idleClient) = session()
@@ -982,7 +973,6 @@ struct ControllerTests {
                           "chords \(label): \(name) chord commits \(committed) and passes through")
                 }
             }
-            // Cmd+Z and Cmd+V have their own key codes for the quality recorder; they still pass through alike.
             for (name, code, text) in [("Cmd+Z", UInt16(6), "z"), ("Cmd+V", UInt16(9), "v")] {
                 let (idle, idleClient) = session()
                 check(!idle.handle(keyEvent(code, text, .command), client: idleClient) && idleClient.mutations.isEmpty,
@@ -995,7 +985,6 @@ struct ControllerTests {
                       "chords composing: \(name) commits 你好 and passes through")
             }
         }
-        // recognizer-url-email
         do {
             for (text, key, label) in [(url, space, "space"), (mail, enter, "return")] {
                 let (controller, client) = session()
@@ -1015,8 +1004,6 @@ struct ControllerTests {
         }
         print("PASS controller composition keys: shift-tap, chords, recognizer-url-email")
     }
-    /// Shift+Backspace forgets the highlighted candidate's learning through the real controller. The words
-    /// are used by no other test.
     @MainActor static func forgetCandidate() {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
@@ -1032,7 +1019,6 @@ struct ControllerTests {
         }
         let shiftBackspace = keyEvent(51, "\u{8}", .shift), backspace = keyEvent(51, "\u{8}")
 
-        // Idle: the key passes through, and the Shift chord does not toggle the mode.
         let (idle, idleClient) = session()
         check(!idle.handle(shiftBackspace, client: idleClient) && idleClient.mutations.isEmpty, "forget idle: passes through")
         check(idle.handle(modifierEvent(56, .shift), client: idleClient))
@@ -1040,7 +1026,6 @@ struct ControllerTests {
         check(!idle.handle(modifierEvent(56), client: idleClient) && !idle.engine!.requestedASCIIMode && idleClient.mutations.isEmpty,
               "forget idle chord: releasing Shift does not toggle the mode")
 
-        // Composing: the learned candidate returns to its native position; nothing is committed.
         let (controller, client) = session()
         let engine = controller.engine!
         typeKeys(controller, client, "tianqi")
@@ -1061,8 +1046,6 @@ struct ControllerTests {
               "forget composing: nothing is committed: \(client.mutations)")
         check((controller.candidates(nil) as? [String]) == native, "forget composing: the panel lists the refreshed candidates")
 
-        // A keyboard event carries device-dependent bits (left or right Shift), and Caps Lock may be on.
-        // The Backspace character is DEL, and the engine still sees Shift only.
         for (name, shiftCode, raw, released) in [("left Shift", UInt16(56), UInt(0x20102), UInt(0)),
                                                   ("right Shift", 60, 0x20104, 0), ("Caps Lock", 56, 0x30102, 0x10000)] {
             let flags = NSEvent.ModifierFlags(rawValue: raw)
@@ -1085,7 +1068,6 @@ struct ControllerTests {
                   "forget \(name): the candidate returns to its native position without a commit: \(engine.snapshot())")
         }
 
-        // Plain Backspace edits as before; Control, Option and Command chords still commit and pass through.
         check(controller.handle(backspace, client: client) && engine.qualitySnapshot().rawInput == "tianq", "forget: plain Backspace deletes a letter")
         for (name, flags) in [("Control", NSEvent.ModifierFlags.control), ("Option", .option), ("Command", .command),
                               ("Shift-Control", [.shift, .control])] {

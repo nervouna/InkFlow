@@ -3,12 +3,6 @@ import Carbon
 import CryptoKit
 import Foundation
 
-// Black-box benchmark driver. It types the quality corpus through any enabled input method into a plain
-// text view and scores what the view reads back: R1 on T0 (= R-sent), R-char and E-kspc.
-// Public API only: events go through NSApp.sendEvent inside this process, so no Accessibility grant is needed
-// and nothing leaves the process. It never reads or writes quality.sqlite3, a Rime user directory or InkFlow
-// preferences, and it never enables, disables or registers an input source.
-// Run it through macOS/scripts/probe-blackbox-benchmark.sh from a logged-in GUI session, outside the sandbox.
 
 let inkflowBundleID = "io.damao.inputmethod.inkflow"
 let policy = "full code, one Space, read back"
@@ -29,7 +23,6 @@ Usage:
 A run types the corpus through the given input source and writes a report under build/blackbox-benchmark/.
 """
 
-// MARK: Rows and scoring
 
 struct Sample: Decodable {
     let id: String
@@ -62,7 +55,6 @@ struct Kspc: Codable {
     let hanCount: Int
     let value: Double?
 
-    // value is an explicit null where the read-back has no Han scalar: unavailable, not zero.
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(keys, forKey: .keys)
@@ -111,7 +103,6 @@ struct Report: Codable {
     let aggregates: Aggregates
 }
 
-// The Han ranges the portable replay instrument counts (Core/Portable/src/ranking.rs is_han).
 func isHan(_ scalar: Unicode.Scalar) -> Bool {
     switch scalar.value {
     case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x2FA1F, 0x30000...0x323AF:
@@ -140,9 +131,6 @@ func levenshtein(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int {
     return previous[b.count]
 }
 
-// Read-back rule: exactly one trailing U+0020 is stripped before hit, charAccuracy and hanCount.
-// An input method that passes uppercase or non-pinyin letters through and then inserts the Space as a literal
-// space is not a miss by policy artifact. The driver and --score apply the same rule.
 func scored(_ sample: Sample, committed: String, uncommitted: Bool, elapsedMs: Int) -> Row {
     var read = committed.unicodeScalars
     let trailingSpace = read.last == " "
@@ -155,7 +143,6 @@ func scored(_ sample: Sample, committed: String, uncommitted: Bool, elapsedMs: I
                hanCount: read.filter { isHan($0) }.count, uncommitted: uncommitted, elapsedMs: elapsedMs)
 }
 
-// 95% Wilson score interval.
 func wilson(_ hits: Int, _ n: Int) -> (low: Double, high: Double) {
     guard n > 0 else { return (0, 0) }
     let z = 1.96
@@ -173,7 +160,6 @@ func kspc(_ rows: [Row]) -> Kspc {
     return Kspc(keys: keys, hanCount: han, value: han > 0 ? Double(keys) / Double(han) : nil)
 }
 
-// E-kspc is a ratio of sums and only exists for the Chinese series and per category, never overall.
 func aggregate(_ rows: [Row], withKspc: Bool) -> Aggregate {
     let hits = rows.filter(\.hit).count
     let interval = wilson(hits, rows.count)
@@ -201,7 +187,6 @@ func aggregates(_ rows: [Row]) -> Aggregates {
                       categories: byCategory)
 }
 
-// MARK: Printing
 
 func percent(_ value: Double) -> String {
     String(format: "%.1f", value * 100)
@@ -244,7 +229,6 @@ func printAggregates(_ rows: [Row], _ all: Aggregates) {
     print("Every bucket is under 200 units: intervals only, no verdict.")
 }
 
-// MARK: Process exit and input source
 
 var originalSource: TISInputSource?
 var signalSources: [DispatchSourceSignal] = []
@@ -267,8 +251,6 @@ func installedSources() -> [TISInputSource] {
     (TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource]) ?? []
 }
 
-// Selects the remembered source again when something else is current. Safe to call any number of times:
-// it does nothing when the driver never switched.
 func restoreInputSource() {
     guard let original = originalSource else { return }
     guard let current = currentSource() else { return }
@@ -280,7 +262,6 @@ func restoreInputSource() {
     }
 }
 
-// Every exit goes through here: normal, refusal, error, SIGINT and SIGTERM.
 func finish(_ code: Int32) -> Never {
     restoreInputSource()
     exit(code)
@@ -318,7 +299,6 @@ func listSources() {
     }
 }
 
-// MARK: Score mode
 
 struct StoredRow: Decodable {
     let id: String
@@ -344,8 +324,6 @@ struct StoredReport: Decodable {
     let results: [BaselineResult]?
 }
 
-// A driver report scores its stored committed text; baseline.json scores the shown-first of the cold
-// observation, which is what one Space would commit.
 func rowsForScoring(_ path: String) -> [Row] {
     guard let data = FileManager.default.contents(atPath: path) else { fail("cannot read \(path)") }
     guard let report = try? JSONDecoder().decode(StoredReport.self, from: data) else {
@@ -374,7 +352,6 @@ func scoreFile(_ path: String) {
     printAggregates(rows, aggregates(rows))
 }
 
-// MARK: Typing
 
 let usKeyCodes: [Character: UInt16] = [
     "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7, "c": 8, "v": 9, "b": 11,
@@ -384,7 +361,6 @@ let usKeyCodes: [Character: UInt16] = [
 let spaceKeyCode: UInt16 = 49
 let escapeKeyCode: UInt16 = 53
 
-// Lets the run loop deliver input-method callbacks and signal handlers.
 func pump(_ seconds: TimeInterval) {
     if !RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: seconds)) {
         Thread.sleep(forTimeInterval: seconds)
@@ -441,9 +417,6 @@ func resetView(_ textView: NSTextView, _ window: NSWindow) {
     pump(0.1)
 }
 
-// Types one sample: the full code, then one Space. Reads the view once it has not changed for settleMs
-// and holds no marked text, or at timeoutMs: then Escape discards what is still composing, the text that
-// remains is read and the row is flagged uncommitted.
 func typeSample(_ sample: Sample, textView: NSTextView, window: NSWindow, settleMs: Int, timeoutMs: Int) -> Row {
     resetView(textView, window)
     let start = DispatchTime.now()
@@ -482,7 +455,6 @@ func typeSample(_ sample: Sample, textView: NSTextView, window: NSWindow, settle
     return scored(sample, committed: committed, uncommitted: uncommitted, elapsedMs: elapsed)
 }
 
-// MARK: Run mode
 
 struct Options {
     var list = false
@@ -566,9 +538,6 @@ func runBenchmark(_ options: Options) -> Never {
     guard let cloud = options.cloud, ["off", "on", "unknown"].contains(cloud) else {
         usageError("--cloud off|on|unknown is required")
     }
-    // The installed InkFlow would learn every sample into the live user dictionary and write synthetic
-    // decisions into quality.sqlite3; the white-box runner is InkFlow's number. Refused before any input
-    // source is read.
     if inputSource.hasPrefix(inkflowBundleID) {
         fail("refusing \(inputSource): this driver never types through InkFlow (\(inkflowBundleID))")
     }
@@ -650,7 +619,6 @@ func runBenchmark(_ options: Options) -> Never {
     finish(0)
 }
 
-// MARK: Entry
 
 let options = parseArguments()
 if options.list {

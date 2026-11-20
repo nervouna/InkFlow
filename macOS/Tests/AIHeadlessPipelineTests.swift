@@ -54,14 +54,12 @@ struct AIHeadlessPipelineTests {
             smartService: service, secureInput: secure, presentation: endpoint,
             thunderPresentation: thunderPresentation)!
         check(controller.panel == nil, "Headless mode allocates no IMK candidate windows")
-        // Desktop focus and Space changes belong to the host session, not to this fake client.
         NSWorkspace.shared.notificationCenter.removeObserver(controller)
         return (controller, client, endpoint)
     }
 
     @MainActor static func main() async {
         _ = NSApplication.shared
-        // No NSApp activation, key window, event posting or global secure-input mutation.
         IFStubHeadlessControllerFramework()
         do {
             check(CommandLine.arguments.count == 3 || CommandLine.arguments.count == 4 || CommandLine.arguments.count == 5)
@@ -112,8 +110,6 @@ struct AIHeadlessPipelineTests {
         defer { controller.engine?.clear(); controller.refresh(client) }
         _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
         Task { @MainActor in
-            // Reproduce a scheduler stall longer than the former three-second
-            // polling deadline while both the debounce and presentation are pending.
             usleep(4_000_000)
         }
         await expectSuggestion(endpoint)
@@ -234,7 +230,6 @@ struct AIHeadlessPipelineTests {
             check(correlated.filter { lifecycle.contains($0.event) }.map(\.event) == lifecycle,
                   "Request, display, adoption command and insertion call/return are ordered once with the same correlation IDs")
             check(records.excludes([value.pinyin, preceding, following, suggestion, "synthetic", "example.invalid"]), "Logs omit input/output/key/URL")
-            // All text printed here is a declared synthetic fixture, never a real user's document.
             print("PASS effect \(value.name): context=\(live ? "zero-length-best-effort" : "two-sided") suggestion=\(suggestion) request_count=1 latency=\(lastKey.duration(to: calls[0].started))")
             fflush(stdout)
         }
@@ -379,7 +374,6 @@ struct AIHeadlessPipelineTests {
                     check(records.records.contains { $0.reason == reason }, "Rejected profile includes the exact observed gate")
                 }
             }
-            // Restore test-client range consistency before normal teardown clears its mark.
             if ["invalid-mark", "outside-selection"].contains(profile) {
                 client.mark = NSRange(location: preceding.utf16.count, length: controller.engine!.snapshot().preedit.utf16.count)
                 client.selection = NSRange(location: NSMaxRange(client.mark), length: 0)
@@ -455,7 +449,6 @@ struct AIHeadlessPipelineTests {
         defer { controller.engine?.clear(); controller.refresh(client) }
         _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
         check(!endpoint.candidatesVisible, "Window show has not completed when final input refresh returns")
-        // The show completes before the trigger delay ends, on a later main-actor turn than the final refresh.
         endpoint.completeShow()
         await expectSuggestion(endpoint)
         check(endpoint.candidatesVisible, "Window endpoint becomes visible on a later main-actor turn")
@@ -465,14 +458,11 @@ struct AIHeadlessPipelineTests {
     }
 
     @MainActor static func visibilityLifecycle(_ settings: IFSettings) async throws {
-        // The deadline expires before show completes. No context read or request may
-        // occur while hidden, and paging must not introduce a new debounce deadline.
         let service = AIHeadlessService(), records = AIDiagnosticCapture()
         let (controller, client, endpoint) = fixture(settings: settings, service: service, manualShow: true)
         await AIDiagnostics.$observe.withValue({ records.append($0) }) {
             _ = await AIHeadlessKeyboard.type("nihao", into: controller, client: client)
             let reads = client.requests.count
-            // Past the 500 ms trigger delay; the show is still pending.
             await wait(0.62)
             let calls = await service.captured()
             check(calls.isEmpty && !endpoint.candidatesVisible && client.requests.count == reads, "Pending native show never captures surrounding text or requests")
@@ -484,7 +474,6 @@ struct AIHeadlessPipelineTests {
             endpoint.completeShow()
             await expectSuggestion(endpoint)
             let readyCalls = await service.captured()
-            // Readiness is polled every 100 ms; another 500 ms trigger delay would exceed the bound.
             check(readyCalls.count == 1 && shown.duration(to: readyCalls[0].started) < .milliseconds(450),
                   "A late show requests on readiness without an extra debounce after paging")
             controller.engine?.clear(); controller.refresh(client)
@@ -500,7 +489,6 @@ struct AIHeadlessPipelineTests {
                 if phase == "pending" {
                     await wait(0.6)
                 } else {
-                    // The request follows the 500 ms trigger delay, which a loaded runner can overshoot.
                     let deadline = ContinuousClock.now.advanced(by: .seconds(5))
                     while await service.count() == 0, ContinuousClock.now < deadline { await wait(0.01) }
                 }
@@ -508,7 +496,6 @@ struct AIHeadlessPipelineTests {
                 check(count == (phase == "pending" ? 0 : 1))
                 switch action {
                 case "hide":
-                    // A native window can close independently of a controller callback.
                     if phase == "inflight" { endpoint.hideCandidates() }
                     else { controller.hidePalettes() }
                 case "escape": check(controller.handle(AIHeadlessKeyboard.event(53), client: client))

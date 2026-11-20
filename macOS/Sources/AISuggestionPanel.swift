@@ -6,8 +6,6 @@ private final class AISuggestionWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// A passive companion to the native candidate window. The input controller owns
-/// presentation and acceptance; this window never receives keyboard or mouse input.
 @MainActor
 final class AISuggestionPanel {
     private let panel: AISuggestionWindow
@@ -76,7 +74,6 @@ final class AISuggestionPanel {
         let inset: CGFloat = 12, gap: CGFloat = 8, maximumHeight: CGFloat = 170
         heading.stringValue = "AI"
         let hintSize = hint.fittingSize
-        // Reserve the text field inset in addition to the measured string width.
         let naturalWidth = ceil((suggestion as NSString).size(withAttributes: [.font: font]).width) + 4
         func measure() -> (CGFloat, CGFloat, CGFloat) {
             let headingWidth = ceil(heading.fittingSize.width)
@@ -123,8 +120,6 @@ final class AISuggestionPanel {
 
     func hide() { panel.orderOut(nil) }
 
-    /// Screen coordinates use a bottom-left origin. Return nil rather than cover
-    /// candidates when no available screen region can contain the complete panel.
     nonisolated static func position(candidateFrame: NSRect, panelSize: NSSize,
                                     screens: [NSRect], gap: CGFloat = 6) -> NSRect? {
         func valid(_ rect: NSRect) -> Bool {

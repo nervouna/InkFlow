@@ -1,6 +1,7 @@
 # Debugging index
 
 Known failures: symptom, cause, fix, and where to look. Git history has the full investigation notes.
+See [application contracts](Docs/ApplicationContracts.md) and the [test harness notes](Docs/TestHarnessContracts.md) for implementation details.
 
 ## Logs and incident archives
 

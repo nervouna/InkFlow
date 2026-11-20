@@ -8,7 +8,6 @@ import sqlite3
 import uuid
 
 FORMAT = 'inkflow-quality'
-# On the document, compressed or not: `load` holds a whole document in memory.
 MAX_BYTES = 1024 * 1024 * 1024
 
 
@@ -63,11 +62,9 @@ def export(path, output, connect, columns):
         raise ValueError('Choose a new JSON path, not the database, source marker or pair key.')
     document = snapshot(path, connect, columns, create_source=True)
     validate(document, columns)
-    # CLI refuses to overwrite any file; Settings uses the save panel's overwrite choice.
     payload = json.dumps(document, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
     if len(payload.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Export exceeds 1 GiB; no output file written.')
-    # A `.gz` path holds the same document compressed, as the Settings export writes it.
     with (gzip.open(output, 'xt', encoding='utf-8') if output.suffix == '.gz' else output.open('x')) as stream:
         try:
             stream.write(payload)
@@ -85,7 +82,6 @@ def load(path, columns):
         raise ValueError(f'Export exceeds 1 GiB: {path}')
     try:
         if path.suffix == '.gz':
-            # The same document, compressed; the limit is on the document.
             with gzip.open(path, 'rb') as stream:
                 payload = stream.read(MAX_BYTES + 1)
             if len(payload) > MAX_BYTES:
@@ -210,7 +206,6 @@ def validate(document, columns):
 
 
 def canonical(row):
-    # JSON whitespace/key order does not create a conflicting record.
     return {k: json.loads(v) if k.endswith('_json') and v is not None else v for k, v in row.items()}
 
 
@@ -229,7 +224,6 @@ def combine(documents, columns):
         for table, records in document['tables'].items():
             for raw in records:
                 row = sanitize(table, raw)
-                # INTEGER PRIMARY KEY can be reused after retention cleanup. Include run and time.
                 rid = (row['run_id'], row['id'], row['occurred_at']) if table == 'effectiveness_events' else row['id']
                 key = (sid, rid)
                 if key in merged[table]:

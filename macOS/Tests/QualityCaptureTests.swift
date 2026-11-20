@@ -61,7 +61,6 @@ struct QualityCaptureTests {
         let db = CaptureDatabase(url: output.appendingPathComponent("engine-controller.sqlite3"))
         if files.fileExists(atPath: db.url.path) { try files.removeItem(at: db.url) }
         let store = QualityStore(url: db.url, engineVersion: IFEngine.version, buildMetadata: qualityCaptureBuildMetadata, textCapture: true)
-        // The worker loads the device key on its first start; envelopes submitted before that carry no pair hashes.
         await store.maintainRetention()
         try IFEngine.start(shared: shared, user: scratch.appendingPathComponent("rime").path)
         IFStubHeadlessControllerFramework()
@@ -96,14 +95,11 @@ struct QualityCaptureTests {
         print("PASS quality capture: actual engine/controller SQLite evidence at \(db.url.path)")
     }
 
-    /// Every shown candidate carries the engine's own provenance: the Rime translator type and whether a fuzzy or
-    /// algebra rule reached its spelling, with the evidence row they come from. They are stored content-free.
     @MainActor static func candidateFacts(_ store: QualityStore, _ db: CaptureDatabase) async throws {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
         let settings = isolated.settings
         settings.candidateCount = 9
-        /// Selects `text` on the first page of `raw` and returns the stored page-0 decision and its selected candidate.
         func decide(_ raw: String, _ text: String) async -> (page: QualityPageSnapshot, selected: QualityCandidate) {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -133,14 +129,12 @@ struct QualityCaptureTests {
         check(native.selected.type == "phrase" && native.selected.corrected == false, "\(native.selected)")
         let learned = await decide("pengyou", "朋友")
         check(learned.selected.type == "user_phrase" && learned.selected.corrected == false, "\(learned.selected)")
-        // z/zh, c/ch and s/sh are one setting; zongguo reaches 中国 (zhong guo) only through it.
         settings.fuzzyEnabled = true
         let fuzzy = await decide("zongguo", "中国")
         check(fuzzy.selected.corrected == true && fuzzy.selected.type == "phrase", "\(fuzzy.selected)")
         settings.fuzzyEnabled = false
         let green = await decide("lv", "绿")
         check(green.selected.corrected == false && green.selected.type == "phrase", "\(green.selected)")
-        // The English module's own candidates are not Rime phrases: no dictionary spelling to compare.
         let english = await decide("codex", "Codex CLI")
         check(english.selected.type == "english_completion", "\(english.selected)")
         check(english.selected.corrected == false, "\(english.selected)")
@@ -185,7 +179,6 @@ struct QualityCaptureTests {
         print("PASS actual Engine/Controller: 0/1/20/50/200 phrases, five candidates, eight visited pages, applied revision and exact commit output")
     }
 
-    /// Every real decision is hashed under the key beside the database, over the span its evidence row names.
     @MainActor static func pairHashes(_ store: QualityStore, _ db: CaptureDatabase) async throws {
         await store.flush()
         let keyFile = db.url.deletingLastPathComponent().appendingPathComponent("quality-pair-key")
@@ -230,12 +223,10 @@ struct QualityCaptureTests {
             + " \(unhashed) without a known span or with a selected prefix carry none")
     }
 
-    /// The window of a commit is stored on the next composition the recorder submits, never on the commit's own.
     @MainActor static func postCommitWindows(_ store: QualityStore, _ db: CaptureDatabase) async throws {
         let isolated = IsolatedSettings()
         defer { isolated.cleanup() }
         let settings = isolated.settings
-        /// Compositions submitted by `body`: the commit each made and the windows its record carries.
         func submitted(_ body: () -> Void) async -> [(commit: String?, windows: [QualityPostCommitWindow])] {
             await store.flush()
             let before = db.rows("SELECT id FROM compositions").count
@@ -246,7 +237,6 @@ struct QualityCaptureTests {
                  db.ops(row).postCommitWindows ?? [])
             }
         }
-        /// The window as the tests expect it: the elapsed time is only checked to be inside `W`.
         func shape(_ window: QualityPostCommitWindow?) -> QualityPostCommitWindow? {
             let limit = Int(QualityLimits.postCommitWindowSeconds * 1000)
             guard var window, (0...limit).contains(window.elapsedMilliseconds) else { return nil }
@@ -257,7 +247,6 @@ struct QualityCaptureTests {
             input("nihao", control, client)
             check(control.handle(keyEvent(49, " "), client: client))
         }
-        /// A second composition on the same controller, which carries what the first one's window recorded.
         func commitA(_ control: InkFlowInputController, _ client: RecordingClient?) {
             input("a", control, client)
             digit(0, control, client)
@@ -267,7 +256,6 @@ struct QualityCaptureTests {
         let undo = keyEvent(6, "z", .command)
         let paste = keyEvent(9, "v", .command)
 
-        // (a) Two Backspaces covering 你好, then typing: next_code, and the window rides the second composition.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -282,7 +270,6 @@ struct QualityCaptureTests {
             check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode,
                 deletions: 2, leadingDeletions: 2), "\(rows[1].windows)")
         }
-        // (b) Cmd+Z right after the commit leads; Cmd+V ends the leading run, so a later Cmd+Z only counts overall.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -303,8 +290,6 @@ struct QualityCaptureTests {
             check(shape(both[1].windows.last) == QualityPostCommitWindow(commitID: both[0].commit!, end: .nextCode,
                 forwardDeletions: 1, undo: 1, paste: 1, leadingForwardDeletions: 1), "\(both)")
         }
-        // (c) A pass-through digit is direct text: a later Backspace counts overall but not as leading.
-        // Arrows end nothing and count nothing.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -318,7 +303,6 @@ struct QualityCaptureTests {
             check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!, end: .nextCode,
                 deletions: 1, directText: 1), "\(rows)")
         }
-        // (d) A punctuation commit straight after a candidate commit ends the first window and opens its own.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -334,7 +318,6 @@ struct QualityCaptureTests {
             check(shape(rows[2].windows.first) == QualityPostCommitWindow(commitID: rows[1].commit!, end: .nextCode),
                   "\(rows)")
         }
-        // (e) The client changes before anything is typed: the switch closes the window, not the next letter.
         do {
             let first = RecordingClient(document: "")
             let second = RecordingClient(document: "")
@@ -349,7 +332,6 @@ struct QualityCaptureTests {
             check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!,
                 end: .clientChanged), "\(rows)")
         }
-        // (f) Deactivation closes it; the controller types on, so the window has a record to ride.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, client, store)
@@ -362,7 +344,6 @@ struct QualityCaptureTests {
             check(shape(rows[1].windows.first) == QualityPostCommitWindow(commitID: rows[0].commit!,
                 end: .deactivated), "\(rows)")
         }
-        // (g) No insertion was issued without a client, so there is no window to carry.
         do {
             let client = RecordingClient(document: "")
             let control = controller(settings, nil, store)
@@ -378,8 +359,6 @@ struct QualityCaptureTests {
             + " client_changed, deactivated and none without an insertion; each rides the next submitted record")
     }
 
-    /// Shift+Backspace on shown candidates is one `forgotten` act per press, through the real controller.
-    /// The idle press and a plain Backspace while composing add no act. The fixture matches ControllerTests.
     @MainActor static func learningActs(_ store: QualityStore, _ db: CaptureDatabase, _ settings: IFSettings) async {
         func acts() -> [[String: String]] {
             db.rows("SELECT source,event,reason,count FROM effectiveness_events"
@@ -421,8 +400,6 @@ struct QualityCaptureTests {
     }
 
     @MainActor static func controller(_ settings: IFSettings, _ client: RecordingClient?, _ store: QualityStore?) -> InkFlowInputController {
-        // Synthetic ordinary-input fixtures must not inherit the desktop's secure-input state.
-        // QualityControllerTimingTests supplies its own explicit secure-input cases.
         InkFlowInputController(server: nil, delegate: nil, client: client, settings: settings,
             settingsWindow: IFSettingsWindowController(settings: settings), qualityStore: store,
             secureInput: { false })!

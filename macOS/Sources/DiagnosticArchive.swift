@@ -126,7 +126,6 @@ struct DiagnosticArchiveWriter: Sendable {
         } onCancel: { cancellation.cancel() }
     }
 
-    /// Called on activation as well as export. Leases preserve another process's active export.
     func cleanupStale() async {
         await Task.detached(priority: .utility) {
             guard let fd = try? Self.openDirectory(stagingRoot, create: false) else { return }
@@ -179,7 +178,6 @@ struct DiagnosticArchiveWriter: Sendable {
             guard name.hasPrefix("export_"), let uuid = UUID(uuidString: String(name.dropFirst(7))), name == "export_\(uuid)" else { continue }
             let fd = openat(rootFD, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
             guard fd >= 0 else { continue }; defer { close(fd) }
-            // The root coordination lock excludes mkdir/lease creation, so a lease-free stage is abandoned.
             let lease = openat(fd, "lease", O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
             guard lease >= 0 else {
                 if errno == ENOENT { removeStage(rootFD: rootFD, name: name, fd: fd) }

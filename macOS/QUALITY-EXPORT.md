@@ -114,3 +114,15 @@ Each document is limited to 1 GiB, measured uncompressed, because analysis loads
 ## Tests
 
 `test.sh quality-capture-query` covers the Settings exporter, roundtrips, deduplication across sources and overlapping files, and rejected corruption.
+
+## Writer implementation
+
+`QualityExport` streams rows out of the committed SQLite view, draining temporary JSON objects after
+each row. The `since` cut includes compositions by start time with their commits and decisions, and
+learning events by event time. Runs and revisions always remain complete. Canonical UTC millisecond
+timestamps make the cutoff a text comparison. Compression writes the same document and does not
+change its byte limit. The writer stages the complete file beside the destination before publishing,
+while the Settings save panel handles replacement approval. Concurrent source-marker initialization
+uses the existing device identity when another export creates it first. Changing the automatic folder
+resets the last-success state so the next check can populate it immediately. The last result persists
+across launches. The scheduling timer exists only while enabled.

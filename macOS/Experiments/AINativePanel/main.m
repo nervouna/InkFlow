@@ -1,7 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <InputMethodKit/InputMethodKit.h>
 
-// Public-API-only feasibility probe. Does not register or install an input source.
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];

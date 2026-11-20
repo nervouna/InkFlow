@@ -13,7 +13,6 @@ struct VoiceForeground: Equatable {
     }
 }
 
-/// Voice owns its mark separately from Rime. All client calls can reenter this object.
 @MainActor
 final class IFInputControllerVoice {
     typealias CorrectionOverride = @MainActor (String, VoicePolishPrompt.Style) async throws -> String
@@ -83,7 +82,6 @@ final class IFInputControllerVoice {
 
 
     func controllerActivated() {
-        // InputMethodKit may activate a new controller before deactivating the old one.
         if let owner = Self.activeOwner, owner !== self { owner.cancel(.deactivated) }
         cancel(.deactivated)
     }
@@ -93,8 +91,6 @@ final class IFInputControllerVoice {
               target.proxy == ObjectIdentifier(sender as AnyObject), controller?.secureInput() == false else {
             cancel(.deactivated); return
         }
-        // Only this synchronous notification addresses the original client. Never
-        // retain the sender for cleanup after activation of another input context.
         let capturedEpoch = epoch
         beginDelivery()
         defer { endDelivery() }
@@ -193,7 +189,6 @@ final class IFInputControllerVoice {
                     cancel(.editing)
                     return false
                 }
-                // Releasing a chord modifier finishes held dictation but never counts as a tap.
                 let wasHeld = held
                 held = false; resetGesture()
                 if wasHeld { stop() }
@@ -206,7 +201,6 @@ final class IFInputControllerVoice {
                 }
                 return gestureUp(binding, toggleBinding: toggleBinding, client: client)
             }
-            // Chord taps may release their modifiers between the two presses.
             if let binding = firstTapBinding, !binding.isModifier, flags.isSubset(of: binding.flags) { return false }
             resetGesture()
             if held { cancel(.editing) }
@@ -224,7 +218,6 @@ final class IFInputControllerVoice {
                 }
                 return gestureDown(binding, holdBinding: holdBinding, toggleBinding: toggleBinding, client: client)
             }
-            // A reentrant edit is passed through; retain the held key's release edge.
             if !isDelivering || !held { resetGesture() }
             guard isActive else { return false }
             if event.keyCode == UInt16(kVK_Escape) {
@@ -263,7 +256,6 @@ final class IFInputControllerVoice {
             reject(.busy); return
         }
         guard controller.settings.voice.service.isReady else { show(.voiceNotReady, client: client); return }
-        // Unknown learned entries use the existing ASR fallback; retain their generation for invalidation.
         let snapshot = lexicon()
         let aliasSnapshot = aliasLexicon?() ?? engine.readVoiceAliases(generation: snapshot.generation,
                                                                        revision: snapshot.revision)
@@ -271,7 +263,6 @@ final class IFInputControllerVoice {
         if let owner = Self.activeOwner, owner !== self { owner.cancel(.deactivated) }
         epoch &+= 1; let expected = epoch
         starting = true; beginDelivery()
-        // Client reads can activate another controller before capture completes.
         Self.activeOwner = self
         defer { starting = false; endDelivery() }
         guard let captured = readTarget(epoch: expected, onReject: reject) else { return }
@@ -279,7 +270,6 @@ final class IFInputControllerVoice {
         guard captured.proxy == ObjectIdentifier(client as AnyObject) else {
             reject(.proxy); return
         }
-        // TSMDocumentAccess is optional. Unknown selection is not an inability to type.
         let selection = captured.client.selectedRange()
         guard epoch == expected else { reject(.stale); return }
         guard !controller.secureInput() else { reject(.secure); return }
@@ -418,7 +408,6 @@ final class IFInputControllerVoice {
         resetGesture()
         held = false
         guard isActive || isDelivering else {
-            // A lifecycle callback can arrive inside service.cancel after token removal.
             if reason == .deactivated || reason == .targetChanged || reason == .secureInput {
                 epoch &+= 1; cleanupPending = nil; cleanupLeavesMarkedText = false
             }
@@ -463,8 +452,6 @@ final class IFInputControllerVoice {
             emitEffectiveness(.init(source: .voiceSession, event: .finalized))
             guard validate(), let owned = target else { return }
             if text.isEmpty { cancel(.none); return }
-            // Selected-text transactions deliberately avoid post-delivery document
-            // reads. Learning observations are only available for ordinary insertion.
             let insertionStart = selectedTextTransaction ? nil :
                 ownedInsertionStart(owned.client, expected: owned, revision: expected)
             beginDelivery()
@@ -486,7 +473,6 @@ final class IFInputControllerVoice {
                 return
             }
             cleanupPending = nil; cleanupLeavesMarkedText = false
-            // Model ownership is gone before the client callback; nested commit/finish cannot insert twice.
             VoiceDiagnostics.emit(.submitted, id: id)
             owned.client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
             VoiceDiagnostics.emit(.insertionReturned, id: id)
@@ -595,7 +581,6 @@ final class IFInputControllerVoice {
     }
 
     private static func waitForLearningWake(_ ticket: VoiceLearningCoordinator.Ticket) async throws {
-        // Scheduling is platform work; the core owns the deadline. Tolerate early wakes.
         while ContinuousClock.now < ticket.deadline {
             try await Task.sleep(for: ContinuousClock.now.duration(to: ticket.deadline))
         }
@@ -608,7 +593,6 @@ final class IFInputControllerVoice {
         case .read(let ticket): scheduleLearningRead(ticket, client: client, persistence: false)
         case .detected(let ticket, let milliseconds):
             emitEffectiveness(.init(source: .voiceCorrection, event: .detected, milliseconds: milliseconds))
-            // The injected observational sink can reenter and revoke this ticket.
             scheduleLearningRead(ticket, client: client, persistence: true)
         case .ended(let reason):
             clearLearningTasks()
@@ -640,8 +624,6 @@ final class IFInputControllerVoice {
                                        revision: UInt64) -> Bool {
         guard currentLearningTarget(client, revision: revision),
               observation.matchesTarget(client: client, sessionRevision: revision) else { return false }
-        // The native identifier lookup above can itself reenter InputMethodKit.
-        // Recheck focus, epoch, application, and secure state after it returns.
         return currentLearningTarget(client, revision: revision)
     }
 
@@ -692,7 +674,7 @@ final class IFInputControllerVoice {
         if deliveryDepth == 0, let pending = cleanupPending {
             let leaveMarkedText = cleanupLeavesMarkedText
             cleanupPending = nil; cleanupLeavesMarkedText = false
-            if leaveMarkedText { /* The host owns this mark; do not perform a second write. */ }
+            if leaveMarkedText { }
             else { clearMark(pending) }
         }
         if deliveryDepth == 0, let pending = pendingStop {

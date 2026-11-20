@@ -6,8 +6,6 @@ struct AISuggestionState: Equatable {
     let anchor: AIClientAnchor
 }
 
-/// Owns one request attempt per unchanged composition, including failures. All document
-/// and UI callbacks are synchronous on MainActor; only the service runs asynchronously.
 @MainActor
 final class AISuggestionCoordinator {
     private let settings: IFSmartSettings
@@ -76,8 +74,6 @@ final class AISuggestionCoordinator {
         hide()
     }
 
-    /// Called before any controller-owned document mutation, and by a cheap UI tracker.
-    /// This never reads surrounding document text or starts inference.
     func validate() {
         guard refreshDepth == 0 else { return }
         guard let state else { return }
@@ -102,8 +98,6 @@ final class AISuggestionCoordinator {
                 $0.anchor.mark.location == next.anchor.mark.location
         } ?? false
         if (state == next || (ownedRefresh && sameComposition)), configuration == settings.configuration {
-            // validate() ran before this controller-authored mark update. Rebind only
-            // its display ranges, preserving the original input deadline and request.
             state = next
             if let preview, !traced({ present(preview) }) { invalidate(reason: .presentation) }
             return
@@ -128,9 +122,6 @@ final class AISuggestionCoordinator {
             do {
                 try await sleep(delay)
                 await self?.waitForRefresh()
-                // show() is asynchronous for some native clients. Keep the original
-                // input deadline and wait without capturing document text. A weak
-                // reference across each wait permits untouched sessions to deallocate.
                 while true {
                     guard self?.matches(token, input: next.input, configuration: configuration) == true else {
                         AIDiagnostics.emit(.discarded, reason: .staleState); return
@@ -184,7 +175,6 @@ final class AISuggestionCoordinator {
               !requiresVisibleCandidates || candidatesVisible(),
               settings.configuration == configuration else { return false }
         let observed = traced { current() }
-        // Even range getters may synchronously reenter the controller.
         return revision == token && self.state == state && settings.isEnabled &&
             (!requiresVisibleCandidates || candidatesVisible()) &&
             settings.configuration == configuration && observed == state

@@ -31,7 +31,6 @@ struct PersonalDataError: LocalizedError, Sendable {
     }
 }
 
-/// UserDefaults is thread-safe; this wrapper only transfers its existing owner to a utility task.
 struct PersonalDefaults: @unchecked Sendable {
     let defaults: UserDefaults
     func rollbackPreferences() throws -> [String: Data] {
@@ -76,7 +75,6 @@ struct PersonalBackupDocument: Codable, Sendable {
     var format: Int = 1
     var rime: String
     var settings: PersonalBackupSettings
-    // nil is explicit absence; an empty native dictionary remains a non-nil snapshot.
     var dictionaries: [String: String?]
     static let names = ["pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"]
     static let maximumBytes = 128 * 1024 * 1024
@@ -108,7 +106,6 @@ struct PersonalBackupDocument: Codable, Sendable {
     static func read(_ url: URL) throws -> Self {
         let bytes = try PersonalDataFiles.read(url, limit: maximumBytes)
         let document = try JSONDecoder().decode(Self.self, from: bytes)
-        // Codable ignores unknown fields by default. Require every nested field to survive encoding.
         let source = try JSONSerialization.jsonObject(with: bytes) as? NSDictionary
         let canonical = try JSONSerialization.jsonObject(with: JSONEncoder().encode(document)) as? NSDictionary
         guard let source, source == canonical else { throw PersonalDataError("unknown-fields") }
@@ -185,7 +182,7 @@ enum PersonalDataFiles {
     static func cleanupStaging(_ roots: [URL]) {
         for root in roots {
             do { try validateTree(root, maximumBytes: 512 * 1024 * 1024); try FileManager.default.removeItem(at: root) }
-            catch { /* Preserve ambiguous or unreadable artifacts; never follow links. */ }
+            catch { }
         }
     }
 }
@@ -205,15 +202,11 @@ package enum IFPersonalDataWorkerBootstrap {
             let databaseRoot = root.appendingPathComponent("databases")
             try PersonalDataFiles.validateTree(databaseRoot)
             if operation == "export" {
-                // The staged copies are closed. The core snapshots them through its own staging directory
-                // inside the candidate root, the only place this sandbox lets it write.
                 let exported: [String: String?]
                 do { exported = try IFPortablePersonalData.export(user: databaseRoot.path) }
                 catch { throw PersonalDataError("native-snapshot") }
                 for name in PersonalBackupDocument.names {
                     guard let text = exported[name] ?? nil else { continue }
-                    // Not PersonalDataFiles.write: its atomic replace stages outside the candidate root,
-                    // which the sandbox does not allow.
                     let file = root.appendingPathComponent(name + ".userdb.txt")
                     try PersonalDataFiles.safe(file)
                     let descriptor = open(file.path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0o600)
@@ -263,7 +256,6 @@ struct PersonalDataWorker: Sendable {
         process.environment = ["PATH": "/usr/bin:/bin", "TMPDIR": root.path, "LANG": "en_US.UTF-8"]
         process.currentDirectoryURL = root
         process.standardInput = FileHandle.nullDevice
-        // Native diagnostics can contain dictionary text. Never collect or forward them.
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run()
         let deadline = ProcessInfo.processInfo.systemUptime + 120
