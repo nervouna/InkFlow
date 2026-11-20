@@ -657,8 +657,6 @@ mod tests {
         }
     }
 
-    /// The condition of `IFEngine.qualitySnapshot`: an exact record with personal commits that
-    /// came from the English or the mixed translator.
     #[test]
     fn document_continuations_must_fit_the_index() {
         let ranker = ContextRanker::from_dictionary("午餐\twu can\t10\n");
@@ -669,6 +667,8 @@ mod tests {
         assert!(!ContextRanker::from_dictionary("").can_extend_document("餐"));
     }
 
+    /// The condition of `IFEngine.qualitySnapshot`: an exact record with personal commits that
+    /// came from the English or the mixed translator.
     #[test]
     fn personal_source_names_exact_personal_english_and_mixed() {
         use PersonalSource::{ExactEnglish, ExactMixed};
