@@ -22,7 +22,6 @@ struct AILiveTests {
                 let suggestion = try await client.suggest(input: input, configuration: configuration)
                 let elapsed = start.duration(to: .now)
                 let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
-                // Fixtures are synthetic. Defensively redact the secret even from unexpected provider output.
                 let safe = suggestion.replacingOccurrences(of: configuration.apiKey, with: "[REDACTED]")
                 let output = ["fixture": name, "seconds": String(format: "%.3f", seconds), "suggestion": safe]
                 print(String(decoding: try JSONEncoder().encode(output), as: UTF8.self))

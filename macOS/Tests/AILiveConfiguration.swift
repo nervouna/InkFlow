@@ -39,7 +39,6 @@ package enum AILiveConfiguration {
                 guard value.count >= 2, value.last == quote else { throw FixtureError.invalidInput }
                 value = String(value.dropFirst().dropLast())
             }
-            // This is a data parser. It never sources the file or expands shell syntax.
             values[key] = value
         }
         let configuration = AISuggestionConfiguration(baseURL: values["LLM_BASE_URL"] ?? "",

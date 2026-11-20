@@ -21,7 +21,6 @@ struct DiagnosticCrashCollection: Encodable, Sendable {
     let issues: [Issue]
 }
 
-/// Reads only bounded regular .ips files and immediately projects them into a finite safe schema.
 struct DiagnosticCrashReader: Sendable {
     let directories: [URL]
     var maximumFiles = 128
@@ -36,7 +35,6 @@ struct DiagnosticCrashReader: Sendable {
         var summaries: [DiagnosticCrashSummary] = [], issues = Set<DiagnosticCrashCollection.Issue>()
         var examined = 0, bytesRead = 0
         for directory in directories {
-            // Walk ancestors without following links, including the report directory itself.
             var fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
             guard fd >= 0 else { issues.insert(.unreadable); continue }
             var failed = false
@@ -112,7 +110,6 @@ struct DiagnosticCrashReader: Sendable {
         if simulated { issues.insert(.simulated); return }
         if nonfatal { issues.insert(.nonfatal); return }
         if exception?["type"] as? String == "EXC_RESOURCE" || exception?["type"] as? String == "EXC_GUARD" {
-            // Fatality varies for these reports. Do not infer a confirmed crash or confirmed nonfatal event.
             issues.insert(.unsupported); return
         }
         let pid = (body["pid"] as? NSNumber).flatMap { value -> Int32? in
@@ -125,7 +122,6 @@ struct DiagnosticCrashReader: Sendable {
             exception: (exception?["type"] as? String).flatMap(DiagnosticCrashSummary.Exception.init(rawValue:)) ?? .unknown))
     }
 
-    // Apple documents these Boolean flags as strings; reports also use JSON Boolean/numeric values.
     private static func flag(_ value: Any?) -> Bool? {
         guard let value else { return false }
         if let text = value as? String {

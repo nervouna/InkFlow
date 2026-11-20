@@ -41,7 +41,7 @@ private final class Reader {
 }
 private enum TestError: Error { case failed }
 
-private let maintenanceDate = Date(timeIntervalSince1970: 1_768_435_200) // 2026-01-15 UTC
+private let maintenanceDate = Date(timeIntervalSince1970: 1_768_435_200)
 
 private let metadata = QualityBuildMetadata(sourceRevision: "source", sourceTreeSHA256: String(repeating: "a", count: 64),
     sourceDirty: true, bundledResourcesSHA256: String(repeating: "b", count: 64),
@@ -148,7 +148,6 @@ private func createV3Database(at url: URL) throws {
         """)
 }
 
-/// Each commit with the decision linked to it: the commit's and the decision's character counts.
 private func linkedCounts(_ reader: Reader) throws -> [[String]] {
     try reader.rows("""
         SELECT c.id, c.character_count, d.selected_character_count
@@ -160,7 +159,6 @@ private func pairKeyURL(_ database: URL) -> URL {
     database.deletingLastPathComponent().appendingPathComponent("quality-pair-key")
 }
 
-/// What the store must write: HMAC-SHA256 under the key file, first 128 bits as lowercase hex.
 private func expectedPairHash(_ message: String, key: Data) -> String {
     HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: key)).prefix(16)
         .map { String(format: "%02x", $0) }.joined()
@@ -170,14 +168,12 @@ private func fileMode(_ url: URL) throws -> Int? {
     try FileManager.default.attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
 }
 
-/// Neither the key's bytes nor its hex appear anywhere in the database file.
 private func expectKeyAbsent(_ key: Data, from database: URL, _ message: String) throws {
     let bytes = try Data(contentsOf: database)
     expect(bytes.range(of: key) == nil, "\(message): key bytes")
     expect(bytes.range(of: Data(key.map { String(format: "%02x", $0) }.joined().utf8)) == nil, "\(message): key hex")
 }
 
-/// A migrated database appends both columns, keeps its legacy row without counts and records them for new rows.
 private func expectMigratedCounts(_ reader: Reader) throws {
     expect(try reader.rows("SELECT name FROM pragma_table_info('commits')").last == ["character_count"],
            "character_count is the last commits column")
@@ -323,8 +319,6 @@ private extension QualityStoreTests {
         try await store.setPaused(true)
         expect(store.statistics().written == 1, "fresh record persisted before elapsed retention")
         clock.advance()
-        // Observe the real timer on its injected clock, then await its worker barrier. Frequent
-        // same-process read-only SQLite queries race the system VFS locks on macOS (IOERR_LOCK).
         let tickObserved = await Task.detached { clock.waitForAdvance() }.value
         expect(tickObserved, "idle maintenance timer observed advanced clock; stats=\(store.statistics())")
         await store.flush()
@@ -388,7 +382,7 @@ private extension QualityStoreTests {
         }
         await store.flush()
         let reader = try Reader(url)
-        await store.maintainRetention() // Inject failure after all deletes, before commit.
+        await store.maintainRetention()
         expect(try reader.scalar("SELECT count(*) FROM compositions") == "3", "retention transaction rolls back all children")
         expect(try reader.rows("PRAGMA foreign_key_check").isEmpty, "rollback restores FK integrity")
         await store.maintainRetention()
@@ -402,7 +396,6 @@ private extension QualityStoreTests {
         await store.flush()
         expect(try reader.scalar("SELECT count(*) FROM effectiveness_events") == "1", "strict 90-day event cutoff")
         let writer = try Reader(url, writable: true)
-        // One aged-in row plus more than the cap, so the pruning below must remove rows to reach the cap.
         let excess = QualityLimits.effectivenessRetentionRows + 16
         try writer.execute("""
             WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x < \(excess))
@@ -443,7 +436,6 @@ private extension QualityStoreTests {
         expect(try reader.scalar("PRAGMA auto_vacuum") == "2", "a new database uses incremental auto_vacuum")
         expect(try reader.scalar("PRAGMA freelist_count") == "0", "maintenance returns pages freed by retention")
         await store.close()
-        // An existing database without auto_vacuum and with free pages, as written by earlier versions.
         let writer = try Reader(url, writable: true)
         try writer.execute("PRAGMA auto_vacuum = NONE")
         try writer.execute("VACUUM")
@@ -495,7 +487,6 @@ private extension QualityStoreTests {
         let url = try makeURL("text-free")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata)
-        // The worker loads the device key on its first start; an envelope submitted before that carries no hashes.
         await store.maintainRetention()
         let keyFile = pairKeyURL(url)
         let key = try Data(contentsOf: keyFile)
@@ -551,7 +542,6 @@ private extension QualityStoreTests {
         expect(literal == [[codeHash, textHash]], "a text-mode decision carries the literals and the same hashes")
         expect(try linkedCounts(reader) == [["commit-text-free", "3", "3"], ["commit-with-text", "3", "3"]],
                "opt-in stores the same counts")
-        // An abandoned composition carries text only in its deleted input: no decision, no commit.
         var abandoned = QualityEnvelope(composition: QualityComposition(id: "abandoned", appBundleID: "test.app", outcome: .cancelled))
         abandoned.composition.operations.inputBeforeDeletion = "pniggu"
         expect(store.submit(abandoned) == .accepted, "opt-in accepts an abandoned composition")
@@ -572,7 +562,6 @@ private extension QualityStoreTests {
         }
         try expectKeyAbsent(key, from: url, "the database file")
         expect(try Data(contentsOf: url).range(of: Data(codeHash.utf8)) != nil, "the byte scan does see a hash")
-        // A character is a Unicode scalar: ❤️ is two scalars and one grapheme. The counts need no stored text.
         expect("❤️".count == 1 && "❤️".unicodeScalars.count == 2, "the fixture text is the two-scalar form")
         let heartURL = try makeURL("heart")
         defer { try? FileManager.default.removeItem(at: heartURL.deletingLastPathComponent()) }
@@ -590,7 +579,6 @@ private extension QualityStoreTests {
         expect(try heartReader.scalar("SELECT count(*) FROM commits WHERE text != ''") == "0" &&
                heartReader.scalar("SELECT count(*) FROM candidate_decisions WHERE selected_text IS NOT NULL") == "0",
                "the counts come without any stored text")
-        // Upgrade: a database written with text reopens in the text-free default and loses its text at startup maintenance.
         let legacyURL = try makeURL("legacy-text")
         let legacy = QualityStore(maintenanceNow: { maintenanceDate }, url: legacyURL, engineVersion: "test", buildMetadata: metadata, textCapture: true)
         phrased.composition.id = "legacy"
@@ -609,12 +597,10 @@ private extension QualityStoreTests {
         }
     }
 
-    /// The pair hashes of one decision: which span, which key, and which decisions get none.
     static func pairIdentity() async throws {
         let url = try makeURL("pairs")
         let directory = url.deletingLastPathComponent()
         defer { try? FileManager.default.removeItem(at: directory) }
-        // The key file's mode does not follow the directory's, and a key of the wrong size is replaced.
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
         let keyFile = pairKeyURL(url)
         try Data("short".utf8).write(to: keyFile)
@@ -641,14 +627,11 @@ private extension QualityStoreTests {
         func add(_ id: String, _ envelope: QualityEnvelope, code: String?, text: String? = "你好😀") {
             cases.append((id, envelope, code, code == nil ? nil : text))
         }
-        // The span of the evidence row, whole or a leading segment, normalized.
         add("whole", variant("whole"), code: "nihao")
         add("segment", variant("segment", raw: "nihaoshijie"), code: "nihao")
         add("normalized", variant("normalized", raw: "Xi'an", text: "西安"), code: "xian", text: "西安")
-        // Without a row only a custom phrase knows its span: the whole input.
         add("custom", variant("custom", evidence: nil, custom: true), code: "nihao")
         add("unknown-span", variant("unknown-span", evidence: nil), code: nil)
-        // A malformed row, a selected prefix and an empty input have no hash.
         for (index, bad) in ["0,9,n", "5,2,n", "7", "a,b,n", "-1,3,n", "3,3,n", ""].enumerated() {
             add("malformed-\(index)", variant("malformed-\(index)", evidence: bad), code: nil)
         }
@@ -657,7 +640,6 @@ private extension QualityStoreTests {
         for item in cases {
             expect(store.submit(item.envelope) == .accepted, "\(item.id) is accepted")
         }
-        // Only the selected candidate and only its page: not the others, the first page or the visited pages.
         var several = variant("several")
         several.decisions[0].snapshot.candidates.insert(
             QualityCandidate(text: "你号", displayIndex: 0, displayRank: 5, nativeIndex: 0, nativeRank: 5), at: 0)
@@ -697,7 +679,6 @@ private extension QualityStoreTests {
             SELECT json_extract(visited_pages_json,'$[0].codeHash') IS NULL
             FROM candidate_decisions WHERE id = 'decision-several'
             """) == "1", "nor a visited page")
-        // The same key is read again and gives the same hash for the same text.
         await store.close()
         let reopened = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test",
                                     buildMetadata: metadata)
@@ -705,7 +686,6 @@ private extension QualityStoreTests {
         expect(try Data(contentsOf: keyFile) == key, "a restart keeps the key")
         expect(reopened.submit(variant("again")) == .accepted, "a reopened store accepts")
         await reopened.flush()
-        // Text mode keeps the literals and the same hashes: one identity space across a mode switch.
         try await reopened.setTextCapture(true)
         expect(reopened.submit(variant("text-mode")) == .accepted, "text mode accepts")
         await reopened.flush()
@@ -719,7 +699,6 @@ private extension QualityStoreTests {
                reader.scalar("SELECT count(*) FROM candidate_decisions WHERE id = 'decision-text-mode'") == "0",
                "turning text off removes the text record, keeps the hashed text-free one")
         expect(try Data(contentsOf: keyFile) == key, "turning text on and off leaves the key alone")
-        // Clearing the records replaces the key, so cleared records cannot be linked to later ones.
         try await reopened.clearRecords()
         let rotated = try Data(contentsOf: keyFile)
         expect(rotated.count == 32 && rotated != key, "clearing the records replaces the key")
@@ -894,7 +873,6 @@ private extension QualityStoreTests {
                        "Fixture keeps requested schema version")
             }
             let store = QualityStore(maintenanceNow: { maintenanceDate }, url: url, engineVersion: "test", buildMetadata: metadata, textCapture: true)
-            // The worker may reject the topology before or after this submit; either way it must not block or throw.
             expect([.accepted, .disabled].contains(store.submit(fixture("malformed-\(label)"))),
                    "Malformed topology detection stays off the producer path")
             await store.close()
@@ -1058,7 +1036,6 @@ private extension QualityStoreTests {
         expect(accepted < 128 && pressure.statistics().buffered == accepted, "byte cap binds before count cap")
         expect(pressure.statistics().bufferedBytes <= QualityLimits.bufferedBytes, "pending plus in-flight byte cap")
         gate.release.signal()
-        // About 8 MiB of 100 KB records: the default one-second close can end before a loaded machine drains them.
         await pressure.close(timeout: 30)
         expect(pressure.statistics().written == accepted && pressure.statistics().bufferedBytes == 0, "entire accepted charge released after drain")
         print("PASS quality configuration: matrix, Unicode, compact/legacy/mixed reopen, reference integrity, logical/encoded config limits, 8 MiB in-flight queue bound")
@@ -1134,7 +1111,6 @@ private extension QualityStoreTests {
         expect(store.submit(fixture("close-pending")) == .accepted, "close fixture accepts pending composition")
         expect(store.submit(.init(source: .voiceSession, event: .finalized)) == .accepted,
                "close fixture accepts pending effectiveness event")
-        // Release even an unbounded implementation so the regression reports its wait, not a hang.
         DispatchQueue.global().asyncAfter(deadline: .now() + 3) { gate.release.signal() }
         let began = ContinuousClock.now
         let completed = await store.close()
@@ -1157,8 +1133,6 @@ private extension QualityStoreTests {
         try locker.execute("BEGIN IMMEDIATE")
         expect(locked.submit(fixture("close-locked")) == .accepted, "writer lock does not block acceptance")
         let saved = await locked.close()
-        // A close timeout ends the caller's wait, not the serial worker's ownership of SQLite.
-        // Queue a second close behind that worker before inspecting its final failure accounting.
         let settled = await locked.close()
         expect(!saved && !settled && locked.statistics().droppedBusy == 1,
                "actual close-time SQLite failure reports unsaved composition")

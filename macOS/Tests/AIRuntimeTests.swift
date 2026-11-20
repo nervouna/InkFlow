@@ -7,8 +7,6 @@ import InkFlowAITestSupport
 import InkFlowTestSupport
 #endif
 
-/// Debounce time that moves only when a test advances it. Sleepers poll it, so a slow host
-/// delays a wakeup but never changes which deadlines have passed.
 @MainActor
 private final class TestClock {
     private var now = Duration.zero
@@ -24,7 +22,6 @@ private final class TestClock {
         while now < deadline { try await Task.sleep(for: .milliseconds(1)) }
     }
 
-    /// Returns once every sleeper whose deadline has passed has resumed.
     func advance(by duration: Duration) async {
         now += duration
         await AIRuntimeTests.until { !self.deadlines.values.contains { $0 <= self.now } }
@@ -67,7 +64,6 @@ private final class RuntimeFixture {
             anchor: AIClientAnchor(client: ObjectIdentifier(client), mark: NSRange(location: 4, length: count),
                                    selection: NSRange(location: 4 + count, length: 0)))
     }
-    /// Starts a new attempt and returns once its debounce has begun on the test clock.
     func schedule() async {
         let started = clock.started
         coordinator.synchronize()
@@ -80,7 +76,6 @@ private final class RuntimeFixture {
 @main
 struct AIRuntimeTests {
     @MainActor static func verify(_ condition: Bool, _ message: String = "", file: StaticString = #filePath, line: UInt = #line) { check(condition, message, file: file, line: line) }
-    /// Polls until `condition` holds. The timeout only bounds a failing run.
     @MainActor static func until(_ condition: () async -> Bool, _ message: String = "",
                                  file: StaticString = #filePath, line: UInt = #line) async {
         let timeout = ContinuousClock.now + .seconds(10)
@@ -210,7 +205,7 @@ struct AIRuntimeTests {
         await fixture.advance(270)
         verify(await fixture.service.count() == 0, "No paid request before 0.5s")
         fixture.coordinator.validate()
-        fixture.setInput("nihao", length: 6) // Rime's display mark changes while raw input is identical.
+        fixture.setInput("nihao", length: 6)
         fixture.coordinator.synchronize(ownedRefresh: true)
         await fixture.advance(300)
         await until({ await fixture.service.count() == 1 }, "Navigation mark update must retain original deadline")
@@ -307,7 +302,6 @@ struct AIRuntimeTests {
         verify(failure.isolated.settings.smart.requestError?.contains("401") == true && failure.shown == nil)
         failure.coordinator.synchronize()
         await failure.advance(540)
-        // A retry would replace the request synchronously; its own debounce starts after this advance.
         verify(await failure.service.count() == 1 && failure.coordinator.request == request,
                "Failure has no automatic paid retry")
     }

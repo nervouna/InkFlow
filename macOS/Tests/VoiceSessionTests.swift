@@ -34,10 +34,8 @@ struct VoiceSessionTests {
         precondition(results == [.completed(rawFinal: "ab", insertedFinal: "AB", usedRawFallback: false)])
         session.finalized(transcript: "ab", id: id)
         precondition(results.count == 1)
-        // A whole-session correction failure preserves the complete finalized ASR transcript.
         results = []
         let failed = VoiceSession(correct: { _ in
-            // Completion must not depend on a fast synthetic transport.
             try await Task.sleep(for: .milliseconds(100))
             throw VoiceCorrectionClient.Failure.incomplete
         }, onPreview: { _ in }, onRequestFinalize: { _ in }, onFinish: { results.append($0) })
@@ -51,7 +49,6 @@ struct VoiceSessionTests {
         try await waitUntil { !results.isEmpty }
         precondition(results == [.completed(rawFinal: "abtail", insertedFinal: "abtail", usedRawFallback: true)])
 
-        // Cancellation wins even when the correction ignores task cancellation and returns later.
         results = []
         var releaseCancelledCorrection: CheckedContinuation<Void, Never>?
         var cancelledCorrectionReturned = false
@@ -78,7 +75,6 @@ struct VoiceSessionTests {
         await Task.yield()
         precondition(results == [.cancelled, .completed(rawFinal: "", insertedFinal: "", usedRawFallback: false)])
 
-        // Tail timeout discards partial recognition; correction deadline can only use finalized ASR.
         results = []
         var limits = VoiceSession.Limits()
         limits.tail = .milliseconds(5)
@@ -103,7 +99,6 @@ struct VoiceSessionTests {
         deadline.finalized(transcript: "rawtail", id: deadlineID)
         precondition(results == [.completed(rawFinal: "rawtail", insertedFinal: "rawtail", usedRawFallback: true)])
 
-        // A deadline that wins after whole-transcript correction starts completes once with full raw ASR.
         results = []
         limits.correctionWait = .milliseconds(10)
         var deadlineRequests: [String] = []
@@ -139,7 +134,6 @@ struct VoiceSessionTests {
         bounded.receiveVolatile("abc", id: boundedID)
         precondition(results == [.failed(.boundExceeded)])
 
-        // Empty corrections preserve the complete finalized raw transcript.
         results = []
         let fallback = VoiceSession(correct: { _ in "" }, onPreview: { _ in },
             onRequestFinalize: { _ in }, onFinish: { results.append($0) })
@@ -150,7 +144,6 @@ struct VoiceSessionTests {
         try await waitUntil { !results.isEmpty }
         precondition(results == [.completed(rawFinal: "raw tail", insertedFinal: "raw tail", usedRawFallback: true)])
 
-        // The finalized transcript is canonical even if adapter fragments differed.
         results = []
         var canonicalRequests: [String] = []
         let canonical = VoiceSession(correct: { text in canonicalRequests.append(text); return "correct" },

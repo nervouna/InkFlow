@@ -33,8 +33,6 @@ private final class ProducerCapture: @unchecked Sendable {
 
 @main struct LocalDiagnosticsTests {
     static func main() async throws {
-        // Foundation deliberately abbreviates /private/var to /var even in resolvingSymlinksInPath.
-        // The store refuses symlink ancestors, so use the physical POSIX temporary directory path.
         let physical = realpath(FileManager.default.temporaryDirectory.path, nil)!
         let temporary = URL(fileURLWithPath: String(cString: physical)); free(physical)
         let root = temporary
@@ -66,7 +64,6 @@ private final class ProducerCapture: @unchecked Sendable {
         clock.advance(61)
         let expired = await store.snapshot()
         precondition(expired.records.isEmpty && expired.status.loss.expiredFiles > 0)
-        // A blocked worker cannot hold the submission lock or enqueue an unbounded number of events.
         let gate = DispatchSemaphore(value: 0), entered = DispatchSemaphore(value: 0)
         let gated = LocalDiagnosticStore(directory: root.appendingPathComponent("Gated"), configuration: config,
             beforeIO: { entered.signal(); gate.wait() })
@@ -78,7 +75,6 @@ private final class ProducerCapture: @unchecked Sendable {
         precondition(ProcessInfo.processInfo.systemUptime - start < 0.1)
         gate.signal()
         _ = await waiter.value
-        // Unsafe directories must fail closed without touching a symlink target.
         let outside = root.appendingPathComponent("Outside")
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         let link = root.appendingPathComponent("Link")
@@ -186,7 +182,6 @@ private final class ProducerCapture: @unchecked Sendable {
         precondition(!safe.contains("secretContent") && !safe.contains("privateText"))
         let repaired = try Data(contentsOf: file)
         precondition(repaired.last == 10)
-        // A second process/run can append without replacing the earlier process identity.
         recovered.submit(.init(module: .voice, event: "resources", outcome: .ready))
         let joined = await recovered.snapshot()
         precondition(Set(joined.records.map { $0.process.run }).count == 2)
@@ -211,7 +206,6 @@ private final class ProducerCapture: @unchecked Sendable {
         }
         let bounded = await store.snapshot()
         precondition(bounded.records.count < 80 && bounded.status.loss.capacityFiles > 0)
-        // Reserved incident filenames participate in exactly the same age/size budget.
         let incident = directory.appendingPathComponent("incident_\(Int64(clock.now().timeIntervalSince1970 * 1_000))_\(UUID()).json")
         try Data(repeating: 32, count: 10_000).write(to: incident)
         let unrelated = directory.appendingPathComponent("user-owned.txt")

@@ -33,10 +33,6 @@ package final class IsolatedSettings {
     package func cleanup() { defaults.removePersistentDomain(forName: suite) }
 }
 
-/// The name of a defaults suite of a test's own: a path in the temporary directory, where cfprefsd
-/// then keeps its plist. With a plain name the plist goes to ~/Library/Preferences and one is left
-/// there per run: cfprefsd writes the emptied suite back seconds after `removePersistentDomain(forName:)`,
-/// so even deleting the file does not keep it away.
 package func temporarySuiteName(_ prefix: String) -> String {
     FileManager.default.temporaryDirectory.appending(path: "\(prefix).\(UUID().uuidString)").path
 }

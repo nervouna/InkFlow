@@ -9,8 +9,6 @@ import InkFlowTestSupport
 
 @main
 struct SettingsTests {
-    /// The checks are driven with an injected clock. The setting and folder are stored directly so that no check
-    /// with the real clock is scheduled beside them.
     @MainActor static func weeklyQualityExport(settings: IFSettings, defaults: UserDefaults, directory: URL) async {
         settings.qualityDatabase = directory.appendingPathComponent("quality.sqlite3")
         let folder = directory.appendingPathComponent("weekly")

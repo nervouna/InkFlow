@@ -1,7 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// UI dependencies remain inert until an explicit action. Fixtures inject every side effect.
 @MainActor struct DiagnosticFeedbackDependencies {
     var save: (Date, Date, String?) async throws -> DiagnosticIncidentSummary
     var incidents: () async throws -> DiagnosticIncidentList

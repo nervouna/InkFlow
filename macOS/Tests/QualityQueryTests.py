@@ -53,7 +53,6 @@ REVERT_COUNTER_FIELDS = ('commits_with_window', 'reverted_commits')
 REVERT_FIELDS = (*REVERT_COUNTER_FIELDS, 'revert_rate', 'revert_wilson_low', 'revert_wilson_high')
 
 
-# The fixture's `raw-only` composition is their carrier; the commits they describe belong to compositions a to d.
 WINDOWS = [window('commit-a', 'next_code', 1500, deletions=2, leadingDeletions=2),
            window('commit-b', 'timeout', 10000, deletions=1, directText=1, paste=1),
            window('commit-c', 'client_changed', 250),
@@ -206,7 +205,6 @@ def replay_fixture(path):
                text=(committed or chosen) if text else '', insertion_issued=1, character_count=committed_count)
         snapshot = page(raw, texts, number=number, text=text, **options)
         selected = texts.index(chosen) if index is None else index
-        # The store hashes the selected candidate before it redacts the text; the span is the evidence row's.
         if chosen and 'evidence' in snapshot['candidates'][selected]:
             snapshot['codeHash'] = fake_hash('code', raw[:options.get('end') or len(raw)])
             snapshot['candidates'][selected]['textHash'] = fake_hash('text', chosen)
@@ -223,29 +221,21 @@ def replay_fixture(path):
                operations_json=json.dumps(OPS), regular_ranked_selection=regular, matches_custom_phrase=0,
                selected_character_count=selected_count)
 
-    # Page 0: the snapshot list is the case, whatever the first page held.
     add('r1', 'kaihui', ['凯会', '开会', '开汇'], '开会', natives=[1, 0, 2], first=['开会', '开汇', '凯会'],
         context='他说')
-    # Paged: the first page is the case.
     add('r2', 'hui', ['辉', '晖'], '辉', number=1, first=['汇', '会', '灰'])
-    # Paged without a usable first page: no list to replay.
     add('r3', 'zhunbeiwu', ['准备午', '准备五'], '准备午', number=1)
     add('r4', 'womenqukaihui', ['我们去开会', '我们去开汇'], '我们去开会', number=1, first=['我们去开会'],
         first_generation=99)
-    # Records from before the facts existed: all or some candidates lack them.
     add('r5', 'tianqi', ['天气', '田七'], '天气', facts=0, counts=None)
     add('r6', 'de', ['的', '得'], '的', facts=1)
-    # Text-free, another kind, not regular, not committed.
     add('r7', 'ke', ['课', '可'], '课', text=False)
     add('r8', 'xiao', ['😀'], '😀', kind='emoji')
-    # Lengths that cannot be known, in their own kind so the Chinese series stays put: a text-free decision written
-    # before v4, an empty selection (a zero count) and a text-mode decision before v4, which buckets by its text.
     add('r11', 'ke', ['课'], '课', kind='symbol', text=False, counts=None)
     add('r12', 'kong', [''], '', kind='symbol', counts=0)
     add('r13', 'pu', ['——'], '——', kind='symbol', counts=None)
     add('r9', 'pu', ['，'], '，', trigger='punctuation', regular=0)
     add('r10', 'shi', ['是'], '是', outcome='reverted')
-    # Before the 28-day window of the trend and the --since of the replay tests.
     add('w1', 'shi', ['使', '是'], '使', started=EARLIER)
     db.commit()
     db.close()
@@ -270,7 +260,6 @@ def retype_fixture(path):
         """One commit of the `chosen` texts, one decision each; with `counts`, the window that closes after it."""
         windows = list(carried)
         carried.clear()
-        # A second apart, in the order added.
         started = datetime.fromisoformat(STAMP.replace('Z', '+00:00')) + timedelta(seconds=len(added))
         stamp = started.isoformat(timespec='milliseconds').replace('+00:00', 'Z')
         added.append(cid)
@@ -300,30 +289,24 @@ def retype_fixture(path):
 
     added = []
     test = ['试验', '实验']
-    # One Backspace of two characters is not a revert.
     add('kept', 'nihao', ['你好', '拟好'], '你好', deletions=1, leadingDeletions=1)
-    # Relabelled: the same code retyped, and the code continued to a candidate of the reverted list.
     add('same', 'shiyan', test, '试验', **REVERT_WINDOW)
     add('same_retype', 'shiyan', test, '实验')
     add('early', 'wom', ['我呒', '我们', '我'], '我呒', **REVERT_WINDOW)
     add('early_retype', 'women', ['我们', '我门'], '我们')
-    # Excluded by the retype: a shorter code (maybe half of a split retype), and a text not on the reverted list.
     add('split', 'wom', ['我呒', '我们', '我'], '我呒', **REVERT_WINDOW)
     add('split_retype', 'wo', ['我', '窝'], '我')
     add('off_list', 'wom', ['我呒', '我们'], '我呒', **REVERT_WINDOW)
     add('off_list_retype', 'womeng', ['我梦'], '我梦')
-    # Excluded by the window: Cmd+Z, a key typed after the deletions, and a window that timed out.
     add('undo', 'shiyan', test, '试验', undo=1, leadingUndo=1)
     add('undo_retype', 'shiyan', test, '实验')
     add('typed_on', 'shiyan', test, '试验', deletions=2, leadingDeletions=2, directText=1)
     add('typed_on_retype', 'shiyan', test, '实验')
     add('late', 'shiyan', test, '试验', end='timeout', **REVERT_WINDOW)
     add('late_retype', 'shiyan', test, '实验')
-    # A retype reverted in turn is no gold; it is relabelled by its own retype, here the same text again.
     add('again', 'shiyan', test, '试验', **REVERT_WINDOW)
     add('again_retype', 'shiyan', test, '实验', **REVERT_WINDOW)
     add('again_retype2', 'shiyan', test, '实验')
-    # Two decisions on the reverted commit, and a retype with two decisions: which segment was wrong is unknown.
     add('pair', 'womenqu', ['我们', '去', '我们去'], '我们', '去', deletions=3, leadingDeletions=3)
     add('pair_retype', 'womenqu', ['我们去'], '我们去')
     add('busy', 'shiyan', test, '试验', **REVERT_WINDOW)
@@ -404,7 +387,6 @@ def scorecard_fixture(path):
                    regular_ranked_selection=chosen['regular'], matches_custom_phrase=0,
                    selected_character_count=len(chosen['word']) if rank else None)
 
-    # Regular compositions: the chosen word is the commit, so its length is the committed characters.
     add('one', keys=5, decisions=[pick('你好', 1)], commits=[('candidate', '你好')])
     add('digit', keys=4, decisions=[pick('使', 3, leader=('是', 'phrase'), trigger='digit')],
         commits=[('candidate', '使')])
@@ -427,19 +409,16 @@ def scorecard_fixture(path):
         commits=[('candidate', '我们'), ('candidate', '去')])
     add('edited', keys=8, edits=2, decisions=[pick('朋友', 1, preeditEdits=2)], commits=[('candidate', '朋友')])
     add('free', keys=5, app='app.free', decisions=[pick('我的', 1, free=True)], commits=[('candidate', '', 2)])
-    # A Return on raw pinyin: a decision of kind unknown with no selection and no linked commit, or no decision.
     add('raw1', keys=6, decisions=[pick('', None, text_kind='unknown', trigger='return_raw', regular=0,
                                         outcome='unknown', linked=False)], commits=[('raw_return', 'nihao')])
     add('raw2', keys=6, commits=[('raw_return', 'ni')])
     add('ascii', keys=5, commits=[('ascii', 'abc')])
-    # A symbol key opens and closes a record that typed no code; an adopted AI suggestion commits nothing.
     add('sym', keys=1, commits=[('direct_symbol', '，')])
     add('nocommit', keys=4, reason='ai_adopted')
     add('intr', outcome='interrupted', keys=2)
     add('partial', outcome='cancelled', keys=6, decisions=[pick('再', 1)], commits=[('candidate', '再')])
     add('canc1', outcome='cancelled', keys=3, edits=2, started=DAY_BEFORE)
     add('canc2', outcome='cancelled', keys=2, started=DAY_BEFORE)
-    # Another statistical rule, and a run without a decision (no fingerprint to attribute): both before the others.
     add('old1', started=OLDER, run='old', revision='rev2', keys=5, decisions=[pick('旧', 1)],
         commits=[('candidate', '旧')])
     add('old2', outcome='cancelled', started=OLDER, run='old', keys=2)
@@ -450,7 +429,6 @@ def scorecard_fixture(path):
 
 REVERT_OLD = '2026-08-15T16:00:00.000Z'
 AFTER_UNTIL = '2026-09-09T16:00:00.000Z'
-# Per composition of `revert_fixture`: (commits_with_window, reverted_commits), worked out from its cases.
 REVERT_COMMITS = {
     'old1': (1, 1), 'd2a': (1, 0), 'd2b': (1, 0), 'd2c': (1, 1), 'd1a': (1, 1), 'd1b': (1, 0),
     'full': (1, 1), 'short': (1, 0), 'over': (1, 1), 'split': (1, 0), 'undo': (1, 1), 'undo_late': (1, 0),
@@ -508,7 +486,6 @@ def revert_fixture(path):
                    operations_json=json.dumps(OPS), regular_ranked_selection=1, matches_custom_phrase=0,
                    selected_character_count=len(word))
 
-    # Another statistical rule, inside the trend window: its revert is not counted next to the others.
     add('old1', REVERT_OLD, commit('旧', 1, 'next_code', deletions=1, leadingDeletions=1),
         run='old', revision='rev2')
     add('d2a', OLDER, commit('朋友', 2, 'timeout', 10000))
@@ -516,32 +493,26 @@ def revert_fixture(path):
     add('d2c', OLDER, commit('朋友', 2, 'next_code', deletions=2, leadingDeletions=2))
     add('d1a', DAY_BEFORE, commit('你', 1, 'next_code', deletions=1, leadingDeletions=1))
     add('d1b', DAY_BEFORE, commit('你好', 2, 'client_changed', 250))
-    # Deletions: as many as the characters, more, one fewer, and as many but after a direct-text key.
     add('full', STAMP, commit('你好', 2, 'next_code', 1500, deletions=2, leadingDeletions=2))
     add('over', STAMP, commit('你好', 2, 'next_code', deletions=5, leadingDeletions=5))
     add('short', STAMP, commit('你好', 2, 'next_code', deletions=1, leadingDeletions=1))
     add('split', STAMP, commit('你好', 2, 'timeout', 10000, deletions=2, leadingDeletions=1, directText=1))
-    # Cmd+Z first, and after a typed character; Forward Delete only; windows that closed with nothing done.
     add('undo', STAMP, commit('你好', 2, 'deactivated', undo=1, leadingUndo=1))
     add('undo_late', STAMP, commit('你好', 2, 'next_code', directText=1, undo=1))
     add('forward', STAMP, commit('你好', 2, 'next_code', forwardDeletions=3, leadingForwardDeletions=3))
     add('idle_timeout', STAMP, commit('你好', 2, 'timeout', 10000))
     add('idle_client', STAMP, commit('你好', 2, 'client_changed', 250))
     add('nowindow', STAMP, commit('你好', 2), app='app.nowindow')
-    # A zero or an unknown character count: only Cmd+Z can revert.
     add('zero_kept', STAMP, commit('', 0, 'next_code', deletions=3, leadingDeletions=3))
     add('null_kept', STAMP, commit('你好', None, 'next_code', deletions=3, leadingDeletions=3))
     add('zero_undo', STAMP, commit('', 0, 'next_code', undo=1, leadingUndo=1))
     add('null_undo', STAMP, commit('你好', None, 'next_code', undo=1, leadingUndo=1))
-    # One commit chosen by two segment decisions.
     add('twice', STAMP, commit('我们', 2, 'next_code', deletions=2, leadingDeletions=2), links=[0, 0])
-    # Other kinds of commit with a window that would revert a candidate.
     add('punct', STAMP, commit('，', 1, 'next_code', kind='punctuation', deletions=1, leadingDeletions=1))
     add('rawret', STAMP, commit('nihao', 5, 'next_code', kind='raw_return', deletions=5, leadingDeletions=5,
                                 undo=1, leadingUndo=1))
     add('eng_kept', STAMP, commit('hello', 5, 'next_code', deletions=4, leadingDeletions=4), text_kind='english')
     add('eng_rev', STAMP, commit('ok', 2, 'next_code', deletions=2, leadingDeletions=2), text_kind='english')
-    # The window rides a composition that starts after the `--until` of the tests.
     add('late', STAMP, commit('你好', 2, 'next_code', deletions=2, leadingDeletions=2))
     add('afterwards', AFTER_UNTIL)
     db.commit()
@@ -633,7 +604,6 @@ def learning_fixture(path, rows):
     db.close()
 
 
-# The pairs of the main fixture, each a sequence of (day, rank, type); pair J is the same word as E under another code.
 LEARNING_PAIRS = {
     ('nihao', '你好'): [(0, 3, 'phrase'), (1, 1, 'phrase'), (2, 1, 'phrase')],
     ('pengyou', '朋友'): [(1, 2, 'user_phrase'), (3, 4, 'phrase'), (5, 1, 'phrase'), (9, 1, 'phrase'),
@@ -652,15 +622,11 @@ def learning_rows():
     rows = [(day, order, code, word, rank, dict(type=kind))
             for order, ((code, word), sequence) in enumerate(LEARNING_PAIRS.items())
             for day, rank, kind in sequence]
-    # The same word chosen again as the leading segment of a longer code: the same pair as the whole input.
     rows.append((16, 30, 'nihaoshijie', '你好', 1, dict(end=5)))
-    # Inside the cohort but with no pair identity: no evidence row to name a span, a text record written before the
-    # hashes, a text-free record without them, and a decision after a selected prefix.
     rows += [(5, 40, 'wu', '无', 2, dict(evidence=False, text=False)),
              (5, 41, 'jiu', '旧', 2, dict(hashed=False)),
              (5, 42, 'mian', '免', 2, dict(hashed=False, text=False)),
              (5, 43, 'houmian', '后', 3, dict(prefix='前', text=False))]
-    # Not counted: another metric rule (known, then unknown), before the window, and outside the regular cohort.
     rows += [(1, 50, 'qita', '其', 2, dict(revision='rev0')),
              (1, 51, 'weizhi', '未', 2, dict(revision='revU')),
              (-1, 0, 'pengyou', '朋友', 1),
@@ -717,7 +683,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(document['schema_version'], 4)
         self.assertEqual({r['character_count'] for r in document['tables']['commits']}, {1, 3})
         self.assertEqual({r['selected_character_count'] for r in document['tables']['candidate_decisions']}, {1})
-        # Same device, another export after extending an active run and adding an event.
         with sqlite3.connect(self.db) as db:
             db.execute("UPDATE recording_runs SET stats_json=?", (json.dumps(dict(written=22)),))
             db.execute("INSERT INTO effectiveness_events(run_id,occurred_at,source,event,count) VALUES('run',?,'voice_session','finalized',1)", (STAMP,))
@@ -732,7 +697,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(external['coverage']['compositions'], 21)
         for field in ('groups', 'rank_counts', 'identity_coverage'):
             self.assertEqual(external[field], local[field])
-        # Device B intentionally uses identical fixture IDs, but must remain a distinct cohort.
         document['source_id'] = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
         b = Path(self.temp.name) / 'B.json'; b.write_text(json.dumps(document))
         union = self.result('summary', '--input', str(a), '--input', str(b))
@@ -743,12 +707,10 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(isolated['coverage'], external['coverage'])
         inspected = self.result('inspect', document['source_id'] + ':a', '--input', str(b))
         self.assertEqual(inspected['composition']['source_id'], document['source_id'])
-        # Local file stayed unchanged by analysis (the deliberate fixture writes above are excluded).
         current = self.db.read_bytes()
         self.result('trend', '--input', str(b), '--until', '2026-09-08', '--days', '7')
         self.assertEqual(current, self.db.read_bytes())
         self.assertNotEqual(before, current)
-        # Retention can free INTEGER PRIMARY KEY 1 within the same recording run.
         with sqlite3.connect(self.db) as db:
             db.execute('DELETE FROM effectiveness_events')
             db.execute("INSERT INTO effectiveness_events(id,run_id,occurred_at,source,event,count) VALUES(1,'run','2026-09-07T16:00:00.000Z','voice_session','finalized',1)")
@@ -763,7 +725,6 @@ class QueryTests(unittest.TestCase):
         result = self.result('summary', '--exports-only', '--input', str(out))
         self.assertEqual(result['coverage']['compositions'], 0)
         self.assertIsNone(json.loads(out.read_text())['range']['first'])
-        # Text history expires before content-free events; versions must remain traceable.
         with sqlite3.connect(empty) as db:
             insert(db, 'recording_runs', id='events-run', started_at=STAMP, status='closed', engine_version='1.17.0',
                    build_metadata_json=json.dumps(dict(appVersion='0.5.0', appBuild='80')), metric_rule_version=1, stats_json='{}')
@@ -801,7 +762,6 @@ class QueryTests(unittest.TestCase):
         self.assertIn('conflicting', self.run_cli('summary', '--input', str(a), '--input', str(bad), success=False))
         self.run_cli('export', '--output', str(self.db), success=False)
         self.run_cli('export', '--output', str(a), success=False)
-        # The pair key beside the database is never an export destination and never in an export.
         key = Path(self.temp.name) / 'quality-pair-key'
         secret = os.urandom(32)
         key.write_bytes(secret)
@@ -841,7 +801,6 @@ class QueryTests(unittest.TestCase):
                          (4, {1, 3}))
         self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
         self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
-        # A `.gz` destination holds the same document compressed, and the CLI writes one too.
         packed = Path(self.temp.name) / 'native.json.gz'
         subprocess.run([executable, str(self.db), str(packed)], check=True, capture_output=True)
         with gzip.open(packed, 'rt', encoding='utf-8') as stream:
@@ -852,7 +811,6 @@ class QueryTests(unittest.TestCase):
         self.run_cli('export', '--output', str(cli), '--format', 'json')
         self.assertEqual(cli.read_bytes()[:2], b'\x1f\x8b')
         self.assertEqual(self.result('summary', '--exports-only', '--input', str(cli))['coverage'], result['coverage'])
-        # Invalid native source schemas are rejected before any output is saved.
         bad = Path(self.temp.name) / 'bad-native.sqlite3'; bad.write_bytes(self.db.read_bytes())
         with sqlite3.connect(bad) as db:
             db.execute('PRAGMA user_version=99')
@@ -889,18 +847,15 @@ class QueryTests(unittest.TestCase):
         self.assertEqual([f.name[-16:] for f in files], ['20260907.json.gz'])
         self.assertEqual(check(recorded + day, recorded + 7 * day).stdout.decode().strip(), 'skipped')
         self.assertEqual(exports(), files)
-        # A week later: a second dated file that reaches back to the last export and one day more.
         self.assertEqual(check(recorded + day, recorded + 8 * day).returncode, 0)
         self.assertEqual([f.name[-16:] for f in exports()], ['20260907.json.gz', '20260914.json.gz'])
         overlap = read(exports()[1])['tables']
         self.assertEqual(len(overlap['compositions']), len(read(files[0])['tables']['compositions']))
-        # Another week: the records are older than its window, the runs and revisions are still complete.
         self.assertEqual(check(recorded + 8 * day, recorded + 15 * day).returncode, 0)
         later = read(exports()[2])['tables']
         self.assertEqual((later['compositions'], later['commits'], later['candidate_decisions'],
                           later['effectiveness_events']), ([], [], [], []))
         self.assertTrue(later['recording_runs'] and later['config_revisions'])
-        # Files of this device older than 35 days go; anything else in the folder stays.
         strangers = [folder / 'InkFlow-quality-00000000-0000-0000-0000-000000000000-20200101.json.gz',
                      folder / 'notes.txt']
         for stranger in strangers:
@@ -934,17 +889,14 @@ class QueryTests(unittest.TestCase):
             self.assertTrue(all(c['text'] == '' and 'comment' not in c for c in page['candidates']))
         self.assertTrue(any('displayRank' in c for page in pages for c in page['candidates']))
         self.assertNotIn(b'nihap', gzip.decompress(files[0].read_bytes()))
-        # A folder stands for the exports in it.
         result = self.result('summary', '--exports-only', '--input', str(folder))
         self.assertEqual([s['source_id'] for s in result['sources']], [document['source_id']])
         self.assertIn('No InkFlow-quality-', self.run_cli('summary', '--exports-only', '--input', self.temp.name,
                                                           success=False))
-        # The manual export of the same database keeps its text.
         manual = Path(self.temp.name) / 'manual.json'
         subprocess.run([executable, str(self.db), str(manual)], check=True, capture_output=True)
         self.assertIn('nihap', manual.read_text())
         self.assertTrue(any(r['text'] for r in json.loads(manual.read_text())['tables']['commits']))
-        # A folder that cannot be written reports the failure and leaves nothing behind.
         missing = Path(self.temp.name) / 'absent'
         self.assertEqual(check('none', recorded + day, missing).returncode, 2)
         self.assertFalse(missing.exists())
@@ -972,7 +924,6 @@ class QueryTests(unittest.TestCase):
         with contextlib.closing(self.quality.connect(self.db)) as db:
             db.execute('BEGIN')
             before = db.execute('SELECT COUNT(*) FROM effectiveness_events').fetchone()[0]
-            # The recorder must be able to commit while a query is open (rollback journal: no reader on the file).
             with contextlib.closing(sqlite3.connect(self.db, timeout=0)) as writer:
                 writer.execute('DELETE FROM effectiveness_events')
                 writer.commit()
@@ -1010,9 +961,7 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((observed['d']['window_forward_deletions'], observed['d']['window_undo'],
                           observed['d']['window_leading_forward_deletions'], observed['d']['window_leading_undo']),
                          (2, 1, 2, 1))
-        # Not observed is null, never zero.
         self.assertEqual(set(columns(observed['e']).values()), {None})
-        # The decisions keep their own identity: the join adds columns and no rows.
         self.assertEqual(len(observed), 20)
 
     def test_inspect_lists_the_windows_of_its_own_commits(self):
@@ -1021,7 +970,6 @@ class QueryTests(unittest.TestCase):
                                         forward_deletions=0, undo=0, direct_text=0, paste=0, leading_deletions=2,
                                         leading_forward_deletions=0, leading_undo=0)])
         self.assertIn('$.windows[0].end | "next_code"', self.run_cli('inspect', 'a'))
-        # The carrier holds four windows in its operations, none of them for its own commit.
         self.assertEqual(self.result('inspect', 'raw-only')['windows'], [])
         self.assertEqual(self.result('inspect', 'e')['windows'], [])
 
@@ -1029,7 +977,6 @@ class QueryTests(unittest.TestCase):
         every = dict(next_code=1, client_changed=1, deactivated=1, timeout=1)
         coverage = self.result()['coverage']
         self.assertEqual((coverage['commit_windows'], coverage['windows_by_end']), (4, every))
-        # The carrier is outside this filter and the commits it describes are inside.
         quoted = self.result('summary', '--app', "app'quoted")['coverage']
         self.assertEqual((quoted['commit_windows'], quoted['windows_by_end']), (4, every))
         none = dict(next_code=0, client_changed=0, deactivated=0, timeout=0)
@@ -1046,7 +993,6 @@ class QueryTests(unittest.TestCase):
         table = self.run_cli('inspect', 'a')
         for field, value in [('type', '"phrase"'), ('corrected', 'false'), ('evidence', '"0,3,n,1,0,n,phrase,0"')]:
             self.assertIn(f'$.decisions[0].snapshot.candidates[0].{field} | {value}', table)
-        # Pages recorded without the facts, such as the first page here, still inspect.
         older = self.result('inspect', 'a')['decisions'][0]['first_page']['candidates'][0]
         self.assertNotIn('type', older)
 
@@ -1070,7 +1016,6 @@ class QueryTests(unittest.TestCase):
             header['generated_at'].replace('Z', '+00:00'))), timedelta(minutes=5))
         self.assertEqual([case['composition_id'] for case in cases], ['r1', 'r2', 'r5', 'r6'])
         listed, first_page = cases[0], cases[1]
-        # Page 0 keeps the commit-time list even though the first page differs.
         self.assertEqual(listed['candidates_from'], 'snapshot')
         self.assertEqual([c['text'] for c in listed['candidates']], ['凯会', '开会', '开汇'])
         self.assertEqual(listed['candidates'][1], dict(
@@ -1082,17 +1027,14 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((listed['selected_display_index'], listed['selected_text'], listed['committed_text']),
                          (1, '开会', '开会'))
         self.assertEqual(listed['occurred_at'], STAMP)
-        # A paged decision replays the first page; its selection index belongs to the snapshot page.
         self.assertEqual(first_page['candidates_from'], 'first_page')
         self.assertEqual(first_page['page'], 1)
         self.assertEqual([c['text'] for c in first_page['candidates']], ['汇', '会', '灰'])
         self.assertEqual((first_page['selected_display_index'], first_page['selected_text']), (0, '辉'))
-        # Records without the facts keep null fields instead of guesses.
         before_facts, partial = cases[2], cases[3]
         self.assertTrue(all(c['type'] is None and c['corrected'] is None and c['evidence'] is None
                             for c in before_facts['candidates']))
         self.assertEqual([c['evidence'] is None for c in partial['candidates']], [False, True])
-        # Without a window the earlier decision is a case too.
         header, cases = self.replay_cases(db=db, name='all.jsonl')
         self.assertEqual((header['cases'], header['window']), (5, dict(since=None, until=None)))
         self.assertEqual(cases[0]['composition_id'], 'w1')
@@ -1119,7 +1061,6 @@ class QueryTests(unittest.TestCase):
                     'off_list_retype-0', 'undo_retype-0', 'typed_on_retype-0', 'late_retype-0', 'again_retype-0',
                     'pair_retype-0', 'busy_retype-0', 'busy_retype-1']
         self.assertEqual([case['decision_id'] for case in cases], [f'decision-{name}' for name in exported])
-        # The retype's text, its commit and its place on the reverted list; the raw input stays the reverted one.
         relabelled = {case['composition_id']: (case['raw_input'], case['selected_display_index'],
                                                case['selected_text'], case['committed_text'])
                       for case in cases if case['relabelled']}
@@ -1128,7 +1069,6 @@ class QueryTests(unittest.TestCase):
         kept = cases[0]
         self.assertEqual((kept['selected_display_index'], kept['selected_text'], kept['committed_text'],
                           kept['relabelled']), (0, '你好', '你好', False))
-        # Exports prefix commit and carrier ids with their source; the rule reads them the same way.
         export = Path(self.temp.name) / 'retype-export.json'
         self.run_cli('export', '--output', str(export), db=db)
         imported, imported_cases = self.replay_cases('--exports-only', '--input', str(export), db=db,
@@ -1277,7 +1217,6 @@ class QueryTests(unittest.TestCase):
         buckets = month['by_selection_length']
         counts = {key: (b['known_rank'], b['top1_selected'], b['top3_selected'], b['paged_selected'])
                   for key, b in buckets.items()}
-        # The text-free 课 (r7) is in bucket 1 through its stored count; 天气 (r5) has none and buckets by its text.
         self.assertEqual(counts, {'1': (3, 2, 2, 1), '2': (2, 1, 2, 0), '3+': (2, 0, 0, 2)})
         self.assertEqual(sum(b['known_rank'] for b in buckets.values()) + month['length_unavailable'],
                          month['known_rank'])
@@ -1287,10 +1226,8 @@ class QueryTests(unittest.TestCase):
         self.assertNotIn('by_selection_length', buckets['1'])
         self.assertNotIn('text_free', buckets['1'])
         self.assertNotIn('length_unavailable', buckets['1'])
-        # The decision outside the window and the emoji one stay out of the Chinese series.
         overall = trend['series']['overall'][-1]['rolling_28d']
         self.assertEqual(overall['known_rank'], 11)
-        # A text-free decision before v4 and an empty selection have no length; a text-mode one before v4 still has.
         symbols = trend['series']['symbol'][-1]['rolling_28d']
         self.assertEqual((symbols['known_rank'], symbols['text_free'], symbols['length_unavailable']), (3, 1, 2))
         self.assertEqual({key: b['known_rank'] for key, b in symbols['by_selection_length'].items()},
@@ -1302,7 +1239,6 @@ class QueryTests(unittest.TestCase):
                 metric = point[window]
                 self.assertEqual(sum(b['known_rank'] for b in metric['by_selection_length'].values())
                                  + metric['length_unavailable'], metric['known_rank'], point['date'])
-        # Table and CSV list every leaf, so the interval, paged rate and buckets appear in both.
         for output in (self.run_cli('trend', '--days', '28', '--until', '2026-09-08', db=db),
                        self.run_cli('trend', '--days', '28', '--until', '2026-09-08', '--format', 'csv', db=db)):
             for field in ('rolling_28d.top1_wilson_low', 'rolling_28d.paged_rate',
@@ -1314,7 +1250,6 @@ class QueryTests(unittest.TestCase):
     def test_trend_fields_exist_on_the_base_fixture(self):
         trend = self.result('trend', '--days', '7', '--until', '2026-09-08')
         month = trend['series']['overall'][-1]['rolling_28d']
-        # Eleven known-rank decisions: 使 or 是 or 😀 chosen at rank 4 on page 1, except 是 at rank 1.
         self.assertEqual((month['known_rank'], month['top1_selected'], month['paged_selected']), (11, 1, 10))
         self.assertAlmostEqual(month['paged_rate'], 10 / 11)
         self.assertEqual(month['length_unavailable'], 0)
@@ -1357,25 +1292,6 @@ class QueryTests(unittest.TestCase):
                             self.assertIsNone(metric[key], f'{label} {key}')
 
     def test_scorecard_counters_by_hand(self):
-        # The fixture's compositions (all on 2026-09-06 under measurement-A except where noted), what each adds
-        # to the counters below, worked out from the table and not from the query:
-        #   code compositions (19): one digit paged moved learnedmiss learnedlead dictkept english blend two edited
-        #     free (12 with decisions), raw1 raw2 ascii intr partial (5), canc1 canc2 on 09-05 (2); not sym (a
-        #     direct symbol) and not nocommit (an adopted AI suggestion).
-        #   cancelled (3): partial canc1 canc2. edited (2): edited canc1. interrupted intr is only in the 19.
-        #   regular committed (12, one decision each but blend and two with two = 14 decisions): the 12 with
-        #     decisions; partial has a decision and is cancelled, raw1's decision is not regular.
-        #   KSPC (11 text-captured): keys 5+4+7+6+5+5+4+6+8+9+8 = 67 over characters 2+1+1+1+3+2+1+5+3+3+2 = 24;
-        #     free is text-free and only counted. Chinese compositions (all decisions chinese, 9 of them): keys
-        #     5+4+7+6+5+5+4+9+8 = 53 over characters 2+1+1+1+3+2+1+3+2 = 16.
-        #   commits: candidate 15 (13 compositions, blend and two with two), raw_return 2 (raw1 raw2); ascii,
-        #     direct_symbol are in neither. Valid decisions (15): rank 1 and one-key are one, english, blend (both),
-        #     two (first), edited, free, partial (8); not one-key: digit (digit), paged (page), moved and
-        #     learnedmiss and learnedlead (moves), dictkept (turned pages and back), two's second (digit key).
-        #   misses (5): digit paged moved learnedmiss learnedlead, all with a type; learnedmiss is learned.
-        #   leaders: learned 2 (learnedlead missed, english kept), dictionary 10 (digit and paged missed; one,
-        #     dictkept user_table, blend's first, two both, edited, free, partial kept); moved, learnedmiss and
-        #     blend's second have leaders of neither set.
         trend = self.scorecard_trend()
         self.assertEqual(trend['metric_scope'], dict(
             rule_fingerprint='measurement-A', policy='latest_compatible_metric_rules', included_decisions=16,
@@ -1402,11 +1318,8 @@ class QueryTests(unittest.TestCase):
                           overall['kspc'], overall['raw_commit_rate']), (3 / 19, 2 / 19, 14 / 12, 67 / 24, 2 / 17))
         for name, counts in [('cancel', (3, 19)), ('preedit_edit', (2, 19)), ('raw_commit', (2, 17))]:
             self.assertEqual((overall[f'{name}_wilson_low'], overall[f'{name}_wilson_high']), wilson(*counts), name)
-        # A mean and a ratio of keys per character have no interval.
         self.assertNotIn('kspc_wilson_low', overall)
         self.assertNotIn('decisions_per_composition_wilson_low', overall)
-        # The decision series is by the decision's kind, the composition series by the composition's: 13 chinese
-        # valid decisions, of which blend's and partial's are in a mixed and a cancelled composition.
         chinese = trend['series']['chinese'][-1]['rolling_28d']
         self.assertEqual({key: chinese[key] for key in DECISION_FIELDS[:8]} | dict(valid=chinese['valid']),
                          dict(onekey_selected=6, misses=5, learned_misses=1, misses_with_provenance=5,
@@ -1419,7 +1332,6 @@ class QueryTests(unittest.TestCase):
             regular_committed_compositions=10, regular_decisions=11, kspc_compositions=9, kspc_keypresses=53,
             kspc_characters=16, kspc_text_free_compositions=1, candidate_commits=12, raw_return_commits=0))
         self.assertEqual((chinese['decisions_per_composition'], chinese['kspc']), (11 / 10, 53 / 16))
-        # Counters stand in a kind series, but a cancel, a pre-edit or a raw Return has no kind to read.
         for key in OVERALL_ONLY_FIELDS:
             self.assertIsNone(chinese[key], key)
         unknown = trend['series']['unknown'][-1]['rolling_28d']
@@ -1436,7 +1348,6 @@ class QueryTests(unittest.TestCase):
         mixed = trend['series']['mixed'][-1]['rolling_28d']
         self.assertEqual((mixed['regular_decisions'], mixed['kspc'], mixed['decisions_per_composition']),
                          (2, 8 / 3, 2.0))
-        # Selected-length buckets keep the decision counters only: 1 character (7 valid), 2 (6) and 3 or more (2).
         buckets = overall['by_selection_length']
         fields = ('valid', 'onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
                   'learned_leader_missed', 'dictionary_leader', 'dictionary_leader_missed')
@@ -1448,7 +1359,6 @@ class QueryTests(unittest.TestCase):
         self.assertIsNone(buckets['1']['learned_leader_miss_rate'])
         self.assertEqual((buckets['3+']['learned_miss_share'], buckets['3+']['dictionary_leader_miss_rate']),
                          (1.0, None))
-        # The week holds the same fixture; the day before has only cancels, which still report their rates.
         week = trend['series']['overall'][-1]['rolling_7d']
         self.assertEqual({key: week[key] for key in COMPOSITION_COUNTER_FIELDS},
                          {key: overall[key] for key in COMPOSITION_COUNTER_FIELDS})
@@ -1461,7 +1371,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((cancels['top1_rate'], cancels['onekey_rate'], cancels['decisions_per_composition'],
                           cancels['kspc'], cancels['raw_commit_rate']), (None, None, None, None, None))
         self.assertEqual((days['2026-09-06']['code_compositions'], days['2026-09-06']['cancel_rate']), (17, 1 / 17))
-        # A day with nothing, and a day of another statistical rule (08-20), have neither counters nor rates.
         for empty in (days['2026-09-07'], days['2026-08-20']):
             self.assertEqual(empty['quality_rate_status'], 'unavailable_without_measurement_evidence')
             self.assertEqual({key: empty[key] for key in COMPOSITION_COUNTER_FIELDS},
@@ -1476,7 +1385,6 @@ class QueryTests(unittest.TestCase):
         replay = Path(self.temp.name) / 'replay.sqlite3'
         replay_fixture(replay)
         self.assert_scorecard_fields(self.result('trend', '--days', '28', '--until', '2026-09-08', db=replay))
-        # Table and CSV list every leaf, so the new fields need no rendering code.
         fields = ('onekey_rate', 'onekey_wilson_low', 'learned_miss_share', 'learned_leader_miss_rate',
                   'dictionary_leader_miss_wilson_high', 'code_compositions', 'cancel_rate', 'cancel_wilson_low',
                   'preedit_edit_rate', 'decisions_per_composition', 'kspc', 'kspc_text_free_compositions',
@@ -1494,8 +1402,6 @@ class QueryTests(unittest.TestCase):
         self.assertIn('.metric_scope.excluded_unknown_compositions | 1', table)
 
     def test_scorecard_composition_rates_are_null_under_a_kind_filter_and_zero_denominators(self):
-        # A kind filter selects the compositions with a matching decision: the cancels drop out and a mixed
-        # composition shows only its matching decisions, so no composition or commit rate reads true.
         trend = self.scorecard_trend('--kind', 'chinese')
         for name in ('overall', 'chinese'):
             metric = trend['series'][name][-1]['rolling_28d']
@@ -1504,8 +1410,6 @@ class QueryTests(unittest.TestCase):
                 self.assertIsNone(metric[key], f'{name} {key}')
             self.assertEqual(metric['quality_rate_status'], 'available_within_measurement_fingerprint')
         self.assert_scorecard_fields(trend)
-        # One text-free composition: no KSPC (0 characters, not 0 keys per character), but it is counted, and a
-        # rate with a nonzero denominator and a zero numerator is 0, not null.
         free = self.scorecard_trend('--app', 'app.free')['series']['overall'][-1]['rolling_28d']
         self.assertEqual({key: free[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
             code_compositions=1, cancelled_compositions=0, edited_compositions=0, regular_committed_compositions=1,
@@ -1515,7 +1419,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((free['cancel_rate'], free['preedit_edit_rate'], free['raw_commit_rate'],
                           free['decisions_per_composition']), (0.0, 0.0, 0.0, 1.0))
         self.assertEqual((free['cancel_wilson_low'], free['cancel_wilson_high']), self.quality.wilson(0, 1))
-        # Nothing selected: every counter 0 and every rate null.
         nothing = self.scorecard_trend('--app', 'no.such.app')['series']['overall'][-1]['rolling_28d']
         self.assertEqual(nothing['quality_rate_status'], 'unavailable_without_measurement_evidence')
         self.assertEqual({key: nothing[key] for key in COMPOSITION_COUNTER_FIELDS},
@@ -1527,7 +1430,6 @@ class QueryTests(unittest.TestCase):
         db = self.scorecard_db()
         summary = self.result('summary', '--since', '2026-09-01', db=db)
         coverage = summary['coverage']
-        # The same cohort as the trend's last point, over the selected compositions (21) and decisions (16).
         self.assertEqual((coverage['compositions'], coverage['decisions'], coverage['valid']), (21, 16, 15))
         self.assertEqual({key: coverage[key] for key in COMPOSITION_COUNTER_FIELDS}, dict(
             code_compositions=19, cancelled_compositions=3, edited_compositions=2,
@@ -1545,7 +1447,6 @@ class QueryTests(unittest.TestCase):
                          (8 / 15, 1 / 5, 1 / 2, 2 / 10))
         self.assertEqual((coverage['top1_rate'], coverage['quality_rate_status']),
                          (10 / 15, 'available_within_measurement_fingerprint'))
-        # Each group has the decision counters and rates, and none of the composition ones.
         groups = {(group['text_kind'], group['presentation']): group for group in summary['groups']}
         chinese = groups[('chinese', 'candidates_requested')]
         self.assertEqual({key: chinese[key] for key in DECISION_FIELDS[:8]} | dict(valid=chinese['valid']), dict(
@@ -1559,7 +1460,6 @@ class QueryTests(unittest.TestCase):
         raw = groups[('unknown', 'candidates_requested')]
         self.assertEqual((raw['decisions'], raw['valid'], raw['onekey_rate'], raw['learned_miss_share']),
                          (1, 0, None, None))
-        # Table and CSV list every field as a leaf.
         table = self.run_cli('summary', '--since', '2026-09-01', db=db)
         listed = {row['path'] for row in csv.DictReader(io.StringIO(
             self.run_cli('summary', '--since', '2026-09-01', '--format', 'csv', db=db)))}
@@ -1575,7 +1475,6 @@ class QueryTests(unittest.TestCase):
     def test_summary_composition_rates_need_one_known_fingerprint_among_decisions_and_compositions(self):
         db = self.scorecard_db()
         rate_fields = ('cancel_rate', 'preedit_edit_rate', 'decisions_per_composition', 'kspc', 'raw_commit_rate')
-        # Everything: measurement-A and -B decisions, and a composition of a run without any decision.
         every = self.result('summary', db=db)['coverage']
         self.assertEqual((every['compositions'], every['code_compositions'], every['unknown_fingerprint_compositions']),
                          (24, 22, 1))
@@ -1583,8 +1482,6 @@ class QueryTests(unittest.TestCase):
                          ('unavailable_across_measurement_fingerprints',) * 2)
         for key in (*rate_fields, 'top1_rate', 'onekey_rate'):
             self.assertIsNone(every[key], key)
-        # One known fingerprint among the decisions (-B), but the orphan's composition has none: the decision rates
-        # keep their decisions-only rule and the composition rates do not exist.
         older = self.result('summary', '--since', '2026-08-15', '--until', '2026-08-25', db=db)['coverage']
         self.assertEqual((older['quality_rate_status'], older['top1_rate'], older['onekey_rate']),
                          ('available_within_measurement_fingerprint', 1.0, 1.0))
@@ -1593,7 +1490,6 @@ class QueryTests(unittest.TestCase):
                          ('unavailable_across_measurement_fingerprints', 3, 1))
         for key in rate_fields:
             self.assertIsNone(older[key], key)
-        # A composition with no fingerprint alone, and nothing at all.
         orphan = self.result('summary', '--app', 'app.orphan', db=db)['coverage']
         self.assertEqual((orphan['composition_rate_status'], orphan['quality_rate_status'], orphan['cancel_rate']),
                          ('unavailable_unknown_measurement_fingerprint', 'unavailable_without_measurement_evidence',
@@ -1631,14 +1527,12 @@ class QueryTests(unittest.TestCase):
                          (commits['candidate'], commits['raw_return']))
         self.assertEqual(trend['metric_scope']['included_compositions'], compositions)
         self.assertEqual(trend['metric_scope']['excluded_compositions'], 0)
-        # Counters nest: learned misses have a type, which a miss may lack; leaders are comparable decisions.
         self.assertLessEqual(week['learned_misses'], week['misses_with_provenance'])
         self.assertLessEqual(week['misses_with_provenance'], week['misses'])
         self.assertLessEqual(week['misses'], week['valid'])
         self.assertLessEqual(week['learned_leader'] + week['dictionary_leader'], week['comparable'])
         self.assertLessEqual(week['onekey_selected'], week['valid'])
         self.assertLessEqual(week['regular_committed_compositions'], week['code_compositions'])
-        # Every known-rank decision of this capture has a length, so the buckets sum to the point.
         self.assertEqual(week['length_unavailable'], 0)
         for key in ('onekey_selected', 'misses', 'learned_misses', 'dictionary_leader_missed'):
             self.assertEqual(sum(bucket[key] for bucket in week['by_selection_length'].values()), week[key], key)
@@ -1652,13 +1546,10 @@ class QueryTests(unittest.TestCase):
         self.assert_revert_fields(trend)
         week = trend['series']['overall'][-1]['rolling_7d']
         coverage = self.result('summary', db=ENGINE_DB)['coverage']
-        # The same cohort counted from the stored rows alone: the windows of candidate commits, and what they show.
         windows = '''FROM compositions c, json_each(c.operations_json,'$.postCommitWindows') j
             JOIN commits m ON m.id = json_extract(j.value,'$.commitID') WHERE m.kind = 'candidate' '''
         reverted = '''(json_extract(j.value,'$.leadingUndo') >= 1 OR (m.character_count > 0
             AND json_extract(j.value,'$.leadingDeletions') >= m.character_count))'''
-        # The capture cases of the post-commit window: two Backspaces over 你好 and Cmd+Z are reverts; Cmd+Z after a
-        # paste (undo 1, leading 0) and a Backspace after a typed digit are not.
         cases = {
             'backspaces': ("json_extract(j.value,'$.deletions') = 2 AND json_extract(j.value,'$.leadingDeletions') = 2",
                            1),
@@ -1736,19 +1627,6 @@ class QueryTests(unittest.TestCase):
                         self.assertLessEqual(metric['revert_rate'], metric['revert_wilson_high'], label)
 
     def test_revert_counters_by_hand(self):
-        # A commit is in W (it has a window) and R (the user took it back) as follows, worked out from the fixture:
-        #   2026-09-06, chinese, 15 in W and 7 in R. In R: full (2 Backspaces for 2 characters), over (5 for 2),
-        #     undo (Cmd+Z), zero_undo and null_undo (Cmd+Z on a commit of 0 and of an unknown length), twice (one
-        #     commit chosen by two decisions: once) and late (its window rides a composition after --until). In W
-        #     only: short (1 for 2), split (2 for 2 but 1 before a direct-text key), undo_late (Cmd+Z after a typed
-        #     character), forward (Forward Delete only), idle_timeout and idle_client (windows closed with nothing
-        #     done), zero_kept and null_kept (3 Backspaces for 0 and for an unknown length). Not in W: nowindow. Not
-        #     candidate commits: punct and rawret, whose windows would revert them.
-        #   2026-09-06, english: eng_kept (4 for 5) in W, eng_rev (2 for 2) in W and R: 2 and 1. Day total 17, 8.
-        #   2026-09-05: d1a in W and R, d1b in W: 2 and 1. 2026-08-20: d2c in R, d2a and d2b not: 3 and 1.
-        #   old1 (2026-08-15, 1 and 1) has another measurement fingerprint, so the trend leaves it out.
-        #   The 28 days to 09-07 hold 15 + 2 + 2 + 3 = 22 in W and 7 + 1 + 1 + 1 = 10 in R; the 7 days hold
-        #   15 + 2 + 2 = 19 and 7 + 1 + 1 = 9.
         trend = self.revert_trend()
         scope = trend['metric_scope']
         self.assertEqual((scope['included_compositions'], scope['excluded_compositions'],
@@ -1757,7 +1635,6 @@ class QueryTests(unittest.TestCase):
         month = series['overall']['rolling_28d']
         self.assert_revert(month, 22, 10, (0.2692, 0.6534))
         self.assert_revert(series['overall']['rolling_7d'], 19, 9, (0.2733, 0.6829))
-        # The commit counters of the scorecard are what they were: 3 + 2 + 18 candidate commits, one raw Return.
         self.assertEqual((month['candidate_commits'], month['raw_return_commits']), (23, 1))
         self.assertEqual(series['overall']['rolling_7d']['candidate_commits'], 20)
         days = {point['date']: point['daily'] for point in trend['series']['overall']}
@@ -1766,8 +1643,6 @@ class QueryTests(unittest.TestCase):
         self.assert_revert(days['2026-08-20'], 3, 1, (0.0615, 0.7923))
         for empty in ('2026-09-07', '2026-09-04', '2026-08-15'):
             self.assert_revert(days[empty], 0, 0)
-        # A commit takes the kind of its composition: chinese holds 3 + 2 + 15 in W and 1 + 1 + 7 in R, english 2
-        # and 1. punct and rawret have no decision, so they sit in unknown, which holds no candidate commit.
         self.assert_revert(series['chinese']['rolling_28d'], 20, 9, (0.2582, 0.6579))
         self.assert_revert(series['chinese']['rolling_7d'], 17, 8, (0.2617, 0.6904))
         self.assert_revert(series['english']['rolling_28d'], 2, 1, (0.0945, 0.9055))
@@ -1799,30 +1674,24 @@ class QueryTests(unittest.TestCase):
             self.assertIn(f'.series.overall[27].rolling_28d.{field} |', table)
             self.assertIn(f'.series.chinese[27].daily.{field} |', table)
             self.assertNotIn(f'by_selection_length.1.{field}', table)
-        # The rate of an empty point prints as N/A.
         self.assertIn('.series.overall[0].daily.revert_rate | N/A', table)
 
     def test_revert_rate_under_a_kind_filter_a_zero_denominator_and_another_rule(self):
-        # The kind filter keeps the compositions with a chinese decision, all of which have commits to revert.
         chinese = self.revert_trend('--kind', 'chinese')
         self.assert_revert_fields(chinese)
         for name in ('overall', 'chinese'):
             self.assert_revert(chinese['series'][name][-1]['rolling_28d'], 20, 9, (0.2582, 0.6579))
         self.assert_revert(chinese['series']['english'][-1]['rolling_28d'], 0, 0)
-        # The other composition and commit rates still have no true reading under a filter.
         self.assertIsNone(chinese['series']['overall'][-1]['rolling_28d']['raw_commit_rate'])
         english = self.revert_trend('--kind', 'english')
         self.assert_revert_fields(english)
         self.assert_revert(english['series']['overall'][-1]['rolling_28d'], 2, 1, (0.0945, 0.9055))
-        # A candidate commit without a window: counted as a commit, not as observed, and no rate of 0%.
         quiet = self.revert_trend('--app', 'app.nowindow')
         self.assert_revert_fields(quiet)
         point = quiet['series']['overall'][-1]['rolling_28d']
         self.assert_revert(point, 0, 0)
         self.assertEqual((point['candidate_commits'], point['quality_rate_status']),
                          (1, 'available_within_measurement_fingerprint'))
-        # Before 08-20 only old1 exists, so its rule is the latest one and its revert counts, though the
-        # composition that carries the window starts on 08-20, after this --until.
         with utc():
             old = self.result('trend', '--days', '28', '--until', '2026-08-20', db=self.revert_db())
         self.assert_revert(old['series']['overall'][-1]['rolling_28d'], 1, 1, (0.2065, 1.0))
@@ -1830,7 +1699,6 @@ class QueryTests(unittest.TestCase):
     def test_summary_reports_the_revert_counters_of_the_trend_window(self):
         db = self.revert_db()
         month = self.revert_trend()['series']['overall'][-1]['rolling_28d']
-        # The trend's last point: the same commits whether or not the carrier of the late window is selected.
         for options in (('--since', '2026-08-18', '--until', '2026-09-08'), ('--since', '2026-08-18')):
             coverage = self.result('summary', *options, db=db)['coverage']
             self.assertEqual(coverage['composition_rate_status'], 'available_within_measurement_fingerprint')
@@ -1838,9 +1706,7 @@ class QueryTests(unittest.TestCase):
                              (22, 10, 10 / 22))
             for key in (*REVERT_COUNTER_FIELDS, 'revert_rate', 'candidate_commits', 'raw_return_commits'):
                 self.assertEqual(coverage[key], month[key], key)
-            # The windows of every kind of commit (24: the 22, punct and rawret) are another count.
             self.assertEqual(coverage['commit_windows'], 24)
-        # Two measurement fingerprints: the counters are there and the rate is not.
         every = self.result('summary', db=db)['coverage']
         self.assertEqual(every['composition_rate_status'], 'unavailable_across_measurement_fingerprints')
         self.assertEqual((every['commits_with_window'], every['reverted_commits'], every['revert_rate']),
@@ -1851,7 +1717,6 @@ class QueryTests(unittest.TestCase):
         quiet = self.result('summary', '--app', 'app.nowindow', db=db)['coverage']
         self.assertEqual((quiet['candidate_commits'], quiet['commits_with_window'], quiet['reverted_commits'],
                           quiet['revert_rate']), (1, 0, 0, None))
-        # Four windows in the base fixture: commit-a (2 Backspaces for 1 character) and commit-d (Cmd+Z) are reverts.
         base = self.result()['coverage']
         self.assertEqual((base['commits_with_window'], base['reverted_commits'], base['revert_rate']), (4, 2, 0.5))
         table = self.run_cli('summary', '--since', '2026-08-18', db=db)
@@ -1875,8 +1740,6 @@ class QueryTests(unittest.TestCase):
                 self.assertEqual(imported[key], local[key], key)
         month = exports_only['series']['overall'][-1]['rolling_28d']
         self.assert_revert(month, 22, 10, (0.2692, 0.6534))
-        # Device B has the same ids; its windows and commits stay apart, so the totals double and each device reads
-        # as the database does.
         document = json.loads(exported.read_text())
         document['source_id'] = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
         other = Path(self.temp.name) / 'revert-b.json'
@@ -2187,20 +2050,17 @@ class QueryTests(unittest.TestCase):
         self.assertIn('not found',self.run_cli('inspect','missing',success=False))
 
     def test_pair_counters_cover_every_known_rank_decision(self):
-        # No record of the base fixture has a hash.
         base = self.result()['coverage']
         self.assertEqual((base['pair_identity'], base['pair_unavailable']), (0, base['known_rank']))
         db = Path(self.temp.name) / 'replay.sqlite3'
         replay_fixture(db)
         summary = self.result(db=db)
         coverage = summary['coverage']
-        # r5 has no evidence row and r12 chose the empty text: no span, no text, no hash. The text-free r7 and r11 do.
         self.assertEqual((coverage['known_rank'], coverage['pair_identity'], coverage['pair_unavailable']), (12, 10, 2))
         for group in summary['groups']:
             self.assertEqual(group['pair_identity'] + group['pair_unavailable'], group['known_rank'])
         windowed = self.result('summary', '--since', '2026-09-01', '--until', '2026-09-08', db=db)['coverage']
         self.assertEqual(windowed['pair_identity'] + windowed['pair_unavailable'], windowed['known_rank'])
-        # Both hashes reach inspect through the decoded pages, text-free or not.
         for cid, raw, word in [('r1', 'kaihui', '开会'), ('r7', 'ke', '课')]:
             decision = self.result('inspect', cid, db=db)['decisions'][0]
             self.assertEqual(decision['snapshot']['codeHash'], fake_hash('code', raw))
@@ -2227,8 +2087,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(result['window'], dict(days=28, first_day='2026-09-03', last_day='2026-09-30',
                                                 since='2026-09-03T00:00:00.000Z', until='2026-10-01T00:00:00.000Z',
                                                 until_exclusive=True))
-        # Two decisions follow another metric rule, one of them an unknown one; the window and the cohort leave the
-        # rest out. The four without a pair identity stay in the cohort and are counted.
         self.assertEqual(result['metric_scope'], dict(
             rule_fingerprint='measurement-A', policy='latest_compatible_metric_rules', unit='known_rank_decision',
             known_rank_decisions=30, included_decisions=28, excluded_decisions=2, excluded_unknown_decisions=1))
@@ -2251,12 +2109,10 @@ class QueryTests(unittest.TestCase):
                          {'cohort', 'unit', 'ranking', 'settings', 'measurement', 'build'})
 
     def test_learning_pair_identity_follows_the_consumed_span(self):
-        # The leading segment of nihaoshijie joins the whole-input pair, so pair 你好 has 4 decisions, not 3 and 1.
         rows = [(0, 0, 'nihao', '你好', 3, dict()), (1, 0, 'nihaoshijie', '你好', 1, dict(end=5))]
         result = self.run_learning(rows=rows, name='segment.sqlite3')
         self.assertEqual(result['units'], dict(decisions=2, pairs=1, words=1))
         self.assertEqual(result['l_ttl']['histogram'], {'1': 1, '2': 0, '3+': 0, 'never': 0})
-        # Without the span the same decision is not guessed to be the whole input.
         rows = [(0, 0, 'nihao', '你好', 3, dict()), (1, 0, 'nihaoshijie', '你好', 1, dict(evidence=False))]
         result = self.run_learning(rows=rows, name='unknown-span.sqlite3')
         self.assertEqual((result['units'], result['pair_coverage']['pair_unavailable']),
@@ -2268,14 +2124,12 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(week['l_reuse']['reuse_rate'], dict(
             numerator=None, denominator=None, rate=None, wilson_low=None, wilson_high=None,
             status='needs_28_day_window'))
-        # A window with nothing in it has null rates, not zero.
         self.assertEqual(week['units'], dict(decisions=0, pairs=0, words=0))
         self.assertIsNone(week['l_ttl']['learned_after_one_rate']['rate'])
         self.assertIsNone(week['l_ttl']['median_selections_to_learn'])
         emoji = self.run_learning('--kind', 'emoji', *LEARNING_ARGS)
         self.assertEqual(emoji['units']['decisions'], 0)
         self.assertIsNone(emoji['l_avoid']['avoidable_miss_rate']['rate'])
-        # 210 pairs, each missed once: enough for a verdict.
         rows = [(20, number % 60, f'code{number}', f'词{number}', 2, dict()) for number in range(210)]
         large = self.run_learning(rows=rows, name='large.sqlite3')
         self.assertEqual(large['l_ttl']['learned_after_one_rate']['status'], 'available')
@@ -2289,7 +2143,6 @@ class QueryTests(unittest.TestCase):
         db = Path(self.temp.name) / 'learning.sqlite3'
         learning_fixture(db, learning_rows())
         coverage = self.result(db=db)['coverage']
-        # The two other-rule decisions and the one before the window carry hashes; the four others do not.
         self.assertEqual((coverage['known_rank'], coverage['pair_identity'], coverage['pair_unavailable']), (31, 27, 4))
 
     def test_learning_never_pools_devices_and_reads_exports(self):
@@ -2301,7 +2154,6 @@ class QueryTests(unittest.TestCase):
         window = ('--until', '2026-09-08')
         message = self.run_cli('learning', '--input', str(exported), '--input', str(other), *window, success=False)
         self.assertIn('never link across devices', message)
-        # The local database counts as a source of its own beside two exports.
         self.run_cli('learning', '--input', str(other), *window, success=False)
         one = json.loads(self.run_cli('learning', '--exports-only', '--input', str(other), *window, '--format', 'json'))
         self.assertEqual(len(one['sources']), 1)
@@ -2310,7 +2162,6 @@ class QueryTests(unittest.TestCase):
                                          '--source', document['source_id'], '--format', 'json'))
         self.assertEqual(chosen['filters']['source'], document['source_id'])
         self.assertNotIn('by_source', chosen)
-        # The window is derived from --days.
         self.assertIn('derives --since', self.run_cli('learning', '--since', '2026-09-01', success=False))
         self.assertIn('local calendar date', self.run_cli('learning', '--until', '2026-09-08T12:00:00Z', success=False))
 
@@ -2353,7 +2204,6 @@ class QueryTests(unittest.TestCase):
                     'mean_native_rank', *DECISION_FIELDS[:12]):
             self.assertEqual(after[key], before[key], key)
         self.assertEqual(after['text_free'], 3)
-        # The counts stay when the text goes, so no decision loses its length bucket.
         self.assertEqual((before['length_unavailable'], after['length_unavailable']), (0, 0))
         trend_after = overall()
         self.assertEqual(trend_after['by_selection_length'], trend_before['by_selection_length'])
@@ -2370,7 +2220,6 @@ class QueryTests(unittest.TestCase):
     def test_incomplete_evidence_bounded_ids_and_concurrent_reader(self):
         db = sqlite3.connect(self.db)
         self.addCleanup(db.close)
-        # Corrupted or absent rank evidence never promotes a candidate to rank one.
         db.execute("UPDATE candidate_decisions SET selected_text='different' WHERE composition_id='a'")
         db.execute("UPDATE candidate_decisions SET first_page_json=json_set(first_page_json,'$.generation',99) WHERE composition_id='b'")
         db.commit()
@@ -2380,7 +2229,6 @@ class QueryTests(unittest.TestCase):
                       and x['caret']==3 and x['preceding_context']=='' and x['text_kind']=='chinese'
                       and x['matches_custom_phrase']==0)
         self.assertEqual(normal['composition_ids'],['c'])
-        # Duplicate one valid envelope into six separate compositions to exceed the sample bound.
         for index in range(6):
             cid=f'copy-{index}'
             source=dict(zip([x[1] for x in db.execute('PRAGMA table_info(compositions)')],
@@ -2397,7 +2245,6 @@ class QueryTests(unittest.TestCase):
         issue=self.result('ranking-issues')['issues'][0]
         self.assertEqual(issue['occurrences'],7)
         self.assertEqual(len(issue['composition_ids']),5)
-        # A reserved rollback-journal writer may coexist with this read-only query.
         db.execute('BEGIN IMMEDIATE')
         db.execute("UPDATE compositions SET app_bundle_id='uncommitted' WHERE id='c'")
         self.assertEqual(self.result('inspect','c')['composition']['app_bundle_id'],"app'quoted")
@@ -2454,7 +2301,6 @@ class QueryTests(unittest.TestCase):
                      phaseObservedVisibleDuration=0.2, visibilityObservationInterval=0.1)
         with contextlib.closing(sqlite3.connect(self.db)) as db, db:
             db.execute("UPDATE compositions SET operations_json=? WHERE id='a'", (json.dumps(dict(OPS, timing=value)),))
-            # Decision snapshots deliberately contain the same data. Never sum these copies.
             db.execute('UPDATE candidate_decisions SET operations_json=?', (json.dumps(dict(OPS, timing=value)),))
             unfinished = dict(value)
             unfinished.pop('endedOffset')
@@ -2485,7 +2331,6 @@ class QueryTests(unittest.TestCase):
         self.assertEqual(result['coverage']['compositions'], 69)
         self.assertGreater(result['coverage']['timing_v1'], 0)
         self.assertGreater(result['key_intervals']['all']['count'], 0)
-        # This engine/controller fixture does not observe native panel visibility.
         self.assertIsNone(result['visibility_observation_interval']['p50'])
         self.assertEqual(result['visibility_observation_interval']['count'], 0)
 
@@ -2517,7 +2362,6 @@ class QueryTests(unittest.TestCase):
                 AND selected_character_count IS NOT length(selected_text)''').fetchone()[0], 0)
             self.assertEqual(db.execute('''SELECT count(*) FROM commits WHERE text != ''
                 AND character_count IS NOT length(text)''').fetchone()[0], 0)
-        # Every row is written by v4 in text mode, so the buckets cover every known-rank decision.
         week = self.result('trend', '--days', '7', db=ENGINE_DB)['series']['overall'][-1]['rolling_7d']
         self.assertGreater(week['known_rank'], 0)
         self.assertEqual(week['length_unavailable'], 0)
@@ -2527,23 +2371,13 @@ class QueryTests(unittest.TestCase):
         db=sqlite3.connect(ENGINE_DB.as_uri()+'?mode=ro',uri=True)
         self.addCleanup(db.close)
         result=self.result(db=ENGINE_DB)
-        # The deferred-toggle then panel-selection fixture adds one valid composition,
-        # decision and issued candidate commit; the toggle itself adds no decision.
-        # The five custom-phrase matrix cases each add one valid decision/commit.
-        # The five candidate-fact cases (phrase, user_phrase, fuzzy, lv, English) add one each as well.
-        # The post-commit window cases add 17 compositions and commits and 16 decisions (one is a direct comma),
-        # one decision of which was committed without a client.
-        # The learning-act fixture adds two compositions, one valid decision and one commit: the learned pick, and the
-        # composition whose learned candidate Shift+Backspace forgets before Escape cancels it.
         self.assertEqual([result['coverage'][x] for x in ['compositions','decisions','commits']],[69,63,65])
         self.assertEqual(result['coverage']['valid'],54)
-        # Every known-rank decision of the real capture is hashed or counted as without a pair identity.
         coverage = result['coverage']
         self.assertEqual(coverage['pair_identity'] + coverage['pair_unavailable'], coverage['known_rank'])
         self.assertGreater(coverage['pair_identity'], 0)
         self.assertEqual(result['coverage']['regular_issued'],55)
         self.assertEqual(result['coverage']['regular_not_issued'],2)
-        # Three fixtures explicitly select emoji; positional selections may also be emoji as the corpus changes.
         self.assertGreaterEqual(sum(g['valid'] for g in result['groups'] if g['text_kind']=='emoji'),3)
         cohort=self.result('summary','--app','inkflow.recording-client',db=ENGINE_DB)
         self.assertGreater(cohort['coverage']['valid'],0)
@@ -2553,7 +2387,6 @@ class QueryTests(unittest.TestCase):
         inspected=self.result('inspect',selected,db=ENGINE_DB)
         self.assertTrue(inspected['commits'][0]['insertion_issued'])
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
-        # Case (a): two Backspaces covered 你好, the next code ended the window and it rides the second composition.
         carried = db.execute('''SELECT json_extract(w.value,'$.commitID') FROM compositions c,
             json_each(c.operations_json,'$.postCommitWindows') w WHERE json_extract(w.value,'$.end')='next_code'
             AND json_extract(w.value,'$.deletions')=2 AND json_extract(w.value,'$.leadingDeletions')=2''').fetchall()

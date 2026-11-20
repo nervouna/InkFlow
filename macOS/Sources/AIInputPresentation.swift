@@ -7,7 +7,6 @@ protocol AISuggestionPresentation: AnyObject {
     func hideSuggestion()
 }
 
-/// Test endpoints may implement both isolated presentation boundaries.
 @MainActor
 protocol AIInputPresentation: CandidatePresentation, AISuggestionPresentation {}
 

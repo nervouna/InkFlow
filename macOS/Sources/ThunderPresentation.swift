@@ -11,8 +11,6 @@ protocol ThunderPresenting: AnyObject {
     func hide()
 }
 
-/// Keeps decorative feedback downstream of text delivery and suppresses motion
-/// when the system accessibility preference requests it.
 @MainActor
 final class NativeThunderPresentation: ThunderPresenting {
     private let reduceMotion: () -> Bool

@@ -10,7 +10,6 @@ package actor DelayedAIService: AISuggestionServing {
     package func suggest(input: AISuggestionInput, configuration: AISuggestionConfiguration) async throws -> String {
         let index = inputs.count
         inputs.append(input)
-        // Deliberately ignores cancellation: the coordinator must reject late results itself.
         return try await withCheckedThrowingContinuation { pending[index] = $0 }
     }
     package func count() -> Int { inputs.count }

@@ -13,3 +13,5 @@ cp macOS/Design/MenuIcon/MenuIconTemplate.tiff macOS/Resources/
 The TIFF is checked in so routine builds do not depend on the installed font version. The `Template` suffix follows AppKit template-image naming. Both input-mode menu entries reference it.
 
 The bundle and mode also declare `TISIconIsTemplate`. This preserves template handling in the cursor input switcher, where the filename suffix alone was insufficient. See `macOS/DEBUGGING.md` for the switcher's behavior.
+
+The bitmap contexts use pixel coordinates. The TIFF writer records the logical point size separately.

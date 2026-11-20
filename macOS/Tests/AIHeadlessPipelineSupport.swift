@@ -5,8 +5,6 @@ import AppKit
 import InkFlowTestSupport
 #endif
 
-/// Only the window endpoint is simulated. Candidate data arrives exclusively from
-/// the production controller's refresh after real per-key Rime processing.
 @MainActor
 package final class HeadlessAIInputPresentation: AIInputPresentation {
     package private(set) var candidates: [String] = []
@@ -16,7 +14,6 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
     package private(set) var refreshCount = 0
     package private(set) var showCount = 0
     package private(set) var hideCount = 0
-    /// A late native show: candidates stay hidden until the test calls completeShow(), whatever the host speed.
     package let manualShow: Bool
     package private(set) var showPending = false
     private var suggestionWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
@@ -38,7 +35,6 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
         candidatesVisible = true
     }
 
-    /// Completes a pending show on this main-actor turn, as a native window that finishes showing later.
     package func completeShow() {
         guard showPending, !candidates.isEmpty else { return }
         showPending = false
@@ -63,8 +59,6 @@ package final class HeadlessAIInputPresentation: AIInputPresentation {
 
     package func hideSuggestion() { suggestion = nil }
 
-    /// Functional tests wait on the presentation event. The timeout is only an
-    /// infrastructure watchdog and intentionally exceeds the production debounce.
     package func waitForSuggestion(timeout: Duration = .seconds(15)) async -> Bool {
         if suggestionVisible { return true }
         let id = UUID()
@@ -100,7 +94,6 @@ package struct AIHeadlessCase: Sendable {
     ]
 }
 
-/// Observation wraps the actual service; live mode never substitutes a stub result.
 package actor AIHeadlessService: AISuggestionServing {
     package struct Call: Sendable {
         package let input: AISuggestionInput
@@ -122,8 +115,6 @@ package actor AIHeadlessService: AISuggestionServing {
     package func captured() -> [Call] { calls }
 }
 
-/// Physical ANSI key codes, real modifiers and monotonic event timestamps. Events
-/// are delivered to handle(_:client:), never to IFEngine.key or a coordinator hook.
 @MainActor
 package enum AIHeadlessKeyboard {
     static let letters: [Character: UInt16] = [
@@ -146,7 +137,6 @@ package enum AIHeadlessKeyboard {
             let flags: NSEvent.ModifierFlags = character == lower ? [] : [.shift]
             check(controller.handle(event(code, String(character), flags: flags), client: client), "Production controller handles fixture letter")
             lastKey = .now
-            // A pause below the debounce threshold between every physical key.
             try? await Task.sleep(for: .milliseconds(12))
         }
         return lastKey

@@ -22,7 +22,6 @@ private final class InputStatusWindow: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// Short-lived, focus-free feedback for input state changes.
 @MainActor
 final class InputStatusPanel {
     private let panel: InputStatusWindow
@@ -91,8 +90,6 @@ final class InputStatusPanel {
         panel.orderOut(nil)
     }
 
-    /// Screen coordinates use a bottom-left origin. Prefer the requested
-    /// above-caret placement, then use the same horizontal anchor below it.
     nonisolated static func position(caretRect: NSRect, panelSize: NSSize,
                                      screens: [NSRect], gap: CGFloat = 8) -> NSRect? {
         func valid(_ rect: NSRect) -> Bool {

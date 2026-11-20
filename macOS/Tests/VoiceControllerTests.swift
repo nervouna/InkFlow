@@ -78,7 +78,6 @@ private final class VoiceHarness {
     }
     func start() async {
         key()
-        // Poll instead of a fixed wait so a loaded machine doesn't fail the start.
         for _ in 0..<100 where fake.starts == 0 { try? await Task.sleep(for: .milliseconds(20)) }
         check(controller.voice.isActive && fake.starts == 1)
     }
@@ -543,8 +542,6 @@ struct VoiceControllerTests {
                     h.focused = RecordingClient(document: "another target")
                 }
             }
-            // The readback waits for a core-owned deadline, which a loaded runner can overshoot by far more than
-            // a fixed sleep. Wait for the transition itself, then give any read that would follow it time to happen.
             for _ in 0..<500 where readsAtTransition == nil { try? await Task.sleep(for: .milliseconds(10)) }
             try? await Task.sleep(for: .milliseconds(100))
 
@@ -808,7 +805,7 @@ struct VoiceControllerTests {
             }
             h.now += 0.25; stale()
             check(!h.controller.voice.isActive && h.fake.starts == 0, "Pending hold cancelled by \(interruption)")
-            h.controller.engine?.clear() // Ordinary Shift-key input may leave a real Rime composition.
+            h.controller.engine?.clear()
         }
         do {
             let h = VoiceHarness(); defer { h.close() }
@@ -973,7 +970,7 @@ struct VoiceControllerTests {
         await old.start()
         let callbacks = old.fake.callbacks!
         callbacks.onFinal("旧字段草稿")
-        old.key() // ASR tail may finish while InputMethodKit activates the replacement controller.
+        old.key()
         let replacement = VoiceHarness(); defer { replacement.close() }
         replacement.controller.activateServer(replacement.client)
         check(!old.controller.voice.isActive, "New controller activation cancels process-wide owner before old deactivation")
@@ -1072,8 +1069,6 @@ struct VoiceControllerTests {
             snapshotRequests.append((text, style)); return text
         }
         await snapshot.start()
-        // Isolate the closure snapshot from the controller's existing policy of cancelling
-        // every active voice session on a general settings-change notification.
         NotificationCenter.default.removeObserver(snapshot.controller, name: .settingsDidChange,
                                                   object: snapshot.settings)
         _ = try snapshot.settings.saveVoicePolishRule(originalBundleIdentifier: "inkflow.recording-client",
@@ -1129,7 +1124,7 @@ struct VoiceControllerTests {
         let callbacks = h.fake.callbacks!
         h.client.onMutation = {
             h.client.onMutation = nil
-            h.client.caretRect.origin.x += 10 // Our new marked text moved the caret.
+            h.client.caretRect.origin.x += 10
             h.controller.voice.cancel(.escape)
         }
         callbacks.onVolatile("重入")
@@ -1272,7 +1267,6 @@ struct VoiceControllerTests {
         let alternatives = [["张伟", "张玮"], ["使用 Swift。"]]
         h.key()
         check(h.controller.voice.isActive && h.fake.starts == 0)
-        // Preparation can finish after target capture but before queued service startup.
         current = .init(generation: 41, revision: 8, availability: .available,
                         entries: [.init(text: "张玮", code: "zhang wei ", commits: 3)])
         for _ in 0..<20 { await Task.yield() }

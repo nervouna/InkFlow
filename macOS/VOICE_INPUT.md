@@ -21,3 +21,32 @@ Shipped in 0.4.0. Experiments and measurements are in the git history of `docs/a
 ## Manual check
 
 After changing shortcuts, marked text, target ownership or commit logic: hold, double-tap and Esc in a native editor and a browser, including over a selection and while switching boxes or apps.
+
+## Adapter and controller invariants
+
+The ASR feed is deliberately off-main. Lock converter access and stream termination together.
+The input callback consumes a borrowed tap buffer only within the locked synchronous conversion;
+no borrowed buffer escapes. Signal real end-of-stream to drain converter priming and trailing samples.
+Stop the feed explicitly even when `SpeechAnalyzer.start` returns after analysis begins. Validate the
+transcriber's range contract before correction or insertion. Final segments arrive once and in order.
+The volatile text is the unfinished suffix. Finalize only after the result stream and audio
+finalization have both ended. A completion callback can synchronously start the next session.
+
+InputMethodKit can activate a replacement controller before deactivating the old one. Only the
+synchronous notification for the original client can address it, and no later cleanup retains that
+client. Range reads, native input identifiers, diagnostic sinks and service cancellation can reenter
+the controller. Remove the token before cancelling the service, recheck ownership after each external
+call, and relinquish transcript ownership before delivering a commit. Recheck focus, epoch, app and
+secure input after the native identifier lookup. The optional TSM document interface can leave the
+selection unknown without blocking typing. Selected-text transactions leave the mark with the host
+and perform no post-delivery read for learning. Unknown learned values keep their generation for ASR
+fallback invalidation.
+
+A chord modifier release ends held dictation without counting as a tap, and taps can release them
+between presses. Pass through a reentrant edit while preserving the release edge of a held key.
+The platform schedules wakes, and the core owns the deadline so an early wake can be rescheduled.
+Preparation is explicit or uses the authorized startup task. The process-only diagnostic fixture opens
+neither audio nor network resources. Production voice correction sends the finalized transcript on
+its own transport and excludes document context, Pinyin and prediction statistics. Cancelling the
+task stops oversized or unsuccessful response bodies. Voice diagnostics retain fixed names, random
+session IDs and elapsed time, with each repeated reason rate-limited.

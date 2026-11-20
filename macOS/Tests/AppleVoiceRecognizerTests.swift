@@ -105,9 +105,6 @@ struct AppleVoiceRecognizerTests {
     static func range(_ start: Int64, _ duration: Int64 = 1) -> CMTimeRange {
         CMTimeRange(start: CMTime(value: start, timescale: 1), duration: CMTime(value: duration, timescale: 1))
     }
-    /// The analyzer's format for the production locale. A hosted runner has no Speech support; only there
-    /// (INKFLOW_SPEECH_ASSETS_OPTIONAL=1, set by the release workflow) the feed is checked against the
-    /// format a Mac reports for zh_CN: 16 kHz mono interleaved Int16.
     static func analyzerFormat() async -> AVAudioFormat {
         if SpeechTranscriber.isAvailable,
            let locale = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh_CN")) {
@@ -129,7 +126,6 @@ struct AppleVoiceRecognizerTests {
     @MainActor static func main() async throws {
         await automaticPreparation()
         await fixtureLifecycle()
-        // Invoke the exact production tap on a detached executor, without opening a microphone.
         let input = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
         let output = await analyzerFormat()
         let feed = try VoiceAudioFeed(input: input, output: output)
@@ -182,7 +178,6 @@ struct AppleVoiceRecognizerTests {
         do { try transcript.appendFinal("duplicate", range: range(1)); preconditionFailure("Accepted overlapping final") }
         catch { precondition(error is VoiceRecognitionError) }
 
-        // Immediate key release/cancel cannot open the microphone or prepare language assets.
         let service = AppleVoiceRecognizer(preparation: .init(locale: Locale(identifier: "zh_CN")))
         var finals: [String] = [], failures = 0
         let callbacks = AppleVoiceRecognizer.Callbacks(onFinal: { _ in preconditionFailure("Unexpected final") },

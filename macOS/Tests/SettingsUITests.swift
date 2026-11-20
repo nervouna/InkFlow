@@ -62,7 +62,6 @@ struct SettingsUITests {
             print("PASS settings UI suite: complete")
             return
         }
-        // Keep existing GUI cases intact; drive asynchronous service scenarios with AppKit's event loop.
         var testError: Error?
         var dictionaryCompleted = false
         Task { @MainActor in
@@ -82,7 +81,6 @@ struct SettingsUITests {
         print("PASS settings UI suite: complete")
     }
 
-    /// UI-only preview: no assertions, input engine, permissions, or network services.
     @MainActor static func runPreview() {
         let suite = temporarySuiteName("inkflow.settings-preview")
         let defaults = UserDefaults(suiteName: suite)!
@@ -102,7 +100,6 @@ struct SettingsUITests {
         print("END settings preview")
     }
 
-    /// Explicit interactive diagnostic: real permission/resources, isolated settings, no recording or IME registration.
     @MainActor static func runMicrophoneReproduction(lifecycleOnly: Bool = false) {
         let name = temporarySuiteName("inkflow.microphone-reproduction")
         let defaults = UserDefaults(suiteName: name)!
@@ -329,7 +326,6 @@ struct SettingsUITests {
         check(updaterState.manualChecks == checksBeforeSettingsAction + 1,
               "Settings uses Sparkle's standard user-initiated check")
 
-        // A standard Sparkle UI change must invalidate the view and read the same public property.
         updaterState.access.automaticallyDownloadsUpdates = false
         updaterState.access.updaterPreferencesDidChange()
         drainEvents()
@@ -513,8 +509,6 @@ struct SettingsUITests {
             return matches[0]
         }
         func press(_ identifier: String) {
-            // SwiftUI checkbox proxies do not implement the in-process press selector.
-            // A child sends the system AX action while this process services its event loop.
             let action = Process()
             action.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
             action.arguments = ["--press-accessibility", String(ProcessInfo.processInfo.processIdentifier), identifier]
@@ -526,7 +520,6 @@ struct SettingsUITests {
             drainEvents()
         }
         func checkTitle(_ title: String, beside control: [String: Any]) {
-            // Native grouped Forms expose control labels as adjacent static text.
             let labels = IFAccessibilityTree(window).filter {
                 $0["role"] as? String == "AXStaticText" && ($0["value"] as? String == title || $0["label"] as? String == title)
             }
@@ -566,7 +559,6 @@ struct SettingsUITests {
             check(popup["role"] as? String == "AXPopUpButton")
             checkTitle("按下 \(key) 时输入", beside: popup)
             check(popup["value"] as? String == "输入 \(mapped)")
-            // Drive the real popup's menu with native key events, including both available choices.
             for enabled in [false, true, false] {
                 let timer = Timer(timeInterval: 0.2, repeats: false) { _ in
                     MainActor.assumeIsolated {
@@ -671,8 +663,6 @@ struct SettingsUITests {
             let label = element["label"] as? String ?? ""
             return label.isEmpty ? element["value"] as? String ?? "" : label
         }
-        // In-process SwiftUI sidebar children are AX proxies without selectable NSAccessibility
-        // rows. Choose the initial section for layout checks; exercise navigation in CUA.
         window.contentViewController = SettingsHostingController(rootView: SettingsView(settings: settings, initialSection: .personalization))
         checkMinimumSize(window)
         drainEvents()
@@ -944,7 +934,6 @@ struct SettingsUITests {
                 Set(actual.types) == Set(saved.types) && saved.types.allSatisfy { actual.data(forType: $0) == saved.data(forType: $0) }
             }
         }
-        // Keep all assertions nonterminating while the synthetic clipboard is installed.
         var clipboardRestored = false
         defer { if !clipboardRestored { _ = restoreClipboard() } }
         var failures: [String] = []
@@ -1048,7 +1037,6 @@ struct SettingsUITests {
     }
 
     @MainActor static func waitForFocus(_ window: NSWindow) {
-        // Activation is asynchronous. Keep the focus requirement and bound the wait.
         let deadline = Date().addingTimeInterval(5)
         while !(window.isVisible && window.isKeyWindow && NSApp.isActive), Date() < deadline {
             drainEvents(seconds: 0.05)
@@ -1064,8 +1052,6 @@ struct SettingsUITests {
     }
 
     @MainActor static func initializeAccessibility() {
-        // SwiftUI initializes its accessibility tree lazily when an assistive client connects.
-        // Use a bounded public read from a child process; never change system accessibility settings.
         let reader = Process()
         reader.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         reader.arguments = ["--initialize-accessibility", String(ProcessInfo.processInfo.processIdentifier)]

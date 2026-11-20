@@ -277,7 +277,6 @@ private func check(_ value: Bool, _ message: String) throws {
         delayedSources.enabled = ["ascii"]
         _ = try await delayed.finish(target: target, state: delayedState, installedBuild: "12")
         try check(delayedSources.selected == IFInputIdentity.modeID && delayedSources.enabledCalls == 2, "delayed enable and selection readback")
-        // First install: nothing registered or running, so finish enables the parent and mode and selects the mode.
         let freshSources = TrialSources(), freshProcesses = TrialProcesses()
         freshSources.registered = false; freshSources.selected = "ascii"; freshSources.enabled = ["ascii"]; freshProcesses.pids = []
         let fresh = IFTrialInstallation(sources: freshSources, processes: freshProcesses)
@@ -296,7 +295,6 @@ private func check(_ value: Bool, _ message: String) throws {
         let deniedResult = try await denied.finish(target: target, state: deniedState, installedBuild: "12")
         try check(!deniedResult.confirmed && deniedProcesses.launches == 1 && deniedSources.selected == "ascii",
                   "unconfirmed first-install enablement reports it, still launches the new build and leaves the selection alone")
-        // Upgrade: InkFlow was enabled before the update, then the system drops it and never confirms it again.
         let upgradeSources = TrialSources(), upgradeProcesses = TrialProcesses()
         let upgrade = IFTrialInstallation(sources: upgradeSources, processes: upgradeProcesses)
         let upgradeState = try await upgrade.prepare(target: target, build: "12")
@@ -339,11 +337,9 @@ private func check(_ value: Bool, _ message: String) throws {
         func inode(_ url: URL) throws -> NSNumber? {
             try fm.attributesOfItem(atPath: url.path)[.systemFileNumber] as? NSNumber
         }
-        // First install: the exclusive rename publishes the candidate and never overwrites.
         let first = try candidate("99-preview")
         try IFAtomicAppReplacement.replace(candidate: first, target: target)
         try check(try installed() == "99-preview" && !fm.fileExists(atPath: first.path), "first installation")
-        // Update: the swap keeps the target path present and leaves the old app in the candidate slot.
         let second = try candidate("1-old-build")
         let oldIdentity = try inode(target), newIdentity = try inode(second)
         try IFAtomicAppReplacement.replace(candidate: second, target: target)

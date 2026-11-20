@@ -147,14 +147,12 @@ extension QualityCaptureTests {
             check(db.ops(db.rows("SELECT * FROM compositions ORDER BY rowid DESC LIMIT 1")[0]).timing == nil,
                   "secure input does not accrue per-key timing")
         }
-        // The post-commit window runs on the injected clock, and secure input keeps it from opening or drops it.
         let limit = QualityLimits.postCommitWindowSeconds
         func commitNihao(_ control: InkFlowInputController, _ client: RecordingClient) {
             typeInput(control, client)
             time.now += 0.1
             check(control.handle(keyEvent(49, " "), client: client))
         }
-        /// The record the next composition submits, which carries the windows closed before it.
         func carrier(_ control: InkFlowInputController, _ client: RecordingClient) async -> [QualityPostCommitWindow]? {
             time.now += 0.1
             check(control.handle(keyEvent(0, "a"), client: client))

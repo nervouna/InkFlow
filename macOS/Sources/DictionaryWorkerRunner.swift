@@ -56,7 +56,6 @@ struct IFDictionaryWorkerRunner: Sendable {
     var timeout: TimeInterval = 600
     var logger: IFDictionaryDiagnosticLogger = { _ in }
 
-    /// sandbox-exec is a deprecated macOS facility. Failure to launch is an error; never run unsandboxed.
     static let sandboxProfile = """
     (version 1)
     (allow default)
@@ -90,7 +89,6 @@ struct IFDictionaryWorkerRunner: Sendable {
             return try runBlocking(request, cancellation: cancellation, progress: progress)
         } catch { let value = IFDictionaryUpdateError.wrapping(error, stage: .prepare); logger(value); throw value }
     }
-    /// Bootstrap can call this synchronously before serving input. Reads inert data only, never old executable resources.
     func rebuildBlocking(candidate: URL, dictionaryShared: URL,
                          cancellation: IFDictionaryCancellation = .init(),
                          progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
@@ -114,7 +112,6 @@ struct IFDictionaryWorkerRunner: Sendable {
             throw IFDictionaryUpdateError(.prepare, "unsafe-candidate")
         }
     }
-    /// Blocking process core, also used by focused timeout/pipe tests. Executable always comes from local runtime configuration.
     func runBlocking(_ request: IFDictionaryWorkerRequest, cancellation: IFDictionaryCancellation = .init(),
                      progress: @escaping @Sendable (IFDictionaryProgress) -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
         let startup = IFStartupDiagnostics.shared
@@ -132,7 +129,6 @@ struct IFDictionaryWorkerRunner: Sendable {
                              "-D", "CANDIDATES_ROOT=\((try IFDictionaryFiles.canonical(candidatesRoot)).path)",
                              "-D", "CANDIDATE_ROOT=\(request.candidate.path)", "-p", Self.sandboxProfile,
                              runtime.helper.path, requestURL.path]
-        // No inherited credentials, user paths or injected dynamic-loader environment reach the helper.
         process.environment = ["PATH": "/usr/bin:/bin",
                                "TMPDIR": request.candidate.path, "LANG": "en_US.UTF-8"]
         process.currentDirectoryURL = request.candidate

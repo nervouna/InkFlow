@@ -2,13 +2,9 @@ import InkFlowRime
 @preconcurrency import InputMethodKit
 import Carbon
 
-/// Audited offline IMK path. AI may consume only plain Tab;
-/// presentation callbacks run after the offline state transition and cannot replace it.
 @MainActor
 @objc(InkFlowInputController)
 final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable {
-    // IMKCandidates borrows this source. The latest panel can outlive its controller,
-    // so retain the single immutable selection layout for the process lifetime.
     private static let selectionKeyLayout: TISInputSource? = {
         let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.US"] as CFDictionary
         return (TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource])?.first
@@ -93,7 +89,6 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         syncAppliedSettings()
     }
 
-    /// The engine applies settings at its next composition boundary; refresh mirrors only what it applied.
     private func syncAppliedSettings() {
         if settings.inputSettingsError != engine?.configurationError {
             settings.inputSettingsError = engine?.configurationError
@@ -138,7 +133,6 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
                                                   clientID: client?.uniqueClientIdentifierString())
         }
         let state = engine?.snapshot() ?? EngineSnapshot()
-        // Settings deferred during the composition take effect once it ends.
         if state.preedit.isEmpty, previousPreeditCount > 0 { engine?.applyConfigurationIfIdle() }
         if !state.preedit.isEmpty {
             inputDiagnostics.beginComposition()
@@ -174,7 +168,6 @@ final class InkFlowInputController: IFInputControllerShell, @unchecked Sendable 
         return delivery
     }
 
-    // InputMethodKit's legacy callbacks are synchronous and main-thread-bound but lack actor annotations.
     nonisolated override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         nonisolated(unsafe) let callbackEvent = event
         nonisolated(unsafe) let callbackClient = sender

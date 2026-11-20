@@ -12,7 +12,6 @@ struct DiagnosticProcess: Codable, Sendable {
 
     init(bundle: Bundle = .main) {
         run = UUID(); pid = ProcessInfo.processInfo.processIdentifier
-        // Metadata is restricted to release/version tokens, not arbitrary bundle text.
         func token(_ value: Any?) -> String {
             guard let value = value as? String, !value.isEmpty, value.utf8.count <= 64,
                   value.utf8.allSatisfy({ (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || [45, 46].contains($0) }) else { return "unknown" }
@@ -50,7 +49,6 @@ struct DiagnosticRecord: Codable, Sendable {
         context = event.context
     }
 
-    /// On-disk input is decoded rather than blindly included in an export. Unknown JSON fields are discarded.
     var isValid: Bool {
         func label(_ value: String) -> Bool {
             !value.isEmpty && value.utf8.count <= 80 && value.utf8.allSatisfy {
@@ -105,8 +103,6 @@ struct DiagnosticStoreConfiguration: Sendable {
     var flushDelay: TimeInterval = 1
 }
 
-/// All disk work, including snapshots, is serialized off the caller. The submission lock is never held
-/// during IO. Each store owns one run; a directory lock coordinates coexistence with another process.
 final class LocalDiagnosticStore: @unchecked Sendable {
     private let directory: URL
     private let configuration: DiagnosticStoreConfiguration
@@ -123,7 +119,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
     private var disabled = false
     private var requests = 0
     private var status = DiagnosticStatus()
-    // Worker-owned state below.
     private var directoryFD: Int32 = -1
     private var lockFD: Int32 = -1
     private var activeFile: String?
@@ -179,7 +174,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
                         try self.loadLoss()
                         try self.maintain()
                         let records = try self.readRecords(since: since, until: until)
-                        // A bookkeeping failure must not discard records already read successfully.
                         do { try self.saveLoss() } catch { self.fail(error) }
                         return records
                     }
@@ -202,7 +196,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
         }
     }
 
-    /// Best effort only: optional diagnostics must not hold application termination on a stalled disk.
     @discardableResult func drain(timeout: TimeInterval = 0.5) async -> Bool {
         await withCheckedContinuation { continuation in
             let reply = DrainReply(continuation)
@@ -253,7 +246,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
                 status.availability = .available; status.failure = nil
             }
         } catch StoreError.failure(.busy) {
-            // Other process may be exporting. Keep the bounded queue and retry later.
             return
         } catch { fail(error) }
     }
@@ -275,7 +267,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
 
     private func prepareDirectory() throws {
         guard directoryFD < 0 else { return }
-        // Resolve every directory component with O_NOFOLLOW. No chmod or cleanup of ancestors.
         var fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
         guard fd >= 0 else { throw StoreError.failure(.ioFailure) }
         do {
@@ -351,7 +342,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
             try remove(file.name); total -= file.size; status.loss.capacityFiles += 1
         }
         if !recovered {
-            // A crashed save can leave this one bounded temporary file; the directory lock excludes active saves.
             var temporary = stat()
             if fstatat(directoryFD, "incident.next", &temporary, AT_SYMLINK_NOFOLLOW) == 0 {
                 guard temporary.st_mode & S_IFMT == S_IFREG && temporary.st_nlink == 1 else { throw StoreError.failure(.unsafePath) }
@@ -444,12 +434,9 @@ final class LocalDiagnosticStore: @unchecked Sendable {
             for line in data.split(separator: 10) {
                 guard line.count <= configuration.maximumEventBytes,
                       let record = try? decoder.decode(DiagnosticRecord.self, from: Data(line)), record.isValid else {
-                    // The corrupt record is never copied to a diagnostic bundle.
                     invalidRecordCount += 1
                     continue
                 }
-                // JSON dates use Unix milliseconds. Compare in that same time base; Date's reference
-                // epoch arithmetic can otherwise exclude an exact boundary by a fraction of a microsecond.
                 if DiagnosticTime.milliseconds(record.timestamp) >= DiagnosticTime.milliseconds(lower)
                     && DiagnosticTime.milliseconds(record.timestamp) <= DiagnosticTime.milliseconds(until ?? .distantFuture) { records.append(record) }
             }
@@ -467,7 +454,6 @@ final class LocalDiagnosticStore: @unchecked Sendable {
     }
     private func saveLoss() throws {
         let data = try JSONEncoder().encode(status.loss)
-        // This file is bounded bookkeeping, reserved in the common capacity budget.
         let fd = try openRegular("loss.next", flags: O_WRONLY | O_CREAT | O_TRUNC)
         defer { close(fd) }
         try writeAll(data, fd: fd)
@@ -504,7 +490,6 @@ extension LocalDiagnostics {
 }
 
 extension LocalDiagnosticStore {
-    /// Incidents share the rolling log's lock, budget and age policy. No second store or database.
     func saveIncident(occurredAt: Date, clickedAt: Date, note: String?) async throws -> DiagnosticIncident {
         try DiagnosticIncident.validate(note: note)
         guard occurredAt.timeIntervalSince1970.isFinite, clickedAt.timeIntervalSince1970.isFinite,
@@ -528,7 +513,6 @@ extension LocalDiagnosticStore {
                     snapshot: .init(records: records, status: self.status, invalidRecordCount: self.invalidRecordCount))
                 let data = try Self.encoder().encode(incident)
                 guard data.count <= self.configuration.maximumBytes - 2_048 else { throw DiagnosticFeedbackError.tooLarge }
-                // Validate size before making room: an impossible save must not evict existing evidence.
                 try self.maintain(reserving: data.count)
                 let temporary = "incident.next"
                 let fd = try self.openRegular(temporary, flags: O_WRONLY | O_CREAT | O_TRUNC)
@@ -536,7 +520,6 @@ extension LocalDiagnosticStore {
                 try self.writeAll(data, fd: fd)
                 let name = "incident_\(anchor)_\(incident.id).json"
                 guard renameat(self.directoryFD, temporary, self.directoryFD, name) == 0 else { throw DiagnosticFeedbackError.unavailable }
-                // The frozen snapshot is usable even if later bookkeeping fails.
                 do { try self.saveLoss() } catch { self.fail(error) }
                 return incident
             }
