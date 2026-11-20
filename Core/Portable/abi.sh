@@ -1,6 +1,4 @@
 #!/bin/bash
-# Build the exported C ABI (cdylib + staticlib) and run the C consumer. Without a
-# prepared resources directory only the fixture and argument checks run.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 resources=${1:-}

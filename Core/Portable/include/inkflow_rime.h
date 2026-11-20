@@ -6,77 +6,35 @@
 extern "C" {
 #endif
 
-/* Frontend-facing ABI of the InkFlow Rust/Rime engine (ABI version 1).
- *
- * Handles: IFREngine, IFRSession and IFRSnapshot are opaque. Each is created by one
- * function and released by its matching destroy or free function, which accepts NULL. Owned
- * strings from ifr_session_take_commit are released with ifr_string_free. Borrowed
- * strings (snapshot accessors, ifr_last_error, configuration errors) stay valid while
- * their owner lives; ifr_last_error is valid on the calling thread until its next
- * failing call. Every string crossing the ABI is NUL-terminated UTF-8; embedded NUL
- * and non-UTF-8 input are rejected with IFR_INVALID_ARGUMENT.
- *
- * Status: functions returning IFRStatus write their outputs only on IFR_OK and set
- * ifr_last_error otherwise. Accessors that cannot fail return neutral values for NULL
- * or out-of-range arguments. No Rust panic unwinds across the ABI: a caught panic is
- * IFR_PANIC and the engine should be destroyed. Invalid pointers remain undefined.
- *
- * Threads: there is no thread affinity. One process-wide lock serializes every Rime
- * call and one policy lock serializes every session of an engine, so all handles may
- * be used from any thread, one call at a time per handle. Rime is process-global: a
- * second live engine returns IFR_ALREADY_RUNNING. Sessions keep their engine alive;
- * ifr_engine_destroy only drops the caller's reference, and Rime finalizes when the
- * last session or engine reference goes.
- *
- * Offsets: ifr_snapshot_caret/selection_* count bytes of the returned UTF-8 preedit
- * and always fall on character boundaries. Frontends convert to their own units.
- *
- * Keys: Rime/X11 keysyms with Rime modifier masks (Shift 1<<0, Control 1<<2,
- * Alt 1<<3, Super 1<<26, Release 1<<30). Digits select displayed candidates, Up/Down
- * move the highlight, Page_Up/Page_Down page, Shift+BackSpace with candidates forgets the
- * highlighted candidate's learning; everything else goes to Rime.
- *
- * Candidate selection and highlight take the snapshot they were decided on. A
- * snapshot superseded by any mutation returns IFR_STALE_SNAPSHOT; an index outside its
- * page returns IFR_INVALID_CANDIDATE. Snapshots are copies and outlive the session.
- *
- * Commits: ifr_session_take_commit drains completed text exactly once. Call it after
- * every key, selection, commit or configuration change before the next action.
- *
- * Nothing here touches the network or telemetry. Engine creation, configuration
- * changes and the custom-phrase reload at a shared idle are the only disk work;
- * keys never read storage. The observer runs on the mutating thread after the engine
- * lock is released; it must not call back into the same session and cannot block
- * input on storage without blocking that thread. */
 
 typedef int32_t IFRStatus;
 enum {
   IFR_OK = 0,
   IFR_PANIC = 1,
   IFR_INVALID_ARGUMENT = 2,
-  IFR_NATIVE = 3,             /* librime failed; stop using the engine and recreate it. */
-  IFR_POISONED = 4,           /* An earlier panic poisoned a lock; recreate the engine. */
-  IFR_ALREADY_RUNNING = 5,    /* Another engine (or its sessions) is still alive. */
+  IFR_NATIVE = 3,
+  IFR_POISONED = 4,
+  IFR_ALREADY_RUNNING = 5,
   IFR_SESSIONS_ACTIVE = 6,
-  IFR_RESOURCE = 7,           /* A prepared resource or the context index is missing/invalid. */
-  IFR_CONFIGURATION = 8,      /* A session could not apply its configuration. */
+  IFR_RESOURCE = 7,
+  IFR_CONFIGURATION = 8,
   IFR_IO = 9,
   IFR_STALE_SNAPSHOT = 10,
   IFR_INVALID_CANDIDATE = 11,
-  IFR_ENGINE_ACTIVE = 12,     /* Personal-data work needs every engine destroyed first. */
-  IFR_INCOMPATIBLE = 13,      /* Another backup format, Rime version or dictionary set. */
+  IFR_ENGINE_ACTIVE = 12,
+  IFR_INCOMPATIBLE = 13,
   IFR_UNKNOWN_FIELDS = 14,
   IFR_SETTINGS = 15,
   IFR_PHRASES = 16,
-  IFR_SNAPSHOT = 17,          /* A dictionary snapshot breaks the TSV contract. */
-  IFR_RECOVERY_REQUIRED = 18  /* An earlier import was interrupted; call ifr_personal_recover. */
+  IFR_SNAPSHOT = 17,
+  IFR_RECOVERY_REQUIRED = 18
   ,
-  IFR_BUSY = 19,              /* Not now: a session is composing, a commit is undrained or Rime's undo window is open. */
-  IFR_UNAVAILABLE = 20,       /* Personal learning management gave no valid answer; refresh and retry. */
-  IFR_CONFLICT = 21,          /* The learning changed since the entry was listed or the delete was made. */
-  IFR_TOO_LARGE = 22          /* Too many entries or too large a learning count for the operation. */
+  IFR_BUSY = 19,
+  IFR_UNAVAILABLE = 20,
+  IFR_CONFLICT = 21,
+  IFR_TOO_LARGE = 22
   ,
-  IFR_NO_REPLY = 23           /* ifr_session_call: nothing answered; see there. */
+  IFR_NO_REPLY = 23
 };
 
 typedef struct IFREngine IFREngine;
@@ -89,19 +47,18 @@ typedef struct IFRPersonalExport IFRPersonalExport;
 typedef struct IFRReply IFRReply;
 
 typedef struct {
-  const char* shared;        /* Prepared shared resources. */
-  const char* user;          /* Isolated writable user directory; created if missing. */
-  const char* cache;         /* Target-native compiled cache, or NULL to compile into user/build. */
-  const char* context_index; /* Prepared pinyin_simp.context.bin, or NULL for Rime's order. */
+  const char* shared;
+  const char* user;
+  const char* cache;
+  const char* context_index;
 } IFREngineConfig;
 
 typedef struct {
-  const char* id;   /* Opaque frontend identity, unique within one configuration. */
+  const char* id;
   const char* code;
   const char* text;
 } IFRPhrase;
 
-/* Input options as a bitmask; ifr_input_options_default() gives the product defaults. */
 enum {
   IFR_OPTION_ABBREVIATION = 1u << 0,
   IFR_OPTION_TYPO_TOLERANCE = 1u << 1,
@@ -128,13 +85,12 @@ enum {
   IFR_ACTION_TOGGLE_ASCII = 5
 };
 
-/* One completed mutation. Snapshots are borrowed for the callback only. */
 typedef struct {
   uint64_t session;
   int action;
-  int32_t key;        /* IFR_ACTION_KEY */
-  int32_t modifiers;  /* IFR_ACTION_KEY */
-  size_t index;       /* IFR_ACTION_SELECT / IFR_ACTION_HIGHLIGHT */
+  int32_t key;
+  int32_t modifiers;
+  size_t index;
   int handled;
   const IFRSnapshot* before;
   const IFRSnapshot* after;
@@ -145,17 +101,11 @@ typedef void (*IFRObserver)(void* user_data, const IFRMutation* mutation);
 uint32_t ifr_abi_version(void);
 const char* ifr_last_error(void);
 uint32_t ifr_input_options_default(void);
-/* The linked librime's version (for example "1.17.0"), valid for the process and needing
- * no engine; NULL only after an earlier panic poisoned the Rime lock. */
 const char* ifr_rime_version(void);
 
-/* Engine creation initializes Rime, checks the prepared cache and loads the context
- * index: setup work, never on the key path. */
 IFRStatus ifr_engine_create(const IFREngineConfig* config, IFREngine** engine);
 void ifr_engine_destroy(IFREngine* engine);
 int ifr_engine_context_ranking_ready(const IFREngine* engine);
-/* NULL removes the observer. The callback and user_data must be usable from any
- * thread that mutates a session of this engine. */
 IFRStatus ifr_engine_set_observer(const IFREngine* engine, IFRObserver callback, void* user_data);
 
 IFRStatus ifr_session_create(const IFREngine* engine, IFRSession** session);
@@ -163,15 +113,12 @@ void ifr_session_destroy(IFRSession* session);
 uint64_t ifr_session_id(const IFRSession* session);
 int ifr_session_available(const IFRSession* session);
 
-/* handled is 1 when the engine consumed the key. Output pointers may be NULL. */
 IFRStatus ifr_session_key(const IFRSession* session, int32_t key, int32_t modifiers, int* handled);
 IFRStatus ifr_session_snapshot(const IFRSession* session, IFRSnapshot** snapshot);
-/* On success, returns a new owned snapshot, or sets *snapshot to NULL when previous still has
- * the same contents and selection identity. Pass NULL for previous to always request a snapshot. */
 IFRStatus ifr_session_snapshot_if_changed(const IFRSession* session, const IFRSnapshot* previous,
                                           IFRSnapshot** snapshot);
 void ifr_snapshot_free(IFRSnapshot* snapshot);
-const char* ifr_snapshot_input(const IFRSnapshot* snapshot);   /* Rime's raw input. */
+const char* ifr_snapshot_input(const IFRSnapshot* snapshot);
 const char* ifr_snapshot_preedit(const IFRSnapshot* snapshot);
 size_t ifr_snapshot_caret(const IFRSnapshot* snapshot);
 size_t ifr_snapshot_selection_start(const IFRSnapshot* snapshot);
@@ -180,38 +127,18 @@ size_t ifr_snapshot_candidate_count(const IFRSnapshot* snapshot);
 const char* ifr_snapshot_candidate_text(const IFRSnapshot* snapshot, size_t index);
 const char* ifr_snapshot_candidate_comment(const IFRSnapshot* snapshot, size_t index);
 int32_t ifr_snapshot_page(const IFRSnapshot* snapshot);
-size_t ifr_snapshot_highlighted(const IFRSnapshot* snapshot);  /* Display index. */
+size_t ifr_snapshot_highlighted(const IFRSnapshot* snapshot);
 int ifr_snapshot_last_page(const IFRSnapshot* snapshot);
 
-/* The caret in the raw input: a byte offset into ifr_snapshot_input, on a character boundary.
- * ifr_snapshot_caret is the caret in the preedit, which shows spaces the input does not have.
- * An AI request's identity is the raw input, this caret and the preedit before
- * ifr_snapshot_selection_start. */
 size_t ifr_snapshot_raw_caret(const IFRSnapshot* snapshot);
 
-/* Quality evidence of the displayed candidate `index`, as the macOS quality recorder reads it.
- * Candidates are in InkFlow's display order. The native position is where Rime put the
- * candidate on its current page, before ordering; the native rank counts across pages,
- * starting at 1: page * page size + native index + 1. Both are 0 when index is out of range. */
 size_t ifr_snapshot_candidate_native_index(const IFRSnapshot* snapshot, size_t index);
 size_t ifr_snapshot_candidate_native_rank(const IFRSnapshot* snapshot, size_t index);
-/* The personal-learning source of an exact record the user's own commits strengthened, or
- * IFR_PERSONAL_NONE (also out of range). */
 enum { IFR_PERSONAL_NONE = 0, IFR_PERSONAL_EXACT_ENGLISH = 1, IFR_PERSONAL_EXACT_MIXED = 2 };
 int ifr_snapshot_candidate_personal_source(const IFRSnapshot* snapshot, size_t index);
-/* Returns 1 and writes the bytes of the raw input the candidate consumes, [*start, *end), for a
- * candidate with a personal source; otherwise 0 and the outputs stay untouched. Either output
- * may be NULL. */
 int ifr_snapshot_candidate_consumed_input(const IFRSnapshot* snapshot, size_t index,
                                           size_t* start, size_t* end);
 
-/* The ranking evidence row the engine computed for the candidate, or NULL when it has none
- * (a selected prefix is pending, a custom phrase code matches, or the page could not be read)
- * or index is out of range: "start,end,class,exact,personal,source,type,corrected". start and end
- * are the raw-input bytes the candidate covers; type is Rime's candidate type of the genuine
- * candidate ("phrase", "user_phrase", "sentence", "completion", "user_table", ...), empty when
- * unknown; corrected is 1 when a fuzzy or algebra rule reached the candidate's spelling, else 0.
- * Content-free: no candidate, comment or input text. Valid as long as the snapshot. */
 const char* ifr_snapshot_candidate_evidence(const IFRSnapshot* snapshot, size_t index);
 
 IFRStatus ifr_session_select(const IFRSession* session, const IFRSnapshot* snapshot,
@@ -221,133 +148,58 @@ IFRStatus ifr_session_highlight(const IFRSession* session, const IFRSnapshot* sn
 IFRStatus ifr_session_change_page(const IFRSession* session, int backward, int* handled);
 IFRStatus ifr_session_commit(const IFRSession* session, int* handled);
 IFRStatus ifr_session_clear(const IFRSession* session);
-/* Clears like ifr_session_clear but delivers no mutation to the observer: for a composition
- * that ended because a feature consumed it (an adopted AI suggestion), not because the user
- * cancelled. */
 IFRStatus ifr_session_clear_unobserved(const IFRSession* session);
-/* *commit receives an owned string, or NULL when nothing completed. */
 IFRStatus ifr_session_take_commit(const IFRSession* session, char** commit);
 void ifr_string_free(char* string);
 
-/* Bounded document text before the caret; only its last graphemes are kept. */
 IFRStatus ifr_session_set_preceding_text(const IFRSession* session, const char* text);
-/* Capture an idle session's document context for the next composition. Its first
- * contextual Han candidate can come from the first nine native candidates. */
 IFRStatus ifr_session_start_document_context(const IFRSession* session, const char* text);
-/* candidate_count outside 3..9 falls back to 5. options NULL keeps the current
- * preferences. Phrases are validated; failures are reported by
- * ifr_session_configuration_error, not by the status. Settings apply at this
- * session's next composition boundary; phrases apply to every idle session. */
 IFRStatus ifr_session_set_configuration(const IFRSession* session, size_t candidate_count,
                                         const IFRPhrase* phrases, size_t phrase_count,
                                         const uint32_t* options);
-/* A stable code (invalid-code, duplicate, phrase-write, missing-prism, ...) or NULL. */
 const char* ifr_session_configuration_error(const IFRSession* session);
 size_t ifr_session_candidate_count(const IFRSession* session);
-/* Returns 1 and writes the applied options once a composition boundary accepted them. */
 int ifr_session_input_options(const IFRSession* session, uint32_t* options);
 
 IFRStatus ifr_session_set_ascii_mode(const IFRSession* session, int value);
 IFRStatus ifr_session_ascii_mode(const IFRSession* session, int* value);
-/* The mode last requested through ifr_session_set_ascii_mode or toggled, which starts
- * after the current composition; ifr_session_ascii_mode reads Rime's live switch. */
 int ifr_session_requested_ascii_mode(const IFRSession* session);
 IFRStatus ifr_session_toggle_ascii_mode(const IFRSession* session, int* handled);
 
-/* Portable personal data: the macOS format-1 backup document. Parsing validates the
- * document and keeps its portable settings; macOS-only preferences are listed as
- * unsupported. Importing replaces the user directory's three Rime dictionaries with
- * the backup's (absence removes the local one) with rollback on failure, and is
- * rejected with IFR_ENGINE_ACTIVE while any engine is initialized in the process:
- * destroy every session and engine first, import, then recreate the engine and apply
- * the backup's settings through ifr_session_set_configuration. Phrase strings are
- * borrowed from the backup. Never call these from the key path. */
 IFRStatus ifr_backup_parse(const uint8_t* bytes, size_t length, IFRBackup** backup);
 void ifr_backup_free(IFRBackup* backup);
 size_t ifr_backup_candidate_count(const IFRBackup* backup);
 uint32_t ifr_backup_input_options(const IFRBackup* backup);
 size_t ifr_backup_phrase_count(const IFRBackup* backup);
-/* Returns 1 and fills phrase, or 0 when index is out of range. */
 int ifr_backup_phrase(const IFRBackup* backup, size_t index, IFRPhrase* phrase);
 size_t ifr_backup_unsupported_count(const IFRBackup* backup);
 const char* ifr_backup_unsupported(const IFRBackup* backup, size_t index);
 IFRStatus ifr_backup_import(const IFRBackup* backup, const char* user);
-/* Finish an interrupted import in `user`; a no-op without a pending transaction. */
 IFRStatus ifr_personal_recover(const char* user);
 
-/* Personal learning management over the shared English and voice-alias namespaces.
- * These run only when every session is idle (nothing composing, no undrained commit) and
- * Rime's native undo window (4 seconds after the last commit) has passed, otherwise they
- * return IFR_BUSY. A listing and an undo token carry the learning revision they were made
- * at; any commit, Backspace/Delete, new session or invalidation supersedes them and the
- * operation then returns IFR_CONFLICT. Never call these from a key callback. */
 enum { IFR_LEARNING_ENGLISH = 0, IFR_LEARNING_VOICE = 1 };
-/* Entries sorted by source, code and text. */
 IFRStatus ifr_personal_learning_entries(const IFREngine* engine, IFRLearning** learning);
 void ifr_learning_free(IFRLearning* learning);
 size_t ifr_learning_count(const IFRLearning* learning);
-/* IFR_LEARNING_ENGLISH or IFR_LEARNING_VOICE, or -1 when index is out of range. */
 int ifr_learning_source(const IFRLearning* learning, size_t index);
-/* Borrowed from the listing; NULL when index is out of range. */
 const char* ifr_learning_code(const IFRLearning* learning, size_t index);
 const char* ifr_learning_text(const IFRLearning* learning, size_t index);
 uint32_t ifr_learning_commits(const IFRLearning* learning, size_t index);
-/* Delete one entry of a listing; *undo receives the token that restores it. */
 IFRStatus ifr_personal_learning_delete(const IFREngine* engine, const IFRLearning* learning,
                                        size_t index, IFRLearningUndo** undo);
-/* Restore a deleted entry; native restore revives its count with one more confirmation. */
 IFRStatus ifr_personal_learning_undo(const IFREngine* engine, const IFRLearningUndo* undo);
 void ifr_learning_undo_free(IFRLearningUndo* undo);
-/* Drop every session's cached learning view after the dictionaries changed outside the engine. */
 IFRStatus ifr_personal_learning_invalidate(const IFREngine* engine);
 
-/* Resource maintenance, setup work for an isolated writable `user` directory. Both need
- * exclusive use of Rime, so they return IFR_ALREADY_RUNNING while any engine is alive,
- * and release it before returning. compile deploys the shared source resources into
- * `cache` through Rime's maintenance and returns IFR_RESOURCE if a compiled file the
- * engine loads (default.yaml, inkflow_pinyin.schema.yaml, the pinyin_simp, easy_en and
- * inkflow_mixed tables and prisms, 32 spelling profiles) is missing or empty. probe serves
- * the compiled cache from a clean `user` directory and selects a Chinese, an English, a
- * mixed and an Emoji candidate; IFR_RESOURCE means the cache does not produce them and
- * ifr_last_error names the first input that failed. */
 IFRStatus ifr_resources_compile(const char* shared, const char* user, const char* cache);
 IFRStatus ifr_resources_probe(const char* shared, const char* user, const char* cache);
 
-/* Snapshot of the three Rime user dictionaries in `user`, as the macOS personal-data worker
- * writes them with IFPersonalDataSnapshot(root, name, file, 0): the same TSV text, which
- * ifr_backup_parse accepts inside a format-1 document and ifr_backup_import restores. The
- * live databases are copied first, under user/PersonalData/staging and removed afterwards,
- * and never opened by the helper. Rejected with IFR_ENGINE_ACTIVE while any engine is
- * initialized in the process. */
 IFRStatus ifr_personal_export(const char* user, IFRPersonalExport** exported);
 void ifr_personal_export_free(IFRPersonalExport* exported);
-/* The snapshot of "pinyin_simp", "inkflow_shared_english" or "inkflow_voice_alias"
- * (NUL-terminated UTF-8, borrowed from the export), or NULL when that dictionary does
- * not exist in `user`, which a backup records as explicit absence, or the name is none
- * of them. */
 const char* ifr_personal_export_text(const IFRPersonalExport* exported, const char* name);
 
-/* The Lua channel: one synchronous round trip through this session's schema modules, which the
- * AI, voice-lexicon and English-learning features use (voice_learning, voice_aliases,
- * voice_lexicon, ai_learning, ai_readings, clear_english_learning). Never call it from a key
- * callback: it reads user dictionaries and may write them. `op` is lowercase letters and
- * underscores and `fields` carry no tab or line break; `capacity` bounds the reply in bytes
- * (at most 4 MiB) and `field_count` is at most 64.
- *
- * IFR_OK: a module answered. *reply holds its status word ("ok", "failed", "unknown" or
- * "conflict" - a module refusing its fields answers "failed", which is still IFR_OK) and its
- * body, until ifr_reply_free. IFR_NO_REPLY (*reply untouched): the session is unavailable,
- * no module answers the operation, the reply does not fit `capacity`, or the request cannot be
- * framed. IFR_INVALID_ARGUMENT: a NULL or non-UTF-8 argument, or a bound exceeded.
- *
- * The caller keeps the gating: it calls only while every session is idle, and delays reads
- * past Rime's native undo window. A successful (status "ok") voice_learning, ai_learning or
- * clear_english_learning advances the personal-learning revision, so listings and undo tokens
- * captured before it return IFR_CONFLICT; clear_english_learning also drops every session's
- * cached learning view. */
 IFRStatus ifr_session_call(const IFRSession* session, const char* op, const char* const* fields,
                            size_t field_count, size_t capacity, IFRReply** reply);
-/* Borrowed from the reply; NULL only for a NULL reply. The body may be empty. */
 const char* ifr_reply_status(const IFRReply* reply);
 const char* ifr_reply_body(const IFRReply* reply);
 void ifr_reply_free(IFRReply* reply);

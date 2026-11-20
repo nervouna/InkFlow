@@ -1,5 +1,3 @@
-//! Synchronous desktop Rime host: the native `Runtime`/`Session` layer plus the
-//! InkFlow session policy in [`engine`].
 pub mod abi;
 pub mod channel;
 pub mod engine;
@@ -27,7 +25,6 @@ pub enum Error {
     InvalidCandidate,
     Poisoned,
     Native(i32),
-    /// A session could not apply its configuration; the code names the failure.
     Configuration(&'static str),
 }
 
@@ -39,12 +36,10 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
 
-// Rime's registry, modules and configuration are process-global.
 static ENGINE: Mutex<bool> = Mutex::new(false);
 fn lock() -> Result<MutexGuard<'static, bool>> {
     ENGINE.lock().map_err(|_| Error::Poisoned)
 }
-/// Whether a runtime is initialized in this process (personal-data work must wait).
 pub(crate) fn engine_active() -> bool {
     ENGINE.lock().map(|active| *active).unwrap_or(true)
 }
@@ -65,21 +60,17 @@ unsafe fn copy(value: *const c_char) -> Result<String> {
     if value.is_null() {
         return Ok(String::new());
     }
-    // Native output remains alive until the surrounding RAII owner is dropped.
     unsafe { CStr::from_ptr(value) }
         .to_str()
         .map(str::to_owned)
         .map_err(|_| Error::InvalidUtf8)
 }
 
-/// The linked librime's version, e.g. "1.17.0". It needs no runtime.
 pub fn rime_version() -> Result<String> {
     let _lock = lock()?;
     unsafe { copy(ffi::ifp_version()) }
 }
 
-/// Back up or restore one closed user dictionary through the native helper, which runs its
-/// own Rime instance; rejected while a runtime is initialized in this process.
 pub(crate) fn personal_data_snapshot(
     root: &Path,
     name: &str,
@@ -104,7 +95,6 @@ pub(crate) fn personal_data_snapshot(
 }
 
 struct RuntimeOwner {
-    // Keep traits' borrowed paths alive through native finalization.
     _shared: CString,
     _user: CString,
     _cache: CString,
@@ -112,7 +102,6 @@ struct RuntimeOwner {
 impl Drop for RuntimeOwner {
     fn drop(&mut self) {
         let mut active = ENGINE.lock().unwrap_or_else(|e| e.into_inner());
-        // On failed teardown, refuse a new runtime in the same process.
         if unsafe { ffi::ifp_finalize() } == 0 {
             *active = false;
         }
@@ -123,13 +112,10 @@ pub struct Runtime {
     owner: Arc<RuntimeOwner>,
 }
 impl Runtime {
-    /// Paths must name prepared shared resources and an isolated writable user directory.
-    /// Initialization and deployment belong off the interactive key-event path.
     pub fn new(shared: &Path, user: &Path) -> Result<Self> {
         Self::with_cache(shared, user, &user.join("build"))
     }
 
-    /// Use an explicit target-native cache, separate from writable personal data.
     pub fn with_cache(shared: &Path, user: &Path, cache: &Path) -> Result<Self> {
         let cache = path(cache)?;
         let shared = path(shared)?;
@@ -149,7 +135,6 @@ impl Runtime {
         })
     }
 
-    /// Compile source resources for this target before opening any sessions.
     pub fn deploy(&mut self, schema: &Path) -> Result<()> {
         let schema = path(schema)?;
         let _lock = lock()?;
@@ -159,8 +144,6 @@ impl Runtime {
         check(unsafe { ffi::ifp_deploy(schema.as_ptr()) })
     }
 
-    /// Compile the configured schema list and its dependencies through Rime maintenance.
-    /// This is preparation work and is rejected while any sessions exist.
     pub fn prepare(&mut self) -> Result<()> {
         let _lock = lock()?;
         if Arc::strong_count(&self.owner) != 1 {
@@ -205,7 +188,6 @@ pub struct Session {
     _runtime: Arc<RuntimeOwner>,
 }
 impl Session {
-    /// Keys and modifiers use Rime/X11 keysyms and masks, not platform key codes.
     pub fn process_key(&mut self, key: i32, modifiers: i32) -> Result<bool> {
         let _lock = lock()?;
         self.published = None;
@@ -220,8 +202,6 @@ impl Session {
         check(unsafe { ffi::ifp_clear(self.id) })
     }
 
-    /// Select a zero-based entry from the latest snapshot of this session.
-    /// Any key, clear, native selection attempt or page change invalidates that snapshot.
     pub fn select_candidate(&mut self, snapshot: &Snapshot, index: usize) -> Result<()> {
         let _lock = lock()?;
         let Some((token, count)) = &self.published else {
@@ -292,7 +272,6 @@ impl Session {
         value.map(Some)
     }
 }
-/// Outcome of replacing schema nodes for one session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PatchOutcome {
     pub patched: bool,
@@ -300,7 +279,6 @@ pub(crate) struct PatchOutcome {
     pub restored: bool,
 }
 
-/// Why a schema patch could not start; nothing was changed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PatchFailure {
     SchemaOpen,
@@ -318,7 +296,6 @@ impl Session {
         value
     }
 
-    /// Rime's raw composition input.
     pub(crate) fn input(&mut self) -> Result<String> {
         let _lock = lock()?;
         let mut raw = std::ptr::null_mut();
@@ -326,7 +303,6 @@ impl Session {
         Self::owned_string(raw)
     }
 
-    /// The caret in Rime's raw composition input, in bytes of [`Session::input`].
     pub(crate) fn input_caret(&mut self) -> Result<usize> {
         let _lock = lock()?;
         let mut caret = 0;
@@ -357,7 +333,6 @@ impl Session {
         Ok(handled != 0)
     }
 
-    /// Select a native index without snapshot identity; the policy layer validates its own.
     pub(crate) fn select_native(&mut self, index: usize) -> Result<bool> {
         let _lock = lock()?;
         self.published = None;
@@ -386,8 +361,6 @@ impl Session {
         Ok(value != 0)
     }
 
-    /// One synchronous round trip through this session's Lua modules. `None` when no module
-    /// answers, the reply does not fit `capacity` bytes, or the request cannot be framed.
     pub(crate) fn call(
         &mut self,
         op: &str,

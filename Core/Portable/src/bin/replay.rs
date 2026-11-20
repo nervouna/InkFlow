@@ -1,15 +1,3 @@
-//! Offline replay of recorded decisions, to score a ranking change before it ships.
-//!
-//! `replay list CASES [--context-index PATH] [--json]` reads the cases that
-//! `quality.py replay-cases` exports and scores three arms against what the user chose:
-//! `native` (Rime's first candidate), `displayed` (the candidate shown first when recorded) and
-//! `ranked` (the context ranker run again on the case). The README section "Replay" defines the
-//! counts; the ship rule is in `docs/input-quality-metrics.md` ("The first-choice target").
-//!
-//! `replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] [--record NAME=FILE ...]
-//! [--json]` runs the real engine once per arm on prepared resources and compares the arms with each other;
-//! an arm named by `--train` learns from the recorded decisions as it goes (see "Engine-mode replay" in the
-//! README).
 use inkflow_rime::{
     engine::{Configuration, Engine, InputSession, Snapshot},
     preferences::InputPreferences,
@@ -33,21 +21,13 @@ type Result<T> = std::result::Result<T, Box<dyn Error>>;
 const USAGE: &str = "Usage: replay list CASES [--context-index PATH] [--json]\n       \
                      replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] \
                      [--record NAME=FILE ...] [--json]";
-/// Instrument constant: replay files hold typed text, which quality records keep for 28 days.
 const MAX_AGE_SECONDS: i64 = 28 * 24 * 60 * 60;
-/// Instrument constant: the pages searched for a selected text, the quality baseline's `pageLimit`.
 const PAGE_LIMIT: usize = 20;
-/// Instrument constant: a rate over fewer units gets its interval and no verdict (design section 8).
 const MIN_UNITS: u64 = 200;
-/// The 95% two-sided normal quantile, `NormalDist().inv_cdf(0.975)` as `quality.py` computes it.
 const Z95: f64 = 1.959_963_984_540_053_4;
-/// The X11 keysym of Page_Down.
 const PAGE_DOWN: i32 = 0xff56;
-/// Instrument constants, not product rules.
 const FUNCTION_WORDS: [&str; 10] = ["的", "地", "得", "在", "再", "吧", "把", "他", "她", "它"];
 const DICTIONARY_TYPES: [&str; 3] = ["phrase", "user_phrase", "user_table"];
-/// Scopes of the breakdown: the whole set, the classes, then the buckets of the selected text's length
-/// that the target is judged on. A case may belong to several classes.
 const SCOPES: [&str; 10] = [
     "all",
     "dictionary_leader",
@@ -126,7 +106,6 @@ fn case(value: &Value) -> Result<Case> {
     })
 }
 
-/// Seconds since the epoch of `YYYY-MM-DDTHH:MM:SS[.fff]Z`, the form `quality.py` writes.
 fn unix_seconds(stamp: &str) -> Option<i64> {
     let (date, time) = stamp.strip_suffix('Z')?.split_once('T')?;
     let number = |part: Option<&str>| part?.parse::<i64>().ok();
@@ -142,7 +121,6 @@ fn unix_seconds(stamp: &str) -> Option<i64> {
     if date.next().is_some() || time.next().is_some() || !(1..=12).contains(&month) {
         return None;
     }
-    // Days since 1970-01-01 from the civil calendar (Hinnant's days_from_civil).
     let year = if month <= 2 { year - 1 } else { year };
     let era = year.div_euclid(400);
     let year_of_era = year - era * 400;
@@ -172,15 +150,12 @@ fn check_age(header: &Value) -> Result<()> {
 
 struct Loaded {
     cases: Vec<Case>,
-    /// The dictionary the checked-in fixture's own ranker uses.
     dictionary: Option<String>,
-    /// The export's `generated_at`; the fixture has none.
     generated_at: Option<String>,
 }
 
 fn load(path: &str) -> Result<Loaded> {
     let body = fs::read_to_string(path).map_err(|error| format!("cannot read {path}: {error}"))?;
-    // The fixture is one JSON document without records, so it has no age. An export is JSON Lines.
     if let Ok(document) = serde_json::from_str::<Value>(&body)
         && let Some(cases) = document["cases"].as_array()
     {
@@ -221,7 +196,6 @@ impl Verdict {
     }
 }
 
-/// The context ranker run again on the page in Rime's order, as the engine ran it.
 fn ranked_pick(case: &Case, ranker: &ContextRanker) -> std::result::Result<String, Verdict> {
     let mut page: Vec<_> = case.candidates.iter().collect();
     page.sort_by_key(|candidate| candidate.native_index);
@@ -244,7 +218,6 @@ fn ranked_pick(case: &Case, ranker: &ContextRanker) -> std::result::Result<Strin
     Ok(texts[order[0]].clone())
 }
 
-/// Whether the selected candidate's evidence ends before the end of the input.
 fn ends_early(case: &Case) -> bool {
     let selected = case
         .candidates
@@ -256,7 +229,6 @@ fn ends_early(case: &Case) -> bool {
     case.page == 0 && metadata.is_some_and(|rows| rows[0].coverage.end < case.raw_input.len())
 }
 
-/// Membership in each of `SCOPES`, decided from the case alone. The leader is Rime's first candidate.
 fn scopes(case: &Case) -> [bool; 10] {
     let leader = case.candidates.iter().find(|c| c.native_rank == 1);
     let kind = leader.and_then(|c| c.kind.as_deref());
@@ -298,7 +270,6 @@ fn score(case: &Case, ranker: Option<&ContextRanker>) -> Scored {
     }
 }
 
-/// Counts of one arm against native over one scope.
 #[derive(Default, Clone, Copy)]
 struct Tally {
     cases: u64,
@@ -327,18 +298,14 @@ impl Tally {
         })
     }
 
-    /// Errors the arm introduced per error it fixed: the odds of the regression share. Unavailable
-    /// without a fixed case.
     fn er(&self) -> Option<f64> {
         (self.fixed > 0).then(|| self.broken as f64 / self.fixed as f64)
     }
 
-    /// Broken over fixed plus broken, with its 95% Wilson interval.
     fn regression(&self) -> Option<Interval> {
         wilson(self.broken, self.fixed + self.broken)
     }
 
-    /// Engine mode's block: the counts, ER and the regression share.
     fn paired_json(&self) -> Value {
         let mut block = self.json();
         block["er"] = json!(self.er());
@@ -349,7 +316,6 @@ impl Tally {
     }
 }
 
-/// A proportion with its 95% Wilson score interval.
 #[derive(Clone, Copy)]
 struct Interval {
     rate: f64,
@@ -357,7 +323,6 @@ struct Interval {
     high: f64,
 }
 
-/// `quality.py`'s `wilson`: unavailable without observations.
 fn wilson(successes: u64, total: u64) -> Option<Interval> {
     if total == 0 {
         return None;
@@ -381,8 +346,6 @@ fn wilson(successes: u64, total: u64) -> Option<Interval> {
     Some(Interval { rate, low, high })
 }
 
-/// Every case, one case per distinct (raw_input, selected_text) pair (its first) and, in engine mode, one
-/// per pair that occurs more than once (its last).
 #[derive(Default, Clone, Copy)]
 struct Scope {
     cases: Tally,
@@ -441,7 +404,6 @@ fn tally(cases: &[Scored], verdict: impl Fn(&Scored) -> Verdict) -> Arm {
     arm
 }
 
-/// Exact two-sided McNemar test: twice the lower binomial tail of the discordant pairs at one half.
 fn mcnemar(fixed: u64, broken: u64) -> f64 {
     let n = (fixed + broken) as usize;
     if n == 0 {
@@ -481,7 +443,6 @@ fn p_text(p: f64) -> String {
     }
 }
 
-/// The scope table: counts of every case, then of the distinct pairs, of an arm against `base`.
 fn print_scopes(base: &str, rows: &[(&str, Scope)]) {
     println!(
         "{:<18}{:>7}{:>8}{:>6}{:>7}{:>8} |{:>9}{:>8}{:>6}{:>7}{:>8} |{:>11}",
@@ -585,18 +546,9 @@ fn list(args: &[String]) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------------------------
-// Engine mode
-// ---------------------------------------------------------------------------------------------
 
-/// Index of `segmentation` in `SCOPES`: the cases the whole-input candidate is judged on.
 const SEGMENTATION: usize = 3;
 
-/// Where a page's first candidate comes from, a coarser view of the design's provenance dimension.
-/// `Learned` is `user_phrase` or an English or mixed candidate with a personal source, `Dictionary` is
-/// `phrase` or `user_table`, `Assembled` is `sentence`. `Other` folds `completion` and the English and mixed
-/// types without a personal source. `NoEvidence` is a page without evidence: after a selected prefix, or for
-/// a custom-phrase code.
 #[derive(Clone, Copy)]
 enum Provenance {
     Learned,
@@ -607,7 +559,6 @@ enum Provenance {
 }
 
 impl Provenance {
-    /// In declaration order, which indexes the leader counts.
     const ALL: [Self; 5] = [
         Self::Learned,
         Self::Dictionary,
@@ -646,8 +597,6 @@ impl Provenance {
     }
 }
 
-/// What one arm showed for one case: the first candidate of the first page with its provenance, the
-/// longest candidate that consumes the whole input, and whether each equals the gold text.
 struct Outcome {
     id: String,
     first: String,
@@ -682,9 +631,6 @@ impl Outcome {
     }
 }
 
-/// What became of the compositions of one arm. The training counts say what the final selection of a
-/// walkable composition did: `trained` committed the recorded text, `incomplete` left letters behind,
-/// `commit_mismatch` committed something else. Only a trained arm makes that selection.
 #[derive(Default, Clone, Copy)]
 struct Walk {
     compositions: u64,
@@ -714,7 +660,6 @@ impl Walk {
         })
     }
 
-    /// The counts a record's header carries; a record from before the walk has none.
     fn from_header(header: &Value) -> Option<Self> {
         let (walk, training) = (&header["walk"], &header["training"]);
         let count = |part: &Value, key: &str| part[key].as_u64().unwrap_or_default();
@@ -730,14 +675,11 @@ impl Walk {
     }
 }
 
-/// The cases of one composition, which the file keeps together and in order.
 struct Composition {
     cases: Range<usize>,
     walkable: bool,
 }
 
-/// Whether the decisions replay as one composition: each later input extends the one before, and the
-/// selected texts in order make the text that was committed.
 fn walkable(cases: &[Case]) -> bool {
     let extends = cases
         .windows(2)
@@ -772,7 +714,6 @@ fn compositions(cases: &[Case]) -> Result<Vec<Composition>> {
     Ok(found)
 }
 
-/// A scratch user directory, removed when the arm is done.
 struct UserDirectory(PathBuf);
 
 impl Drop for UserDirectory {
@@ -781,7 +722,6 @@ impl Drop for UserDirectory {
     }
 }
 
-/// The longest candidate whose evidence says it consumes the whole input; the earlier one on a tie.
 fn longest_whole_input(
     candidates: &[inkflow_rime::engine::Candidate],
     input_length: usize,
@@ -802,7 +742,6 @@ fn longest_whole_input(
     longest.to_owned()
 }
 
-/// Type letters into the composition.
 fn type_letters(session: &InputSession, letters: &str) -> Result<()> {
     for byte in letters.bytes() {
         session.key(i32::from(byte), i32::from(byte.is_ascii_uppercase()))?;
@@ -811,14 +750,12 @@ fn type_letters(session: &InputSession, letters: &str) -> Result<()> {
     Ok(())
 }
 
-/// A new composition holding the whole `raw_input` of the case.
 fn type_fresh(session: &InputSession, case: &Case) -> Result<()> {
     session.clear()?;
     session.set_preceding_text(&case.preceding)?;
     type_letters(session, &case.raw_input)
 }
 
-/// Score the first page now shown for the case.
 fn observe(session: &InputSession, case: &Case) -> Result<(Outcome, Snapshot)> {
     let page = session.snapshot()?;
     let first = page.candidates.first();
@@ -828,7 +765,6 @@ fn observe(session: &InputSession, case: &Case) -> Result<(Outcome, Snapshot)> {
     Ok((outcome, page))
 }
 
-/// Select `text` on the page shown or on a later one, up to `PAGE_LIMIT` pages. False when it is not there.
 fn select_text(session: &InputSession, mut page: Snapshot, text: &str) -> Result<bool> {
     for pages in 1..=PAGE_LIMIT {
         if let Some(index) = page.candidates.iter().position(|c| c.text == text) {
@@ -848,12 +784,6 @@ fn select_text(session: &InputSession, mut page: Snapshot, text: &str) -> Result
     Ok(false)
 }
 
-/// Replay one composition. A walkable one is typed once: each decision is scored on the page the user was
-/// shown, in the state their earlier selections left, then its text is selected and the extra letters of the
-/// next decision are typed. A trained arm also makes the last selection, which commits and so trains; the
-/// cold arm leaves it. The walk ends at a text that is not found or at a selection that ends the
-/// composition early, and the decisions after it, like every decision of an unwalkable composition, are
-/// scored on a fresh composition that trains nothing.
 fn walk_composition(
     session: &InputSession,
     cases: &[Case],
@@ -890,7 +820,6 @@ fn walk_composition(
         }
         walking = false;
         if remaining {
-            // The next composition's clear discards the letters; nothing is learned.
             walk.incomplete += 1;
         } else if commit == cases[last].committed {
             walk.trained += 1;
@@ -905,15 +834,11 @@ struct Run {
     name: String,
     source: String,
     trained: bool,
-    /// The walk counts; a record from before the walk has none.
     walk: Option<Walk>,
-    /// Records that carry no `first_provenance`: they load as `none`.
     without_provenance: u64,
     outcomes: Vec<Outcome>,
 }
 
-/// Run every composition on a fresh engine, one arm. The user directory starts absent and is deleted
-/// afterwards, whatever a trained arm learned in it.
 fn run_live(
     name: &str,
     resources: &Path,
@@ -962,7 +887,6 @@ fn run_live(
     })
 }
 
-/// What a record row says about one case.
 struct Row {
     first: String,
     provenance: Option<Provenance>,
@@ -985,7 +909,6 @@ fn record_row(value: &Value) -> Result<(String, Row)> {
     Ok((text(value, "id")?, row))
 }
 
-/// The arm a `--record` run wrote, matched to the cases by decision id.
 fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Run> {
     let fail = |message: String| format!("arm {name}: {path}: {message}");
     let body = fs::read_to_string(path).map_err(|error| fail(format!("cannot read: {error}")))?;
@@ -1028,7 +951,6 @@ fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Run> {
     })
 }
 
-/// Typed text stays outside the repository, like the case files.
 fn outside_repository(path: &str) -> Result<()> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let Ok(root) = root.canonicalize() else {
@@ -1050,7 +972,6 @@ fn outside_repository(path: &str) -> Result<()> {
     Ok(())
 }
 
-/// A new owner-only file, as the case files are; it is never written over another file.
 fn write_record(path: &str, generated_at: &str, run: &Run) -> Result<()> {
     let mut header = json!({
         "generated_at": generated_at,
@@ -1083,11 +1004,9 @@ fn write_record(path: &str, generated_at: &str, run: &Run) -> Result<()> {
     Ok(())
 }
 
-/// `YYYY-MM-DDTHH:MM:SS.000Z` of Unix seconds, the form `unix_seconds` reads.
 fn stamp(seconds: i64) -> String {
     let days = seconds.div_euclid(86_400) + 719_468;
     let rest = seconds.rem_euclid(86_400);
-    // Civil date from days (Hinnant's civil_from_days).
     let era = days.div_euclid(146_097);
     let day_of_era = days.rem_euclid(146_097);
     let year_of_era =
@@ -1200,22 +1119,15 @@ fn parse_engine(args: &[String]) -> Result<EngineArgs> {
     })
 }
 
-/// Facts about a case that do not depend on the arm.
 struct Facts {
     scopes: [bool; 10],
-    /// The candidate shown first when the decision was recorded.
     leader: String,
-    /// First case of its (raw_input, selected_text) pair.
     distinct: bool,
-    /// First case of its (raw_input, committed_text) pair.
     distinct_whole: bool,
-    /// Last case of a (raw_input, selected_text) pair that occurs more than once.
     repeat: bool,
-    /// Last case of a (raw_input, committed_text) pair that occurs more than once.
     repeat_whole: bool,
 }
 
-/// A case's identity as a pair: its raw input and the text it is judged against.
 type Key<'a> = (&'a str, &'a str);
 
 fn pair_key(case: &Case) -> Key<'_> {
@@ -1226,7 +1138,6 @@ fn whole_key(case: &Case) -> Key<'_> {
     (&case.raw_input, &case.committed)
 }
 
-/// The index of the last case of each key, and how many cases have it.
 fn last_of<'a>(keys: impl Iterator<Item = Key<'a>>) -> HashMap<Key<'a>, (usize, usize)> {
     let mut last = HashMap::new();
     for (index, key) in keys.enumerate() {
@@ -1278,7 +1189,6 @@ impl Count {
         json!({"cases": self.cases, "hits": self.hits})
     }
 
-    /// The misses among the cases, with their rate and interval; unavailable, never 0%, without cases.
     fn miss_json(&self) -> Value {
         let misses = self.cases - self.hits;
         let interval = wilson(misses, self.cases);
@@ -1292,16 +1202,12 @@ impl Count {
     }
 }
 
-/// An arm's hits over every case and over the distinct pairs of one scope.
 #[derive(Default, Clone, Copy)]
 struct Hits {
     cases: Count,
     distinct: Count,
 }
 
-/// One arm over all cases: first-candidate hits per scope, whole-input hits on the
-/// segmentation cases, how often its first candidate was the recorded displayed leader, and the
-/// first candidate's misses by provenance (the `learned` row is L-over).
 struct ArmReport {
     name: String,
     source: String,
@@ -1354,7 +1260,6 @@ fn arm_report(run: &Run, facts: &[Facts]) -> ArmReport {
     report
 }
 
-/// `arm` against `base`: fixed is a hit where `base` misses, broken the reverse.
 struct PairReport {
     base: String,
     arm: String,
@@ -1427,8 +1332,6 @@ fn arm_report_json(arm: &ArmReport) -> Value {
     report
 }
 
-/// A pair's scope in engine mode: the counts with ER and the regression share, and the McNemar p-values of
-/// the distinct pairs and of the repeated ones.
 fn pair_scope_json(scope: &Scope) -> Value {
     json!({
         "cases": scope.cases.paired_json(),
@@ -1471,7 +1374,6 @@ fn share(part: u64, whole: u64) -> String {
     format!("{part} ({rate:.1}%)")
 }
 
-/// `12.3% [4.0, 31.0]`, starred under `MIN_UNITS` units (the interval and no verdict), or `unavailable`.
 fn rate_text(successes: u64, total: u64) -> String {
     let Some(interval) = wilson(successes, total) else {
         return "unavailable".to_owned();
@@ -1574,7 +1476,6 @@ fn print_leaders(arms: &[ArmReport]) {
     println!("* under {MIN_UNITS} units: the interval and no verdict.");
 }
 
-/// ER, the regression share and the repeated pairs of an arm against its base.
 fn print_repeat(rows: &[(&str, Scope)]) {
     println!(
         "{:<18}{:>13}{:>13} |{:>8}{:>8}{:>6}{:>7}{:>8}{:>13}{:>11}",

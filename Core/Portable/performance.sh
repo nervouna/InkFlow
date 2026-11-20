@@ -1,7 +1,4 @@
 #!/bin/bash
-# Capture the Rust engine with the recorded macOS headless protocol: five fresh release
-# processes, absent user directories, the quality corpus typed five times. Reports the
-# distributions beside the approved review limits; it does not fail on them.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 resources=${1:?Usage: performance.sh RESOURCES_DIRECTORY [OUTPUT_DIRECTORY]}

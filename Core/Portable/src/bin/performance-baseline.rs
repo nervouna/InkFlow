@@ -1,6 +1,3 @@
-//! Headless key-latency and memory capture of the Rust engine, following the protocol of
-//! Core/Tests/PerformanceBaseline/PerformanceBaseline.swift: one fresh process per trial,
-//! an absent user directory, the quality corpus typed five times without commits.
 use inkflow_rime::{
     engine::{Configuration, Engine},
     preferences::InputPreferences,
@@ -18,7 +15,6 @@ struct Rusage {
 unsafe extern "C" {
     fn getrusage(who: i32, usage: *mut Rusage) -> i32;
 }
-/// Process peak RSS in bytes (Darwin reports bytes, Linux KiB).
 fn peak_resident_bytes() -> Result<i64, Box<dyn Error>> {
     let mut usage = Rusage {
         utime: [0; 2],

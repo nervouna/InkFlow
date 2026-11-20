@@ -25,6 +25,11 @@ bash Core/scripts/build-portable.sh
 bash macOS/scripts/test.sh portable
 ```
 
+`abi.sh` builds the C-facing dynamic and static libraries and exercises the C consumer. By default it runs
+the isolated probe and argument checks. Pass a directory from `prepare-resources.sh` to `abi.sh` or
+`parity.sh` to reuse prepared production resources. The parity runner makes that path absolute because
+Cargo starts the tests from the crate directory.
+
 The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`; native outputs and Cargo artifacts stay there too. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. On macOS the native libraries and the release Rust archive target the app's minimum system version, read from `LSMinimumSystemVersion` in `macOS/Info.plist` (`deploymentTarget` in `native-build.json`), so they load wherever the app does. Remove `build/portable/` for a clean rebuild or after changing compiler/SDK/architecture or that version.
 
 `native-sources.lock.json` pins source commits, URLs, and SHA-256 hashes. librime is the shipping 1.17.0 revision. Its glog, LevelDB, marisa, OpenCC, and yaml-cpp pins follow that revision's submodules; Boost remains 1.89.0. The Lua plugin is pinned to its last upstream commit before the 1.17.0 release, with Lua 5.4.8 from its pinned thirdparty tree.
@@ -32,8 +37,20 @@ The first build downloads checksum-verified source archives. Subsequent builds r
 Both desktops build the same source graph. The build links static dependencies and the Lua plugin into a shared librime, then compiles both existing `InkFlowRimeNative` source files against that build's installed headers and generated configuration. External plugin discovery is disabled. The narrow C++ bridge registers `inkflow_mixed_personal` after every initialization and checks its presence. No host librime or Homebrew C++ headers are used for the native extension.
 
 OpenCC 1.1.9 requests C++14, but the pinned marisa headers require C++17. The build changes only OpenCC's language-standard declarations to C++17 and explicitly includes `cstdint` for GCC 15. OpenCC uses the same pinned marisa library as librime. Optional gflags, libunwind, Snappy, crc32c, and tcmalloc dependencies are disabled to avoid host-dependent linkage.
+Boost.Regex builds without ICU because the embedded Rime does not use ICU regex and the Linux shared
+library would otherwise acquire a system ICU dependency. Its Linux rpath resolves both a colocated library
+and the library directory beside `bin/`. On macOS, the build supplies the deployment target through the
+environment used by clang and b2 and through CMake's explicit setting. Rime sends ERROR and higher
+diagnostics to stderr for the dictionary worker and keeps no log files.
 
 The test copies the tiny checked-in source fixture into a fresh temporary directory, compiles it using the target runtime, and removes the directory after runtime teardown. It checks Chinese composition, one-shot commits, a non-ASCII Lua filter, snapshot ownership, serialized sessions across threads, runtime/session lifetime, and restart.
+
+The setup-only resource operations use exclusive Rime access and an isolated writable user directory.
+Compilation uses Rime maintenance to deploy the schema list and checks that its output includes each
+required configuration, dictionary, prism and all 32 spelling profiles. The first missing or empty
+dependency is reported relative to the cache. The smoke probe serves the prepared cache from a clean
+user directory and selects known Chinese, English, mixed and Emoji candidates. Failure names the first
+input that could not be selected. This proves candidate availability.
 
 ## Session policy and old/new comparison
 
@@ -61,11 +78,52 @@ text-only behavior until preparation rebuilds them. The index adds no key-event 
 
 `fixtures/ranking-reference.json` and `fixtures/quality-evidence.json` are frozen references from the last Swift engine (revision 38eb53c; `quality-evidence.json` names its earlier recording revision, with the Swift engine sources unchanged between them). Their recorders were deleted with the Swift engine, so nothing can regenerate them: change a case only for a reasoned behavior change, by applying that rule to the recorded results, and never by re-recording from the Rust core.
 
-Quality recording stays outside the engine. `Engine::set_observer` installs a callback that receives every completed mutation with the displayed snapshots before and after, delivered after the policy lock is released; it cannot change input or hold a key event. The engine itself performs no telemetry, network, SQLite or disk work from a key event other than the phrase-file reload at a shared idle.
+`Engine::set_observer` reports completed mutations with the displayed snapshots before and after, outside
+the policy lock. Quality recording happens in the frontend. The input loop performs synchronous Rime
+work only, with schema and shared phrase-table reloads deferred to idle boundaries. The settings path
+writes the phrase file. See the [runtime contract](runtime-contract.md) for observer threading, the
+ABI's ownership rules and the ranker's fallback boundaries.
+
+### Verification fixtures
+
+The Rust runtime probe and the parity suite serialize Rime use within each process. Native sessions may
+outlive a released runtime or engine handle. The runtime and C tests use real probe deployment to check
+resource validation and teardown on a missing production schema. The C consumer takes a fixture root
+with `shared/`, a scratch directory and an optional production resource root. Its POSIX feature macro
+exposes `sleep` in C11 mode for waiting out the native undo window. Production-only checks exercise the
+full cache compile and probe as well as maintenance, AI, voice, and quality accessors. A new user directory
+writes InkFlow's distribution identity without creating log files.
+
+The fixture databases in `fixtures/swift-user` were restored from the synthetic snapshots in
+`macOS/Tests/PersonalDataTests.swift` by the macOS dictionary worker (0.6.2 build 164). Its TSV snapshots
+are the byte-for-byte export reference. Tests compare equivalent synthetic rows without ordering
+where the expected text was authored manually, since Rime exports in native key order. Import restores
+the rows into a second directory, and rejection leaves the existing databases in place. The format-1
+document omits absent optional values where Swift's Codable would.
+
+The production parity cases include lookahead across the page boundary, and verify that a negative
+English lookup reported to the short-conflict filter is scoped to one segment query. In multi-session
+configuration tests, an active composition delays a phrase reload. An undrained commit must survive
+settings applying before the frontend reads it. Parity with the Swift engine's original quality runner
+uses ten unaffected Han commits in corpus order after each sample, wrapping when needed for retention.
+
+Voice-correction and AI adoption parity reproduce the recorded read, write, clear and restart flows.
+Learning-epoch tests use untouched listed entries so the revision alone decides whether a listing or
+undo token is stale. Rejected management reads leave Rime's immediate Backspace undo available.
+The AI identity grows to include the selected prefix after a partial selection. Learning a correction
+registers the full input spelling, and the frozen Swift export checks that no suffix-only, raw typo
+or abbreviation code was recorded. The mixed-sentence regression inspects personal evidence for
+`google` because exact `google` can lead even without personal evidence.
+
+Replay tests use synthetic cases only. Integer counts match exactly and McNemar floating-point
+results are compared with tolerance. Live arms use independent scratch user directories and fixtures
+with residual letters that allow either incomplete or unfound outcomes. A record with no provenance
+loads as `none`, and one with no walk metadata has no walk counts. Tests verify that reloading a trained
+record reproduces its report and that record creation preserves the original when the path exists.
 
 ## Performance
 
-`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 24-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
+`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 24-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS, converted to bytes from KiB on Linux. Darwin already reports bytes. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
 
 Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on freshly prepared production resources, at faee8df. The Swift column ran `performance-baseline` in release from this checkout; the recorded M5 Pro baseline is not comparable to either.
 
@@ -96,19 +154,27 @@ rm "$TMPDIR/cases.jsonl"
 ```
 
 Without `--context-index` the `ranked` arm is not run. The checked-in fixture ranks with its own small dictionary.
+Unlike exported JSON Lines, the synthetic fixture is one JSON document without an export timestamp.
+The timestamp parser and formatter share the exporter's UTC form, `YYYY-MM-DDTHH:MM:SS[.fff]Z`,
+and use Howard Hinnant's civil-calendar algorithm. The Wilson calculation mirrors
+`NormalDist().inv_cdf(0.975)` in the Python reporter. McNemar doubles the lower binomial tail of the
+discordant pairs. Both calculations are instrument definitions used to compare replays.
 
 Delayed correction chains are collapsed by the exporter and explicitly marked as inferred context returns.
 Report direct and inferred chain counts separately; the inference is not document readback.
 
 ### Replay files
 
-Case files hold typed text. They stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off. The record files of engine mode follow the same rules.
+Case files hold typed text. They stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off. The record files of engine mode follow the same rules. The replay record writer currently checks
+the checkout that built the binary when applying path exclusion. Use a path outside every checkout,
+including when running a binary built elsewhere. [Tracking issue #237](https://github.com/nervouna/InkFlow/issues/237).
 
 ## Engine-mode replay
 
 `replay engine CASES --arm NAME=RESOURCES|NAME=@FILE ... [--train NAME ...] [--record NAME=FILE ...] [--json]` runs the real engine on the same case files as list mode and compares **arms with each other**. A live arm (`NAME=RESOURCES`, a `prepare-resources.sh` output) starts one `Engine` on those resources with an absent user directory and `set_configuration(9, &[], Some(&InputPreferences::default()))`. It walks the compositions of the file (see "Learning arms"): per decision it sets `preceding_context`, types `raw_input` and snapshots the first page. Unless `--train` names it, an arm never makes a composition's last selection, so it never commits and nothing is learned. The user directory is a scratch directory under the temporary directory, removed when the arm ends, and one arm finishes before the next engine starts (Rime is process-global).
 
-Each arm is scored on the first candidate against `selected_text` (a hit), and, for `segmentation` cases, on the longest candidate whose evidence covers the whole input against `committed_text`. The report gives, per arm, its first-candidate hits, how often its first candidate equals the recorded `displayed` leader (below 100%: the records came from a trained user dictionary, which a fresh engine does not have), the whole-input hits and the hits per class, the walk and training counts and the misses of the first candidate by provenance; then, for every pair of arms in the order given (the earlier one is the base), fixed, broken, distinct counts and the McNemar p-value in list mode's table, plus a `whole_input` row on the segmentation cases and the ER and `repeat` table. Counts of two arms are only comparable with each other.
+Each arm is scored on the first candidate against `selected_text` (a hit), and, for `segmentation` cases, on the longest candidate whose evidence covers the whole input against `committed_text`, keeping the earlier
+candidate on ties. The report gives, per arm, its first-candidate hits, how often its first candidate equals the recorded `displayed` leader (below 100%: the records came from a trained user dictionary, which a fresh engine does not have), the whole-input hits and the hits per class, the walk and training counts and the misses of the first candidate by provenance; then, for every pair of arms in the order given (the earlier one is the base), fixed, broken, distinct counts and the McNemar p-value in list mode's table, plus a `whole_input` row on the segmentation cases and the ER and `repeat` table. Counts of two arms are only comparable with each other.
 
 `--record NAME=FILE` writes a live arm's outcomes as JSON Lines (a header with `generated_at`, `trained` and the `walk` and, for a trained arm, `training` counts, then `id` (the `decision_id`), `first`, `first_provenance`, `longest`, `first_hit` and `longest_hit` per case), and `--arm NAME=@FILE` loads such a file as an arm. That is how an arm from another binary joins the comparison. A record without `first_provenance` loads with `none` and is counted `without_provenance`; its L-over is unavailable. Record files hold typed text and follow the [replay file rules](#replay-files); their header carries the case file's `generated_at`.
 
@@ -149,9 +215,19 @@ rm "$TMPDIR/cases.jsonl"
 
 ## Personal learning and portable personal data
 
-`Engine::personal_learning_entries`, `delete_personal_learning` and `undo_personal_learning` port `EnginePersonalLearning.swift` over the same Lua `learning_manage` channel: they run only when every session is idle and Rime's native undo window (4 s after the last commit) has passed, otherwise `Busy`; entries and undo tokens carry a learning revision that any commit, Backspace/Delete, new session or invalidation supersedes (`Conflict`). As on macOS, the newest commit may still be in Rime's pending transaction until the next transaction or teardown, and a native restore revives a deleted count with one confirmation. Never call this API from a key callback.
+`Engine::personal_learning_entries`, `delete_personal_learning` and `undo_personal_learning` port `EnginePersonalLearning.swift` over the same Lua `learning_manage` channel: they run only when every session is idle and Rime's native undo window (4 s after the last commit) has passed, otherwise `Busy`; entries and undo tokens carry a learning revision that any commit, Backspace/Delete, new session or invalidation supersedes (`Conflict`). As on macOS, the newest commit may still be in Rime's pending transaction until the next transaction or teardown, and a native restore revives a deleted count with one confirmation. Never call this API from a key callback. The active native Rime memories own the namespaces. There is no
+separate index of personal entries. Listings sort by source, code and text and expose strings borrowed
+until the listing is freed. If management gives no usable answer, refresh and retry. A failed native
+write may already be partial, so it invalidates the learning revision too. Rime may undo a commit
+through Backspace even when it returns the key unhandled for the client.
 
 `src/personal.rs` defines the portable backup: `Backup::from_json`/`to_json` read and write the macOS format-1 document (`format`, `rime`, `settings`, `dictionaries`). Supported data are the three Rime user dictionaries (`pinyin_simp`, `inkflow_shared_english`, `inkflow_voice_alias`), custom phrases, the candidate count and the input options. macOS-only preferences (shortcuts, font size, layout, thunder mode, voice rules) are skipped and listed in `Backup::unsupported`; unknown fields are rejected like on macOS. Written documents carry neutral values for those fields; macOS additionally requires the three fuzzy options to agree and exactly one paging pair. `personal::export` snapshots closed dictionaries through the existing native helper on a copy; `personal::import` restores snapshots into a staging directory, then moves originals aside and installs the new databases, restoring the originals on any failure; `personal::recover` finishes an interrupted import. `None` in a backup is explicit absence and removes the local dictionary. None of this runs while an engine is initialized in the process (`EngineActive`); frontends stop the engine first and apply the returned settings through `set_configuration` afterwards. Backups never imply that live databases can be shared between engines.
+
+The exported TSV is borrowed until the export is released. Unknown names and absent dictionaries
+return null. Export snapshots a closed copy in `user/PersonalData/staging` and removes that staging
+directory afterwards. During import, keep the engine stopped through dictionary replacement and apply
+the returned configuration to the recreated engine. Backup phrase strings remain valid while the
+backup handle is live.
 
 ## Interface contract
 
@@ -163,7 +239,8 @@ rm "$TMPDIR/cases.jsonl"
 - There is at most one runtime. A second initialization returns `AlreadyRunning`. Sessions retain an `Arc` to the runtime, so dropping its public handle cannot finalize live sessions. The last session/runtime owner finalizes Rime. A poisoned lock fails subsequent normal operations; destructors still attempt cleanup without panicking.
 - Callers supply existing shared-resource and writable user directories. Initialization, source deployment, and session creation are setup work. `Runtime::with_cache` separates target-native cache files from personal data. `prepare` runs Rime's schema-list maintenance and checks its completion notification. Preparation and deployment are rejected while sessions exist. The wrapper does not prepare resources, download, access SQLite, or record telemetry from `process_key`.
 - All text and paths crossing this ABI are NUL-terminated UTF-8. Embedded NUL and non-UTF-8 paths are rejected. Snapshot caret/selection offsets count **bytes in the returned UTF-8 preedit**. Rust validates character boundaries; frontends must convert to UTF-16 or other platform units. Candidate text and comments are independent strings.
-- Keys are Rime/X11 keysyms with Rime modifier masks, not macOS virtual key codes or Linux hardware scan codes. `process_key` returns whether Rime handled the event. There is no surrounding-text or mobile editing API yet. `change_page` delegates paging to Rime. `select_candidate` accepts a zero-based current-page index and the latest snapshot from that session. It rejects snapshots from other sessions, superseded snapshots, and out-of-range indices before calling Rime. Keys, clears, native selection attempts, and page changes invalidate selection tokens even if Rime does not handle the operation. Cloned snapshots retain their token; changing public display fields cannot change the native candidate count used for validation. `InputSession::select` and `highlight` apply the same rule to displayed indices: the snapshot must be the session's latest ordered page, and any mutation supersedes it, while repeated reads keep one identity.
+- Keys are Rime/X11 keysyms with Rime modifier masks, not macOS virtual key codes or Linux hardware scan codes. `process_key` returns whether Rime handled the event. Raw `Session` does not expose document context or a mobile-editing API. Frontends supply bounded context
+  through the policy engine. `change_page` delegates paging to Rime. `select_candidate` accepts a zero-based current-page index and the latest snapshot from that session. It rejects snapshots from other sessions, superseded snapshots, and out-of-range indices before calling Rime. Keys, clears, native selection attempts, and page changes invalidate selection tokens even if Rime does not handle the operation. Cloned snapshots retain their token; changing public display fields cannot change the native candidate count used for validation. `InputSession::select` and `highlight` apply the same rule to displayed indices: the snapshot must be the session's latest ordered page, and any mutation supersedes it, while repeated reads keep one identity.
 - Snapshots are copied into Rust-owned strings and vectors while the lock is held. They remain valid after another event, another snapshot, session destruction, and runtime teardown. Page and highlighted indices are zero-based native menu metadata; an empty menu has no selectable entry regardless of those fields.
 - `take_commit` consumes Rime's pending commit once and returns `None` when empty. Call it after each key or candidate selection before processing the next action. The prototype does not queue multiple uncollected commits. On an allocation or UTF-8 conversion error, a retrieved commit may already have been consumed; stop the session rather than replaying the key.
 - Internal C callers must pass valid borrowed pointers and zero-initialized outputs. Status 0 is success, -1 native failure, -2 invalid session/schema, and -3 a caught C++ exception. A false/unhandled key is not an error. Native snapshots and commit buffers must be freed with their matching ABI functions, never Rust's allocator. Snapshot free clears the struct; it also accepts a zeroed snapshot.
