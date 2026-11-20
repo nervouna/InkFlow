@@ -64,7 +64,6 @@ package enum QualityStoreFaultPoint: Sendable { case afterComposition, beforeCom
 
 package enum QualityControlError: Error { case unavailable, commandPending, database(Int32) }
 
-/// Test hooks run on the worker only. Production leaves them empty.
 package struct QualityStoreHooks: Sendable {
     package var beforeOpen: (@Sendable () -> Void)? = nil
     package var beforeBatch: (@Sendable () -> Void)? = nil
@@ -82,7 +81,6 @@ package struct QualityStoreHooks: Sendable {
 
 }
 
-/// The lock protects bounded memory only. The SQLite connection and all encoding belong to queue.
 package final class QualityStore: @unchecked Sendable {
     package let runID: String
     private let queue = DispatchQueue(label: "io.damao.inkflow.quality", qos: .utility)
@@ -94,11 +92,8 @@ package final class QualityStore: @unchecked Sendable {
     private var scheduled = false
     private var accepting = true
     private var paused: Bool
-    /// Off by default: envelopes lose every input, candidate, commit and context string before buffering.
     private var textCapture: Bool
-    /// The device key of the pair hashes, loaded by the worker. Nil until then, or when its file cannot be kept.
     private var pairKey: Data?
-    /// Counts key rotations: an envelope hashed under the key a rotation replaced must not be recorded.
     private var pairKeyEpoch = 0
     private var commandPending = false
     private var captureGeneration: UInt64 = 0
@@ -106,7 +101,6 @@ package final class QualityStore: @unchecked Sendable {
     private let database: QualityDatabase
     private let hooks: QualityStoreHooks
     private var timer: DispatchSourceTimer?
-    // Worker-only lifecycle state.
     private var ready = false
     private var closed = false
     private var closeSucceeded = false
@@ -124,7 +118,6 @@ package final class QualityStore: @unchecked Sendable {
         self.maintenanceNow = maintenanceNow
         database = QualityDatabase(url: url, runID: runID, engineVersion: engineVersion,
                                    buildMetadata: buildMetadata, metadataURL: metadataURL, hooks: hooks)
-        // Queue/timer creation is in-memory; even locating the bundled manifest happens below.
         let timer = DispatchSource.makeTimerSource(queue: queue)
         self.timer = timer
         timer.schedule(deadline: .now() + QualityLimits.flushInterval, repeating: QualityLimits.flushInterval)
@@ -137,15 +130,12 @@ package final class QualityStore: @unchecked Sendable {
         timer?.cancel()
         let database = database
         let statistics = lock.withLock { stats }
-        // Never close a connection or write run metadata on the releasing/event thread.
         queue.async { try? database.finish(statistics: statistics, status: "closed") }
     }
 
     @discardableResult
     package func submit(_ envelope: QualityEnvelope) -> QualitySubmission {
         let (redacted, key, epoch) = lock.withLock { (!textCapture, pairKey, pairKeyEpoch) }
-        // The pair hashes need the strings that redaction removes, so they are computed here: two HMACs per decision,
-        // in memory. The key file is read, written and rotated on the worker only.
         var envelope = envelope
         if let key { envelope = envelope.hashingPairs(key: SymmetricKey(data: key)) }
         if redacted { envelope = envelope.redactingText() }
@@ -183,8 +173,6 @@ package final class QualityStore: @unchecked Sendable {
         }
     }
 
-    /// Small, content-free counters share the utility worker but not composition envelopes.
-    /// The producer never waits for SQLite and a failed writer only disables measurement.
     @discardableResult
     package func submit(_ event: QualityEffectivenessEvent) -> QualitySubmission {
         guard event.isValid else {
@@ -208,7 +196,6 @@ package final class QualityStore: @unchecked Sendable {
         return .accepted
     }
 
-    /// Active recorders call this once when their core exceeds the same 64 KiB cap.
     package func noteOversizedActiveRecord() {
         lock.withLock { stats.submitted += 1; stats.droppedOversized += 1 }
     }
@@ -223,13 +210,11 @@ package final class QualityStore: @unchecked Sendable {
         lock.withLock { (captureGeneration, accepting && !stats.disabled && !paused && !commandPending) }
     }
 
-    /// The memory gate changes before the worker barrier. No caller waits for disk under the lock.
     package func setPaused(_ paused: Bool) async throws {
         try beginControl(paused: paused)
         try await finishControl(.none)
     }
 
-    /// Turning text off also removes every stored record that still carries text.
     package func setTextCapture(_ enabled: Bool) async throws {
         try beginControl(textCapture: enabled)
         try await finishControl(enabled ? .none : .purgeText)
@@ -269,7 +254,6 @@ package final class QualityStore: @unchecked Sendable {
                     switch cleanup {
                     case .clear:
                         try database.removeRecords(before: nil, now: maintenanceNow())
-                        // Cleared records must not link to later ones.
                         database.rotatePairKey()
                         lock.withLock {
                             pairKey = database.pairKey
@@ -289,7 +273,6 @@ package final class QualityStore: @unchecked Sendable {
         }
     }
 
-    /// Maintenance is also callable by deterministic tests; the timer uses the same worker path.
     package func maintainRetention() async {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
@@ -309,14 +292,11 @@ package final class QualityStore: @unchecked Sendable {
             handle(error, count: 0)
             return
         }
-        // Best effort: a busy database is compacted at the next maintenance.
         try? database.reclaimSpace()
     }
 
     private func rawCutoff(_ now: Date) -> Date { now.addingTimeInterval(-Double(QualityLimits.rawRetentionDays) * 86_400) }
 
-    /// Only lifecycle/tests/tools await this. Event handlers must never wait for disk.
-    /// Drains the accepted prefix at invocation; later submissions need not have finished.
     package func flush() async {
         let target = lock.withLock { acceptedSequence }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
@@ -342,8 +322,6 @@ package final class QualityStore: @unchecked Sendable {
         }
     }
 
-    /// Stops accepting immediately. A timeout ends the wait, not the worker's ownership of SQLite.
-    /// False reports incomplete persistence; auxiliary data must never veto application termination.
     @discardableResult
     package func close(timeout: TimeInterval = 1) async -> Bool {
         let (target, expectedWritten) = lock.withLock {
@@ -380,7 +358,6 @@ package final class QualityStore: @unchecked Sendable {
 
     private var statsDisabled: Bool { lock.withLock { stats.disabled } }
 
-    /// Caller holds lock; at most one batch wakeup is queued regardless of producer pressure.
     private func scheduleIfFull() {
         guard pending.count >= QualityLimits.batchEnvelopes, !scheduled else { return }
         scheduled = true
@@ -518,7 +495,6 @@ package final class QualityStore: @unchecked Sendable {
         if shouldLog {
             LocalDiagnostics.shared.submit(.init(module: .statistics, event: "qualityStoreDisabled", outcome: .failed,
                 errorDomain: .sqlite, errorCode: Int(code)))
-            // No input, SQL, filesystem path, or arbitrary SQLite error text enters logs.
             if let systemError = databaseError?.systemError {
                 NSLog("InkFlow quality recording disabled (code %d, system errno %d)", code, systemError)
             } else { NSLog("InkFlow quality recording disabled (code %d)", code) }
@@ -543,7 +519,6 @@ private enum QualitySQLValue {
     package static func optional(_ value: Int?) -> Self { value.map(Self.integer) ?? .null }
 }
 
-/// All methods and destruction/close are confined to QualityStore's serial worker.
 private final class QualityDatabase: @unchecked Sendable {
     private let url: URL
     private let runID: String
@@ -556,12 +531,10 @@ private final class QualityDatabase: @unchecked Sendable {
     private var lastSavedStatistics: QualityStoreStatistics?
     private let startedAt = Date()
     private lazy var encoder = QualityJSON.encoder(compact: true)
-    /// 32 bytes of the file `quality-pair-key` beside the database. It stays on this Mac: no export, backup, record
-    /// or log carries it, and clearing the records replaces it.
     private(set) var pairKey: Data?
     private static let pairKeyName = "quality-pair-key"
     private static let pairKeySize = 32
-    private static let applicationID = 0x49465131 // IFQ1
+    private static let applicationID = 0x49465131
     private static let unsupportedSchema: Int32 = -1001
 
     package init(url: URL, runID: String, engineVersion: String, buildMetadata: QualityBuildMetadata?,
@@ -622,8 +595,6 @@ private final class QualityDatabase: @unchecked Sendable {
         return Data(bytes.prefix(Self.pairKeySize))
     }
 
-    /// Replaces the file. The mode is set when the file is created, whatever the directory's mode is. A failure leaves
-    /// no key, so the records carry no pair hashes until the next start.
     private func makePairKey() -> Data? {
         unlink(pairKeyPath)
         let descriptor = open(pairKeyPath, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
@@ -644,7 +615,6 @@ private final class QualityDatabase: @unchecked Sendable {
         if version == "0", identity == "0", objects == "0" {
             try execute("BEGIN IMMEDIATE")
             do {
-                // Another recorder may have initialized the empty file before this writer lock.
                 if try scalar("SELECT count(*) FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'") != "0" {
                     rollback()
                     try validateSchema()
@@ -687,8 +657,6 @@ private final class QualityDatabase: @unchecked Sendable {
             guard ["1", "2", "3"].contains(lockedVersion), lockedIdentity == String(Self.applicationID) else {
                 throw QualityDatabaseError(code: Self.unsupportedSchema)
             }
-            // Legacy ownership must be exact before the first ALTER/CREATE. Unknown
-            // objects or columns belong to another writer and are never repaired.
             try validateTopology(version: lockedVersion)
             if lockedVersion == "1" {
                 try execute("ALTER TABLE config_revisions ADD COLUMN ranking_fingerprint TEXT")
@@ -799,9 +767,6 @@ private final class QualityDatabase: @unchecked Sendable {
         } catch { rollback(); throw error }
     }
 
-    /// Delete children first because the existing schema intentionally has no cascading deletes.
-    /// Logical removal is atomic; secure_delete does not promise erasure from filesystem snapshots.
-    /// `textRecords` also removes compositions written with text, however recent, including pre-text-free records.
     package func removeRecords(before cutoff: Date?, now: Date, textRecords: Bool = false) throws {
         try execute("BEGIN IMMEDIATE")
         do {
@@ -822,7 +787,6 @@ private final class QualityDatabase: @unchecked Sendable {
                 try execute("DELETE FROM compositions WHERE id IN (SELECT id FROM text_compositions)")
                 try execute("DROP TABLE text_compositions")
             }
-            // Compact historical pages can refer to a different revision than the final snapshot.
             try execute("""
                 WITH referenced(id) AS (
                     SELECT config_revision_id FROM candidate_decisions
@@ -847,7 +811,6 @@ private final class QualityDatabase: @unchecked Sendable {
         } catch { rollback(); throw error }
     }
 
-    /// Returns pages freed by retention to the filesystem. A database without incremental auto_vacuum is rebuilt once.
     package func reclaimSpace() throws {
         if try scalar("PRAGMA auto_vacuum") != "2" {
             try execute("PRAGMA auto_vacuum = INCREMENTAL")
@@ -858,7 +821,6 @@ private final class QualityDatabase: @unchecked Sendable {
     }
 
     private func eventBytes(_ envelope: QualityEnvelope) throws -> Int {
-        // Revision payloads have their own cap and are persisted once in config_revisions.
         var event = envelope
         event.revisions = []
         return try encoder.encode(event).count
@@ -874,7 +836,6 @@ private final class QualityDatabase: @unchecked Sendable {
                      .integer(composition.pageHistoryTruncated ? 1 : 0), .integer(composition.droppedPageCount),
                      .optional(composition.outcomeReason), .text(try json(composition.operations))])
         try inject(.afterComposition)
-        // Commit parents precede decision children; the composite FK prevents cross-composition links.
         for commit in envelope.commits {
             try execute("""
                 INSERT INTO commits (id, composition_id, issued_at, text, kind, insertion_issued, client_id,
@@ -886,8 +847,6 @@ private final class QualityDatabase: @unchecked Sendable {
                          .optional(commit.clientID), .integer(commit.characterCount)])
         }
         for decision in envelope.decisions {
-            // An unchanged revision can be referenced without re-sending it. Never accept a
-            // snapshot whose actual applied values disagree with that revision's saved values.
             for page in [decision.snapshot] + [decision.firstPage].compactMap({ $0 }) + decision.visitedPages {
                 let saved = try query("SELECT applied_config_json, ranking_fingerprint, settings_fingerprint, measurement_fingerprint, build_identity FROM config_revisions WHERE id = ?", [.text(page.configurationRevisionID)]).first
                 guard saved?.first == (try json(page.configuration)) else {
@@ -973,8 +932,6 @@ private final class QualityDatabase: @unchecked Sendable {
             connection = nil
             runStarted = false
         }
-        // A failed final update still closes the connection. Explicit close reports the
-        // failure; fatal/deinitialization cleanup remains best effort.
         try updateRun(statistics: statistics, status: status)
     }
 

@@ -1,7 +1,6 @@
 import InkFlowDomain
 import Foundation
 
-/// App-owned compiled resources. This receipt binds data bytes, not binaries changed by signing.
 package struct IFPackagedCache: Codable {
     package static let directory = "RimePrebuilt"
     package static let filename = "inkflow-cache.json"

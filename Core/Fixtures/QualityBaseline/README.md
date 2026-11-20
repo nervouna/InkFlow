@@ -67,3 +67,5 @@ The runner prints, per sample, the target's rank cold, after each of the four tr
 The black-box counterpart that scores the same corpus through another input method is [the benchmark driver](../../../macOS/Experiments/BlackBoxBenchmark/README.md).
 
 Scripted operation counts are synthetic; don't pool them with live quality-record actions.
+
+The Han-only retention pool uses the same Unicode ranges as the portable replay instrument.

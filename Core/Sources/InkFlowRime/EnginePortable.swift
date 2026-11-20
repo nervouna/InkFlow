@@ -2,14 +2,12 @@ import InkFlowDomain
 import InkFlowPortable
 import Foundation
 
-/// Glue between the IFEngine facade and the Rust core's C ABI (`Core/Portable/include/inkflow_rime.h`).
 let ifrOK = IFRStatus(IFR_OK)
 
 func ifrString(_ pointer: UnsafePointer<CChar>?) -> String {
     pointer.map(String.init(cString:)) ?? ""
 }
 
-/// NUL-terminated copies of `strings`, valid for the call. Callers reject embedded NULs first.
 func withCStrings<Result>(_ strings: [String], _ body: ([UnsafePointer<CChar>?]) -> Result) -> Result {
     let copies = strings.map { strdup($0) }
     defer { copies.forEach { free($0) } }
@@ -17,7 +15,6 @@ func withCStrings<Result>(_ strings: [String], _ body: ([UnsafePointer<CChar>?])
 }
 
 extension InputPreferences {
-    /// The ABI's option bitmask, in `InputOption.allCases` order.
     var optionMask: UInt32 {
         InputOption.allCases.enumerated().reduce(0) { $0 | ((self[$1.element] ? 1 : 0) << UInt32($1.offset)) }
     }
@@ -29,7 +26,6 @@ extension InputPreferences {
     }
 }
 
-/// An owned display snapshot of one session in InkFlow's candidate order. Its strings live as long as it does.
 final class PortableSnapshot {
     let handle: OpaquePointer
 
@@ -52,7 +48,6 @@ final class PortableSnapshot {
     func text(_ index: Int) -> String { ifrString(ifr_snapshot_candidate_text(handle, index)) }
     func comment(_ index: Int) -> String { ifrString(ifr_snapshot_candidate_comment(handle, index)) }
 
-    /// The engine's ranking evidence row of a candidate, split into the facts quality records keep.
     func evidence(_ index: Int) -> (row: String, type: String, corrected: Bool)? {
         guard let pointer = ifr_snapshot_candidate_evidence(handle, index) else { return nil }
         let row = String(cString: pointer)
@@ -70,13 +65,11 @@ final class PortableSnapshot {
     }
 }
 
-/// The Lua channel's answer, read from and freed with its handle.
 func portableReply(_ reply: OpaquePointer) -> IFRimeChannel.Reply {
     defer { ifr_reply_free(reply) }
     return IFRimeChannel.Reply(status: ifrString(ifr_reply_status(reply)), body: ifrString(ifr_reply_body(reply)))
 }
 
-/// The Settings message for a configuration code the core reports (`ifr_session_configuration_error`).
 func configurationMessage(_ code: String) -> String {
     switch code {
     case "invalid-code": "输入码只能包含英文字母 a–z。"
@@ -95,9 +88,6 @@ func configurationMessage(_ code: String) -> String {
     }
 }
 
-/// Dictionary compilation and probing, run by the isolated worker and the packaged-cache tool.
-/// The result is 0 on success, as the worker's callers expect; a probe failure keeps the
-/// diagnostic number of its first failing case (1 for the session, 2 + the case's position).
 package enum IFPortableResources {
     private static let probeInputs = ["xiehouyu", "suranqijing", "email", "wofaleemail", "nihao"]
 
@@ -112,12 +102,9 @@ package enum IFPortableResources {
     }
 }
 
-/// The three Rime user dictionaries of a closed user directory as the personal-data worker snapshots
-/// them. The core copies the live databases first, under `PersonalData/staging` of that directory.
 package enum IFPortablePersonalData {
     package static let names = ["pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"]
 
-    /// The snapshot text per dictionary, nil for a dictionary the directory does not have.
     package static func export(user: String) throws -> [String: String?] {
         var exported: OpaquePointer?
         guard ifr_personal_export(user, &exported) == ifrOK, let exported else {

@@ -3,8 +3,6 @@ import Foundation
 
 @MainActor
 extension IFEngine {
-    /// Explicit lifecycle action. It touches only the two named English memories;
-    /// public dictionaries and the ordinary pinyin_simp user dictionary stay open.
     @discardableResult
     package static func clearPersonalEnglishLearning() -> Bool {
         guard ready, allSessionsIdle else { return false }
@@ -39,7 +37,6 @@ extension IFEngine {
         return VoiceAliasSnapshot(status: reply.status, rows: reply.body, generation: generation, revision: revision)
     }
 
-    /// Small read-only input observation; candidate presentation and quality telemetry are unrelated.
     package func aiInputIdentity() -> AIInputIdentity? {
         guard available, !asciiMode, let page = PortableSnapshot(session) else { return nil }
         let input = page.input
@@ -51,8 +48,6 @@ extension IFEngine {
         return AIInputIdentity(rawInput: input, caret: page.rawCaretBytes, selectedPrefix: prefix)
     }
 
-    /// Called only for a consumed AI adoption, inside the controller's delivery scope.
-    /// Learning failure must never prevent insertion or register the original typo.
     @discardableResult
     package func prepareConsumedAIAdoption(input: AIInputIdentity, text: String) -> Bool {
         let preferences = inputPreferences
@@ -61,7 +56,6 @@ extension IFEngine {
         return learnAIAdoption(input: input, text: text, preferences: preferences, pronunciation: pronunciation)
     }
 
-    /// Low-level Rime update, also used by native learning contract regressions.
     @discardableResult
     package func learnAIAdoption(input: AIInputIdentity, text: String, preferences: InputPreferences? = nil,
                          pronunciation: AIPronunciation? = nil) -> Bool {
@@ -79,8 +73,6 @@ extension IFEngine {
                 preferences: inputPreferences ?? requestedInput)
     }
 
-    /// Read only the current recommendation's native phrase/character codes. The
-    /// absolute reverse-table path follows active dictionary activation and rollback.
     package func aiPronunciation(input: AIInputIdentity, text: String) -> AIPronunciation {
         guard available else { return AIPronunciation(phrases: [:], characters: [:]) }
         let reverse = Self.compiledDirectory.appendingPathComponent("pinyin_simp.reverse.bin").path

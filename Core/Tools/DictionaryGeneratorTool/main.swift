@@ -4,7 +4,6 @@ import Foundation
 import InkFlowDomain
 #endif
 
-// The online preparation worker calls the same IFDictionaryGenerator API.
 do {
     try IFDictionaryToolBootstrap.run(arguments: Array(CommandLine.arguments.dropFirst()))
 } catch {

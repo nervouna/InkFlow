@@ -32,8 +32,6 @@ if ! $preparation_only; then
   build/core-tests/core-dictionary-tests --source "$PWD"
   inkflow_test_timing_report core-dictionaries source "$stage_started"
 fi
-# Build a genuine packaged cache before any parent process starts a serving Rime runtime.
-# Every runtime resource, helper copy, candidate and user database belongs to this fixture.
 ditto "$shared" "$scratch/runtime/Resources/Rime"
 mkdir -p "$scratch/runtime/bin" "$scratch/scenarios"
 cp build/core-tests/dictionary-preparation-fixture "$scratch/runtime/bin/preparation-fixture"

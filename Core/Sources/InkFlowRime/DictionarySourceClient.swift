@@ -13,7 +13,6 @@ package struct IFDictionaryHTTPResponse: Sendable {
 
 package typealias IFDictionaryTransport = @Sendable (URLRequest, Int) async throws -> IFDictionaryHTTPResponse
 
-/// One ephemeral request per delegate. Bytes are bounded while receiving, including redirects.
 private final class IFDictionaryHTTPTask: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private let limit: Int
@@ -59,7 +58,6 @@ private final class IFDictionaryHTTPTask: NSObject, URLSessionDataDelegate, @unc
     }
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        // System TLS trust is allowed; credentials are never supplied to public source endpoints.
         completionHandler(challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust
                           ? .performDefaultHandling : .cancelAuthenticationChallenge, nil)
     }

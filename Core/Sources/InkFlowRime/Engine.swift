@@ -25,11 +25,6 @@ package struct EngineSnapshot: Equatable {
 
 }
 
-/// The Swift face of the Rust core (`Core/Portable`, reached through its C ABI). Sessions, keys,
-/// candidate order, selection, paging, commits, custom phrases and input preferences live in the
-/// core; this class keeps what is the frontend's: the delivery lease and idle signalling, the
-/// voice-lexicon gating, the quality recording around each mutation and the Settings-facing
-/// errors. The core and its Rime are process-global and accessed on the main actor.
 @MainActor
 package final class IFEngine {
     package static let voiceLexicon = VoiceLexiconStore()
@@ -48,7 +43,6 @@ package final class IFEngine {
 
     package static var liveSessions: [IFEngine] { instances.values.compactMap(\.value) }
     package static var personalDataSuspended = false
-    /// Created and still attached to the running core, whether or not the core has lost its Rime session.
     private var attached: Bool {
         Self.ready && !Self.personalDataSuspended && session != nil && sessionGeneration == Self.generation
     }
@@ -85,12 +79,10 @@ package final class IFEngine {
             return handled != 0
         }
     }
-    /// Keep the lease until every native client callback returns, including nested run loops.
     package func beginDelivery() { deliveryDepth += 1 }
     package func endDelivery() { deliveryDepth = max(0, deliveryDepth - 1); Self.signalIdle() }
     package static var allSessionsIdle: Bool { sessionsIdle(includingDelivery: true) }
 
-    /// Drains completed text into each session's buffer, so an undelivered commit counts as busy.
     private static func sessionsIdle(includingDelivery: Bool) -> Bool {
         liveSessions.allSatisfy { engine in
             guard !includingDelivery || engine.deliveryDepth == 0 else { return false }
@@ -120,23 +112,16 @@ package final class IFEngine {
     package var candidateCount: Int { available ? Int(ifr_session_candidate_count(session)) : 5 }
     private var requestedCount = 5
     package var requestedInput = InputPreferences()
-    /// The preferences the session applied at its last composition boundary.
     package var inputPreferences: InputPreferences? {
         var mask: UInt32 = 0
         guard available, ifr_session_input_options(session, &mask) != 0 else { return nil }
         return InputPreferences(optionMask: mask)
     }
     private var bufferedCommit = ""
-    /// Custom phrases are requested for every session and outlive engine restarts, like each session's
-    /// requested count; the core writes Rime's custom_phrase.txt and reloads it at the next shared idle.
     private static var requestedPhrases: [CustomPhrase] = []
-    /// The phrases Rime has loaded, which quality records. The core applies a change at the first
-    /// idle boundary after the request; this follows the same condition.
     private static var loadedPhrases: [CustomPhrase] = []
     package private(set) var configurationError: String?
     private var configurationCode: String?
-    // Quality records the preceding context this session last received and clears it when the
-    // composition's content ends, as the core's ranking does.
     private var precedingText = ""
     private var orderedContent = EngineSnapshot()
     package let qualityRecorder: QualityRecorder?
@@ -148,15 +133,12 @@ package final class IFEngine {
 
     package static var version: String { ifrString(ifr_rime_version()) }
 
-    /// The process owns recording across native dictionary replacement and recovery.
     package static func configureQualityRecording(_ store: QualityStore?) { productionQualityStore = store }
 
-    /// Content-free counts from outside the recorder, such as the Settings learning management.
     package static func recordEffectiveness(_ event: QualityEffectivenessEvent) {
         _ = productionQualityStore?.submit(event)
     }
 
-    /// Standalone startup retains the existing explicit quality-store injection.
     package static func start(shared: String, user: String, qualityStore: QualityStore? = nil) throws {
         if ready { return }
         let sharedURL = URL(fileURLWithPath: shared)
@@ -164,7 +146,6 @@ package final class IFEngine {
             contextIndex: sharedURL.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
         do { try start(configuration); productionQualityStore = qualityStore }
         catch let error as IFDictionaryUpdateError where error.code == "missing-runtime-resource" {
-            // Preserve the established standalone API's missing-resource error contract.
             throw NSError(domain: "io.damao.inputmethod.inkflow", code: 2,
                 userInfo: [NSLocalizedDescriptionKey: "InkFlow 缺少内置词典资源，请重新构建并安装。"])
         }
@@ -193,8 +174,6 @@ package final class IFEngine {
             }
         }
         let user = configuration.user
-        // Rime initialization (compiling into user/build without a prepared cache), the phrase file and
-        // the context index are all part of creating the core's engine. A prepared cache is never deployed here.
         let initialization = startup.begin(.initialization, source: source)
         var created: OpaquePointer?
         let status = withCStrings([shared, user, configuration.cache?.path, configuration.contextIndex?.path]
@@ -244,9 +223,6 @@ package final class IFEngine {
         }
     }
 
-    /// The new engine starts with no phrases, so the requested ones are written to custom_phrase.txt through
-    /// the probe session: restoring a session later reads that file and never writes it.
-    /// A learned user's first candidate need not equal the clean worker probe's first candidate.
     private static func probe(_ native: OpaquePointer, phrases: [CustomPhrase]) throws {
         var created: OpaquePointer?
         guard ifr_session_create(native, &created) == ifrOK, let probe = created else {
@@ -268,8 +244,6 @@ package final class IFEngine {
         voiceLexicon.reset()
         for recorder in qualityRecorders { recorder.value?.interrupt(reason: "engine_stopped") }
         qualityRecorders = []
-        // Invalidate every object before the core goes; a stale deinit can never destroy a reused handle.
-        // The core finalizes Rime when its last session and the engine reference are gone.
         for engine in liveSessions { engine.detachSession() }
         if let native { ifr_engine_destroy(native) }
         native = nil
@@ -349,10 +323,8 @@ package final class IFEngine {
 
     @discardableResult
     package func key(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false) -> Bool {
-        // The core retries a session it lost during a phrase reload on its next use.
         guard attached else { return false }
         defer { Self.signalIdle() }
-        // Apply existing idle configuration before capturing the values this key actually uses.
         applyConfigurationIfIdle()
         guard available else { return false }
         return qualityOperation(.key(key, modifiers, isRepeat)) { performKey(key, modifiers: modifiers) }
@@ -361,7 +333,6 @@ package final class IFEngine {
     private func performKey(_ key: Int32, modifiers: Int32) -> Bool {
         var handled: Int32 = 0
         let status = ifr_session_key(session, key, modifiers, &handled)
-        // Rime can undo learning while leaving Backspace unhandled for the client.
         if key == 0xff08 || key == 0xffff { Self.voiceLexicon.markDirty() }
         trackOrdering()
         return status == ifrOK && handled != 0
@@ -389,12 +360,9 @@ package final class IFEngine {
         if let inputPreferences { requestedInput = inputPreferences }
         configurationError = nil; configurationCode = nil
         pushConfiguration()
-        // A phrase file that could not be written keeps the whole configuration waiting.
         if configurationCode == "phrase-write" { (requestedCount, requestedInput, _) = previous }
     }
 
-    /// Hand the requested count, preferences and phrases to the core. It applies them at this
-    /// session's next composition boundary, and the phrases to every idle session.
     private func pushConfiguration() {
         guard attached, let session else { return }
         Self.configure(session, count: requestedCount, options: requestedInput.optionMask, phrases: Self.requestedPhrases)
@@ -410,21 +378,17 @@ package final class IFEngine {
         }
     }
 
-    /// Existing idle configuration applies before the values a key actually uses are captured,
-    /// and when the frontend ends a composition.
     package func applyConfigurationIfIdle() {
         guard attached, let session else { return }
         _ = ifr_session_set_ascii_mode(session, requestedASCIIMode ? 1 : 0)
         refreshApplied()
     }
 
-    /// What the core applied or refused after a call that can change the configuration.
     private func refreshApplied() {
         guard let session else { return }
         configurationCode = ifr_session_configuration_error(session).map { String(cString: $0) }
         if let configurationCode { reportConfigurationError(configurationMessage(configurationCode)) }
         else { configurationError = nil }
-        // Settings, ASCII mode and phrases take effect between compositions, and so does their record.
         guard orderedContent.preedit.isEmpty else { return }
         if Self.loadedPhrases != Self.requestedPhrases, configurationCode != "phrase-write",
            Self.sessionsIdle(includingDelivery: false) {
@@ -441,8 +405,6 @@ package final class IFEngine {
         configurationError = message
     }
 
-    /// Semantic key input. Negative values record an unsupported platform event without entering Rime:
-    /// -1 any other chord, -2 an unsupported character, -3 Cmd+Z and -4 Cmd+V.
     @discardableResult
     package func input(_ key: Int32, modifiers: Int32 = 0, isRepeat: Bool = false,
                capturedAt: TimeInterval? = nil) -> Bool {
@@ -459,7 +421,6 @@ package final class IFEngine {
         guard available else { return }
         defer { Self.signalIdle() }
         _ = qualityOperation(.select(index, trigger, ambiguousText), capturedAt: capturedAt) {
-            // The snapshot is the current page, so the core never sees a stale selection.
             guard let page = PortableSnapshot(session), index >= 0, index < page.candidateCount else { return false }
             var handled: Int32 = 0
             let status = ifr_session_select(session, page.handle, index, &handled)
@@ -477,8 +438,6 @@ package final class IFEngine {
     private func performHighlight(_ index: Int) {
         guard let page = PortableSnapshot(session), index >= 0, index < page.candidateCount else { return }
         _ = ifr_session_highlight(session, page.handle, index)
-        // Highlighting a partial choice can change Rime's preedit and cursor.
-        // Record the new content without overriding explicit user navigation.
         orderedContent = content(of: snapshotContent())
     }
 
@@ -497,7 +456,6 @@ package final class IFEngine {
         guard available else { return }
         defer { Self.signalIdle() }
         let clear = {
-            // An adopted AI suggestion ends the composition without being the user's cancellation.
             _ = recordQuality ? ifr_session_clear(self.session) : ifr_session_clear_unobserved(self.session)
             self.trackOrdering()
             return true
@@ -512,7 +470,6 @@ package final class IFEngine {
         return result
     }
 
-    /// The preceding context ends with the composition whose content it ranked.
     private func trackOrdering() {
         guard available else { return }
         let current = content(of: snapshotContent())
@@ -579,7 +536,6 @@ package final class IFEngine {
         return handled
     }
 
-    /// Read-only observation; never reads commit buffers, updates order or changes highlight.
     package func qualitySnapshot() -> QualityPageSnapshot {
         guard available, let page = PortableSnapshot(session) else {
             return QualityPageSnapshot(generation: 0, rawInput: "", caret: 0, selectedPrefix: "",
@@ -591,7 +547,6 @@ package final class IFEngine {
         let offset = page.selectionStart
         let prefix = offset <= preedit.utf8.count ? String(bytes: preedit.utf8.prefix(offset), encoding: .utf8) : nil
         let number = page.page
-        // Rime reports a page size only while a menu is shown.
         let size = page.candidateCount > 0 ? candidateCount : 0
         let candidates = (0..<page.candidateCount).map { display in
             let source: String? = switch Int(ifr_snapshot_candidate_personal_source(page.handle, display)) {
@@ -622,7 +577,6 @@ extension Notification.Name {
 
 package enum IFEngineSwitchStep: Equatable { case start, probe, session(Int), sessionCreated(Int) }
 
-/// Descriptor validation happens away from live native input callbacks; the engine loads the context index itself.
 package struct IFEngineConfiguration: Sendable {
     package struct Identity: Equatable, Sendable {
         let shared: String
@@ -633,7 +587,6 @@ package struct IFEngineConfiguration: Sendable {
     package let shared: URL
     package let cache: URL?
     package let user: String
-    /// The prepared `pinyin_simp.context.bin`; without it Rime keeps its own candidate order.
     package let contextIndex: URL?
 
     package var identity: Identity {

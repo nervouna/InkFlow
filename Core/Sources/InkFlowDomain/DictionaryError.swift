@@ -1,6 +1,5 @@
 import Foundation
 
-/// Shared by dictionary generation and the context index builder.
 package struct IFDictionaryError: Error, LocalizedError, Sendable {
     package let code: String
     package let source: String?

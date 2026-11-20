@@ -1,7 +1,6 @@
 import InkFlowDomain
 import Foundation
 
-/// Resource preparation runs in an isolated runtime supplied by the host. It never launches a process.
 package enum IFDictionaryPreparation {
     package typealias EngineOperation = (_ shared: String, _ user: String, _ cache: String) -> Int32
 
@@ -69,7 +68,6 @@ package enum IFDictionaryPreparation {
             operation = "generate-spelling"
             let spelling = try IFSpellingGenerator.generate(dictionary: dictionary)
             for name in spelling.keys.sorted() {
-                // Keep replacement staging inside the sandbox's candidate directory.
                 try IFDictionaryFiles.atomicWrite(spelling[name]!, to: shared.appendingPathComponent(name))
             }
             operation = "create-isolated-directories"

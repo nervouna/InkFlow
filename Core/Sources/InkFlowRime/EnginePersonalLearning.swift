@@ -1,14 +1,12 @@
 import InkFlowPortable
 import Foundation
 
-/// A listing the core captured at one learning revision. Entries refer to it by index.
 final class LearningListing: @unchecked Sendable {
     fileprivate let handle: OpaquePointer
     fileprivate init(_ handle: OpaquePointer) { self.handle = handle }
     deinit { ifr_learning_free(handle) }
 }
 
-/// What the core needs to restore a deleted entry.
 final class LearningUndoToken: @unchecked Sendable {
     fileprivate let handle: OpaquePointer
     fileprivate init(_ handle: OpaquePointer) { self.handle = handle }
@@ -43,8 +41,6 @@ extension IFEngine {
         case busy, unavailable, conflict, tooLarge
     }
 
-    /// No filesystem enumeration and no secondary store: the active Rime memories own both
-    /// namespaces. This lifecycle API must never run in a key callback.
     package static func personalLearningEntries() throws -> [PersonalLearningEntry] {
         guard ready, let native else { throw PersonalLearningError.unavailable }
         guard allSessionsIdle, voiceLexicon.canRead else { throw PersonalLearningError.busy }
@@ -81,14 +77,11 @@ extension IFEngine {
         guard allSessionsIdle, voiceLexicon.canRead else { throw PersonalLearningError.busy }
         let status = operation(native)
         if Int(status) == IFR_BUSY { throw PersonalLearningError.busy }
-        // The core already dropped every session's cached view. A failed native write may have applied
-        // part of the operation: do not retain a stale UI snapshot or allow an older undo after any attempt.
         voiceLexicon.invalidateLearningSnapshot()
         signalIdle()
         guard status == ifrOK else { throw learningError(status) }
     }
 
-    /// The dictionaries changed outside the engine: drop every session's cached learning view.
     package static func invalidatePersonalLearning() {
         if let native { _ = ifr_personal_learning_invalidate(native) }
         voiceLexicon.invalidateLearningSnapshot()

@@ -1,7 +1,6 @@
 import Foundation
 import os
 
-/// Content-free, constant-size events. Run ID and PID separate cold starts from client switches.
 package struct IFStartupDiagnostics: Sendable {
     package enum Stage: String, DiagnosticLabel {
         case process, bootstrap, backend, journal, fingerprint, cacheValidation, indexes, rebuild

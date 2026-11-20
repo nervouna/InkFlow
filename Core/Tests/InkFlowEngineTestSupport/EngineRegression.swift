@@ -4,8 +4,6 @@ import Foundation
 import InkFlowCoreTestSupport
 
 package enum EngineRegression {
-    // Event modifiers: Shift = 1, Command = 2, Control = 4, Option = 8.
-    // macOS uses native metadata; standalone Core uses the equivalent Rime key.
     package typealias Event = @MainActor (IFEngine, Int32, UInt16, String, Int32) -> Bool
 
     @MainActor package static func rimeEvent(_ engine: IFEngine, _ key: Int32, _ code: UInt16,
@@ -59,8 +57,6 @@ package enum EngineRegression {
         configure(engine, exact)
         check(!contains(engine, "hlw", "互联网"), "Abbreviation OFF")
 
-        // Consonant-only syllables (hm, m, n, ng) are erased before any other rule, so they cannot cover the input
-        // and prune its abbreviation readings. Nothing has been committed yet: the user data is still fresh.
         func firstPage(_ input: String) -> [String] {
             engine.clear()
             type(engine, input)
@@ -332,7 +328,6 @@ package enum EngineRegression {
             selectCandidate(display, input: code, engine: engine)
             engine.key(0xff09)
         }
-        // A query with uppercase letters also looks up its lowercase code (rule 3), so Api reaches API.
         selectCandidate("API", input: "Api", engine: engine)
         engine.key(0xff09)
         type(engine, "swiftui")
@@ -427,9 +422,6 @@ package enum EngineRegression {
         }
     }
 
-    /// Spellings and casing come from ESDB: brands keep their mixed case, names and acronyms their capitals, and a
-    /// word that has a lowercase form offers it. Learning would lead, so this runs on fresh user data before any
-    /// other test selects an English word.
     @MainActor package static func esdbSpellings(event: Event = rimeEvent) {
         let engine = IFEngine()!
         func firstEnglish(_ input: String) -> String? {
@@ -444,20 +436,15 @@ package enum EngineRegression {
             let first = firstEnglish(input)
             check(first == expected, "ESDB spelling of \(input) leads English as \(expected), got \(first ?? "none")")
         }
-        // wordfreq folds case, so case forms ESDB lists side by side tie and the lowercase form wins the tie.
-        // english-overrides.tsv demotes the lowercase form where the other spelling is the usual one.
         for (input, expected) in [("china", "China"), ("english", "English"), ("pc", "PC"), ("whos", "who's")] {
             let first = firstEnglish(input)
             check(first == expected, "Case tie of \(input) leads English as \(expected), got \(first ?? "none")")
         }
-        // Both spellings are common: polish only moves down, it stays on the first page.
         type(engine, "polish")
         let polish = engine.snapshot().candidates
         engine.clear()
         check(polish.contains("Polish") && polish.contains("polish"),
               "Both Polish and polish stay on the first page of polish: \(polish)")
-        // Only `hello` is a source spelling. Its Capitalized and ALL-CAPS forms are generated, so Shift-typed
-        // Hello and Caps Lock HELLO offer themselves first.
         let keyCodes: [Character: UInt16] = ["H": 4, "E": 14, "e": 14, "L": 37, "l": 37, "O": 31, "o": 31]
         func send(_ letters: String, shiftFirst: Bool) {
             for (index, letter) in letters.enumerated() {
@@ -474,7 +461,6 @@ package enum EngineRegression {
         check(engine.snapshot().candidates.first == "HELLO",
               "Caps Lock HELLO offers HELLO first: \(engine.snapshot().candidates)")
         engine.clear()
-        // A word whose canonical form is cased still joins mixed composition through its lowercase code.
         type(engine, "woyongiphone")
         check(engine.snapshot().candidates.contains("我用iPhone"),
               "woyongiphone offers 我用iPhone on the first page: \(engine.snapshot().candidates)")
@@ -485,9 +471,6 @@ package enum EngineRegression {
 
     @MainActor package static func mixedEnglishCandidates(event: Event = rimeEvent) {
         let engine = IFEngine()!
-        // Before any mixed selection: selecting a mixed sentence teaches its words (see
-        // mixedSelectionLearning). A learned sentence would lead its input, and a learned
-        // spelling would lead its standalone English.
         for input in ["Hello", "email"] {
             type(engine, input)
             let english = engine.snapshot().candidates.filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
@@ -520,8 +503,6 @@ package enum EngineRegression {
             ("womenquoffice", "我们去office"),
             ("zhefenoffer", "这份offer")
         ] {
-            // Abbreviation can add a full-coverage Chinese interpretation before this
-            // mixed candidate. Preserve native coverage priority and exact selection.
             type(engine, input)
             engine.clear()
             selectCandidate(expected, input: input, engine: engine)
@@ -556,8 +537,6 @@ package enum EngineRegression {
             check(Set(english).count == english.count, "No duplicate English candidates across pages")
             engine.clear()
         }
-        // Standalone words typed with real Shift events reach the admitted lowercase code;
-        // the entry spelled exactly as typed leads.
         let keyCodes: [Character: UInt16] = ["A": 0, "P": 35, "I": 34, "S": 1, "w": 13, "i": 34, "f": 3, "t": 17, "U": 32]
         for word in ["API", "SwiftUI"] {
             for letter in word {
@@ -570,9 +549,6 @@ package enum EngineRegression {
             check(engine.takeCommit() == word && engine.snapshot().preedit.isEmpty,
                   "Select the Shift-typed technical word: \(word)")
         }
-        // Capitals typed as a standalone word lead as typed and Space commits them. Caps Lock sends the same
-        // characters without the Shift modifier. The lowercase spelling is a word of its own (`os`, `it`),
-        // and learning it must not override the typed case.
         let capitalKeys: [Character: UInt16] = ["O": 31, "S": 1, "I": 34, "T": 17, "D": 2, "H": 4, "E": 14]
         func commitCapitals(_ word: String, shift: Bool) {
             for letter in word {
@@ -586,13 +562,11 @@ package enum EngineRegression {
         }
         commitCapitals("OS", shift: false)
         for word in ["IT", "ID", "THE"] { commitCapitals(word, shift: true) }
-        // Pinyin abbreviations may lead the lowercase page, so compare the English candidates.
         func lowercaseEnglish() -> [String] {
             type(engine, "os")
             defer { engine.clear() }
             return allCandidates(engine).filter { $0.unicodeScalars.allSatisfy { $0.value < 128 } }
         }
-        // Learn the lowercase spelling more often than the capitals, from lowercase input.
         for _ in 0..<3 { selectCandidate("os", input: "os", engine: engine) }
         check(lowercaseEnglish().first == "os", "Learned lowercase leads English: \(lowercaseEnglish())")
         commitCapitals("OS", shift: true)
@@ -639,20 +613,14 @@ package enum EngineRegression {
         print("PASS mixed English: initial/internal/final words, adjacent boundaries, source-frequency completion ranking, exact retention, deduplication, edit/select")
     }
 
-    /// Selecting a mixed candidate confirms each of its ASCII runs in the English user dictionary,
-    /// like selecting the same words alone, and a sentence whose every run is confirmed then
-    /// leads. Return, cancel and an immediate undo confirm nothing; one unconfirmed run, a complete
-    /// Pinyin word and a custom phrase keep their places. The words are used by no other test.
     @MainActor package static func mixedSelectionLearning() {
         let engine = IFEngine()!
-        // Where the sentence sits on the first page, and whether its evidence says every run is learned.
         func state(_ input: String, _ expected: String) -> (index: Int, learned: Bool)? {
             engine.clear(); type(engine, input)
             let candidates = engine.qualitySnapshot().candidates
             guard let index = candidates.firstIndex(where: { $0.text == expected }) else { return nil }
             return (index, candidates[index].source == "personal_exact_mixed")
         }
-        // Select the sentence, then undo the commit with Backspace or end the undo window with Tab.
         func choose(_ input: String, _ expected: String, undo: Bool = false) {
             engine.clear(); type(engine, input)
             guard let index = engine.snapshot().candidates.firstIndex(of: expected) else {
@@ -662,8 +630,6 @@ package enum EngineRegression {
             check(engine.takeCommit() == expected && engine.snapshot().preedit.isEmpty, "Select the mixed candidate \(expected)")
             engine.key(undo ? 0xff08 : 0xff09)
         }
-        // Whether standalone `google` carries personal evidence in a technical context. Its place no
-        // longer shows that: `google` is not Pinyin-shaped, so it leads either way (rule 14).
         func standaloneLearned() -> Bool {
             engine.clear(); engine.setPrecedingText("代码"); type(engine, "google")
             return engine.qualitySnapshot().candidates.first { $0.text == "google" }?.source == "personal_exact_english"
@@ -673,7 +639,6 @@ package enum EngineRegression {
         check(current?.index == 1 && current?.learned == false, "An unlearned sentence stays behind the Chinese reading: \(engine.snapshot().candidates)")
         check(!standaloneLearned(), "Standalone google has no personal evidence yet")
 
-        // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
         engine.clear(); type(engine, google)
         check(engine.key(0xff0d) && engine.takeCommit() == google, "Return commits the raw input")
         engine.key(0xff09)
@@ -685,13 +650,11 @@ package enum EngineRegression {
         check(current?.index == 1 && current?.learned == false, "Return, cancel and an immediate undo learn nothing")
         check(!standaloneLearned(), "Standalone google is still unlearned")
 
-        // A regular selection learns the run with its display and lowercase code.
         choose(google, sentence)
         current = state(google, sentence)
         check(current?.index == 0 && current?.learned == true, "The learned sentence leads: \(engine.snapshot().candidates)")
         check(standaloneLearned(), "The same record serves standalone English")
 
-        // A sentence with one unlearned run keeps its place until every run is learned.
         let (both, bothSentence) = ("wofalegoogleheamazon", "我发了google和amazon")
         current = state(both, bothSentence)
         check(current?.index == 1 && current?.learned == false, "amazon has no personal evidence yet: \(engine.snapshot().candidates)")
@@ -699,14 +662,12 @@ package enum EngineRegression {
         current = state(both, bothSentence)
         check(current?.index == 0 && current?.learned == true, "Every run is learned: \(engine.snapshot().candidates)")
 
-        // A custom phrase keeps its explicit priority over a learned sentence.
         engine.setConfiguration(candidateCount: 5, customPhrases: [CustomPhrase(id: UUID(), code: google, text: "自定义词")])
         engine.clear(); type(engine, google)
         check(engine.snapshot().candidates.first == "自定义词", "Custom phrase keeps priority over a learned sentence")
         engine.clear()
         engine.setConfiguration(candidateCount: 5, customPhrases: [])
 
-        // A complete Pinyin word is never a personal token, however often it is selected.
         let (banana, bananaSentence) = ("wokanbanana", "我看banana")
         current = state(banana, bananaSentence)
         check(current?.index == 1 && current?.learned == false, "banana is a mixed candidate behind the Chinese reading")
@@ -807,7 +768,6 @@ package enum EngineRegression {
             }
             engine.clear()
         }
-        // Exercise prefix lookup, edits, cache replacement, and selection/re-entry.
         for input in screenshots {
             var prefix = ""
             for letter in input {
@@ -837,7 +797,6 @@ package enum EngineRegression {
                 engine.clear()
             }
         }
-        // Explicit ASCII mode is character passthrough, not dictionary admission.
         engine.asciiMode = true
         for letter in "women compute Haiti".utf16 { check(!engine.key(Int32(letter))) }
         check(engine.snapshot().candidates.isEmpty && engine.takeCommit().isEmpty)
@@ -887,8 +846,6 @@ package enum EngineRegression {
             check(engine.takeCommit() == expected)
             check(engine.snapshot().preedit.isEmpty)
         }
-        // Frost's measured homophone order prefers 背景 for both beijing and its
-        // tolerated transposition; 北京 remains directly selectable.
         let normalCity = IFEngine()!
         type(normalCity, "beijing")
         let normalCandidates = normalCity.snapshot().candidates
@@ -926,7 +883,7 @@ package enum EngineRegression {
         check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nniha")
         type(engine, "o")
         check(engine.snapshot().candidates.first == "你好")
-        check(event(engine, 0xff50, 115, "", 0)) // Home, then remove the extra initial.
+        check(event(engine, 0xff50, 115, "", 0))
         check(engine.snapshot().cursor == 0)
         check(event(engine, 0xffff, 117, "", 0))
         check(engine.snapshot().preedit.replacingOccurrences(of: " ", with: "") == "nihao")
@@ -1006,7 +963,6 @@ package enum EngineRegression {
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.snapshot() == old && a.takeCommit().isEmpty && a.candidateCount == 9)
         a.key(32)
-        // Applying settings between a completed composition and draining its commit must not lose text.
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.takeCommit() == "地址甲")
         type(a, "dz"); check(a.snapshot().candidates.first == "更新地址" && a.candidateCount == 3)
@@ -1174,8 +1130,6 @@ package enum EngineRegression {
         check(terrain.snapshot().candidates.first == "地", "The matching di reading still completes 山地")
         check(terrain.key(32))
         check(terrain.takeCommit() == "地", "The promoted matching reading keeps display-to-native selection")
-        // `nia` is ni + a: the complete phrase 你啊 leads and the partial 你 consumes only `ni`. A consonant-only
-        // tail such as the ng of `neng` is erased from the spelling profiles, so it leaves no partial choices.
         let coverage = prepared("谢谢", "nia", count: 9)
         check(coverage.snapshot().candidates.first == "你啊",
               "Context must not promote partial 你 above complete 你啊: \(coverage.snapshot())")
@@ -1205,7 +1159,6 @@ package enum EngineRegression {
         }
         for (prefix, input, expected) in [("准备午", "can", "餐"), ("正式宣", "bu", "布"),
                                            ("最新软", "jian", "件"), ("非常感", "xie", "谢")] {
-            // Emoji also occupy page slots; keep the target inside the tested page.
             let engine = prepared(prefix, input, count: 9)
             check(engine.snapshot().candidates.first == expected, "Bundled dictionary context \(prefix) + \(input): \(engine.snapshot())")
             check(engine.snapshot().highlight == 0)
@@ -1295,8 +1248,6 @@ package enum EngineRegression {
         print("PASS context engine: real phrases, 3/5/9 pages, stable fallback, digits/click/default/arrow mappings, paging, raw Return, edit/cancel, partial selection, session isolation")
     }
 
-    /// Swift–Lua requests travel through the core's one versioned property protocol. Its framing and
-    /// version checks are the core's (`channel.rs` unit tests, `parity.sh` swift_property_channel).
     @MainActor package static func propertyChannel() {
         let engine = IFEngine()!
         check(engine.call("learning_invalidate") == IFRimeChannel.Reply(status: "ok"), "A live module answers a version 1 request")
@@ -1385,7 +1336,6 @@ package enum EngineRegression {
         guard let helloIndex = helloCandidates.firstIndex(of: "hello") else {
             check(false, "Admitted hello must remain selectable"); return
         }
-        // Fuzzy Pinyin may cover the same input and retain Chinese priority.
         engine.highlight(helloIndex)
         check(engine.key(32))
         check(engine.takeCommit() == "hello", "Space selects the complete English word")
@@ -1462,9 +1412,6 @@ package enum EngineRegression {
         print("PASS punctuation: exact mappings, Shift, independent quotes, apostrophe delimiter, bracket paging, ASCII/shortcut passthrough, decimal/time input")
     }
 
-    /// One block per row of the key table in keys.md ("Keys during composition"). The block's
-    /// first comment is the row id, and every failure message starts with that id. Each block
-    /// covers the idle, composing and recognizer-match columns of its row.
     @MainActor package static func compositionKeys(event: Event = rimeEvent) {
         struct Key { let symbol: Int32, code: UInt16, text: String, modifiers: Int32 }
         let space = Key(symbol: 32, code: 49, text: " ", modifiers: 0)
@@ -1498,7 +1445,6 @@ package enum EngineRegression {
             send(engine, text)
             return engine
         }
-        // An engine whose composition the recognizer has taken: the raw text, no menu.
         func matched(_ text: String = "www.example", _ preferences: InputPreferences? = nil) -> IFEngine {
             let engine = composing(text, preferences), state = engine.snapshot()
             check(state.preedit == text && state.candidates.isEmpty && engine.takeCommit().isEmpty,
@@ -1520,7 +1466,6 @@ package enum EngineRegression {
             ("$", "¥"), ("^", "……"), ("_", "——"), ("\"", "“")
         ]
 
-        // letter-lower
         do {
             let idle = IFEngine()!
             check(press(idle, char("n")) && idle.snapshot().preedit == "n", "letter-lower idle: starts a composition")
@@ -1529,7 +1474,6 @@ package enum EngineRegression {
             let raw = matched(url)
             check(press(raw, char("x")) && raw.snapshot().preedit == url + "x", "letter-lower match: appended raw")
         }
-        // letter-upper
         do {
             let idle = IFEngine()!
             check(press(idle, char("A")) && idle.snapshot().preedit == "A", "letter-upper idle: starts a composition")
@@ -1538,7 +1482,6 @@ package enum EngineRegression {
             let raw = matched(url)
             check(press(raw, char("X")) && raw.snapshot().preedit == url + "X", "letter-upper match: appended raw")
         }
-        // digit-page
         do {
             idleIgnores(char("2"), "digit-page")
             let engine = composing("shi"), page = engine.snapshot().candidates
@@ -1547,7 +1490,6 @@ package enum EngineRegression {
             let raw = matched(url)
             check(press(raw, char("2")) && raw.snapshot().preedit == url + "2", "digit-page match: appended raw")
         }
-        // digit-zero
         do {
             idleIgnores(char("0"), "digit-zero")
             let engine = composing("shi"), before = engine.snapshot()
@@ -1555,7 +1497,6 @@ package enum EngineRegression {
             let raw = matched(url)
             check(press(raw, char("0")) && raw.snapshot().preedit == url + "0", "digit-zero match: appended raw")
         }
-        // digit-beyond-page
         do {
             for digit in "6789" {
                 idleIgnores(char(digit), "digit-beyond-page")
@@ -1567,7 +1508,6 @@ package enum EngineRegression {
                       "digit-beyond-page match: appended raw")
             }
         }
-        // space
         do {
             idleIgnores(space, "space")
             let engine = composing("nihao")
@@ -1578,7 +1518,6 @@ package enum EngineRegression {
                       "space match: commits \(text) literally")
             }
         }
-        // return
         do {
             idleIgnores(enter, "return")
             let engine = composing("nihao")
@@ -1590,7 +1529,6 @@ package enum EngineRegression {
                       "return match: commits \(text) literally")
             }
         }
-        // backspace
         do {
             idleIgnores(backspace, "backspace")
             let engine = composing("ni")
@@ -1607,7 +1545,6 @@ package enum EngineRegression {
             check(press(leaving, backspace) && spelled(leaving) == "www" && !leaving.snapshot().candidates.isEmpty,
                   "backspace match: input that stops matching composes as usual")
         }
-        // escape
         do {
             idleIgnores(escape, "escape")
             let engine = composing("nihao")
@@ -1619,7 +1556,6 @@ package enum EngineRegression {
                       "escape match: cancels \(text) without committing")
             }
         }
-        // punctuation-chinese
         do {
             for (character, output) in chinese {
                 let key = char(character)
@@ -1640,7 +1576,6 @@ package enum EngineRegression {
                       "punctuation-chinese match: \(character) appended raw")
             }
         }
-        // punctuation-ascii
         do {
             let ascii = InputPreferences().setting(.englishPunctuation, to: true)
             for (character, _) in chinese {
@@ -1657,10 +1592,8 @@ package enum EngineRegression {
                       "punctuation-ascii match: \(character) appended raw")
             }
         }
-        // at
         do {
             idleIgnores(char("@"), "at")
-            // Letters followed by @ are an email start; an apostrophe keeps the input out of the pattern.
             let engine = composing("xi'an")
             check(!press(engine, char("@")) && engine.takeCommit() == "西安" && engine.snapshot().preedit.isEmpty,
                   "at composing: commits the highlighted candidate and passes through")
@@ -1672,7 +1605,6 @@ package enum EngineRegression {
             let raw = matched(mail)
             check(press(raw, char("@")) && raw.snapshot().preedit == mail + "@", "at match: appended raw")
         }
-        // dot
         do {
             let idle = IFEngine()!
             check(press(idle, char(".")) && idle.takeCommit() == "。", "dot idle: Chinese full stop")
@@ -1688,7 +1620,6 @@ package enum EngineRegression {
             let longer = composing("wwww")
             check(press(longer, char(".")) && longer.takeCommit().hasSuffix("。"), "dot composing: wwww. is not a URL")
         }
-        // colon
         do {
             let idle = IFEngine()!
             check(press(idle, char(":")) && idle.takeCommit() == "：", "colon idle: Chinese colon")
@@ -1702,7 +1633,6 @@ package enum EngineRegression {
             let later = matched("https://example.com")
             check(press(later, char(":")) && later.snapshot().preedit == "https://example.com:", "colon match: appended raw")
         }
-        // slash
         do {
             idleIgnores(char("/"), "slash")
             let engine = composing("nihao")
@@ -1714,7 +1644,6 @@ package enum EngineRegression {
             check(start.snapshot().preedit == "https://example.com/a/b", "slash match: appended raw")
             check(press(start, space) && start.takeCommit() == "https://example.com/a/b", "slash match: commits literally")
         }
-        // paging-keys
         do {
             idleIgnores(pageUp, "paging-keys"); idleIgnores(pageDown, "paging-keys")
             let engine = composing("shi"), first = engine.snapshot().candidates
@@ -1727,7 +1656,6 @@ package enum EngineRegression {
                 check(handled && unchanged(raw, before), "paging-keys match: swallowed, no menu: \(handled) \(raw.snapshot())")
             }
         }
-        // paging-bound-keys
         do {
             let idle = IFEngine()!
             check(press(idle, char("[")) && idle.takeCommit() == "【" && press(idle, char("]")) && idle.takeCommit() == "】",
@@ -1746,7 +1674,6 @@ package enum EngineRegression {
                       "paging-bound-keys match: \(character) appended raw")
             }
         }
-        // arrows-vertical
         do {
             idleIgnores(up, "arrows-vertical"); idleIgnores(down, "arrows-vertical")
             let engine = composing("shi"), first = engine.snapshot().candidates
@@ -1759,7 +1686,6 @@ package enum EngineRegression {
                 check(handled && unchanged(raw, before), "arrows-vertical match: swallowed, no menu: \(handled) \(raw.snapshot())")
             }
         }
-        // arrows-horizontal
         do {
             idleIgnores(left, "arrows-horizontal"); idleIgnores(right, "arrows-horizontal")
             let engine = composing("nihao"), end = engine.snapshot().cursor
@@ -1770,8 +1696,6 @@ package enum EngineRegression {
             check(press(raw, left) && raw.snapshot().cursor == url.count - 1 && raw.snapshot().preedit == url,
                   "arrows-horizontal match: Left moves the caret in the raw text")
             check(press(raw, right) && raw.snapshot().cursor == url.count, "arrows-horizontal match: Right moves it back")
-            // Rime rebuilds the composition at the start of the input and cannot keep a later candidate
-            // highlighted there, so the page at the start keeps Rime's order (see `home`).
             let reordered = fresh()
             reordered.setPrecedingText("准备午")
             send(reordered, "can")
@@ -1779,8 +1703,6 @@ package enum EngineRegression {
             check(reordered.snapshot().cursor == 0 && reordered.snapshot().highlight == 0,
                   "arrows-horizontal composing: Left onto the start of a reordered page highlights the first candidate: \(reordered.snapshot())")
         }
-        // Three pages for the Home and End rows: Rime's own order, a page the context reordered, and a page
-        // led by a learned mixed sentence. The last two show a first candidate that is not Rime's first.
         var learned = false
         func pages() -> [(name: String, engine: IFEngine, reordered: Bool)] {
             if !learned {
@@ -1798,7 +1720,6 @@ package enum EngineRegression {
             send(context, "can")
             return [("native", composing("nihao"), false), ("context", context, true), ("learned mixed", composing("wokannetflix"), true)]
         }
-        // home
         do {
             idleIgnores(home, "home")
             for (name, engine, reordered) in pages() {
@@ -1817,7 +1738,6 @@ package enum EngineRegression {
                 check(again && repeated == state && engine.takeCommit().isEmpty,
                       "home \(name): a second press at the start changes nothing: \(repeated)")
             }
-            // The key moves the caret in one press, whatever the highlight was.
             let moved = composing("shi")
             press(moved, down); press(moved, down)
             check(moved.snapshot().highlight == 2, "home fixture: the highlight is on the third candidate")
@@ -1828,14 +1748,11 @@ package enum EngineRegression {
             check(rawHandled && raw.snapshot().cursor == 0 && raw.snapshot().preedit == url,
                   "home match: moves the caret to the start of the raw text: \(raw.snapshot())")
         }
-        // end
         do {
             idleIgnores(end, "end")
             for (name, engine, _) in pages() {
-                // At the end of the input the key changes nothing, even where the first candidate is not Rime's first.
                 let before = engine.snapshot(), atEnd = press(engine, end)
                 check(atEnd && unchanged(engine, before), "end \(name): at the end nothing changes: \(engine.snapshot()) vs \(before)")
-                // From the start the caret returns to the end and the page is ranked again.
                 press(engine, home)
                 check(engine.snapshot().cursor == 0, "end \(name) fixture: the caret is at the start")
                 let handled = press(engine, end), committed = engine.takeCommit(), state = engine.snapshot()
@@ -1857,10 +1774,6 @@ package enum EngineRegression {
         print("PASS composition keys: letter-lower, letter-upper, digit-page, digit-zero, digit-beyond-page, space, return, backspace, escape, punctuation-chinese, punctuation-ascii, at, dot, colon, slash, paging-keys, paging-bound-keys, arrows-vertical, arrows-horizontal, home, end")
     }
 
-    /// An exact technical English word leads the page when its input is 4 or more letters that are
-    /// not complete Pinyin syllables optionally followed by one unfinished final syllable (rule 14).
-    /// Every guard input kept the first candidate recorded on `main` before this rule existed, except `tin` and
-    /// `chin`: their recorded 题嗯 and 吃嗯 were built from the consonant-only syllable `n`, which is erased now.
     @MainActor package static func technicalEnglishLead(event: Event = rimeEvent) {
         let engine = IFEngine()!
         func first(_ input: String) -> String? {
@@ -1870,8 +1783,6 @@ package enum EngineRegression {
             }
             return engine.snapshot().candidates.first
         }
-        // technical-guard: complete Pinyin, an unfinished final syllable, abbreviations and inputs of
-        // three letters or fewer keep the first candidate recorded before the rule.
         let guards = [("tin", "体内"), ("chin", "吃奶"), ("women", "我们"), ("can", "惨"), ("hen", "很"),
                       ("bs", "不是"), ("hlw", "互联网"), ("zhguo", "中国"), ("nihao", "你好"),
                       ("xianzaiwomenlai", "现在我们来"), ("shanghai", "伤害"),
@@ -1880,12 +1791,10 @@ package enum EngineRegression {
             let candidate = first(input)
             check(candidate == expected, "technical-guard \(input): first candidate stays \(expected), got \(candidate ?? "none")")
         }
-        // technical-lead: the English word beats the reading built from abbreviations and typos.
         for (input, expected) in [("macos", "macOS"), ("deepseek", "DeepSeek"), ("ios", "iOS")] {
             let candidate = first(input)
             check(candidate == expected, "technical-lead \(input): \(expected) leads the page, got \(candidate ?? "none"): \(engine.snapshot().candidates)")
         }
-        // technical-lead: the Chinese reading stays selectable behind it.
         _ = first("macos")
         check(engine.snapshot().candidates.contains("马刺欧式"), "technical-lead macos: the Chinese reading stays on the page")
         engine.key(0xff54)
@@ -1895,10 +1804,6 @@ package enum EngineRegression {
         print("PASS technical English lead: macos/deepseek/ios lead, the Chinese reading stays behind, Pinyin-shaped and short inputs keep their first candidate")
     }
 
-    /// In a technical context a lowercase input that is complete normal Pinyin keeps its Chinese first candidate
-    /// although the user has chosen its English word, and the word stays on the first page (rule 14). Capitals, a word
-    /// that is not complete Pinyin and the letters i, u and v, which are not syllables, keep the lead. Every record
-    /// is forgotten again.
     @MainActor package static func pinyinPersonalEnglish(event: Event = rimeEvent) {
         let engine = IFEngine()!
         let technical = "正在使用 Swift "
@@ -1916,14 +1821,11 @@ package enum EngineRegression {
         func candidate(_ text: String) -> QualityCandidate? {
             engine.qualitySnapshot().candidates.first { $0.text == text }
         }
-        // The `exact` field of a displayed candidate's evidence row: 1 exact English, 2 technical lead,
-        // 4 complete Pinyin.
         func mark(_ text: String) -> String? {
             guard let row = candidate(text)?.evidence else { return nil }
             let fields = row.split(separator: ",", omittingEmptySubsequences: false)
             return fields.count > 3 ? String(fields[3]) : nil
         }
-        // Select a candidate, then end the undo window as the next key of a user typing on does.
         func learn(_ input: String, _ text: String) {
             guard let index = page(input).firstIndex(of: text) else {
                 check(false, "pinyin-personal fixture: \(text) is missing for \(input)")
@@ -1932,7 +1834,6 @@ package enum EngineRegression {
             engine.select(index)
             check(engine.takeCommit() == text, "pinyin-personal fixture: select \(text)")
             engine.key(0xff09)
-            // The English lookup is cached for the current input; another input drops it, so the record shows.
             compose("qz")
         }
         func forget(_ input: String, _ text: String) {
@@ -1945,7 +1846,6 @@ package enum EngineRegression {
             check(candidate(text)?.source == nil, "pinyin-personal fixture: \(text) is forgotten")
         }
 
-        // Before anything is learned the Chinese reading leads, with or without a technical signal.
         let pinyin = [("ne", "ne"), ("o", "o"), ("beijing", "Beijing")]
         var chinese: [String: String] = [:]
         for (input, word) in pinyin {
@@ -1957,7 +1857,6 @@ package enum EngineRegression {
             learn(input, word)
         }
         check(chinese["ne"] == "呢" && chinese["o"] == "哦", "pinyin-personal fixture: \(chinese)")
-        // pinyin-personal: the learned word keeps its evidence and its place directly behind the Chinese reading.
         for (input, word) in pinyin {
             let candidates = page(input, context: technical)
             check(candidates.prefix(2) == [chinese[input]!, word], "pinyin-personal \(input): \(candidates)")
@@ -1965,13 +1864,10 @@ package enum EngineRegression {
             check(mark(word) == "4", "pinyin-personal \(input): not marked: \(engine.qualitySnapshot().candidates)")
             check(page(input).first == chinese[input], "pinyin-personal \(input): no technical signal, Chinese leads")
         }
-        // pinyin-personal: Space commits the Chinese reading.
         compose("ne", context: technical)
         check(event(engine, 32, 49, " ", 0) && engine.takeCommit() == "呢", "pinyin-personal ne: Space commits 呢")
         engine.key(0xff09)
-        // pinyin-guard: capitals are explicit English intent.
         check(page("O", context: technical).first == "O", "pinyin-guard O: \(engine.snapshot().candidates)")
-        // pinyin-guard: a word that is not complete Pinyin still leads, and so do the letters that are no syllable.
         learn("google", "google")
         let google = page("google", context: technical)
         check(google.first == "google" && mark("google") != "4", "pinyin-guard google: \(google)")
@@ -1989,23 +1885,16 @@ package enum EngineRegression {
               "context, capitals, google and the letters i/u/v keep the lead")
     }
 
-    /// Shift+Backspace forgets the learning of the highlighted candidate and nothing else: Rime's own
-    /// delete_candidate for Chinese and standalone English, one negative update per learned ASCII run for
-    /// a mixed sentence, the heaviest learned word of a Chinese sentence made of learned words. The words
-    /// are used by no other test, and every record is forgotten again.
     @MainActor package static func forgetCandidate(event: Event = rimeEvent) {
-        // A session still composing from an earlier case would keep the custom phrase file from reloading.
         for other in IFEngine.liveSessions { other.clear() }
         let engine = IFEngine()!
         @discardableResult func forget() -> Bool { event(engine, 0xff08, 51, "\u{8}", 1) }
         func compose(_ input: String) { engine.clear(); type(engine, input) }
         func candidates(_ input: String) -> [String] { compose(input); return engine.snapshot().candidates }
-        // The texts of the first page that carry the user's own confirmations.
         func personal(_ input: String) -> [String] {
             compose(input)
             return engine.qualitySnapshot().candidates.filter { $0.source != nil }.map(\.text)
         }
-        // Select a candidate, then end the undo window as the next key of a user typing on does.
         func learn(_ input: String, _ text: String) {
             guard let index = candidates(input).firstIndex(of: text) else {
                 check(false, "forget fixture: \(text) is missing for \(input): \(engine.snapshot().candidates)"); return
@@ -2014,7 +1903,6 @@ package enum EngineRegression {
             check(engine.takeCommit() == text && engine.snapshot().preedit.isEmpty, "forget fixture: select \(text)")
             engine.key(0xff09)
         }
-        // Shift+Backspace on the highlighted candidate consumes the key and leaves the composition open.
         func forgetKeepsComposition(_ row: String) {
             let input = engine.qualitySnapshot().rawInput
             check(forget(), "\(row): the key is consumed")
@@ -2022,17 +1910,14 @@ package enum EngineRegression {
                   && engine.qualitySnapshot().rawInput == input, "\(row): nothing is committed, the composition stays open")
         }
 
-        // Idle: the key passes through to the application and never enters Rime.
         check(!forget() && engine.takeCommit().isEmpty && engine.snapshot().preedit.isEmpty, "forget idle: passes through")
         compose("ni")
         check(event(engine, 0xff08, 51, "\u{8}", 0) && engine.snapshot().preedit == "n", "forget: plain Backspace still edits")
 
-        // A recognizer match has no candidates: nothing to forget, the key edits like Backspace.
         compose("www.example")
         check(forget() && engine.snapshot().preedit == "www.exampl" && engine.takeCommit().isEmpty,
               "forget match: deletes the last character: \(engine.snapshot())")
 
-        // Chinese: a candidate learned to first place returns to its native position, other learning stays.
         let native = candidates("yuyan"), nativeOther = candidates("wenti")
         check(native.count == 5 && nativeOther.count == 5, "forget Chinese fixture: \(native) \(nativeOther)")
         learn("yuyan", native[2]); learn("wenti", nativeOther[1])
@@ -2044,7 +1929,6 @@ package enum EngineRegression {
         check(engine.snapshot().candidates == native && engine.snapshot().highlight == 0,
               "forget Chinese: the candidate returns to its native position: \(engine.snapshot().candidates) vs \(native)")
         check(candidates("wenti") == learnedOther, "forget Chinese: another learned entry is unchanged")
-        // Only the highlighted candidate is forgotten, and the highlight stays at its index.
         engine.key(0xff54)
         check(engine.snapshot().highlight == 1)
         forgetKeepsComposition("forget Chinese highlighted")
@@ -2054,7 +1938,6 @@ package enum EngineRegression {
         forgetKeepsComposition("forget Chinese cleanup")
         check(engine.snapshot().candidates == nativeOther, "forget Chinese: the second learned candidate is forgotten too")
 
-        // Standalone English: the personal record is forgotten, the dictionary candidate stays where it is.
         check(personal("docker").isEmpty, "forget English fixture: no personal Docker yet")
         learn("docker", "Docker")
         check(personal("docker") == ["Docker"], "forget English: the learned word carries evidence: \(personal("docker"))")
@@ -2065,7 +1948,6 @@ package enum EngineRegression {
               && engine.snapshot().highlight == index, "forget English: the record is forgotten: \(engine.qualitySnapshot().candidates)")
         check(personal("docker").isEmpty, "forget English: the next composition has no evidence")
 
-        // Mixed: the sentence loses its personal bucket and falls back behind the Chinese reading.
         let mixed = "wofaleyoutube", sentence = "我发了YouTube"
         check(personal(mixed).isEmpty && personal("youtube").isEmpty, "forget mixed fixture: nothing learned yet")
         let before = candidates(mixed)
@@ -2084,11 +1966,6 @@ package enum EngineRegression {
               "forget mixed: the sentence falls back: \(engine.snapshot().candidates) vs \(before)")
         check(personal("youtube").isEmpty, "forget mixed: the run is forgotten for standalone English too")
 
-        // Sentence: Rime's poet makes a sentence from learned words, so deleting the sentence's own record
-        // is not enough, it is made again with the same text. `测试学习奥` for `ceshixuexiao` is learned four
-        // ways, and the unlearned first candidate is `测试学校`. Shift+Backspace ends the lead of the
-        // sentence by forgetting the learned word that weighs most in it, and leaves other learning alone:
-        // words forgotten in vain are given back.
         let typed = "ceshixuexiao", split = "ceshixuexi'ao", target = "测试学习奥"
         let unlearnedSentence = candidates(typed)
         check(unlearnedSentence.first == "测试学校", "forget sentence fixture: \(unlearnedSentence)")
@@ -2106,7 +1983,6 @@ package enum EngineRegression {
             check(candidates(typed).first == "测试学校", "forget sentence \(path): retyping lists the unlearned candidate first")
             check(candidates("shuiguo") == learnedMusic, "forget sentence \(path): another learned entry is unchanged")
         }
-        // Select the candidate with this text, paging forward when it is not on the page.
         func pick(_ text: String) {
             for _ in 0..<6 {
                 if let index = engine.snapshot().candidates.firstIndex(of: text) { engine.select(index); return }
@@ -2114,9 +1990,6 @@ package enum EngineRegression {
             }
             check(false, "forget sentence fixture: \(text) is missing: \(engine.snapshot().candidates)")
         }
-        // A sentence that leads without learning: 测试 is learned through the abbreviation `cs`, where it is
-        // natively fourth, and is a word of the unlearned `测试学校`. Forgetting it changes nothing there, so
-        // Shift+Backspace gives it back.
         let abbreviation = candidates("cs")
         check(abbreviation.first != "测试", "forget sentence fixture: \(abbreviation)")
         learn("cs", "测试")
@@ -2130,10 +2003,8 @@ package enum EngineRegression {
         compose("cs")
         forgetKeepsComposition("forget sentence cleanup abbreviation")
         check(engine.snapshot().candidates == abbreviation, "forget sentence cleanup: the word is forgotten: \(engine.snapshot().candidates)")
-        // (a) The whole sentence selected as one candidate, twice, after an apostrophe split the input.
         learn(split, target); learn(split, target)
         forgetSentence("whole")
-        // (b) Partial selections, twice: 测试, then 学习, then 奥.
         for _ in 0..<2 {
             compose(typed)
             for part in ["测试", "学习", "奥"] { pick(part) }
@@ -2141,21 +2012,16 @@ package enum EngineRegression {
             engine.key(0xff09)
         }
         forgetSentence("partial")
-        // (c) Its words learned on their own: the sentence has no record, the poet makes it from them.
         learn("ceshixuexi", "测试学习"); learn("ao", "奥")
         forgetSentence("words")
-        // (d) Both: the record goes first, and the sentence is made again from the words.
         learn("ao", "奥"); learn(split, target); learn(split, target)
         forgetSentence("words and whole")
-        // The words left over and the other learned entry are forgotten again.
         compose("ceshixuexi")
         forgetKeepsComposition("forget sentence cleanup words")
         compose("shuiguo")
         forgetKeepsComposition("forget sentence cleanup")
         check(engine.snapshot().candidates == music, "forget sentence cleanup: the other learned entry is forgotten")
 
-        // A candidate without learning changes nothing, and the highlight, the page and a confirmed
-        // prefix survive Rime's recomposition.
         let plain = candidates("zhishi")
         engine.key(0xff54); engine.key(0xff54)
         forgetKeepsComposition("forget unlearned")
@@ -2177,12 +2043,10 @@ package enum EngineRegression {
         forgetKeepsComposition("forget prefix")
         check(engine.snapshot().hasSelectedPrefix && engine.snapshot().candidates == rest.candidates,
               "forget prefix: the confirmed prefix and the list stay: \(engine.snapshot()) vs \(rest)")
-        // A mixed sentence whose runs have no record writes nothing and keeps its place.
         compose(mixed)
         forgetKeepsComposition("forget unlearned mixed")
         check(engine.snapshot().candidates == before && personal(mixed).isEmpty && personal("youtube").isEmpty,
               "forget unlearned mixed: the list and the evidence stay: \(engine.snapshot().candidates)")
-        // A custom phrase keeps its place.
         let phrase = CustomPhrase(id: UUID(), code: "zhishi", text: "自定义知识")
         engine.clear()
         engine.setConfiguration(candidateCount: 5, customPhrases: [phrase])
@@ -2198,10 +2062,6 @@ package enum EngineRegression {
         print("PASS forget candidate: idle passthrough, Chinese native delete, sentences made of learned words, personal English, mixed runs, unlearned and custom phrase unchanged, composition kept, highlight kept")
     }
 
-    /// An English word the user chose leads the next time when the only Chinese rival is a sentence the
-    /// engine composed from separate words (rule 14). A dictionary phrase and a phrase the user learned keep
-    /// the first place. The guards kept the first candidate recorded on `main` before this rule existed:
-    /// `shanghai` 伤害, `a` 啊 and `release` 热了阿瑟. The learned records stay in the test's user directory.
     @MainActor package static func learnedEnglishOverSentence(event: Event = rimeEvent) {
         let engine = IFEngine()!
         func compose(_ input: String) {
@@ -2211,12 +2071,10 @@ package enum EngineRegression {
             }
         }
         func candidates(_ input: String) -> [String] { compose(input); return engine.snapshot().candidates }
-        // The texts of the first page that carry the user's own confirmations.
         func personal(_ input: String) -> [String] {
             compose(input)
             return engine.qualitySnapshot().candidates.filter { $0.source != nil }.map(\.text)
         }
-        // Select a candidate, then end the undo window as the next key of a user typing on does.
         func learn(_ input: String, _ text: String) {
             guard let index = candidates(input).firstIndex(of: text) else {
                 check(false, "learned-english fixture: \(text) is missing for \(input): \(engine.snapshot().candidates)"); return
@@ -2226,24 +2084,20 @@ package enum EngineRegression {
             engine.key(0xff09)
         }
 
-        // learned-guard: a dictionary phrase leads `shanghai` with or without the learned English word.
         let shanghai = candidates("shanghai")
         check(shanghai.prefix(3) == ["伤害", "Shanghai", "上海"], "learned-guard shanghai fixture: \(shanghai)")
         learn("shanghai", "Shanghai")
         check(personal("shanghai") == ["Shanghai"], "learned-guard shanghai: the English word is learned: \(engine.qualitySnapshot().candidates)")
         check(candidates("shanghai") == shanghai, "learned-guard shanghai: the phrase keeps its place: \(engine.snapshot().candidates)")
-        // learned-guard: a single syllable has no sentence, so a learned `A` stays behind 啊 without a technical context.
         check(candidates("a").first == "啊", "learned-guard a fixture: \(engine.snapshot().candidates)")
         learn("A", "A")
         check(personal("a") == ["A"], "learned-guard a: the English letter is learned: \(engine.qualitySnapshot().candidates)")
         check(engine.snapshot().candidates.first == "啊", "learned-guard a: 啊 keeps its place: \(engine.snapshot().candidates)")
 
-        // learned-lead: before anything is learned, the sentence composed from separate words leads.
         let release = candidates("release")
         check(release.first == "热了阿瑟" && release.contains("release") && personal("release").isEmpty,
               "learned-lead release fixture: \(release)")
         learn("release", "release")
-        // learned-lead: the word chosen once leads, and the sentence stays selectable behind it.
         let learned = candidates("release")
         check(learned.first == "release" && learned.contains("热了阿瑟") && engine.snapshot().highlight == 0,
               "learned-lead release: the learned word leads: \(learned)")
@@ -2251,13 +2105,11 @@ package enum EngineRegression {
         engine.key(32)
         check(engine.takeCommit() == "release", "learned-lead release: the highlighted first candidate commits")
         engine.key(0xff09)
-        // learned-lead: the second candidate commits the Chinese reading, which Rime now learns as a phrase.
         compose("release")
         engine.key(0xff54)
         engine.key(32)
         check(engine.takeCommit() == "热了阿瑟", "learned-lead release: the displayed second candidate commits the sentence")
         engine.key(0xff09)
-        // learned-guard: a phrase the user learned keeps the first place, with the English word behind it.
         let phrase = candidates("release")
         check(phrase.prefix(2) == ["热了阿瑟", "release"], "learned-guard release: the learned phrase keeps its place: \(phrase)")
         engine.clear()
