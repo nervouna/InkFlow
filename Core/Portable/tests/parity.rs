@@ -282,6 +282,47 @@ fn all_candidates(session: &InputSession) -> Vec<String> {
     panic!("candidate enumeration must reach the final page");
 }
 
+/// The English translator reports each segment's completed lookup to the short-conflict
+/// filter. A negative result must not suppress a different session or a later lookup.
+#[test]
+fn short_conflict_lookup_lifetime() {
+    let Some((resources, _runtime)) = resources() else { return };
+    let user = scratch("short-conflict-lookup");
+    let engine = engine(&resources, &user);
+    let first = engine.session().unwrap();
+    let second = engine.session().unwrap();
+
+    type_keys(&first, "can");
+    assert!(texts(&first).contains(&"can".to_owned()));
+    type_keys(&second, "shi");
+    assert!(!texts(&second).contains(&"Shi".to_owned()));
+    type_keys(&first, "x");
+    assert!(first.key(0xff08, 0).unwrap());
+    assert!(texts(&first).contains(&"can".to_owned()), "editing back restores the exact candidate");
+    first.clear().unwrap();
+    second.clear().unwrap();
+
+    assert_eq!(status(&second, "voice_learning", &["shi", "shi", "Shi"]), "ok");
+    type_keys(&second, "shi");
+    let page = second.snapshot().unwrap();
+    let choice = page.candidates.iter().position(|c| c.text == "Shi" && c.personal_source().is_some()).unwrap();
+    assert!(second.select(&page, choice).unwrap());
+    assert_eq!(second.take_commit().unwrap(), "Shi");
+
+    type_keys(&first, "nia");
+    let page = first.snapshot().unwrap();
+    let partial = page.texts().iter().position(|word| *word == "你").unwrap();
+    assert!(first.select(&page, partial).unwrap());
+    assert_eq!(first.snapshot().unwrap().preedit, "你a");
+    first.clear().unwrap();
+    type_keys(&first, "can");
+    assert!(texts(&first).contains(&"can".to_owned()));
+    drop(first);
+    drop(second);
+    drop(engine);
+    fs::remove_dir_all(user).unwrap();
+}
+
 /// An opt-in host supplies context before composition. Rime owns the reordered
 /// menu, so a candidate brought across a page boundary survives every input path.
 #[test]

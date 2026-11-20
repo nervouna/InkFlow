@@ -322,9 +322,20 @@ function M.fini(env)
   env.memory:disconnect()
 end
 
+-- Every Rime menu queries this translator before applying its filters. Report once
+-- per query, before any yield or early return; paused translations never overwrite a
+-- newer menu's answer. The property is schema-local, and its value contains no input.
+local function report_conflict_lookup(context, possible)
+  local absent = possible and "" or "1"
+  if context:get_property("_inkflow_no_exact_english") ~= absent then
+    context:set_property("_inkflow_no_exact_english", absent)
+  end
+end
+
 function M.func(input, segment, env)
   if not input:match("^[A-Za-z]+$") then
     env.input, env.entries, env.learnable = nil, nil, {}
+    report_conflict_lookup(env.engine.context, false)
     return
   end
   if env.input ~= input then
@@ -406,6 +417,10 @@ function M.func(input, segment, env)
       if entry.code then env.learnable[entry.text] = entry end
     end
   end
+  -- An exact record sorts before every completion. Personal records are always exact.
+  local first = env.entries[1]
+  local whole = segment.start == 0 and segment._end == #env.engine.context.input
+  report_conflict_lookup(env.engine.context, whole and first and first.exact)
   for _, entry in ipairs(env.entries) do
     local dictionary_entry = entry.static_entry or entry.user_entry
     -- Preserve the compiled internal code required by Phrase, while making the
