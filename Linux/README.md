@@ -134,6 +134,9 @@ runner builds against the Omarchy ARM stable mirror, checks both archives, loads
 D-Bus, and exercises install, upgrade, rollback and uninstall. A successful run links its GitHub Release draft
 in the run summary. If an upload fails, rerun the failed job to resume with the same verified artifact.
 
+For input-path changes, compare the previous published package and the draft on the same target using the
+[frontend latency probe](fcitx5/README.md#frontend-latency).
+
 While signed in, open the draft and follow its install instructions on an ARM64 Omarchy/Hyprland machine.
 Check that selecting InkFlow Pinyin and committing a candidate work. After confirming the install, edit the draft,
 leave **Set as the latest release** unchecked and publish it. Alternatively, promote it with

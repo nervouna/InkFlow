@@ -72,6 +72,9 @@ client-side D-Bus key-call round trips in milliseconds (nearest-rank p50/p95/p99
 presses and releases separately. Repeat invocations to compare first activations across fresh processes.
 Use `--latency-samples` to include each completed key-call duration in nanoseconds for pooled percentiles.
 
+Compare `long_with_context` with `words.niyebuxiangnidepengyoushangxin` for the same long spelling.
+The contextual trial supplies `今天` with the cursor at its end before timing each repetition.
+
 The latency probe also types and confirms 120 instances of `nihao` with Space after the spelling-only
 measurements. Its `space_commit` percentiles time the confirming key until the client receives its D-Bus
 reply. Compare recording on and off with the same package and disposable profile:
