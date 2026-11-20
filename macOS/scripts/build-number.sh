@@ -1,5 +1,4 @@
 #!/bin/bash
-# Allocate once per app build. The main checkout owns state shared by linked worktrees.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 common=$(cd "$(git rev-parse --git-common-dir)" && pwd -P)

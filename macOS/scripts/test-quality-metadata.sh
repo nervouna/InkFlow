@@ -38,7 +38,6 @@ build_swift_product quality-build-metadata build/quality-build-metadata release
 build/quality-build-metadata "$repo" "$app"
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/first.json"
 build/quality-build-metadata "$repo" "$app" --verify
-# Re-signing may or may not change canonical payload bytes on this toolchain.
 for binary in "$app/Contents/Frameworks/librime.1.dylib" "$app/Contents/MacOS/InkFlow"; do
   codesign --force --options runtime --timestamp=none --sign - "$binary"
 done
@@ -55,8 +54,6 @@ elif build/quality-build-metadata "$repo" "$app" --verify > "$fixture/re-signed-
 fi
 build/quality-build-metadata "$repo" "$app" --verify-signed
 
-# Exercise the signing-sensitive digest boundary deterministically, regardless
-# of whether real re-signing changed the canonical layout on this platform.
 plutil -replace bundleSHA256 -string mismatched "$app/Contents/Resources/QualityBuild.json"
 if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/mismatched-bundle.log" 2>&1; then
   echo 'FAIL: ordinary verification accepted a mismatched bundle digest' >&2
@@ -65,8 +62,6 @@ fi
 build/quality-build-metadata "$repo" "$app" --verify-signed
 cp "$fixture/first.json" "$app/Contents/Resources/QualityBuild.json"
 
-# Signed verification ignores only the signing-sensitive bundle digest. Every
-# other recorded provenance field remains mandatory and exact.
 cp "$app/Contents/Resources/QualityBuild.json" "$fixture/signed.json"
 reject_signed_metadata() {
   local label=$1
@@ -117,8 +112,6 @@ cp "$app/Contents/Resources/QualityBuild.json" "$fixture/current-layout.json"
 build/quality-build-metadata "$repo" "$app"
 cmp "$fixture/current-layout.json" "$app/Contents/Resources/QualityBuild.json"
 build/quality-build-metadata "$repo" "$app" --verify
-# Change only executable bytes, then restore them, so rejection cannot be caused
-# by an unrelated source/provenance change elsewhere in this fixture.
 cp "$app/Contents/MacOS/InkFlow" "$fixture/unchanged-executable"
 printf 'modified executable bytes\n' > "$app/Contents/MacOS/InkFlow"
 if build/quality-build-metadata "$repo" "$app" --verify > "$fixture/changed-payload.log" 2>&1; then
@@ -230,9 +223,6 @@ if build/quality-build-metadata "$repo" "$app" > "$fixture/broken-macho.log" 2>&
 fi
 rm "$app/Contents/Resources/broken-macho.bin"
 
-# Sparkle uses a versioned framework with internal symlinks. Hash each link's
-# relative target, and reject a link whose lexical or resolved destination exits
-# the framework boundary.
 sparkle_fixture="$app/Contents/Frameworks/Sparkle.framework"
 mkdir -p "$sparkle_fixture/Versions/B"
 printf 'fixture Sparkle framework payload\n' > "$sparkle_fixture/Versions/B/Sparkle"
@@ -315,8 +305,6 @@ for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
   [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
 done
-# Newly introduced helpers are untracked before the delivery commit, but still
-# must participate in the build closure and dirty-state calculation.
 for helper in build-number build-summary; do
   snapshot=$("$tool" "$identity_repo" --build-snapshot)
   printf 'fixture build helper\n' > "$identity_repo/macOS/scripts/$helper.sh"

@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-# Process and TIS observations must come from the real login session.
 /bin/ps -p "$$" -o pid= >/dev/null || { echo 'Desktop process access unavailable; input-source state is unknown. Run installation outside the restricted sandbox.' >&2; exit 1; }
 source macOS/scripts/sparkle-signing.sh
 app="$PWD/build/InkFlow.app"
@@ -40,7 +39,6 @@ stage=$(mktemp -d "$(dirname "$target")/.inkflow-install.XXXXXX")
 verified=false
 candidate_identity=''
 cleanup() {
-  # Also detects replacement when the helper exits before reporting success.
   if [[ "$verified" != true && -n "$candidate_identity" && -e "$target" && -s "$stage/state.json" &&
         "$(stat -f '%d:%i' "$target")" == "$candidate_identity" ]]; then
     echo "Installation verification failed; staged state retained at $stage" >&2
@@ -52,7 +50,6 @@ trap cleanup EXIT
 ditto "$app" "$stage/InkFlow.app"
 codesign --verify --deep --strict "$stage/InkFlow.app"
 candidate_identity=$(stat -f '%d:%i' "$stage/InkFlow.app")
-# The lifecycle helper waits for graceful shutdown before any installed file moves.
 build=$(plutil -extract CFBundleVersion raw "$stage/InkFlow.app/Contents/Info.plist")
 bash macOS/scripts/register.sh "$target" --prepare-update "$stage/state.json" "$build"
 bash macOS/scripts/register.sh "$target" --commit-update "$stage/state.json"
@@ -61,7 +58,6 @@ bash macOS/scripts/register.sh "$target" --finish-update "$stage/state.json" | t
 verified=true
 echo "Installed and verified fresh process: $target ($mode)"
 if [[ "$updating" == true ]]; then
-  # Preserve the menu agent: restarting it can make the input menu disappear.
   if grep -Fxq 'input_source_state_restored=1' "$stage/finish.log"; then
     echo '更新完成：新进程路径和构建号已核验，原输入源状态已恢复。实际输入及语音仍需手动试用。'
   else

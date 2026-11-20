@@ -1,5 +1,4 @@
 #!/bin/bash
-# Source this helper, then call load_release_config. The plist is data, not shell code.
 load_release_config() {
   local root config name permissions
   root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)

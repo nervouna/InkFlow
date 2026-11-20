@@ -1,5 +1,4 @@
 #!/bin/bash
-# The verified receipt freezes the allocated candidate build; source plist is its floor.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $# == 1 || $# == 2 ]] || { echo 'Usage: release-build.sh RECEIPT [APP_PLIST]' >&2; exit 2; }

@@ -1,8 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-# Opt-in real TCC diagnostic. LaunchServices gives the harness its own permission
-# identity; directly running its executable can inherit the terminal's permission.
 if [[ "${1:-}" == --microphone-reproduction || "${1:-}" == --settings-window-lifecycle ]]; then
   app="$PWD/build/MicrophoneReproduction.app"
   mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
@@ -37,14 +35,12 @@ if [[ "${1:-}" == --microphone-reproduction || "${1:-}" == --settings-window-lif
   fi
   exit 0
 fi
-# Build first. This harness never launches or registers the production IME.
 app="$PWD/build/SettingsHarness.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp build/InkFlow.app/Contents/Resources/AppIcon.icns "$app/Contents/Resources/"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string io.damao.inkflow.settings-harness "$app/Contents/Info.plist"
 plutil -replace CFBundleExecutable -string SettingsHarness "$app/Contents/Info.plist"
-# Keep LSBackgroundOnly and LSUIElement to test production activation behavior.
 plutil -remove ComponentInputModeDict "$app/Contents/Info.plist"
 plutil -remove TISInputSourceID "$app/Contents/Info.plist"
 plutil -remove InputMethodConnectionName "$app/Contents/Info.plist"

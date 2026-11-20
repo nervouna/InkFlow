@@ -83,7 +83,6 @@ INKFLOW_SKIP_SWIFTPM_BUILD=1 bash macOS/scripts/check-bundle.sh --fast --signed 
 bash .agents/skills/inkflow-release/scripts/check-credentials.sh
 scratch=$(mktemp -d "$release_dir/assembly.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
-# The Sparkle update payload: the stapled app alone, archived after notarization.
 ditto -c -k --sequesterRsrc --keepParent "$app" "$scratch/$update_zip_name"
 python3 - "$scratch/$update_zip_name" <<'PY'
 import sys
@@ -110,9 +109,7 @@ for name in sidecars:
 if "InkFlow.app/Contents/Info.plist" not in names:
     raise SystemExit("Sparkle update ZIP is missing its app bundle Info.plist.")
 PY
-# The package wraps the same stapled app; it is notarized and stapled by release.sh.
 bash macOS/scripts/build-pkg.sh "$app" "$scratch/$pkg_name" --sign "$identity" "$installer_identity"
-# release.sh treats the package as the mark of a finished assembly, so it is moved last.
 mv -f "$scratch/$update_zip_name" "$update_zip"
 mv -f "$scratch/$pkg_name" "$pkg"
 printf 'Signed installer package (not yet notarized): %s\n' "$pkg"

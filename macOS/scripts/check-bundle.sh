@@ -23,10 +23,8 @@ icon=$(plutil -extract tsInputMethodIconFileKey raw "$app/Contents/Info.plist")
 [[ "$icon" == InputMethod.icns && -s "$app/Contents/Resources/$icon" ]]
 app_icon=$(plutil -extract CFBundleIconFile raw "$app/Contents/Info.plist")
 [[ "$app_icon" == AppIcon.icns && -s "$app/Contents/Resources/$app_icon" ]]
-# One librime, built from source with Lua merged in. An external plugin would be a second runtime.
 librime="$app/Contents/Frameworks/librime.1.dylib"
 [[ -s "$librime" ]]
-# The license texts Resources/Licenses/librime*.txt are not libraries.
 [[ "$(find "$app" -name 'librime*' -not -path "$app/Contents/Resources/Licenses/*" | sed "s|^$app/||")" == Contents/Frameworks/librime.1.dylib \
    && ! -e "$app/Contents/Frameworks/rime-plugins" ]] || {
   echo 'The bundle must carry exactly one librime and no plugin.' >&2

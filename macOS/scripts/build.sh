@@ -6,17 +6,12 @@ mkdir build/app-build.lock 2>/dev/null || { echo 'App build active or interrupte
 trap 'rmdir build/app-build.lock' EXIT
 build_number=$(bash macOS/scripts/build-number.sh)
 macOS/scripts/dependencies.sh
-# The Rust core and its source-built librime (Lua merged in) are what the app links and ships.
 bash Core/scripts/build-portable.sh
 export INKFLOW_PORTABLE_BUILT=1
-# Download and verify the generator-declared dictionary inputs before freezing the
-# build identity. They remain part of the snapshot, so later changes still fail.
 bash macOS/scripts/prepare-chinese.sh --sources-only
 source macOS/scripts/swift-package.sh
 build_swift_product quality-build-metadata build/quality-build-metadata debug
 build_snapshot=$(build/quality-build-metadata "$PWD" --build-snapshot)
-# The first build bootstraps the snapshot tool. Re-enter SwiftPM after the snapshot so
-# a change during bootstrap cannot leave the embedded metadata tool/source out of sync.
 build_swift_product quality-build-metadata build/quality-build-metadata debug
 stage_root=$(mktemp -d "$PWD/build/app-stage.XXXXXX")
 app="$stage_root/InkFlow.app"

@@ -1,4 +1,3 @@
-// Explicit diagnostic only. Private framework inspection is never linked into InkFlow.
 #import <Cocoa/Cocoa.h>
 #import <InputMethodKit/InputMethodKit.h>
 #import <objc/runtime.h>
@@ -21,7 +20,6 @@ int main(int argc, const char **argv) {
             fprintf(stderr, "UNSUPPORTED: native legacy candidate inspection unavailable\n");
             return 2;
         }
-        // Read pointer identity without retaining or messaging the possibly freed object.
         void *(*getCandidates)(id, SEL) = (void *(*)(id, SEL))[storage methodForSelector:getter];
         __weak IMKCandidates *releasedPanel;
         __attribute__((objc_precise_lifetime)) IMKCandidates *retainedPanel = nil;
@@ -46,7 +44,6 @@ int main(int argc, const char **argv) {
             ((void (*)(id, SEL, id, id))[server methodForSelector:deactivate])(server, deactivate, nil, nil);
             printf("native_deactivation_returned\n");
         }
-        // Exit zero means the requested experiment matched, not that the product is fixed.
         return referenced && (keepAlive ? !released : released) ? 0 : 3;
     }
 }

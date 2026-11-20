@@ -9,7 +9,6 @@ tar -xzf "$scratch/bundle.tar.gz" -C "$scratch"
 root=$(printf '%s\n' "$scratch"/InkFlow-*-dictionary-source)
 [[ -d "$root" ]] || fail
 (cd "$root" && shasum -a 256 -c SHA256SUMS >/dev/null)
-# Every pinned Chinese catalog input is present with its catalog digest.
 build/dictionary-generator sources | while IFS=$'\t' read -r id sha bytes url; do
   printf '%s  %s\n' "$sha" "$root/upstream/dictionary-sources/$id.yaml" | shasum -a 256 -c - >/dev/null
 done
@@ -26,10 +25,8 @@ done
 grep -q "$(git rev-parse HEAD)" "$root/README.md"
 grep -q 'build 123' "$root/README.md"
 ! grep -qi 'sogou\|rime-selected' "$root/SOURCES.tsv" || fail
-# The recorded manifest is the one the current recipe generates.
 bash Core/scripts/prepare-chinese.sh "$scratch/chinese" >/dev/null
 cmp "$scratch/chinese/dictionary-manifest.json" "$root/generated/dictionary-manifest.json"
-# Every SOURCES.tsv row points at a bundled file with the recorded digest.
 tail -n +2 "$root/SOURCES.tsv" | while IFS=$'\t' read -r component license origin path sha bytes; do
   printf '%s  %s\n' "$sha" "$root/$path" | shasum -a 256 -c - >/dev/null
 done
