@@ -4,6 +4,7 @@
 // SQLite or telemetry.
 #ifndef INKFLOW_FCITX5_ENGINE_H
 #define INKFLOW_FCITX5_ENGINE_H
+#include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/log.h>
 #include <fcitx/addonfactory.h>
 #include <fcitx/addoninstance.h>
@@ -38,6 +39,7 @@ public:
   }
   IFRSession* session = nullptr;
   SnapshotRef snapshot;
+  fcitx::CapabilityFlags presentedCapabilities;
   ShiftToggle shiftToggle;
 };
 
@@ -66,7 +68,7 @@ private:
   bool sensitive(const fcitx::InputContext* ic) const;
   void refreshContext(fcitx::InputContext* ic, State* state);
   // Drain the commit exactly once, then rebuild preedit and candidates from a fresh snapshot.
-  void refresh(fcitx::InputContext* ic, State* state);
+  void refresh(fcitx::InputContext* ic, State* state, bool reuseUnchanged = false);
   void clear(fcitx::InputContext* ic, State* state);
   void failed(fcitx::InputContext* ic, State* state, const char* what, IFRStatus status);
   void createEngine();

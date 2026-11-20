@@ -477,12 +477,26 @@ pub unsafe extern "C" fn ifr_session_snapshot(
     session: *const InputSession,
     snapshot: *mut *mut SnapshotHandle,
 ) -> Status {
+    unsafe { ifr_session_snapshot_if_changed(session, ptr::null(), snapshot) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_snapshot_if_changed(
+    session: *const InputSession,
+    previous: *const SnapshotHandle,
+    snapshot: *mut *mut SnapshotHandle,
+) -> Status {
     guard(|| {
         let session = unsafe { reference(session, "session") }?;
         if snapshot.is_null() {
             return Err(Failure::argument("snapshot is NULL"));
         }
-        let handle = SnapshotHandle::new(session.snapshot()?)?;
+        let current = session.snapshot()?;
+        if unsafe { previous.as_ref() }.is_some_and(|old| old.snapshot.reusable_as(&current)) {
+            unsafe { write(snapshot, ptr::null_mut()) };
+            return Ok(());
+        }
+        let handle = SnapshotHandle::new(current)?;
         unsafe { write(snapshot, Box::into_raw(Box::new(handle))) };
         Ok(())
     })

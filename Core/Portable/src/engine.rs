@@ -166,6 +166,11 @@ impl PartialEq for Snapshot {
 impl Eq for Snapshot {}
 
 impl Snapshot {
+    /// A retained page can still be displayed and clicked only while its selection identity also matches.
+    pub(crate) fn reusable_as(&self, current: &Self) -> bool {
+        Arc::ptr_eq(&self.token, &current.token) && self == current
+    }
+
     /// Once a segment is selected, the immediate prefix is inside the mark.
     pub fn has_selected_prefix(&self) -> bool {
         self.selection_bytes.start > 0

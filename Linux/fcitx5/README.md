@@ -53,6 +53,23 @@ PYTHON=/path/to/test-venv/bin/python bash Linux/fcitx5/test-installed.sh "$HOME/
 
 It starts a private Fcitx5 daemon on a separate D-Bus with temporary configuration and personal data. It checks real addon loading, preedit/candidate signals, mouse and space selection, exactly-once commits, focus/reset cancellation, sensitive-field pass-through, configuration reload, custom phrases, text-free warnings, and explicit backup import with engine recreation. It does not type into desktop applications or import into live user dictionaries.
 
+### Frontend latency
+
+Run the same checkout's harness against each release prefix on the same target, using matching production
+resources and the default five candidates. Record the package revisions, CPU and Fcitx5 version with the output.
+
+```sh
+PYTHON=/path/to/test-venv/bin/python bash Linux/fcitx5/test-installed.sh "$HOME/.local" --latency
+```
+
+Each invocation starts a fresh private daemon and user directory. The first measurement starts when the focused
+client switches from the US keyboard to InkFlow and ends when the first nonempty candidate panel signal arrives
+for `n`. Daemon startup, OS cache eviction and screen painting are outside this interval. Each short or long
+spelling then gets one warmup and 12 measured repetitions, with a reset between repetitions. The JSON reports
+client-side D-Bus key-call round trips in milliseconds (nearest-rank p50/p95/p99) and panel signal counts for
+presses and releases separately. Repeat invocations to compare first activations across fresh processes.
+Use `--latency-samples` to include each completed key-call duration in nanoseconds for pooled percentiles.
+
 ## Target verification
 
 On ARM64 Arch Linux/Omarchy with Hyprland, Fcitx5 5.1.23 and GCC 16.1.1, the native build, Rust runtime tests, 291 ranking cases, production resource preparation, 21-sample learned baseline, engine/personal-data parity, C ABI consumers, addon build, helper tests and installed-addon test passed. The desktop service loaded InkFlow and reported `inkflow-pinyin` as selected; the existing US keyboard and Pinyin entries were retained.
