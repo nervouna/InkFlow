@@ -382,8 +382,8 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
     reuseUnchanged = false;
   }
   IFRSnapshot* raw = nullptr;
-  bool clientPreedit = ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
-  const auto* previous = reuseUnchanged && clientPreedit == st->clientPreedit ? st->snapshot.get() : nullptr;
+  const auto capabilities = ic->capabilityFlags();
+  const auto* previous = reuseUnchanged && capabilities == st->presentedCapabilities ? st->snapshot.get() : nullptr;
   status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
   // The published list still owns a selectable token. A change of token alone requires a fresh list.
   if (status == IFR_OK && !raw) return;
@@ -396,7 +396,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
     st->snapshot.reset();
   } else {
     st->snapshot = SnapshotRef(raw, ifr_snapshot_free);
-    st->clientPreedit = clientPreedit;
+    st->presentedCapabilities = capabilities;
     const char* preedit = ifr_snapshot_preedit(raw);
     if (preedit && *preedit) {
       PreeditLayout layout = preedit_layout(preedit, ifr_snapshot_caret(raw),
@@ -410,7 +410,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
         text.append(segment.text, flags);
       }
       text.setCursor(static_cast<int>(layout.cursor));
-      if (clientPreedit) {
+      if (capabilities.test(fcitx::CapabilityFlag::Preedit)) {
         panel.setClientPreedit(text);
       } else {
         panel.setPreedit(text);

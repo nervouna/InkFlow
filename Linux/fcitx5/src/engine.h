@@ -4,6 +4,7 @@
 // SQLite or telemetry.
 #ifndef INKFLOW_FCITX5_ENGINE_H
 #define INKFLOW_FCITX5_ENGINE_H
+#include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/log.h>
 #include <fcitx/addonfactory.h>
 #include <fcitx/addoninstance.h>
@@ -38,7 +39,7 @@ public:
   }
   IFRSession* session = nullptr;
   SnapshotRef snapshot;
-  bool clientPreedit = false;
+  fcitx::CapabilityFlags presentedCapabilities;
   ShiftToggle shiftToggle;
 };
 

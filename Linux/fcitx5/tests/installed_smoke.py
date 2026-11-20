@@ -45,6 +45,14 @@ async def main():
             context = bus.get_proxy_object("org.fcitx.Fcitx5", path, tree).get_interface(
                 "org.fcitx.Fcitx.InputContext1"
             )
+            capabilities = (1 << 1) | (1 << 4) | (1 << 39)
+            await context.call_set_capability(capabilities)
+            await context.call_focus_in()
+            if sys.argv[1:] == ["--latency"]:
+                from latency import measure_latency
+                await measure_latency(context, controller)
+                return
+
             commits, preedits, panels, uppers = [], [], [], []
             context.on_commit_string(lambda text: commits.append(text))
             context.on_update_formatted_preedit(lambda text, cursor: preedits.append((text, cursor)))
@@ -54,13 +62,6 @@ async def main():
                 uppers.append(upper)
 
             context.on_update_client_side_ui(panel)
-            capabilities = (1 << 1) | (1 << 4) | (1 << 39)
-            await context.call_set_capability(capabilities)
-            await context.call_focus_in()
-            if sys.argv[1:] == ["--latency"]:
-                from latency import measure_latency
-                await measure_latency(context, controller)
-                return
             await controller.call_set_current_im("inkflow-pinyin")
             await controller.call_activate()
             assert await controller.call_current_input_method() == "inkflow-pinyin"
@@ -93,7 +94,15 @@ async def main():
             assert not await key(0xFF51, states=1)
             await key(0xFF51, release=True, states=1)
             await key(0xFFE1, release=True, states=1)
-            await type_text("niha")
+            # A client taking over the panel mid-composition needs its first full candidate list.
+            await context.call_set_capability(capabilities & ~(1 << 39))
+            await type_text("nih")
+            assert await key(ord("a"))
+            await context.call_set_capability(capabilities)
+            previous_panels = len(panels)
+            await key(ord("a"), release=True)
+            await controller.call_current_input_method()
+            assert any(panels[previous_panels:]), "new client-side panel never received the current page"
             assert await key(ord("o"))
             before = len(panels), len(preedits)
             await key(ord("o"), release=True)
