@@ -14,7 +14,6 @@ package enum InputOption: String, CaseIterable, Sendable {
     }
 }
 
-/// A value snapshot belongs to one composition, even while persisted preferences change.
 package struct InputPreferences: Equatable, Sendable {
     private let values: [InputOption: Bool]
     package init(_ values: [InputOption: Bool] = [:]) {
@@ -39,7 +38,6 @@ package struct InputPreferences: Equatable, Sendable {
         [spellingProfile($0) + ".schema.yaml", spellingProfile($0) + ".prism.bin"]
     }
 
-    /// Replace entire config nodes so Rime's existing components retain their own snapshots.
     package var schemaPatch: String {
         var bindings: [String] = []
         if self[.bracketPaging] {

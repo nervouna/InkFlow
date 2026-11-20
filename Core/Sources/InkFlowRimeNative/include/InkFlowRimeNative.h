@@ -5,7 +5,6 @@
 extern "C" {
 #endif
 
-// Register after each Rime initialization, before creating engine sessions.
 void IFRegisterRimeNativeComponents(void);
 int IFPersonalDataSnapshot(const char* root, const char* name, const char* file, int restore);
 

@@ -20,8 +20,6 @@ struct VoiceLexiconTests {
         precondition(select([["张伟。", "张玮！"]]) == "张伟。", "Punctuation is preserved")
         precondition(select([["张伟", "张炜"]]) == "张伟", "No evidence preserves Apple order")
         precondition(select([["星木海", "星慕海"]]) == "星木海", "Missing ASR novel-word alternative cannot be invented")
-        // A conservative spelling-description heuristic deliberately forgoes reranking.
-        // It does not claim to infer intended spelling from arbitrary language.
         precondition(select([["张伟，伟大的伟", "张玮，玮大的玮"]]) == "张伟，伟大的伟")
         precondition(select([["张伟，伟岸的伟", "张玮，玮岸的玮"]]) == "张伟，伟岸的伟")
         precondition(select([["张伟的朋友", "张玮的朋友"]]) == "张玮的朋友", "Ordinary possessive is not spelling guidance")

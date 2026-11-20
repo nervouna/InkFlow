@@ -38,8 +38,6 @@ bool IsPublicEnglish(const string& text) {
   return !text.empty() && std::all_of(text.begin(), text.end(), IsLetter);
 }
 
-// Context properties that carry the input verdicts to the Lua metadata: IsTechnicalInput's, and whether a
-// lowercase input is complete normal Pinyin.
 const char* const kTechnicalInputProperty = "inkflow_technical_input";
 const char* const kPinyinInputProperty = "inkflow_pinyin_input";
 
@@ -68,8 +66,6 @@ class MixedSyllabifier final : public PhraseSyllabifier {
   vector<size_t> vertices_;
 };
 
-// An ASCII run of a mixed sentence and its lowercase code in the English user
-// dictionary. `commits` is the run's confirmation count there, 0 when it has none.
 struct AsciiRun {
   string display;
   string code;
@@ -78,8 +74,6 @@ struct AsciiRun {
 
 class MixedPhrase final : public Phrase {
  public:
-  // `learned` is the bucket 0-3 of the sentence's weakest ASCII run, 0 as soon as
-  // one run has no personal confirmation. `runs` is every ASCII run of the text.
   MixedPhrase(size_t start, size_t end, const string& text,
               const string& preedit, int learned, const vector<AsciiRun>& runs,
               vector<ComponentSpan> components, vector<size_t> vertices)
@@ -88,13 +82,8 @@ class MixedPhrase final : public Phrase {
         components_(std::move(components)) {
     entry_->text = text;
     entry_->preedit = preedit;
-    // The English learner reads the runs of a committed sentence from here, as
-    // "display<TAB>code" lines; the entry has no dictionary code of its own.
     for (const auto& run : runs)
       entry_->custom_code += run.display + '\t' + run.code + '\n';
-    // A multilingual sentence has no shared native syllable-code namespace.
-    // This language has no Memory/store. Keep it non-null because librime-lua's
-    // Phrase.lang_name binding dereferences the language pointer.
     set_syllabifier(New<MixedSyllabifier>(std::move(vertices)));
     set_quality(-0.5);
   }
@@ -106,12 +95,9 @@ class MixedPhrase final : public Phrase {
     static const Language language("inkflow_mixed_readonly");
     return &language;
   }
-  // Retain actual lexical provenance even though this candidate is read-only.
   vector<ComponentSpan> components_;
 };
 
-// Recover the selected dictionary code's positions from the native graph.
-// No spelling rules or synthetic syllable IDs are introduced here.
 bool RecoverSpans(const SyllableGraph& graph, const Code& code, size_t index,
                   size_t position, size_t end, vector<size_t>* vertices) {
   if (index == code.size()) return position == end;
@@ -130,8 +116,6 @@ bool RecoverSpans(const SyllableGraph& graph, const Code& code, size_t index,
 
 using Edges = vector<vector<size_t>>;
 
-// A prism key is normal when one of its spellings is neither an abbreviation,
-// fuzzy, completion nor typo-correction alias.
 bool HasNormalSpelling(Prism& prism, int spelling_id) {
   for (auto spelling = prism.QuerySpelling(spelling_id); !spelling.exhausted();
        spelling.Next()) {
@@ -142,9 +126,6 @@ bool HasNormalSpelling(Prism& prism, int spelling_id) {
   return false;
 }
 
-// Enumerate all normal lexical spans in the uncut input. Syllabifier's final
-// graph prunes competing paths, so admission reads the same native prism API
-// before that pruning. Delimiters follow Syllabifier's consumption convention.
 Edges NormalEdges(const string& input, Prism& prism, const string& delimiters) {
   Edges edges(input.size() + 1);
   for (size_t start = 0; start < input.size(); ++start) {
@@ -185,8 +166,6 @@ vector<bool> ReachableToEnd(const Edges& edges) {
   return reachable;
 }
 
-// Whether `tail` is an unfinished syllable: the start of some key that has a
-// normal spelling, such as `n` of `ni` or `zh` of `zhong`.
 bool BeginsNormalSpelling(Prism& prism, const string& tail) {
   vector<Prism::Match> keys;
   prism.ExpandSearch(tail, &keys, 0);
@@ -195,12 +174,6 @@ bool BeginsNormalSpelling(Prism& prism, const string& tail) {
   });
 }
 
-// An input of 4 or more ASCII letters that is not complete normal syllables
-// optionally followed by one unfinished final syllable, as `macos` and
-// `deepseek` are not but `email` (e mai l) and `chin` (chi n) are. The same
-// native normal-spelling evidence as rule 9: abbreviations, fuzzy pairs and
-// typo aliases never make an input look like Pinyin. `reachable` is
-// ReachableFromStart over the input's NormalEdges.
 bool IsTechnicalInput(const string& input, const vector<bool>& reachable, Prism& prism) {
   if (input.size() < 4 || reachable.back()) return false;
   for (size_t start = 0; start < input.size(); ++start) {
@@ -216,8 +189,6 @@ struct PersonalMatch {
   an<DictEntry> entry;
 };
 
-// Confirmation counts of the personal edges that can carry a sentence, keyed by
-// input span and exact display.
 using Learned = map<std::tuple<size_t, size_t, string>, int>;
 
 struct StaticSlice {
@@ -256,9 +227,6 @@ class MixedPersonalTranslator final : public Translator {
       personal_.reset(factory->Create(Ticket(ticket.schema, "english")));
       if (personal_) personal_->Load();
     }
-    // This reader lives for the translator's entire lifetime. In particular,
-    // Query never destroys it or touches transactions: UserDictionary's native
-    // destructor commits on schema/session teardown, just like existing Memory.
     poet_ = std::make_unique<Poet>(nullptr, config);
   }
 
@@ -268,7 +236,6 @@ class MixedPersonalTranslator final : public Translator {
         input.size() <= static_cast<size_t>(std::numeric_limits<int>::max()) &&
         segment.end >= segment.start && input.size() == segment.end - segment.start &&
         pinyin_ && pinyin_->loaded();
-    // Both verdicts read one NormalEdges of the input, which the personal lookup below reuses.
     Edges normal;
     string technical;
     string pinyin;
@@ -276,7 +243,6 @@ class MixedPersonalTranslator final : public Translator {
       normal = NormalEdges(input, *pinyin_->prism(), delimiters_);
       const auto reachable = ReachableFromStart(normal);
       if (IsTechnicalInput(input, reachable, *pinyin_->prism())) technical = input;
-      // Capitals are explicit English intent (rule 9), so only lowercase input is Pinyin here.
       if (reachable.back() && !HasUppercase(input)) pinyin = input;
     }
     PublishInput(kTechnicalInputProperty, technical);
@@ -294,8 +260,6 @@ class MixedPersonalTranslator final : public Translator {
     const auto right = ReachableToEnd(context);
     map<pair<size_t, size_t>, an<StaticSlice>> slices;
     set<string> emitted;
-    // Only edges that can carry a sentence count as personal evidence for runs
-    // another edge's sentence passes through.
     vector<PersonalMatch> usable;
     Learned learned;
     for (const auto& match : matches) {
@@ -325,10 +289,6 @@ class MixedPersonalTranslator final : public Translator {
   }
 
  private:
-  // The English ranking metadata (inkflow_input_coverage.lua) reads these context
-  // properties in the same composition: each holds the input when that input is
-  // technical (or lowercase complete Pinyin), otherwise it is empty. Naming the
-  // input keeps a stale value from ever matching another one.
   void PublishInput(const char* property, const string& value) {
     Context* context = engine_ ? engine_->context() : nullptr;
     if (context && context->get_property(property) != value)
@@ -446,8 +406,6 @@ class MixedPersonalTranslator final : public Translator {
         while (!target.second.exhausted() &&
                entries.size() < static_cast<size_t>(max_homophones_)) {
           auto entry = target.second.Peek();
-          // Apply the personal boundary constraint before native homophone
-          // pruning. Otherwise e.g. English "sang" can hide the valid 桑 path.
           const bool ascii_neighbor = !entry->text.empty() &&
               ((end < input.size() && target.first == end - start &&
                 IsLetter(entry->text.back())) ||
@@ -468,8 +426,6 @@ class MixedPersonalTranslator final : public Translator {
     vector<size_t> all_vertices{offset};
     string preedit;
     string public_run;
-    // A public run is as personal as its span: it counts only when it is whole
-    // public English entries on an edge with a confirmation.
     size_t run_start = 0, run_end = 0;
     bool run_whole = true;
     vector<AsciiRun> runs;
@@ -503,7 +459,6 @@ class MixedPersonalTranslator final : public Translator {
         runs.push_back({entry.text, Lowercase(input.substr(cursor, end - cursor)),
                         match.entry->commit_count});
       }
-      // Validate complete public ASCII runs, including adjacent native entries.
       for (char c : personal ? string() : entry.text) {
         if (IsLetter(c)) {
           if (public_run.empty()) { run_start = cursor; run_whole = true; }
@@ -559,7 +514,7 @@ class MixedPersonalTranslator final : public Translator {
   the<Poet> poet_;
   Projection formatter_;
 };
-}  // namespace
+}
 
 extern "C" void IFRegisterRimeNativeComponents(void) {
   rime::Registry::instance().Register(

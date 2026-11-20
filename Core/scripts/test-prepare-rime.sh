@@ -2,7 +2,6 @@
 set -euo pipefail
 fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
-# macOS awk collates distinct CJK strings as equal under UTF-8 locales; compare bytes.
 awk() { LC_ALL=C command awk "$@"; }
 
 check_repository_policy_word() {
@@ -59,7 +58,6 @@ awk -F '\t' '
   END { if (!rows) exit 1 }
 ' Core/config/english-overrides.tsv
 
-# An override that matches no snapshot or technology display does nothing: delete it.
 awk -F '\t' '
   /^[[:space:]]*#/ || !NF { next }
   FILENAME != ARGV[3] {
@@ -86,8 +84,6 @@ printf 'fixture source catalog\n' > "$fixture/Core/config/chinese-sources.json"
 printf 'fixture build generator\n' > "$fixture/Core/scripts/build-dictionary-generator.sh"
 printf 'fixture SwiftPM wrapper\n' > "$fixture/Core/scripts/swift-package.sh"
 : > "$fixture/Core/Data/english-technology.tsv"
-# Isolate English policy fixtures from the independently tested Chinese/spelling generators.
-# This stub exists only inside this test's temporary repository.
 cat > "$fixture/Core/scripts/prepare-chinese.sh" <<'STUB'
 #!/bin/bash
 set -euo pipefail
@@ -98,8 +94,6 @@ shasum -a 256 Core/Package.swift Core/Tools/DictionaryGeneratorTool/main.swift C
   Core/scripts/build-dictionary-generator.sh Core/scripts/swift-package.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json | shasum -a 256 | awk '{print $1}' \
   > "$1/dictionary-manifest.json"
 STUB
-# Spelling must run after the generated Chinese dictionary has been copied. The
-# shared generator's output and CLI parity are tested by test-dictionary-generator.sh.
 cat > "$fixture/Core/scripts/prepare-spelling.sh" <<'STUB'
 #!/bin/bash
 set -euo pipefail
@@ -233,12 +227,6 @@ McDonald's	mcdonalds	1075000
 Office	office	1050000
 DATA
 diff -u "$fixture/expected.tsv" "$fixture/english.tsv"
-# Every row is coded by its lowercase letters. An admitted lowercase display also gets its Capitalized and
-# ALL-CAPS forms, coded by the same case; a Capitalized display gets its ALL-CAPS form; a cased letters-only
-# display is also its own code (iPhone). Lowercase codes reach only source spellings, never a synthesized one,
-# and the gate removes a word with all of its forms (compute, Compute, COMPUTE). Every pair stays unique.
-# Case variants tie and Rime keeps file order among equal weights, so lowercase spellings come first
-# (office before Office, even though the snapshot lists Office first), in the mixed dictionary too.
 [[ -z $(cut -f1,2 "$fixture/english.tsv" | LC_ALL=C sort | uniq -d) ]] || fail
 awk -F '\t' '
   $2 ~ /^[a-z]+$/ && $1 !~ /^(email|emails|computer|boundary|above|api|API|D|Alias|foo-bar|office)$/ &&
@@ -280,14 +268,12 @@ Office	office	10500
 DATA
 diff -u "$fixture/expected-mixed.tsv" "$fixture/mixed.tsv"
 
-# The engine mapping is configurable independently of observed frequencies.
 configure 4.0 100000 100
 generate
 awk -F '\t' 'BEGIN {OFS="\t"} {$3=$3/2.5; print}' "$fixture/expected.tsv" > "$fixture/rescaled.tsv"
 diff -u "$fixture/rescaled.tsv" "$fixture/english.tsv"
 configure 4.0 250000 100
 
-# Overrides cover nonzero evidence, every code of an exact text, and exclusion.
 cat > "$fixture/Core/config/english-overrides.tsv" <<'DATA'
 Widget	4.50	Raise a below-gate observation for every code of this exact display
 novel	4.10	Replace a nonzero observed frequency
@@ -343,7 +329,6 @@ McDonald's	mcdonalds	1075000
 Office	office	1050000
 DATA
 diff -u "$fixture/expected-overrides.tsv" "$fixture/english.tsv"
-# Only mixed scaling changes; its structural constraints remain independent.
 cp "$fixture/mixed.tsv" "$fixture/mixed-before.tsv"
 configure 4.0 250000 10
 generate
@@ -394,7 +379,6 @@ expect_failure 'duplicate snapshot word' 'english-wordfreq.tsv'
 printf 'email\tinvalid\n' > "$fixture/Core/Data/english-wordfreq.tsv"
 expect_failure 'malformed snapshot' 'english-wordfreq.tsv'
 
-# Curated technical spellings are explicit source data, still subject to the same gate.
 printf 'computer\t4.97\n' > "$fixture/Core/Data/english-wordfreq.tsv"
 printf 'TechUI\t4\tExplicit technology policy, not an observation\nC++\t4\tExplicit technology policy\n' > "$fixture/Core/config/english-overrides.tsv"
 cat > "$fixture/Core/Data/english-technology.tsv" <<'DATA'
@@ -448,7 +432,6 @@ expect_failure 'missing technology source' 'english-technology.tsv'
 : > "$fixture/Core/Data/english-technology.tsv"
 : > "$fixture/Core/config/english-overrides.tsv"
 configure 4 250000 100
-# Empty data is valid and cannot fall back to old source weights.
 : > "$fixture/Core/Data/english-wordfreq.tsv"
 generate
 test ! -s "$fixture/english.tsv"

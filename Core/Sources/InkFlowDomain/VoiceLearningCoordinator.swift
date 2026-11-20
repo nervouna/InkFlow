@@ -1,6 +1,5 @@
 import Foundation
 
-/// Owns correction policy and deadlines. Adapters execute only ticketed reads and effects.
 @MainActor
 package final class VoiceLearningCoordinator {
     package enum Key { case undo, edit, otherKey }
@@ -72,7 +71,6 @@ package final class VoiceLearningCoordinator {
         return .read(next)
     }
 
-    /// A stale or early callback must not even touch the native client.
     package func observation(for ticket: Ticket, now: ContinuousClock.Instant = .now) -> VoiceCorrectionObservation? {
         guard isCurrent(ticket), let observation, now >= ticket.deadline, now < observation.expiry else { return nil }
         return observation
@@ -92,7 +90,6 @@ package final class VoiceLearningCoordinator {
         let decision = evidence.map { observation.observe($0, now: now) } ?? .discard
         if ticket.kind == .persistence {
             guard let pending, decision == .learn(pending) else { return cancel(reason: .unavailable) }
-            // Revoke all old reads before the storage callback or any adapter callback.
             let action = LearningAction(generation: generation, correction: pending)
             reset()
             ready = action
@@ -125,7 +122,6 @@ package final class VoiceLearningCoordinator {
         return .ended(rejection)
     }
 
-    /// Consume before invoking storage. Neither repeated effects nor a failed write may retry.
     package func takeLearningAction(_ action: LearningAction) -> VoiceLearnedCorrection? {
         guard ready == action else { return nil }
         ready = nil

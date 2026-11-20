@@ -3,7 +3,6 @@ import Foundation
 import PackageDescription
 
 let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-// Portable Rust core, built by Core/scripts/build-portable.sh; see the root Package.swift.
 let portableRoot = repository.appendingPathComponent("build/portable").path
 let portableLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),

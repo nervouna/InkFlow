@@ -153,7 +153,6 @@ package struct VoiceCorrectionObservation {
         }
     }
 
-    /// Facts collected by the adapter. Qualification is checked again on submission.
     package struct ReadEvidence {
         package let target: TargetEvidence
         package let mark: NSRange
@@ -243,7 +242,6 @@ package struct VoiceCorrectionObservation {
                                           sessionRevision: evidence.sessionRevision)
     }
 
-    /// Validate immutable document evidence before the adapter attempts an exact bounded read.
     package func readingRange(mark: NSRange, selection: NSRange, currentLength: Int, secure: Bool,
                       now: ContinuousClock.Instant = .now) -> NSRange? {
         guard attributedTokenIndex != nil, !secure, now < expiry,
@@ -274,7 +272,6 @@ package struct VoiceCorrectionObservation {
         guard let attributedTokenIndex, actualRange == requestedRange,
               current.utf16.count == requestedRange.length else { return .discard }
         guard current != insertedFinal else { return .pending }
-        // Automatic polish is not evidence of a user correction.
         guard rawFinal == insertedFinal,
               let substitution = Self.singleLatinSubstitution(from: insertedFinal, to: current),
               substitution.index == attributedTokenIndex else { return .discard }

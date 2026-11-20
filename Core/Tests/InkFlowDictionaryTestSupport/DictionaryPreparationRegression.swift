@@ -13,7 +13,6 @@ private func asyncFails(_ code: String, _ body: () async throws -> Void) async {
     catch { fatalError("Unexpected error \(error)") }
 }
 
-/// Shared assertions exercise real generation, compilation and clean probing through each host adapter.
 package struct DictionaryPreparationRegression: Sendable {
     private let makeServices: @Sendable (IFDictionaryRuntime, URL, IFDictionaryStore) -> IFDictionaryServices
     private let copyRuntime: @Sendable (IFDictionaryRuntime, URL) throws -> IFDictionaryRuntime
@@ -55,7 +54,6 @@ package struct DictionaryPreparationRegression: Sendable {
         try store.beginActivation(version)
         try store.confirmActivation(version)
         check(try store.state().current?.artifactID == version.artifactID, "Default fractional dates round trip through activation")
-        // Updated immutable source with only a comment change must not activate or advance its timestamp.
         var bytes = inputs[0].data; bytes.insert(contentsOf: Data("# same content fixture\n".utf8), at: 0)
         inputs[0] = .init(receipt: .init(id: specs[0].id, commit: fakeCommit, blobSHA: IFDictionaryHash.gitBlob(bytes),
             sha256: IFDictionaryHash.sha256(bytes), byteCount: bytes.count, recordCount: 0), data: bytes)
@@ -68,8 +66,6 @@ package struct DictionaryPreparationRegression: Sendable {
         check(!FileManager.default.fileExists(atPath: identicalCandidate.appendingPathComponent("cache").path), "No compile for same content")
         try store.removeCandidate(identicalCandidate)
 
-        // A new legal syllable must update the guard in downloaded and dictionary-only
-        // rebuilds, even though the app's bundled schema still has the old inventory.
         bytes.append(Data("\n新拼写\tboa\t1\n".utf8))
         inputs[0] = .init(receipt: .init(id: specs[0].id, commit: fakeCommit, blobSHA: IFDictionaryHash.gitBlob(bytes),
             sha256: IFDictionaryHash.sha256(bytes), byteCount: bytes.count, recordCount: 0), data: bytes)

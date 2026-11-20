@@ -12,7 +12,6 @@ package enum IFDictionaryActivity: Equatable {
     case idle, updated, checking, upToDate, updateAvailable, downloading, preparing, verifying, waitingForIdle, applying
 }
 
-/// The process owns this service. Views observe it but never create/cancel its task.
 package struct IFDictionaryServices: Sendable {
     package typealias Progress = @Sendable (IFDictionaryProgress) -> Void
     package var check: @Sendable ([IFDictionarySourceReceipt]) async throws -> IFDictionaryCheck
@@ -77,7 +76,6 @@ package final class IFDictionaryCoordinator {
             pending == nil && recoveryAlternatives.isEmpty && engineAvailable && configuration != nil
     }
 
-    /// Reserve only a settled configuration; no dictionary task may overlap.
     package func beginPersonalData() throws -> IFEngineConfiguration {
         guard IFEngine.allSessionsIdle else { throw IFDictionaryUpdateError(.apply, "personal-data-composition") }
         guard IFEngine.voiceLexicon.canRead else { throw IFDictionaryUpdateError(.apply, "personal-data-undo-grace") }
@@ -117,11 +115,9 @@ package final class IFDictionaryCoordinator {
     @ObservationIgnored private var retryOperation: Operation?
     @ObservationIgnored private var presentationGeneration: UInt64 = 0
     @ObservationIgnored private var operationPresentation: UInt64 = 0
-    /// Narrow fault seam for native initialize/probe/individual session restoration tests.
     @ObservationIgnored package var activationFault: (IFEngineSwitchStep, Bool) throws -> Void = { _, _ in }
     private enum Operation { case check, update, recovery, servingRecovery, cleanup }
 
-    /// No default root, preferences, networking, or engine startup. Shared Settings remains inert in harnesses.
     package init(backend: IFDictionaryBackend? = nil, backendFactory: (@Sendable () throws -> IFDictionaryBackend)? = nil,
          now: @escaping @Sendable () -> Date = Date.init,
          logger: @escaping IFDictionaryDiagnosticLogger = { _ in }) {
@@ -132,7 +128,6 @@ package final class IFDictionaryCoordinator {
         guard !isPresented else { return }
         isPresented = true
         failure = nil
-        // A task's new failure may display in the current presentation; old failures are never replayed.
         operationPresentation = presentationGeneration
     }
     package func presentationClosed() {
@@ -144,11 +139,8 @@ package final class IFDictionaryCoordinator {
         record(IFDictionaryUpdateError.wrapping(error, stage: .recovery), retry: .recovery)
     }
 
-    /// Legacy synchronous entry point retained for focused harnesses. Production uses bootstrapForServing.
     package func bootstrap() { bootstrap(prepared: nil) }
 
-    /// Only immutable, precompiled bundled input precedes server construction. Downloaded recovery
-    /// starts later on a detached executor and cannot confirm over the saved journal prematurely.
     package func bootstrapForServing(runtime: IFDictionaryRuntime, user: URL) {
         guard !isShuttingDown, !isBusy, !IFEngine.ready else { return }
         servingStartup = (runtime, user)
@@ -277,8 +269,6 @@ package final class IFDictionaryCoordinator {
         }
     }
 
-    /// Manual and serving recovery share disk validation and helper work on a background executor.
-    /// The serving path supplies its already-running packaged fallback.
     private nonisolated static func prepareRecovery(_ backend: IFDictionaryBackend,
                                                     bundledFallback: IFPreparedActivation? = nil) throws -> IFRecoveryPreparation {
         try Task.checkCancellation()
@@ -303,7 +293,6 @@ package final class IFDictionaryCoordinator {
                         errors.append(.wrapping(error, stage: .recovery))
                         do { versions[version.artifactID] = try rebuild(version, backend: backend, fingerprint: fingerprint) }
                         catch let failure as IFDictionaryUpdateError where failure.code == "artifact-obsolete" {
-                            // Never rebuildable: the bundled fallback replaces it instead of keeping a retry.
                             errors.removeLast()
                         }
                     }
@@ -335,8 +324,6 @@ package final class IFDictionaryCoordinator {
         IFEngine.idleHandler = nil
     }
 
-    /// Cancel optional preparation, then drain every producer before abandoning or cleaning its artifacts.
-    /// Already-entered synchronous journal writes and native activation finish before shutdown can proceed.
     package func shutdown() async throws {
         isShuttingDown = true
         while personalDataReserved { try await Task.sleep(for: .milliseconds(20)) }
@@ -354,8 +341,6 @@ package final class IFDictionaryCoordinator {
         isBusy = false; operationID = nil; progress = nil
     }
 
-    /// Detached preparation is owned: cancellation reaches it, and its producer always finishes before return.
-    /// Cleanup and compact journal completion deliberately use separate, uncancelled tasks.
     private nonisolated static func prepareOffMain<Value: Sendable>(
         _ operation: @escaping @Sendable () throws -> Value
     ) async throws -> Value {
@@ -375,7 +360,6 @@ package final class IFDictionaryCoordinator {
         guard canCheck else { return }
         begin(.check)
     }
-    /// Only a user action after a successful check may enter this path.
     package func downloadAndUpdate() {
         guard canUpdate else { return }
         begin(.update)
@@ -456,7 +440,6 @@ package final class IFDictionaryCoordinator {
                             self.checked = nil; activity = .upToDate
                         } else {
                             let date = now()
-                            // Hash-heavy adopt and resolve stay off the input actor. The engine loads the context index itself.
                             let prepared = try await Self.prepareOffMain {
                                 let version = try backend.store.adopt(candidate, fingerprint: fingerprint, now: date)
                                 try Task.checkCancellation()
@@ -470,7 +453,7 @@ package final class IFDictionaryCoordinator {
                             IFEngine.idleHandler = { [weak self] in self?.activateIfIdle() }
                             IFEngine.signalIdle()
                             task = nil
-                            return // Single-flight remains occupied while pending activation waits for every session.
+                            return
                         }
                     } catch {
                         await Task.detached { if FileManager.default.fileExists(atPath: candidate.path) { try? backend.store.removeCandidate(candidate) } }.value
@@ -496,8 +479,6 @@ package final class IFDictionaryCoordinator {
         }
     }
 
-    /// Keep the transient bundled engine serving during every disk/index/worker wait. No new
-    /// persistent fallback pointer is needed: only successful recovery confirms the existing journal.
     private func beginServingRecovery() {
         activity = .preparing
         task = Task { [self] in
@@ -523,8 +504,6 @@ package final class IFDictionaryCoordinator {
                 }
                 if prepared.malformed {
                     let date = now()
-                    // The unreadable journal cannot supply recoverable pointers. Match the existing
-                    // repair contract only after the shipped fallback has actually started successfully.
                     try await Task.detached { try backend.store.repairBundled(fallback.descriptor.manifest, now: date) }.value
                     guard !isShuttingDown else { finishServingRecovery(); return }
                     use(servingFallback ?? fallback, date: date)
@@ -574,7 +553,6 @@ package final class IFDictionaryCoordinator {
         }
     }
 
-    /// Invoked by a deferred native idle signal, never by polling or network work in a key callback.
     package func activateIfIdle() {
         guard !isShuttingDown, let backend, let pending, activity == .waitingForIdle, IFEngine.allSessionsIdle else { return }
         activity = .applying
@@ -606,14 +584,12 @@ package final class IFDictionaryCoordinator {
         pendingRecovery = nil
         IFEngine.idleHandler = nil
         task = Task { [self] in
-            // Confirm is compact; journal abandonment and artifact housekeeping follow on a background executor.
             do { try await Task.detached { try backend.store.abandonActivation() }.value }
             catch { record(.wrapping(error, stage: .recovery), retry: .recovery) }
             if recovery != nil && !recovered {
                 if !isShuttingDown, engineAvailable, !recoveryAlternatives.isEmpty {
                     queueServingRecovery(); return
                 }
-                // Preserve the saved versions for retry when only the transient fallback is usable.
                 recoveryAlternatives = []
                 retryOperation = .servingRecovery
             } else {
@@ -633,7 +609,6 @@ package final class IFDictionaryCoordinator {
     private func use(_ prepared: IFPreparedActivation, date: Date) {
         descriptor = prepared.descriptor
         let loaded = prepared.configuration
-        // Bundled bootstrap compiled the user's ordinary build cache. Preserve it for a compile-free rollback.
         configuration = .init(shared: loaded.shared,
             cache: loaded.cache ?? URL(fileURLWithPath: loaded.user).appendingPathComponent("build"),
             user: loaded.user, contextIndex: loaded.contextIndex)
@@ -641,7 +616,6 @@ package final class IFDictionaryCoordinator {
         engineAvailable = IFEngine.ready
     }
 
-    /// The engine loads the prepared context index when it starts, so a descriptor is all there is to prepare.
     private nonisolated static func prepareConfiguration(_ descriptor: IFDictionaryDescriptor, user: URL) -> IFPreparedActivation {
         .init(descriptor: descriptor, configuration: .init(shared: descriptor.sharedData, cache: descriptor.cache, user: user.path,
             contextIndex: descriptor.sharedData.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename)))

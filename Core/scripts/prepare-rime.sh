@@ -33,8 +33,6 @@ else
   destination=""
 fi
 if [[ -n "$destination" ]]; then
-# Join observed frequencies and explicit overrides by exact displayed text. Never
-# estimate an unknown word. Every snapshot spelling is coded by its lowercase letters.
 LC_ALL=C awk -v min_zipf="$ENGLISH_MIN_ZIPF" -v weight_scale="$ENGLISH_WEIGHT_SCALE" \
   -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
 function fail(message) {
@@ -132,7 +130,6 @@ END {
   for (row=1; row<=technology_rows; row++) emit(technology_word[row],technology_code[row])
 }' Core/Data/english-wordfreq.tsv Core/config/english-overrides.tsv Core/Data/english-technology.tsv \
   > "$staging/easy_en.dict.yaml"
-# Mixed composition adds only its existing structural restrictions and scaling.
 LC_ALL=C awk -v weight_divisor="$MIXED_ENGLISH_WEIGHT_DIVISOR" '
 function emit(word, code, weight, pair) {
   pair=word SUBSEP code

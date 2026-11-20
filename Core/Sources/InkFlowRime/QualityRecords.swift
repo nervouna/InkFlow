@@ -2,14 +2,11 @@ import InkFlowDomain
 import Foundation
 import CryptoKit
 
-/// Values captured in memory. JSON and fingerprinting belong to the store's worker.
 package struct QualityBuildMetadata: Codable, Equatable, Sendable {
     package var sourceRevision: String
     package var sourceTreeSHA256: String
     package var sourceDirty: Bool?
     package var bundledResourcesSHA256: String
-    /// Complete unsigned .app payload, excluding this metadata file and later signing/notarization envelopes.
-    /// The legacy resources digest remains for compatibility.
     package var bundleSHA256: String = "unknown"
     package var rankingSourceSHA256: String = "unknown"
     package var rankingResourcesSHA256: String = "unknown"
@@ -140,7 +137,6 @@ package struct QualityAppliedConfiguration: Codable, Equatable, Sendable {
     package var asciiMode = false
     package var fontSize = 14
     package var vertical = false
-    /// Nil for records captured before input preferences were available.
     package var inputOptions: [String: Bool]? = nil
     package init(candidateCount: Int,
         customPhrases: [QualityPhrase] = [],
@@ -161,7 +157,6 @@ package struct QualityAppliedConfiguration: Codable, Equatable, Sendable {
 }
 
 package struct QualityConfigRevision: Codable, Equatable, Sendable {
-    /// Capture-time identity; the worker adds a stable content fingerprint for comparisons.
     package var id = UUID().uuidString
     package var configuration: QualityAppliedConfiguration
     package var createdAt = Date()
@@ -175,14 +170,12 @@ package struct QualityConfigRevision: Codable, Equatable, Sendable {
 
 }
 
-/// Text kind is a descriptive output category, never translator provenance.
 package enum QualityTextKind: String, Codable, Sendable {
     case chinese, english, emoji, mixed, symbol, number, other, unknown
 
     package static func classify(_ text: String) -> Self {
         guard !text.isEmpty else { return .unknown }
         let scalars = text.unicodeScalars
-        // Digits have the Unicode Emoji property; require an actual emoji sequence/presentation.
         let emoji = scalars.contains { $0.properties.isEmojiPresentation || $0.value == 0xfe0f || $0.value == 0x20e3 }
         let han = scalars.contains { (0x3400...0x9fff).contains($0.value) || (0x20000...0x323af).contains($0.value) }
         let latin = scalars.contains { (65...90).contains($0.value) || (97...122).contains($0.value) }
@@ -206,15 +199,9 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
     package var source: String? = nil
     package var consumedInputStart: Int? = nil
     package var consumedInputEnd: Int? = nil
-    /// Rime's candidate type of the genuine candidate (`phrase`, `user_phrase`, `sentence`, `completion`, ...),
-    /// empty when unknown. Content-free; present only with `evidence`.
     package var type: String? = nil
-    /// A fuzzy or algebra rule reached the candidate's spelling. Content-free; present only with `evidence`.
     package var corrected: Bool? = nil
-    /// The engine's ranking evidence row, `start,end,class,exact,personal,source,type,corrected`, which
-    /// `parse_metadata` reads. Content-free; present on a candidate only when the engine computed it.
     package var evidence: String? = nil
-    /// Keyed hash of `text` on the selected candidate of a decision (`QualityEnvelope.hashingPairs`); never on others.
     package var textHash: String? = nil
     package init(text: String,
         comment: String? = nil,
@@ -246,7 +233,6 @@ package struct QualityCandidate: Codable, Equatable, Sendable {
 
 }
 
-/// Independent of EngineSnapshot equality. Indices/pages are zero-based; ranks are one-based.
 package struct QualityPageSnapshot: Codable, Equatable, Sendable {
     package var generation: Int
     package var rawInput: String
@@ -260,12 +246,9 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
     package var candidates: [QualityCandidate]
     package var highlightedDisplayIndex: Int
     package var selectedPrefixValid = true
-    /// Engine observation alone does not establish that a client requested or showed candidates.
     package var presentation: QualityPresentation = .notShown
     package var capturedAt = Date()
-    /// False once every typed, shown or chosen string was removed before persistence.
     package var textCaptured = true
-    /// Keyed hash of the code the selected candidate consumed (`QualityEnvelope.hashingPairs`); on decision snapshots.
     package var codeHash: String? = nil
     package init(generation: Int,
         rawInput: String,
@@ -301,7 +284,6 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
         self.codeHash = codeHash
     }
 
-    /// Keeps positions, ranks and classification; removes every string the user typed, saw or chose.
     package func redactingText() -> Self {
         var page = self
         page.rawInput = ""
@@ -319,7 +301,6 @@ package struct QualityPageSnapshot: Codable, Equatable, Sendable {
 }
 
 extension QualityAppliedConfiguration {
-    /// Custom phrases keep their stable IDs, so the phrase set still shapes the ranking fingerprint, but no code or text.
     package func redactingText() -> Self {
         var configuration = self
         for index in configuration.customPhrases.indices {
@@ -331,7 +312,6 @@ extension QualityAppliedConfiguration {
 }
 
 extension QualityConfigRevision {
-    /// A redacted configuration is a different stored revision; the ID must not collide with its text-mode twin.
     package static func redactedID(_ id: String) -> String { id.hasSuffix("/text-free") ? id : id + "/text-free" }
 }
 
@@ -403,21 +383,15 @@ package enum QualityPostCommitWindowEnd: String, Codable, Sendable {
     case timeout
 }
 
-/// Content-free counts of the keys that arrived after one commit, while no composition was active, until the next code
-/// started, the client changed, InkFlow was deactivated or `QualityLimits.postCommitWindowSeconds` passed.
-/// A commit without a window was not observed. Never interpret absence as zero.
 package struct QualityPostCommitWindow: Codable, Equatable, Sendable {
     package var commitID: String
     package var end: QualityPostCommitWindowEnd
-    /// 0 ... postCommitWindowSeconds * 1000.
     package var elapsedMilliseconds: Int
-    /// Whole window: Backspace, Forward Delete, Cmd+Z, pass-through printable ASCII keys and Cmd+V.
     package var deletions = 0
     package var forwardDeletions = 0
     package var undo = 0
     package var directText = 0
     package var paste = 0
-    /// Backspace, Forward Delete and Cmd+Z before the first direct-text or paste key.
     package var leadingDeletions = 0
     package var leadingForwardDeletions = 0
     package var leadingUndo = 0
@@ -439,21 +413,14 @@ package struct QualityPostCommitWindow: Codable, Equatable, Sendable {
     }
 }
 
-/// Counters are separate facts: an arrow crossing a page increments moves and page turns.
 package struct QualityOperations: Codable, Equatable, Sendable {
     package var keypresses = 0
     package var pageRequests = 0
     package var pageTurns = 0
     package var candidateMoves = 0
-    /// Actual Backspace/Delete/caret-edit operations that changed composition state, excluding typing and selection.
     package var preeditEdits = 0
-    /// Absent in older records or when capture was suppressed. Never interpret absence as zero.
     package var timing: QualityTiming? = nil
-    /// Raw input just before the first Backspace, Delete or Escape that removed input in this span.
-    /// Typed text: stored only in text mode. Absent when nothing was deleted, and in records written before it existed.
     package var inputBeforeDeletion: String? = nil
-    /// Windows of earlier commits, carried by the composition record that follows them. Composition only: decisions
-    /// keep nil and `add` ignores it. Absent when none was observed, and in records written before it existed.
     package var postCommitWindows: [QualityPostCommitWindow]? = nil
 
     mutating func add(_ other: Self) {
@@ -463,8 +430,6 @@ package struct QualityOperations: Codable, Equatable, Sendable {
         candidateMoves += other.candidateMoves
         preeditEdits += other.preeditEdits
         inputBeforeDeletion = inputBeforeDeletion ?? other.inputBeforeDeletion
-        // Timing is a phase snapshot, not an additive counter. In particular, do not
-        // double-count dwell when a tentative punctuation decision is folded back.
     }
     package init(keypresses: Int = 0,
         pageRequests: Int = 0,
@@ -490,8 +455,6 @@ package enum QualityKeyKind: String, Codable, Sendable {
     case shortcut, modeToggle = "mode_toggle", other
 }
 
-/// Content-free effectiveness evidence. These closed enums deliberately cannot carry
-/// transcript, candidate, document, or correction text.
 package enum QualityEffectivenessSource: String, Codable, Sendable {
     case voiceSession = "voice_session"
     case voiceCorrection = "voice_correction"
@@ -558,8 +521,6 @@ package struct QualityEffectivenessEvent: Equatable, Sendable {
 
 package struct QualityKeySample: Codable, Equatable, Sendable {
     package var sequence: Int
-    /// Seconds at the controller keyDown callback entry (or direct engine call),
-    /// on the monotonic timeline relative to QualityTiming.startedAt.
     package var offset: TimeInterval
     package var interval: TimeInterval?
     package var kind: QualityKeyKind
@@ -578,9 +539,6 @@ package struct QualityKeySample: Codable, Equatable, Sendable {
 
 }
 
-/// Composition-level samples and decision-level phase snapshots share this schema.
-/// Visibility is observed at refresh/key boundaries and a bounded polling interval;
-/// it proves panel visibility at observations, not attention or exact display onset.
 package struct QualityTiming: Codable, Equatable, Sendable {
     package var version = 1
     package var startedAt: Date
@@ -591,8 +549,6 @@ package struct QualityTiming: Codable, Equatable, Sendable {
     package var endedOffset: TimeInterval? = nil
     package var postEditWait: TimeInterval? = nil
     package var observedVisibleDuration: TimeInterval? = nil
-    /// A partial candidate selection starts a new remaining-input phase without
-    /// resetting the whole last-edit-to-final-selection measurements above.
     package var phaseWait: TimeInterval? = nil
     package var phaseObservedVisibleDuration: TimeInterval? = nil
     package var visibilityObservationInterval: TimeInterval? = nil
@@ -626,8 +582,6 @@ package struct QualityTiming: Codable, Equatable, Sendable {
 
 }
 
-/// One injectable monotonic source for physical key entry, edit, visibility and end.
-/// NSEvent timestamps are deliberately not mixed with this clock (fixtures may be zero).
 @MainActor
 package struct QualityClock {
     package init(monotonic: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }, utc: @escaping () -> Date = { Date() }) {
@@ -673,7 +627,6 @@ package struct QualityDecision: Codable, Equatable, Sendable {
     package var outcome: QualityDecisionOutcome
     package var selectedDisplayIndex: Int? = nil
     package var selectedText: String? = nil
-    /// Unicode scalars of `selectedText` at construction; survives text-free redaction. Nil when there was no text.
     package var selectedCharacterCount: Int? = nil
     package var textKind: QualityTextKind = .unknown
     package var commitID: String? = nil
@@ -682,9 +635,7 @@ package struct QualityDecision: Codable, Equatable, Sendable {
     package var matchesCustomPhrase = false
     package var unknownRankReason: String? = nil
     package var pathReason: String? = nil
-    /// Captured before mutation, with the exact order presented for this decision.
     package var snapshot: QualityPageSnapshot
-    /// Nil means unknown. Never replace with the top candidate of a later page.
     package var firstPage: QualityPageSnapshot? = nil
     package var visitedPages: [QualityPageSnapshot] = []
     package var pageHistoryTruncated = false
@@ -722,10 +673,6 @@ package struct QualityDecision: Codable, Equatable, Sendable {
 }
 
 extension QualityDecision {
-    /// The code the candidate consumed: lowercase, apostrophes removed. Its span is the first two fields of the
-    /// candidate's `evidence` row, in raw-input bytes. Without that row only a chosen custom phrase knows its span,
-    /// the whole input; any other decision has none, because guessing the whole input would split a leading segment
-    /// from its recurrences. Nil for a malformed row.
     fileprivate func consumedCode(by candidate: QualityCandidate) -> String? {
         let input = Array(snapshot.rawInput.utf8)
         var span = input.indices
@@ -746,10 +693,8 @@ package struct QualityCommit: Codable, Equatable, Sendable {
     package var id = UUID().uuidString
     package var issuedAt = Date()
     package var text: String
-    /// Unicode scalars of `text` at construction; survives text-free redaction.
     package var characterCount: Int
     package var kind: QualityCommitKind
-    /// An insertText call was issued; this is not independent observation of the document.
     package var insertionIssued: Bool
     package var clientID: String? = nil
 
@@ -773,8 +718,6 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
     package var commits: [QualityCommit] = []
     package var revisions: [QualityConfigRevision] = []
 
-    /// Also use this cap while growing an active recorder, before retaining another snapshot.
-    /// Counts strings and collection/record overhead with an early exit, without JSON or I/O.
     package func bounded() -> QualityEnvelope? {
         guard decisions.count <= 128, commits.count <= 256, revisions.count <= 256 else { return nil }
         guard let configurations = configurationsByID else { return nil }
@@ -797,7 +740,6 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         return reduced
     }
 
-    /// Text-free mode: ranking, timing and outcome facts stay; input, candidate, commit and context text go.
     package func redactingText() -> Self {
         var envelope = self
         envelope.composition.operations.inputBeforeDeletion = nil
@@ -816,9 +758,6 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         return envelope
     }
 
-    /// Pair identity: keyed hashes of the code the selected candidate consumed and of its text, so a recurring pair
-    /// is recognizable without either string. A decision gets both hashes or neither. In-memory only; it runs before
-    /// `redactingText()` because the strings are gone after it.
     package func hashingPairs(key: SymmetricKey) -> Self {
         var envelope = self
         for index in envelope.decisions.indices {
@@ -835,13 +774,11 @@ package struct QualityEnvelope: Codable, Equatable, Sendable {
         return envelope
     }
 
-    /// HMAC-SHA256 truncated to 128 bits, 32 lowercase hex characters.
     private static func pairHash(_ message: String, key: SymmetricKey) -> String {
         HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key).prefix(16)
             .map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Includes reference-only pages; conflicting identity is invalid evidence.
     package var configurationsByID: [String: QualityAppliedConfiguration]? { try? validatedConfigurations() }
 
     package enum ConfigurationFailure: Error { case invalid, oversized }
@@ -935,7 +872,6 @@ package enum QualityLimits {
     package static let flushInterval: TimeInterval = 1
     package static let metricRuleVersion = 1
     package static let collectionRuleVersion = 1
-    /// `W`: how long after a commit the recorder counts deletions, undo, direct text and paste.
     package static let postCommitWindowSeconds: TimeInterval = 10
     package static let keySamples = 256
     package static let visibilityObservationInterval: TimeInterval = 0.1
@@ -948,7 +884,6 @@ package enum QualityLimits {
     package static let maintenanceInterval: TimeInterval = 3_600
 }
 
-/// Conservative logical retained-byte budget. The worker separately checks encoded bytes.
 private struct QualityMemoryBudget {
     package var remaining = QualityLimits.envelopeBytes
     package var exhausted: Bool { remaining < 0 }
@@ -961,7 +896,6 @@ private struct QualityMemoryBudget {
         for value in values {
             guard !exhausted else { return }
             guard let value else { continue }
-            // String UTF-16 storage, bookkeeping, and early exit for an arbitrarily large input.
             let count = value.utf8.prefix(max(0, remaining / 2 + 1)).count
             remaining -= 64 + 2 * count
         }
@@ -992,7 +926,6 @@ private struct QualityMemoryBudget {
     }
 }
 
-/// Timestamp JSON uses UTC ISO 8601 with milliseconds, matching SQL's time columns.
 package enum QualityJSON {
     package static let compactPages = CodingUserInfoKey(rawValue: "quality.compactPages")!
     package static let configurationResolver = CodingUserInfoKey(rawValue: "quality.configurationResolver")!

@@ -16,8 +16,6 @@ package enum IFDictionaryStage: String, Codable, DiagnosticLabel {
     }
 }
 
-/// Error.code is a String because worker/source failures cross a process boundary. Only these fixed
-/// codes may enter the content-free local log; descriptions, source names and stderr never do.
 package struct DictionaryDiagnosticCode: DiagnosticLabel {
     package let rawValue: String
     private static let allowed: Set<String> = [
@@ -37,7 +35,6 @@ package struct DictionaryDiagnosticCode: DiagnosticLabel {
     package init(rawValue: String) { self.rawValue = Self.allowed.contains(rawValue) ? rawValue : "unknown" }
 }
 
-/// Diagnostic payloads are deliberately separate from the persistent state and manifest.
 package struct IFDictionaryUpdateError: Error, LocalizedError, Codable, Sendable {
     package let stage: IFDictionaryStage
     package let code: String
@@ -66,7 +63,6 @@ package struct IFDictionaryUpdateError: Error, LocalizedError, Codable, Sendable
                          detail: dictionary.errorDescription ?? dictionary.code)
         }
         let value = error as NSError
-        // Do not include userInfo, which can contain URLs or arbitrary private payloads.
         return .init(stage, "underlying", source: source, detail: "\(value.domain) (\(value.code))")
     }
 }

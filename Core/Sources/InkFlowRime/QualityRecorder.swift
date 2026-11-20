@@ -1,7 +1,6 @@
 import InkFlowDomain
 import Foundation
 
-/// Only outer engine operations enter the recorder, including nested digit/select callbacks.
 package enum QualityAction {
     case key(Int32, Int32, Bool = false), select(Int, QualityTrigger, Bool), highlight, flush(QualityTrigger), toggle(Bool), clear
 
@@ -31,14 +30,12 @@ package enum QualityAction {
     package var cancellation: Bool {
         switch self { case .clear, .key(0xff1b, _, _): true; default: false }
     }
-    /// User keys that remove typed input: Backspace, Delete and Escape.
     package var deletion: Bool {
         if case .key(let key, _, _) = self { return [0xff08, 0xffff, 0xff1b].contains(key) }
         return false
     }
 }
 
-/// Capture is synchronous bounded memory. This class never encodes JSON, reads a file or waits for SQL.
 @MainActor
 package final class QualityRecorder {
     private let store: QualityStore
@@ -78,8 +75,6 @@ package final class QualityRecorder {
     private var hadClient = false
     private var captureGeneration: UInt64
     private var privacySuppressed = false
-    /// The open post-commit window and the closed ones waiting for the next submitted record.
-    /// They outlive any composition, so `reset()` leaves them alone; a new capture generation drops them.
     private var openWindow: (window: QualityPostCommitWindow, openedAt: TimeInterval, leading: Bool)?
     private var closedWindows: [QualityPostCommitWindow] = []
 
@@ -93,8 +88,6 @@ package final class QualityRecorder {
     package var lastEditMonotonicTime: TimeInterval? { timing?.lastEditOffset.map { monotonicStart + $0 } }
     private var offsetNow: TimeInterval { max(0, clock.monotonic() - monotonicStart) }
 
-    /// A pause/clear invalidates the entire active composition, even when resumed before the next key.
-    /// Only an observed empty input before a new operation permits capture to start again.
     private func captureAllowed(cleanBoundary: Bool = false) -> Bool {
         let state = store.captureState
         if captureGeneration != state.generation || !state.enabled {
@@ -137,7 +130,6 @@ package final class QualityRecorder {
         timing?.visibilityObservationInterval = QualityLimits.visibilityObservationInterval
     }
 
-    /// Physical keys intercepted by the controller, including held Tabs, never enter Rime.
     package func recordExternalKey(_ kind: QualityKeyKind, isRepeat: Bool, at monotonicTime: TimeInterval? = nil) {
         guard captureAllowed() else { return }
         guard envelope != nil, !suppressed else { return }
@@ -147,8 +139,6 @@ package final class QualityRecorder {
         enforceBudget()
     }
 
-    /// AI insertion has its own content/usage record. Keep this ordinary record text-free
-    /// for that insertion and terminate without inventing a regular candidate decision.
     package func finishExternalSelection(reason: String, at monotonicTime: TimeInterval? = nil) {
         guard envelope != nil else { return }
         timing?.endedOffset = monotonicTime.map { max(0, $0 - monotonicStart) } ?? offsetNow
@@ -167,7 +157,6 @@ package final class QualityRecorder {
         if let app { appBundleID = app }
     }
 
-    /// The controller's deactivation signal; the window rides the next record this recorder submits.
     package func closePostCommitWindow(_ end: QualityPostCommitWindowEnd) {
         closeWindow(end, at: clock.monotonic())
     }
@@ -180,8 +169,6 @@ package final class QualityRecorder {
         if snapshot.rawInput.isEmpty && snapshot.candidates.isEmpty {
             switch action {
             case .flush, .clear, .highlight:
-                // An idle IMK finish callback can reenter during insertText, before its original
-                // decision is linked. Preserve that pending drain instead of replacing its origin.
                 return
             default: break
             }
@@ -240,14 +227,12 @@ package final class QualityRecorder {
     package func didMutate(_ snapshot: QualityPageSnapshot, handled: Bool) {
         guard captureAllowed() else { return }
         if suppressed {
-            // Stay disabled through the drain for an oversized committing operation.
             if snapshot.rawInput.isEmpty { latest = snapshot }
             return
         }
         guard let operation = inProgress else { return }
         inProgress = nil
         let before = operation.before
-        // The engine forgets the highlighted candidate on Shift+Backspace whenever it shows candidates.
         if case .key(0xff08, 1, _) = operation.action, !before.candidates.isEmpty, handled {
             recordEffectiveness(.init(source: .candidateLearning, event: .forgotten))
         }
@@ -255,15 +240,12 @@ package final class QualityRecorder {
                       at: monotonicStart + operation.entered)
         let edited = before.rawInput != snapshot.rawInput || before.caret != snapshot.caret ||
             before.selectedPrefix != snapshot.selectedPrefix || before.selectedPrefixValid != snapshot.selectedPrefixValid
-        // Typo evidence: what was typed before the user started removing it. The store drops it without text capture.
         if operation.action.deletion, !before.rawInput.isEmpty, before.rawInput != snapshot.rawInput {
             if envelope?.composition.operations.inputBeforeDeletion == nil {
                 envelope?.composition.operations.inputBeforeDeletion = before.rawInput
             }
             if sinceDecision.inputBeforeDeletion == nil { sinceDecision.inputBeforeDeletion = before.rawInput }
         }
-        // Final empty state is a selection/cancellation, not a new Pinyin edit.
-        // Partial selection establishes a new remaining-input phase at this event.
         if snapshot.rawInput.isEmpty && (!before.rawInput.isEmpty || operation.decision != nil) {
             timing?.endedOffset = operation.entered
         } else if edited && !snapshot.rawInput.isEmpty {
@@ -285,7 +267,6 @@ package final class QualityRecorder {
         if let index = operation.decision {
             if envelope?.decisions[index].trigger == .punctuation, !snapshot.rawInput.isEmpty {
                 if edited && !pendingPrefixes.isEmpty { invalidatePending("composition_edited_after_selection") }
-                // Apostrophe can delimit Pinyin; brackets page. Neither proves candidate acceptance.
                 if let discarded = envelope?.decisions.removeLast() {
                     sinceDecision.add(discarded.operations)
                 }
@@ -300,7 +281,6 @@ package final class QualityRecorder {
                 setOutcome(index, .unknown, "invalid_selected_prefix")
                 expectedCommit = nil
             } else if snapshot.rawInput.isEmpty {
-                // Only the original takeCommit drain can prove this tentative final selection.
             } else if let text = envelope?.decisions[index].selectedText,
                       snapshot.rawInput == before.rawInput,
                       snapshot.selectedPrefix == before.selectedPrefix + text,
@@ -334,7 +314,6 @@ package final class QualityRecorder {
         enforceBudget()
     }
 
-    /// Called after the existing controller has made the candidate list available and requested its panel.
     package func presented(_ snapshot: QualityPageSnapshot, revision: QualityConfigRevision, panelShowIssued: Bool) {
         guard captureAllowed() else { return }
         guard !suppressed, !snapshot.rawInput.isEmpty else { return }
@@ -355,7 +334,6 @@ package final class QualityRecorder {
             return
         }
         guard !text.isEmpty else {
-            // Backspace deleting the final raw character has no get_commit payload.
             if latest?.rawInput.isEmpty == true, expectedCommit == nil { finish(.cancelled, reason: "composition_emptied") }
             return
         }
@@ -388,7 +366,6 @@ package final class QualityRecorder {
             }
         }
         finish(.committed, reason: nil)
-        // After finish: a window rides the record that follows its commit, never the commit's own.
         if insertionIssued, timingEnabled {
             openWindow = (QualityPostCommitWindow(commitID: commit.id), clock.monotonic(), true)
         }
@@ -434,14 +411,11 @@ package final class QualityRecorder {
             return nil
         case .flush(let trigger):
             return candidate(snapshot.highlightedDisplayIndex, trigger, .forcedFlush, regular: false)
-        // A mode request preserves the composition. Its later selection/flush owns the decision.
         case .toggle: return nil
         default: return nil
         }
     }
 
-    /// Counts the keys that reach the engine while no composition exists after a commit. Lazy: no timer, and the
-    /// window closes at the first event after `W` seconds, so a key past `W` is outside it.
     private func observeWindow(_ action: QualityAction, before: QualityPageSnapshot, after: QualityPageSnapshot,
                                handled: Bool, at now: TimeInterval) {
         guard let open = openWindow else { return }
@@ -479,7 +453,6 @@ package final class QualityRecorder {
         openWindow = open
     }
 
-    /// Lazy close: with no timer an event can arrive long after `W`, so the distance is clamped to `W`.
     private func closeWindow(_ end: QualityPostCommitWindowEnd, at now: TimeInterval) {
         guard var open = openWindow else { return }
         openWindow = nil
@@ -526,8 +499,6 @@ package final class QualityRecorder {
         keySequence += 1
         lastKeyOffset = offset
         if timing!.keySamples.count == QualityLimits.keySamples {
-            // Keep the first N-1 keys and latest key, so the terminating operation and
-            // its actual adjacent interval survive even an unusually long composition.
             timing?.keySamples.removeLast()
             timing?.droppedKeyCount += 1
         }
@@ -616,7 +587,6 @@ package final class QualityRecorder {
     private func enforceBudget() {
         envelope?.composition.operations.timing = timingSnapshot
         guard var record = envelope else { return }
-        // Include all transient cache pages in the same active cap, retaining decision/first-page core.
         if let latest {
             record.decisions.append(QualityDecision(sequence: record.decisions.count, trigger: .other,
                 outcome: .unknown, snapshot: latest, firstPage: firstPage, visitedPages: pages))
@@ -654,7 +624,6 @@ package final class QualityRecorder {
         record.composition.endedAt = record.composition.operations.timing.map {
             $0.startedAt.addingTimeInterval($0.endedOffset ?? offsetNow)
         } ?? clock.utc()
-        // Empty finish callbacks and idle highlight calls do not create compositions.
         if !record.decisions.isEmpty || !record.commits.isEmpty || observedComposition {
             if !closedWindows.isEmpty { record.composition.operations.postCommitWindows = closedWindows }
             store.submit(record)

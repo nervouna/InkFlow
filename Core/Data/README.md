@@ -27,3 +27,20 @@ download. wordfreq data runs to about 2021 and is
 folds case, so `US/us` are indistinguishable. Attribution and CC BY-SA 4.0 terms are
 in [`macOS/Licenses/wordfreq.txt`](../../macOS/Licenses/wordfreq.txt); the ESDB notice is
 [`macOS/Licenses/esdb.txt`](../../macOS/Licenses/esdb.txt).
+
+## Build-time admission
+
+`Core/config/english.conf` applies an inclusive Zipf threshold between zero and nine to both
+automatic English paths. Admission joins the snapshot and exact-display overrides and never
+estimates an unknown word. Each ordinary source row uses its lowercase letters as the code.
+The integer engine weight comes from multiplying the observed or overridden Zipf by the scale
+and rounding. The configured positive scale cannot exceed 238,609,294 because the maximum
+Zipf value must fit in a signed 32-bit weight. The mixed divisor scales only admitted entries
+in mixed composition and cannot change standalone weight or admission. Mixed composition also
+applies its own structural constraints.
+
+Proper case and explicit alternate codes come from admitted source entries. Generated
+same-case aliases inherit the admitted source spelling's weight. The
+[mixed-input rules](../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md)
+describe case ties, exact overrides and the restrictions on mixed entries. Delete an override
+when its display spelling no longer appears in the frequency snapshot or technical vocabulary.

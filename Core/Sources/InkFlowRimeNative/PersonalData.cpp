@@ -76,7 +76,6 @@ std::pair<Rows, Rows> parse(const std::string& file, const std::string& name) {
 }
 }
 
-// Called only by the isolated personal-data worker, with closed staged databases.
 extern "C" int IFPersonalDataSnapshot(const char* root, const char* name, const char* file, int restore) {
   bool initialized = false;
   try {
@@ -94,8 +93,6 @@ extern "C" int IFPersonalDataSnapshot(const char* root, const char* name, const 
       std::unique_ptr<rime::Db> db(component->Create(dictionary)); check(db->Open());
       if (restore) {
         check(rime::UserDbHelper(db.get()).UniformRestore(rime::path(file)));
-        // TsvReader trims an empty metadata value's delimiter. The independently
-        // validated map retains it; restore it explicitly before comparing all keys.
         for (const auto& entry : expected.second)
           if (entry.second.empty()) check(db->MetaUpdate(entry.first, entry.second));
       }

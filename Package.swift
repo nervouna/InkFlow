@@ -6,12 +6,6 @@ let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().pa
 let bundledRimeRuntime: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"]),
 ]
-// Portable Rust core, built by Core/scripts/build-portable.sh. Link the archive by path:
-// the crate also builds a dylib, which `-linkflow_rime` would pick instead. It links beside
-// libinkflow_dictionary.a only because ld pulls archive members on demand; both carry their
-// own Rust std, so `-force_load` or `-all_load` on either one fails with duplicate symbols.
-// The archive contains the InkFlowRimeNative sources (Core/Sources/InkFlowRimeNative, compiled
-// by Core/Portable/native), and the source-built librime.1.dylib is the only librime.
 let portableRoot = "\(packageRoot)/build/portable"
 let portableLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["\(portableRoot)/cargo/release/libinkflow_rime.a", "-L\(portableRoot)/prefix/lib"]),
@@ -291,9 +285,6 @@ let package = Package(
         .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
-        // Portable core: a C module over Core/Portable/include with libinkflow_rime.a and the
-        // source-built librime. InkFlowRime and everything that links it depend on it; the smoke
-        // test links it together with the dictionary staticlib.
         .target(name: "InkFlowPortable", path: "Core/Sources/InkFlowPortable",
                 publicHeadersPath: "include",
                 cSettings: [.unsafeFlags(["-I\(portableRoot)/include"])],

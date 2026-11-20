@@ -1,7 +1,6 @@
 import InkFlowDomain
 import Foundation
 
-/// A disposable view of the existing Rime user dictionary, never a learning authority.
 package struct VoiceLexiconSnapshot: Sendable, Equatable {
     package enum Availability: Sendable { case available, unknown }
     package struct Entry: Sendable, Equatable {
@@ -48,7 +47,6 @@ package struct VoiceLexiconSnapshot: Sendable, Equatable {
         self.init(generation: generation, revision: revision, availability: .available, entries: entries)
     }
 
-    /// Settings remains the authority for explicitly maintained phrases, ahead of automatic learning.
     package func includingCustomPhrases(_ phrases: [CustomPhrase]) -> Self {
         let explicit = phrases.prefix(Self.entryLimit).map {
             Entry(text: $0.text, code: $0.code, commits: 1, explicit: true)
@@ -65,11 +63,8 @@ package final class VoiceLexiconStore {
     private var epoch: UInt64 = 0
     private var committedAt: Date?
     private var committedInstant: ContinuousClock.Instant?
-    /// Invalidates management snapshots/undo after any observed learning or reset.
     package private(set) var learningRevision: UInt64 = 0
 
-    /// Native Rime allows undo while time(NULL) - transaction_time <= 3 seconds.
-    /// Check wall time as well as monotonic elapsed time, including backward clock changes.
     package var canRead: Bool {
         guard let committedAt, let committedInstant else { return true }
         return Date().timeIntervalSince(committedAt) >= 4 && committedInstant.duration(to: .now) >= .seconds(4)
@@ -89,15 +84,12 @@ package final class VoiceLexiconStore {
 
     package func markDirty() { dirty = true; learningRevision &+= 1 }
 
-    /// Explicit management invalidates snapshots already captured by a voice
-    /// operation, without shortening the ordinary native undo safety window.
     package func invalidateLearningSnapshot() {
         task?.cancel(); task = nil; dirty = true; epoch &+= 1
         learningRevision &+= 1
         snapshot = .unknown(generation: epoch)
     }
 
-    /// Called by the engine's deferred idle notification, independently of dictionary activation.
     package func prepareIfNeeded() {
         guard dirty, task == nil, IFEngine.ready else { return }
         let expectedEpoch = epoch
@@ -108,11 +100,7 @@ package final class VoiceLexiconStore {
             self.task = nil
             guard IFEngine.ready, IFEngine.allSessionsIdle,
                   let engine = IFEngine.liveSessions.first(where: \.available) else { return }
-            // allSessionsIdle may drain a new commit. Check its undo window afterwards.
             guard self.canRead else { self.prepareIfNeeded(); return }
-            // Temporary UserDictionary destruction commits the shared native transaction.
-            // Delay reads until its ordinary undo window has already expired. No handles
-            // survive the call; Memory.disconnect makes its remaining callbacks inert.
             self.snapshot = engine.readVoiceLexicon(generation: expectedEpoch, revision: self.snapshot.revision &+ 1)
             self.dirty = false
         }
@@ -133,16 +121,12 @@ extension IFEngine {
 }
 
 package enum VoiceAlternativeReranker {
-    /// Ranges must preserve the ASR text exactly, with its primary spelling first.
-    /// Only alternatives already offered by ASR are eligible; never invent a homophone replacement.
     package static func select(_ ranges: [[String]], snapshot: VoiceLexiconSnapshot, fixedPrefix: String = "") -> String {
         let primary = ranges.compactMap(\.first).joined()
         guard ranges.count <= 64, primary.utf16.count <= 16_000, !snapshot.entries.isEmpty else { return primary }
-        // Only entries present in some alternative can score; keep the beam cheap for a large lexicon.
         let offered = Set(String(fixedPrefix.suffix(8)) + ranges.flatMap { $0.prefix(8) }.joined())
         let entries = snapshot.entries.filter { $0.text.allSatisfy(offered.contains) }
         guard !entries.isEmpty else { return primary }
-        // Explicit character spelling is stronger evidence than a learned homophone.
         guard primary.range(of: #"([\p{Han}])[\p{Han}]{0,4}的\1"#, options: .regularExpression) == nil else { return primary }
         let prefix = String(fixedPrefix.suffix(8))
         var paths = [""]
@@ -161,7 +145,6 @@ package enum VoiceAlternativeReranker {
                     if next.count == 128 { break expansion }
                 }
             }
-            // Stable beam ordering retains Apple order on ties. Score each path only once.
             var scored: [(text: String, index: Int, value: Int)] = []
             for (index, text) in next.enumerated() {
                 scored.append((text, index, score(prefix + text, entries: entries)))
