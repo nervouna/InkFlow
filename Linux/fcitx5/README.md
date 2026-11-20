@@ -92,3 +92,32 @@ On ARM64 Arch Linux/Omarchy with Hyprland, Fcitx5 5.1.23 and GCC 16.1.1, the nat
 The managed package at `dec1f3f` passed all 20 installer tests and the real-package install, upgrade-fixture, rollback and uninstall exercise on that device. Each package switch loaded the addon on a private D-Bus; personal-data fixtures survived. The live manual installation was then upgraded, its original registration restored and compared byte-for-byte, and the managed package reinstalled. The final desktop service loaded its library and resources from the managed release with no automatic service restarts reported. ELF runtime paths are relative and do not depend on the build checkout.
 
 The user confirmed the Omarchy installation works. Steam Deck/KDE Plasma, older Fcitx5 versions, Flatpak clients and OS-update persistence have not been verified; Steam Deck work is deferred at the user's request. Fcitx5 5.1.14 headers need C++20; older releases may need `FCITX_ADDON_FACTORY` (the fallback is compiled in).
+
+## Frontend invariants
+
+Candidate navigation can replace the panel's candidate list before its callback returns.
+The callback copies the engine and input context it needs before requesting navigation.
+A key release with an unchanged snapshot keeps the old page selectable and records no new quality decision.
+Fcitx5's panel emptiness test excludes the input-method overlay, which lets switch-trigger releases keep the overlay.
+
+The ABI guarantees preedit offsets on UTF-8 character boundaries. Inconsistent bounds omit highlighting and
+put the caret at the end. Fcitx5 surrounding-text offsets count code points. The frontend captures up to 32
+code points to cover combining sequences within the engine's 16-grapheme context. Invalid text and out-of-range
+offsets yield empty context. Both Mod4 and GTK's virtual Super map to Rime's Super. In the default Shift
+gesture, a left Shift press without Control, Alt or Super arms ASCII toggling. Another key cancels it before
+release. The private-daemon tests clear Fcitx5's global AltTriggerKeys so the addon receives that gesture.
+
+Addon teardown releases the engine handle before Fcitx5 unregisters its property factory. The factory drops
+the sessions, and the last reference finalizes Rime. Explicit backup import drops every session and the engine
+before replacing dictionaries. Startup restores any interrupted import before opening Rime. If recovery
+fails, the addon passes keys through to avoid mixing dictionaries from two versions.
+
+Quality recording sends bounded numeric decisions from the Fcitx5 event thread to an optional writer.
+Only that writer loads the sibling SQLite module and prepares the timezone. Pausing or shutting down wakes the
+writer to drain pending counts. A segmented choice counts only when the committed text matches the selected
+prefix and candidate, with optional punctuation excluded from the measurement. ICU generates Unicode ranges
+at build time to match macOS text classification.
+
+The private-daemon tests cover a client taking over the panel mid-composition, a Shift+Left chord that
+cancels standalone Shift toggling, and the privacy boundary when recording starts during a composition.
+The latency probe makes a round trip to the same daemon before timing each trial to drain earlier panel messages.

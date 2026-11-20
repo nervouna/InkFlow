@@ -94,7 +94,6 @@ def display(data):
 
 
 def export(data, destination):
-    # link() publishes only a complete, private file and cannot clobber a racing export.
     with tempfile.NamedTemporaryFile(mode="w", dir=destination.parent, prefix=".inkflow-quality-", delete=False) as out:
         temporary = Path(out.name)
         try:

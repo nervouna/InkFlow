@@ -1,4 +1,3 @@
-// Loaded only by the optional recording worker. SQLite never runs on the input thread.
 #include "quality.h"
 
 #include <sqlite3.h>
@@ -69,9 +68,9 @@ private:
   sqlite3* db_ = nullptr;
   sqlite3_stmt* upsert_ = nullptr;
 };
-}  // namespace
+}
 
 extern "C" __attribute__((visibility("default"))) QualityBackend* inkflow_quality_open(const char* directory) {
   return new Backend(directory);
 }
-}  // namespace inkflow
+}

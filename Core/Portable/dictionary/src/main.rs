@@ -15,7 +15,6 @@ fn read(path: &Path, limit: usize) -> Result<Vec<u8>> {
 }
 
 fn write_new(directory: &Path, files: BTreeMap<String, Vec<u8>>) -> Result<()> {
-    // Preparation callers publish their own completed staging tree.
     fs::create_dir(directory)?;
     let result = (|| {
         for (name, bytes) in files {

@@ -1,7 +1,4 @@
 #!/bin/bash
-# Platform-independent checks of the Fcitx5 adapter: the pure bridge helpers, and a
-# syntax-only compile of the addon when FCITX5_SOURCE points at an fcitx5 source tree
-# (its generated export headers are stubbed). The real build runs on Linux via CMake.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-fcitx5.XXXXXX")

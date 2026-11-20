@@ -1,6 +1,3 @@
-// Pure helpers between Fcitx5 and the engine ABI: XDG paths, preedit layout from UTF-8
-// byte offsets, key-state translation and bounded surrounding text. No Fcitx5 or GLib
-// dependency, so tests/bridge_test.cpp runs on any platform.
 #ifndef INKFLOW_FCITX5_BRIDGE_H
 #define INKFLOW_FCITX5_BRIDGE_H
 #include <cstdint>
@@ -37,9 +34,6 @@ inline std::vector<std::string> split(const std::string& text, char separator) {
   return parts;
 }
 
-// Resources: INKFLOW_RESOURCES (a prepared directory holding shared/ and prepared/cache/),
-// otherwise the first <dir>/inkflow/rime of XDG_DATA_HOME then XDG_DATA_DIRS that holds
-// shared/. User data: XDG_DATA_HOME/inkflow/rime. Empty strings mean "not found".
 inline Paths resolve_paths(const Env& env, const Exists& exists) {
   Paths paths;
   std::string home = env_or(env, "HOME", "");
@@ -73,8 +67,6 @@ struct PreeditLayout {
   std::size_t cursor;
 };
 
-// Offsets are UTF-8 bytes of `preedit` on character boundaries (the ABI guarantees it);
-// anything inconsistent collapses to an unhighlighted preedit with the caret at its end.
 inline PreeditLayout preedit_layout(const std::string& preedit, std::size_t caret,
                                     std::size_t selection_start, std::size_t selection_end) {
   PreeditLayout layout{{}, preedit.size()};
@@ -93,8 +85,6 @@ inline PreeditLayout preedit_layout(const std::string& preedit, std::size_t care
   return layout;
 }
 
-// Fcitx5 KeyState bits that Rime understands, as Rime masks. Super (Mod4) and GTK's
-// virtual Super both become Rime's Super mask; a release adds Rime's release mask.
 inline std::uint32_t rime_modifiers(std::uint32_t fcitx_states, bool release) {
   const std::uint32_t shift = 1u << 0, lock = 1u << 1, control = 1u << 2, alt = 1u << 3;
   const std::uint32_t super = 1u << 6, super2 = 1u << 26;
@@ -104,8 +94,6 @@ inline std::uint32_t rime_modifiers(std::uint32_t fcitx_states, bool release) {
   return mask;
 }
 
-// A standalone left Shift toggles ASCII mode, as on macOS: a press without Control, Alt
-// or Super arms it, any other key disarms it, and the release that follows toggles.
 struct ShiftToggle {
   bool armed = false;
   bool key(std::uint32_t keysym, std::uint32_t fcitx_states, bool release) {
@@ -133,7 +121,6 @@ inline std::size_t utf8_sequence_length(unsigned char lead) {
   return 0;
 }
 
-// Byte offsets of each code point start plus the end; empty when the text is not UTF-8.
 inline std::vector<std::size_t> code_point_offsets(const std::string& text) {
   std::vector<std::size_t> offsets;
   std::size_t index = 0;
@@ -150,8 +137,6 @@ inline std::vector<std::size_t> code_point_offsets(const std::string& text) {
   return offsets;
 }
 
-// The last `limit` code points before `cursor` (a code-point index, as Fcitx5 reports it).
-// Invalid UTF-8 or an out-of-range cursor yields no context rather than wrong context.
 inline std::string preceding_text(const std::string& text, std::size_t cursor, std::size_t limit) {
   auto offsets = code_point_offsets(text);
   if (offsets.empty() || cursor + 1 > offsets.size()) return "";
@@ -159,7 +144,6 @@ inline std::string preceding_text(const std::string& text, std::size_t cursor, s
   return text.substr(offsets[first], offsets[cursor] - offsets[first]);
 }
 
-// One configured custom phrase, "code=text"; the engine validates both parts.
 inline bool parse_phrase(const std::string& entry, std::string& code, std::string& text) {
   auto separator = entry.find('=');
   if (separator == std::string::npos) return false;
@@ -168,5 +152,5 @@ inline bool parse_phrase(const std::string& entry, std::string& code, std::strin
   return !code.empty() && !text.empty();
 }
 
-}  // namespace inkflow
+}
 #endif

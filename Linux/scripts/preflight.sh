@@ -1,5 +1,4 @@
 #!/bin/bash
-# Read-only target inspection. Run as the desktop user, including over SSH.
 set -euo pipefail
 printf 'Architecture: '; uname -m
 printf 'OS:\n'

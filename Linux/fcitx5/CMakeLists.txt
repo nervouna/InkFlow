@@ -10,11 +10,9 @@ set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 find_package(Fcitx5Core REQUIRED)
 find_package(SQLite3 REQUIRED)
 find_package(ICU COMPONENTS uc REQUIRED)
-# Package staging uses relative paths regardless of the host Fcitx installation.
 set(INKFLOW_ADDONDIR "${FCITX_INSTALL_ADDONDIR}" CACHE STRING "Fcitx addon install directory")
 set(INKFLOW_PKGDATADIR "${FCITX_INSTALL_PKGDATADIR}" CACHE STRING "Fcitx data install directory")
 
-# The Rust engine is built first: cargo build --release in Core/Portable (see README).
 get_filename_component(INKFLOW_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(INKFLOW_CARGO_DIR "${INKFLOW_ROOT}/build/portable/cargo/release" CACHE PATH "Cargo release output of Core/Portable")
 set(INKFLOW_NATIVE_PREFIX "${INKFLOW_ROOT}/build/portable/prefix" CACHE PATH "Native prefix from build-native.py")
@@ -39,7 +37,6 @@ add_library(inkflow MODULE src/engine.cpp src/candidates.cpp src/quality.cpp "${
 add_dependencies(inkflow inkflow-quality)
 target_include_directories(inkflow PRIVATE "${INKFLOW_ROOT}/Core/Portable/include" src "${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_options(inkflow PRIVATE -Wall -Wextra -Werror)
-# The staticlib bundles the Rust crate and the C++ bridge; librime stays shared.
 target_link_libraries(inkflow PRIVATE Fcitx5::Core
   "${INKFLOW_CARGO_DIR}/libinkflow_rime.a" "${INKFLOW_NATIVE_PREFIX}/lib/librime.so"
   stdc++ dl pthread m)
@@ -60,6 +57,5 @@ endif()
 enable_testing()
 add_executable(bridge_test tests/bridge_test.cpp)
 target_include_directories(bridge_test PRIVATE src)
-# Release builds must still execute the assert-based helper checks.
 target_compile_options(bridge_test PRIVATE -UNDEBUG)
 add_test(NAME bridge_test COMMAND bridge_test)

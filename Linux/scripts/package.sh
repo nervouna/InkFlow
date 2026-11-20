@@ -1,6 +1,4 @@
 #!/bin/bash
-# Build a local directory package or the two versioned release archives from a clean checkout.
-# Usage: bash Linux/scripts/package.sh [PREPARED_RESOURCES] | --release X.Y.Z
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -s) == Linux ]] || { echo 'Linux host required.' >&2; exit 1; }
@@ -33,7 +31,6 @@ if [[ $# == 0 ]]; then
   cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin prepare-resources -- \
     "$resources/shared" "$resources/prepared"
 else
-  # Compare reused resources against today's committed dictionary recipe too.
   bash Core/scripts/prepare-rime.sh build/linux/package-shared
 fi
 python3 Linux/scripts/package-notices.py --check-resources "$resources" "${1:+reused}"
@@ -46,12 +43,10 @@ cmake -S Linux/fcitx5 -B build/linux/cmake -G Ninja \
   -DINKFLOW_ADDONDIR=lib/fcitx5 -DINKFLOW_PKGDATADIR=share/fcitx5 \
   -DINKFLOW_RESOURCES="$resources"
 cmake --build build/linux/cmake --target inkflow --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-4}"
-# A failed build never replaces a previously completed package.
 stage="$work/stage"
 mkdir -p "$stage"
 DESTDIR="$stage" cmake --install build/linux/cmake
 cp "$resources/resources.json" "$stage/usr/share/inkflow/rime/resources.json"
-# The addon loader resolves a bare library name in its configured addon paths.
 sed -i 's|^Library=.*|Library=libinkflow|' "$stage/usr/share/fcitx5/addon/inkflow.conf"
 python3 Linux/scripts/package-notices.py "$stage/usr" "$version"
 if [[ -n $version ]]; then

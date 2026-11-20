@@ -1,4 +1,3 @@
-// Local quality capture. Only bounded numeric decisions cross the writer queue.
 #pragma once
 
 #include "inkflow_rime.h"
@@ -27,8 +26,6 @@ struct QualityDecision {
   RankBin bin;
 };
 
-// Loaded by the worker from the same installation as the addon. SQLite
-// is optional at runtime; an unavailable writer leaves the offline engine alone.
 class QualityBackend {
 public:
   virtual ~QualityBackend() = default;
@@ -78,4 +75,4 @@ private:
   bool context_ = false;
 };
 
-}  // namespace inkflow
+}
