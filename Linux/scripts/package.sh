@@ -15,7 +15,8 @@ if [[ ${1:-} == --release ]]; then
   shift 2
 fi
 [[ $# -le 1 ]] || { echo 'Usage: package.sh [PREPARED_RESOURCES]' >&2; exit 1; }
-[[ -z $(git status --porcelain --untracked-files=normal) ]] || {
+changes=$(git status --porcelain --untracked-files=normal)
+[[ -z $changes ]] || {
   echo 'Commit source changes before packaging for exact provenance.' >&2; exit 1;
 }
 mkdir -p build/linux

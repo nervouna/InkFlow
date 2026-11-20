@@ -31,9 +31,9 @@ else
 下载安装包 \`$binary.tar.xz\` 和 \`SHA256SUMS-linux\`，在同一目录执行：
 
 \`\`\`sh
-sha256sum --check --ignore-missing SHA256SUMS-linux
-tar -xf $binary.tar.xz
-python3 $binary/install.py install $binary
+sha256sum --check --ignore-missing SHA256SUMS-linux &&
+  tar -xf $binary.tar.xz &&
+  python3 $binary/install.py install $binary
 \`\`\`
 
 对应源码见同页的 \`$source\`。[Linux 安装、更新与回滚说明](https://github.com/$GH_REPO/blob/$revision/Linux/README.md)
@@ -42,11 +42,17 @@ NOTES
     --title "InkFlow Linux $version · ARM64 Omarchy" --notes-file "$scratch/notes.md"
 fi
 # Rerunning the failed draft job uses the same Actions artifact. Keep already uploaded bytes.
-gh release view "$tag" --json assets --jq '.assets[].name' > "$scratch/names"
+gh release view "$tag" --json assets > "$scratch/assets.json"
 for file in "${files[@]}"; do
-  if ! grep -Fxq "$file" "$scratch/names"; then
-    gh release upload "$tag" "$file"
-  fi
+  state=$(jq -r --arg name "$file" '.assets[] | select(.name == $name) | .state' "$scratch/assets.json")
+  case "$state" in
+    uploaded) continue ;;
+    # GitHub may reserve the name with an empty "starter" asset after an interrupted upload.
+    starter) gh release upload "$tag" "$file" --clobber ;;
+    "") gh release upload "$tag" "$file" ;;
+    *) echo "Unexpected asset state for $file: $state" >&2
+       exit 1 ;;
+  esac
 done
 mkdir "$scratch/download"
 gh release download "$tag" --dir "$scratch/download"

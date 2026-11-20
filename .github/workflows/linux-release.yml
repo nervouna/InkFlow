@@ -59,6 +59,9 @@ jobs:
           persist-credentials: false
       - name: Prepare pinned build tools
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --verify HEAD
+          dbus-uuidgen --ensure
           python3 -m venv /tmp/inkflow-tools
           /tmp/inkflow-tools/bin/pip install cmake==3.31.6 ninja==1.11.1.4
           echo /tmp/inkflow-tools/bin >> "$GITHUB_PATH"
