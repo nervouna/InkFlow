@@ -1,7 +1,12 @@
 #include "bridge.h"
 #include "InkFlowRimeNative.h"
 #include <rime_api.h>
+#include <rime/context.h>
+#include <rime/filter.h>
+#include <rime/menu.h>
 #include <rime/registry.h>
+#include <rime/service.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +28,34 @@ struct Snapshot {
   std::vector<std::string> comments;
   std::vector<IFPCandidate> candidates;
 };
+std::shared_ptr<rime::Menu> current_menu(uintptr_t id) {
+  auto session = rime::Service::instance().GetSession(id);
+  if (!session || !session->context()) return {};
+  const auto& composition = session->context()->composition();
+  return composition.empty() ? nullptr : composition.back().menu;
+}
+
+// Rime supplies the actual materialized candidate handles to a filter. Move just the
+// chosen continuation into the current page; the lazy tail and every handle stay intact.
+class ContextPromotion final : public rime::Filter {
+ public:
+  ContextPromotion(size_t source, size_t destination)
+      : Filter(rime::Ticket{}), source_(source), destination_(destination) {}
+
+  std::shared_ptr<rime::Translation> Apply(std::shared_ptr<rime::Translation> tail,
+                                          rime::CandidateList* candidates) override {
+    if (destination_ < source_ && source_ < candidates->size()) {
+      auto first = candidates->begin();
+      std::rotate(first + destination_, first + source_, first + source_ + 1);
+    }
+    return tail;
+  }
+
+ private:
+  size_t source_;
+  size_t destination_;
+};
+
 struct Context {
   RimeContext value{};
   Context() { RIME_STRUCT_INIT(RimeContext, value); }
@@ -169,6 +202,30 @@ extern "C" int ifp_snapshot(uintptr_t session, IFPSnapshot* result) {
                owned->candidates.data(), owned->candidates.size(), c.menu.page_no,
                c.menu.highlighted_candidate_index, c.menu.is_last_page, owned.get()};
     owned.release();
+    return 0;
+  } catch (...) { return -3; }
+}
+extern "C" int ifp_context_window(uintptr_t session, IFPSnapshot* result) {
+  try {
+    auto menu = current_menu(session);
+    if (!menu) return 0;
+    std::unique_ptr<rime::Page> page(menu->CreatePage(9, 0));
+    if (!page) return 0;
+    auto owned = std::make_unique<Snapshot>();
+    for (const auto& candidate : page->candidates) owned->texts.push_back(candidate->text());
+    for (const auto& word : owned->texts) owned->candidates.push_back({word.c_str(), nullptr});
+    result->candidates = owned->candidates.data();
+    result->candidate_count = owned->candidates.size();
+    result->owner = owned.release();
+    return 0;
+  } catch (...) { return -3; }
+}
+extern "C" int ifp_promote_context_candidate(uintptr_t session, size_t source, size_t destination) {
+  try {
+    auto menu = current_menu(session);
+    if (!menu || source >= menu->candidate_count() || destination >= source) return -1;
+    ContextPromotion promotion(source, destination);
+    menu->AddFilter(&promotion);
     return 0;
   } catch (...) { return -3; }
 }

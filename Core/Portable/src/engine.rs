@@ -12,7 +12,7 @@ use crate::{
     Error, Result, Runtime, Session,
     phrases::{CustomPhrase, PhraseError, phrase_tsv},
     preferences::InputPreferences,
-    ranking::{ContextRanker, Metadata, PersonalSource, parse_metadata},
+    ranking::{ContextRanker, Metadata, PersonalSource, Source, parse_metadata},
 };
 use std::{
     collections::BTreeMap,
@@ -213,6 +213,7 @@ struct Core {
     buffered_commit: String,
     error: Option<ConfigurationError>,
     preceding: String,
+    document_context_window: bool,
     ordered_content: Option<crate::Snapshot>,
     order: Vec<usize>,
     metadata: Option<Vec<Metadata>>,
@@ -232,6 +233,7 @@ impl Core {
             buffered_commit: String::new(),
             error: None,
             preceding: String::new(),
+            document_context_window: false,
             ordered_content: None,
             order: Vec::new(),
             metadata: None,
@@ -346,10 +348,9 @@ pub struct Engine {
     compiled: PathBuf,
 }
 
-fn content(raw: &crate::Snapshot) -> crate::Snapshot {
-    let mut content = raw.clone();
-    content.highlighted = 0;
-    content
+fn content(mut raw: crate::Snapshot) -> crate::Snapshot {
+    raw.highlighted = 0;
+    raw
 }
 
 impl Engine {
@@ -727,15 +728,75 @@ impl Engine {
             .and_then(|reply| parse_metadata(&reply.body, offset, count, input_length)))
     }
 
+    // Read beyond a short first page only for a document continuation. If the wider
+    // ranker's preferred Han word is off-page, bring its native handle to the last
+    // visible slot. Ordinary equivalent-span ranking, selection and paging then apply.
+    fn rank_page(
+        core: &mut Core,
+        raw: &crate::Snapshot,
+        ranker: Option<&ContextRanker>,
+        input: &str,
+    ) -> Result<()> {
+        let size = raw.candidates.len();
+        if let Some(ranker) = ranker
+            && core.document_context_window
+            && raw.page == 0
+            && !raw.last_page
+            && (3..9).contains(&size)
+            && core.preceding.graphemes(true).next_back().is_some_and(crate::ranking::is_han)
+            && ranker.can_extend_document(&raw.candidates[0].text)
+        {
+            let mut words = core.session.as_ref().unwrap().context_window()?;
+            if words.len() > size
+                && let Some(mut rows) = Self::input_ranking_metadata(core, 0, words.len(), input.len())?
+            {
+                let order = ranker.order(&words, &core.preceding, Some(&rows), input);
+                let first = order[0];
+                let promote = first >= size && words[first].graphemes(true).all(crate::ranking::is_han);
+                if promote {
+                    core.session.as_mut().unwrap().promote_context_candidate(first, size - 1)?;
+                    words[size - 1..=first].rotate_right(1);
+                    rows[size - 1..=first].rotate_right(1);
+                }
+                let native_span = rows.iter().all(|row| {
+                    row.source == Source::Native && row.coverage == rows[0].coverage
+                });
+                rows.truncate(size);
+                if native_span {
+                    // All slots are interchangeable and the best Han and original first Han stay
+                    // visible. Clipping the wider order keeps exactly the same relative priorities.
+                    core.order = order.into_iter().filter_map(|index| {
+                        if promote && index == first {
+                            Some(size - 1)
+                        } else {
+                            (index < size - usize::from(promote)).then_some(index)
+                        }
+                    }).collect();
+                } else {
+                    // Partial candidates retain their native slots; English precedence and
+                    // deferral depend on the candidates the user actually sees.
+                    core.order = ranker.order(&words[..size], &core.preceding, Some(&rows), input);
+                }
+                core.metadata = Some(rows);
+                return Ok(());
+            }
+        }
+        core.metadata = Self::input_ranking_metadata(core, raw.page, size, input.len())?;
+        if let Some(ranker) = ranker {
+            let words = raw.candidates.iter().map(|candidate| candidate.text.clone()).collect::<Vec<_>>();
+            core.order = ranker.order(&words, &core.preceding, core.metadata.as_deref(), input);
+        }
+        Ok(())
+    }
+
     fn update_ordering(&self, state: &mut State, id: u64, force: bool) -> Result<()> {
         let loaded_phrases = &state.loaded_phrases;
         let core = state.sessions.get_mut(&id).unwrap();
         if !core.available() {
             return Ok(());
         }
-        let raw = Self::raw(core)?;
-        let current = content(&raw);
-        if !force && core.ordered_content.as_ref() == Some(&current) {
+        let raw = content(Self::raw(core)?);
+        if !force && core.ordered_content.as_ref() == Some(&raw) {
             return Ok(());
         }
         // Explicit custom codes keep the user's ordered phrases ahead of ordinary words.
@@ -751,18 +812,13 @@ impl Engine {
         core.order = (0..raw.candidates.len()).collect();
         core.metadata = None;
         if raw.selection_bytes.start == 0 && !has_custom_code {
-            let metadata =
-                Self::input_ranking_metadata(core, raw.page, raw.candidates.len(), input.len())?;
-            if let Some(ranker) = self.ranker.as_ref().filter(|_| !at_start) {
-                let texts: Vec<String> = raw.candidates.iter().map(|c| c.text.clone()).collect();
-                core.order = ranker.order(&texts, &core.preceding, metadata.as_deref(), &input);
-            }
-            core.metadata = metadata;
+            let ranker = self.ranker.as_ref().filter(|_| !at_start);
+            Self::rank_page(core, &raw, ranker, &input)?;
         }
         if let Some(&first) = core.order.first() {
             core.session.as_mut().unwrap().highlight(first)?;
         }
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         if raw.preedit.is_empty() {
             core.preceding.clear();
         }
@@ -772,29 +828,31 @@ impl Engine {
 
     fn perform_key(&self, state: &mut State, id: u64, key: i32, modifiers: i32) -> Result<bool> {
         let core = state.sessions.get_mut(&id).unwrap();
-        let displayed = Self::display(core)?;
         if modifiers == 0 && (49..=57).contains(&key) {
             let index = (key - 49) as usize;
-            if index < displayed.candidates.len() {
+            if index < Self::display(core)?.candidates.len() {
                 self.select_display(state, id, index)?;
                 return Ok(true);
             }
         }
-        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !displayed.candidates.is_empty() {
+        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !Self::display(core)?.candidates.is_empty() {
             let delta = if key == 0xff54 { 1 } else { -1 };
             return self.move_highlight(state, id, delta, key);
         }
         // Shift+Backspace forgets the highlighted candidate's learning. Without candidates it stays
         // Rime's key, so an idle press still reaches the application.
-        if modifiers == 1 && key == 0xff08 && !displayed.candidates.is_empty() {
-            return self.forget_highlighted(state, id, &displayed);
+        if modifiers == 1 && key == 0xff08 {
+            let displayed = Self::display(core)?;
+            if !displayed.candidates.is_empty() {
+                return self.forget_highlighted(state, id, &displayed);
+            }
         }
         // Rime's selector takes Home, and End at the end of the input, while its highlight is not its
         // first candidate, which is where a reordered page keeps it. Highlight that candidate so the
         // navigator moves the caret, then rank the new page again: the highlight moved even when the
         // caret did not.
         let caret_key =
-            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !displayed.candidates.is_empty();
+            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !Self::display(core)?.candidates.is_empty();
         if caret_key {
             core.session.as_mut().unwrap().highlight(0)?;
         }
@@ -901,7 +959,7 @@ impl Engine {
         core.session.as_mut().unwrap().highlight(native)?;
         // Highlighting a partial choice can change Rime's preedit and cursor.
         // Record the new content without overriding explicit user navigation.
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         Ok(())
     }
 
@@ -1277,11 +1335,25 @@ impl InputSession {
 
     /// Bounded document text before the caret; applied to the live composition.
     pub fn set_preceding_text(&self, text: &str) -> Result<()> {
+        self.set_context(text, false)
+    }
+
+    /// Begin a composition with document context. The first page can draw its Han
+    /// continuation from the first nine native candidates for the whole composition.
+    pub fn start_document_context(&self, text: &str) -> Result<()> {
+        self.set_context(text, true)
+    }
+
+    fn set_context(&self, text: &str, document_window: bool) -> Result<()> {
         let graphemes: Vec<&str> = text.graphemes(true).collect();
         let start = graphemes.len().saturating_sub(CONTEXT_LIMIT);
         let prefix: String = graphemes[start..].concat();
         let mut state = self.engine.lock()?;
         let core = state.sessions.get_mut(&self.id).unwrap();
+        if document_window && core.ordered_content.as_ref().is_some_and(|page| !page.preedit.is_empty()) {
+            return Ok(());
+        }
+        core.document_context_window = document_window;
         if prefix == core.preceding {
             return Ok(());
         }

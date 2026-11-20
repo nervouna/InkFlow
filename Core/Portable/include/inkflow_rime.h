@@ -231,6 +231,9 @@ void ifr_string_free(char* string);
 
 /* Bounded document text before the caret; only its last graphemes are kept. */
 IFRStatus ifr_session_set_preceding_text(const IFRSession* session, const char* text);
+/* Capture an idle session's document context for the next composition. Its first
+ * contextual Han candidate can come from the first nine native candidates. */
+IFRStatus ifr_session_start_document_context(const IFRSession* session, const char* text);
 /* candidate_count outside 3..9 falls back to 5. options NULL keeps the current
  * preferences. Phrases are validated; failures are reported by
  * ifr_session_configuration_error, not by the status. Settings apply at this

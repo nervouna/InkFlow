@@ -41,6 +41,10 @@ int ifp_clear(uintptr_t session);
 int ifp_select_candidate(uintptr_t session, size_t index);
 int ifp_change_page(uintptr_t session, int backward, int* changed);
 int ifp_snapshot(uintptr_t session, IFPSnapshot* snapshot);
+/* First nine entries of the current Rime menu, without moving its page or cursor.
+ * Only candidates[].text and its owner are populated. Release with ifp_snapshot_free. */
+int ifp_context_window(uintptr_t session, IFPSnapshot* snapshot);
+int ifp_promote_context_candidate(uintptr_t session, size_t source, size_t destination);
 void ifp_snapshot_free(IFPSnapshot* snapshot);
 /* A successful empty read returns NULL. A non-NULL commit is consumed once. */
 int ifp_take_commit(uintptr_t session, char** commit);

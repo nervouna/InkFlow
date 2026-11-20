@@ -9,22 +9,12 @@ end
 
 function M.func(input, env)
   local raw = env.engine.context.input
-  local thread = coroutine.create(function()
-    for candidate in input:iter() do coroutine.yield(candidate) end
-  end)
-  local exhausted = false
-  local function next_candidate()
-    if exhausted then return nil end
-    local ok, candidate = coroutine.resume(thread)
-    if not ok then error(candidate) end
-    if coroutine.status(thread) == "dead" then exhausted = true end
-    return candidate
-  end
+  local next_candidate, translation = input:iter()
   local buffered, exact_index = {}, nil
   -- A Translation iterator is lazy. Inspect only a fixed prefix before the
-  -- first yield, then resume the same iterator so native paging stays intact.
+  -- first yield, then consume the same iterator so native paging stays intact.
   while #buffered < env.max_lookahead do
-    local candidate = next_candidate()
+    local candidate = next_candidate(translation)
     if not candidate then break end
     buffered[#buffered + 1] = candidate
     local candidate_type = candidate.type or ""
@@ -45,7 +35,7 @@ function M.func(input, env)
     for _, candidate in ipairs(buffered) do yield(candidate) end
   end
   while true do
-    local candidate = next_candidate()
+    local candidate = next_candidate(translation)
     if not candidate then break end
     yield(candidate)
   end

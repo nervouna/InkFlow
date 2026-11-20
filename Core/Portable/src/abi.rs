@@ -761,6 +761,18 @@ pub unsafe extern "C" fn ifr_session_set_preceding_text(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_start_document_context(
+    session: *const InputSession,
+    text: *const c_char,
+) -> Status {
+    guard(|| {
+        let session = unsafe { reference(session, "session") }?;
+        let text = unsafe { self::text(text, "text") }?;
+        Ok(session.start_document_context(text)?)
+    })
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_set_configuration(
     session: *const InputSession,
     candidate_count: usize,
