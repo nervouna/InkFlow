@@ -461,6 +461,13 @@ impl ContextRanker {
         }
     }
 
+    /// A contextual continuation must leave room for at least one preceding Han
+    /// character in an indexed phrase. Longer native leaders cannot be displaced.
+    pub(crate) fn can_extend_document(&self, word: &str) -> bool {
+        let length = word.graphemes(true).count();
+        (1..self.longest).contains(&length) && all_han(word)
+    }
+
     pub fn order(
         &self,
         candidates: &[String],
@@ -652,6 +659,16 @@ mod tests {
 
     /// The condition of `IFEngine.qualitySnapshot`: an exact record with personal commits that
     /// came from the English or the mixed translator.
+    #[test]
+    fn document_continuations_must_fit_the_index() {
+        let ranker = ContextRanker::from_dictionary("午餐\twu can\t10\n");
+        assert!(ranker.can_extend_document("餐"));
+        assert!(!ranker.can_extend_document("午餐"));
+        assert!(!ranker.can_extend_document("a"));
+        assert!(!ranker.can_extend_document(""));
+        assert!(!ContextRanker::from_dictionary("").can_extend_document("餐"));
+    }
+
     #[test]
     fn personal_source_names_exact_personal_english_and_mixed() {
         use PersonalSource::{ExactEnglish, ExactMixed};

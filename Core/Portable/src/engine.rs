@@ -739,7 +739,7 @@ impl Engine {
             && !raw.last_page
             && (3..9).contains(&size)
             && core.preceding.graphemes(true).next_back().is_some_and(crate::ranking::is_han)
-            && raw.candidates[0].text.graphemes(true).all(crate::ranking::is_han)
+            && ranker.can_extend_document(&raw.candidates[0].text)
         {
             let mut words = core.session.as_ref().unwrap().context_window()?;
             if words.len() > size
