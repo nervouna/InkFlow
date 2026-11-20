@@ -2,8 +2,6 @@
 #include "quality.h"
 
 #include <sqlite3.h>
-#include <unicode/uchar.h>
-#include <unicode/utf8.h>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -15,13 +13,7 @@ namespace inkflow {
 namespace {
 class Backend final : public QualityBackend {
 public:
-  explicit Backend(const char* directory) : directory_(directory) {
-    // Initialize the properties used by both event-thread classification methods on this worker.
-    volatile auto emoji = u_hasBinaryProperty(0x1f600, UCHAR_EMOJI_PRESENTATION);
-    volatile auto category = u_charType('!');
-    (void)emoji;
-    (void)category;
-  }
+  explicit Backend(const char* directory) : directory_(directory) {}
 
   ~Backend() override {
     sqlite3_finalize(upsert_);
@@ -34,7 +26,10 @@ public:
     auto file = directory_ / "counts.sqlite3";
     int fd = ::open(file.c_str(), O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW, 0600);
     if (fd < 0) return false;
+    struct stat info{};
+    const bool privateFile = fstat(fd, &info) == 0 && S_ISREG(info.st_mode) && fchmod(fd, 0600) == 0;
     close(fd);
+    if (!privateFile) return false;
     if (sqlite3_open_v2(file.c_str(), &db_, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOFOLLOW, nullptr) != SQLITE_OK) {
       return false;
     }
@@ -45,34 +40,6 @@ public:
     const char* sql = "INSERT INTO counts_v1 VALUES(date(?1,'unixepoch','localtime'),?2,?3,?4,?5,1)"
                       " ON CONFLICT(day,length,context,page_size,rank_bin) DO UPDATE SET n=n+1";
     return sqlite3_prepare_v2(db_, sql, -1, &upsert_, nullptr) == SQLITE_OK;
-  }
-
-  // Same Unicode scalar ranges and Emoji_Presentation precedence as QualityTextKind.classify.
-  uint8_t chineseLength(std::string_view candidate) const noexcept override {
-    bool han = false;
-    uint8_t length = 0;
-    const auto size = static_cast<int32_t>(candidate.size());
-    for (int32_t index = 0; index < size;) {
-      UChar32 scalar;
-      U8_NEXT(reinterpret_cast<const uint8_t*>(candidate.data()), index, size, scalar);
-      if (scalar < 0 || (scalar >= 'A' && scalar <= 'Z') || (scalar >= 'a' && scalar <= 'z') ||
-          scalar == 0xfe0f || scalar == 0x20e3 || u_hasBinaryProperty(scalar, UCHAR_EMOJI_PRESENTATION)) return 0;
-      han |= (scalar >= 0x3400 && scalar <= 0x9fff) || (scalar >= 0x20000 && scalar <= 0x323af);
-      if (length < 3) ++length;
-    }
-    return han ? length : 0;
-  }
-
-  bool symbol(std::string_view text) const noexcept override {
-    for (int32_t index = 0; index < static_cast<int32_t>(text.size());) {
-      UChar32 scalar;
-      U8_NEXT(reinterpret_cast<const uint8_t*>(text.data()), index, static_cast<int32_t>(text.size()), scalar);
-      if (scalar < 0 || (!(U_GET_GC_MASK(scalar) & (U_GC_P_MASK | U_GC_S_MASK)) && !u_isUWhiteSpace(scalar))) {
-        return false;
-      }
-      if (scalar == 0xfe0f || scalar == 0x20e3 || u_hasBinaryProperty(scalar, UCHAR_EMOJI_PRESENTATION)) return false;
-    }
-    return !text.empty();
   }
 
   bool write(std::span<const QualityDecision> batch) override {

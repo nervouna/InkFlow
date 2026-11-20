@@ -83,6 +83,7 @@ async def main():
             assert any(parts for parts, _ in preedits), "no preedit received"
             assert panels and panels[-1], "no candidates received"
             assert panels[-1][0][1] == "你好", panels[-1]
+            assert not (Path(os.environ["XDG_DATA_HOME"]) / "inkflow/quality/counts.sqlite3").exists()
             await context.call_select_candidate(0)
             assert commits == ["你好"], commits
             assert not preedits[-1][0], "preedit survived selection"

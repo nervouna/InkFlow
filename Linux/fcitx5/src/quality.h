@@ -27,13 +27,11 @@ struct QualityDecision {
   RankBin bin;
 };
 
-// Loaded by the worker from the same installation as the addon. ICU and SQLite
-// are optional at runtime; an unavailable writer leaves the offline engine alone.
+// Loaded by the worker from the same installation as the addon. SQLite
+// is optional at runtime; an unavailable writer leaves the offline engine alone.
 class QualityBackend {
 public:
   virtual ~QualityBackend() = default;
-  virtual uint8_t chineseLength(std::string_view candidate) const noexcept = 0;
-  virtual bool symbol(std::string_view text) const noexcept = 0;
   virtual bool write(std::span<const QualityDecision> decisions) = 0;
 };
 
@@ -41,8 +39,6 @@ class QualityWriter {
 public:
   explicit QualityWriter(std::string directory);
   ~QualityWriter();
-  uint8_t chineseLength(std::string_view candidate) const;
-  bool symbol(std::string_view text) const;
   void submit(std::span<const QualityDecision> decisions);
 
 private:
@@ -53,7 +49,7 @@ private:
   std::atomic<unsigned> written_{0};
   std::atomic<bool> stopping_{false};
   std::counting_semaphore<capacity + 1> wake_{0};
-  std::atomic<const QualityBackend*> classifier_{nullptr};
+  std::atomic<bool> accepting_{true};
   std::thread worker_;
 };
 

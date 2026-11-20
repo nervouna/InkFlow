@@ -13,7 +13,7 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     path = Path(os.environ["XDG_DATA_HOME"]) / "inkflow/quality/counts.sqlite3"
     marker = "质检机密标记"
     options = ("CandidateCount=8\n\n[CustomPhrases]\n"
-               f"0=zzqs={marker}\n1=zzqx=SecretPhrase\n2=zzqe=天气🔒\n")
+               f"0=zzqs={marker}\n1=zzqx=SecretPhrase\n2=zzqe=天气🔒\n3=zzqxmix=花A\n4=zzqh=𠀀。\n")
 
     async def recording(enabled):
         value = "True" if enabled else "False"
@@ -60,7 +60,7 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     assert commits[-1] == "你啊"
     await type_text("nihao")
     await key(ord(","))
-    for code in ("zzqx", "zzqe"):
+    for code in ("zzqx", "zzqe", "zzqxmix", "zzqh"):
         await type_text(code)
         await key(32)
     await type_text("nihao")
@@ -81,7 +81,8 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
     await recording(False)
     after = counts()
     expected = dict(baseline)
-    for cell in ((3, 1, 8, 0), (2, 0, 8, 0), (1, 0, 8, 3), (1, 0, 8, partial_bin), (1, 0, 8, 0), (2, 0, 8, 0)):
+    for cell in ((3, 1, 8, 0), (2, 0, 8, 0), (1, 0, 8, 3), (1, 0, 8, partial_bin),
+                 (1, 0, 8, 0), (2, 0, 8, 0), (2, 0, 8, 0)):
         expected[cell] = expected.get(cell, 0) + 1
     assert expected == after, (expected, after)
 

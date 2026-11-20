@@ -1,13 +1,45 @@
 #include "quality.h"
 
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/utf8.h>
 #include <dlfcn.h>
 
 #include <algorithm>
+#include <chrono>
 #include <filesystem>
 
 namespace inkflow {
 namespace {
+#include "quality_unicode.inc"
+
+ScalarKind kind(uint32_t scalar) {
+  auto range = std::lower_bound(std::begin(scalarRanges), std::end(scalarRanges), scalar,
+                                [](const auto& entry, uint32_t value) { return entry.last < value; });
+  return range == std::end(scalarRanges) ? ScalarKind::Other : range->kind;
+}
+
+// Matches QualityTextKind.classify; the input snapshot contains validated UTF-8.
+uint8_t chineseLength(std::string_view candidate) {
+  bool han = false;
+  uint8_t length = 0;
+  for (uint32_t c : fcitx::utf8::MakeUTF8CharRange(candidate)) {
+    if ((c >= 0x3400 && c <= 0x9fff) || (c >= 0x20000 && c <= 0x323af)) {
+      han = true;
+    } else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || kind(c) == ScalarKind::Emoji) {
+      return 0;
+    }
+    if (length < 3) ++length;
+  }
+  return han ? length : 0;
+}
+
+bool symbol(std::string_view text) {
+  for (uint32_t c : fcitx::utf8::MakeUTF8CharRange(text)) {
+    if (kind(c) != ScalarKind::Symbol) return false;
+  }
+  return !text.empty();
+}
+
 std::string_view view(const char* value) {
   return value ? std::string_view(value) : std::string_view();
 }
@@ -28,6 +60,7 @@ QualityWriter::QualityWriter(std::string directory)
         } catch (const std::exception&) {
           FCITX_WARN() << "InkFlow local quality writer unavailable";
         }
+        accepting_.store(false, std::memory_order_release);
       }) {}
 
 QualityWriter::~QualityWriter() {
@@ -36,18 +69,9 @@ QualityWriter::~QualityWriter() {
   worker_.join();
 }
 
-uint8_t QualityWriter::chineseLength(std::string_view candidate) const {
-  const auto* backend = classifier_.load(std::memory_order_acquire);
-  return backend ? backend->chineseLength(candidate) : 0;
-}
-
-bool QualityWriter::symbol(std::string_view text) const {
-  const auto* backend = classifier_.load(std::memory_order_acquire);
-  return backend && backend->symbol(text);
-}
-
 void QualityWriter::submit(std::span<const QualityDecision> decisions) {
   // Fcitx5's event loop is the only producer. It never waits for the writer.
+  if (decisions.empty() || !accepting_.load(std::memory_order_acquire)) return;
   const unsigned end = written_.load(std::memory_order_relaxed);
   if (decisions.size() > capacity - (end - read_.load(std::memory_order_acquire))) return;
   unsigned next = end;
@@ -55,10 +79,13 @@ void QualityWriter::submit(std::span<const QualityDecision> decisions) {
     queue_[next++ % capacity] = decision;
   }
   written_.store(next, std::memory_order_release);
-  if (!decisions.empty()) wake_.release(decisions.size());
+  wake_.release(decisions.size());
 }
 
 void QualityWriter::run(const std::string& directory) {
+  // No dlopen, SQLite or timezone setup competes with the first candidate.
+  wake_.acquire();
+  if (!written_.load(std::memory_order_acquire)) return;
   Dl_info info{};
   if (!dladdr(reinterpret_cast<const void*>(&view), &info)) return;
   auto library = std::filesystem::path(info.dli_fname).parent_path() / "libinkflow-quality.so";
@@ -71,35 +98,25 @@ void QualityWriter::run(const std::string& directory) {
     FCITX_WARN() << "InkFlow local quality storage unavailable";
     return;
   }
-  classifier_.store(backend.get(), std::memory_order_release);
   unsigned head = 0;
-  bool healthy = true;
   for (;;) {
-    wake_.acquire();
-    if (head == written_.load(std::memory_order_acquire)) {
-      if (stopping_.load(std::memory_order_acquire)) break;
-      continue;
-    }
     std::array<QualityDecision, 64> batch;
     std::size_t n = 0;
+    // Coalesce bursts of selections into one transaction. A pause/shutdown
+    // posts an extra wake so queued decisions drain without waiting out the timer.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(40);
     do {
+      if (head == written_.load(std::memory_order_acquire)) break;
       batch[n++] = queue_[head++ % capacity];
-    } while (n < batch.size() && head != written_.load(std::memory_order_acquire) && wake_.try_acquire());
+    } while (n < batch.size() && wake_.try_acquire_until(deadline));
     read_.store(head, std::memory_order_release);
-    if (!healthy) continue;
-    try {
-      healthy = backend->write(std::span(batch).first(n));
-    } catch (const std::exception&) {
-      healthy = false;
-    }
-    if (!healthy) {
-      classifier_.store(nullptr, std::memory_order_release);
+    if (n && !backend->write(std::span(batch).first(n))) {
       FCITX_WARN() << "InkFlow local quality storage write failed";
+      return;
     }
+    if (stopping_.load(std::memory_order_acquire) && head == written_.load(std::memory_order_acquire)) return;
+    wake_.acquire();
   }
-  // The owner only stops this worker outside an event; the input thread no longer
-  // uses the classifier. Keep the backend alive even after a storage failure.
-  classifier_.store(nullptr, std::memory_order_release);
 }
 
 void QualityComposition::begin(bool context) {
@@ -136,7 +153,7 @@ void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* befor
   }
   if (!chosen.empty()) {
     const bool punctuation = choice->punctuation;
-    const auto length = punctuation ? 0 : writer.chineseLength(chosen);
+    const auto length = punctuation ? 0 : chineseLength(chosen);
     if (length && count_ == maxSegments) {
       reset();
       return;
@@ -158,7 +175,7 @@ void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* befor
       auto tail = delivered.substr(oldPrefix.size());
       if (tail.starts_with(chosen)) {
         auto suffix = tail.substr(chosen.size());
-        if (writer.symbol(suffix)) delivered = delivered.substr(0, oldPrefix.size() + chosen.size());
+        if (symbol(suffix)) delivered = delivered.substr(0, oldPrefix.size() + chosen.size());
       }
     }
     if (nextInput.empty() && equalsParts(delivered, oldPrefix, chosen)) {

@@ -33,6 +33,10 @@ The result is `build/linux/package/`. It contains the addon, pinned librime, com
 
 Build on the target distribution and CPU architecture. The package uses the target's Fcitx5, ICU, C/C++ runtime and other system libraries; it is not a distribution-independent binary. The installer checks architecture, hashes and library dependencies before changing anything. Hashes detect damaged files, not a malicious publisher: install packages only from a trusted source.
 
+The Linux build also uses ICU and SQLite development files (`icu` and `sqlite` on Arch,
+`libicu-dev` and `libsqlite3-dev` on Ubuntu). ICU generates the Unicode classification ranges
+at build time. SQLite belongs to the optional statistics module.
+
 ## Install or upgrade
 
 Keep another input method enabled and finish any current composition before running the installer. Installation briefly restarts an active Fcitx5 user service.
@@ -104,8 +108,8 @@ later corrects the inserted text.
 The optional worker writes only daily counts by length, context availability, page size and rank group
 to `$XDG_DATA_HOME/inkflow/quality/counts.sqlite3` (default `~/.local/share`). The first proven selection creates the database.
 The writer prunes older days on updates. Text, key sequences, times of day and application identifiers
-are never stored. Measurements are best effort during worker startup, storage failures and queue overload.
-Typing keeps working if the worker or its SQLite/ICU libraries are unavailable. Restore writable storage
+are never stored. The writer batches nearby selections over up to 40 ms. Storage failures and a full queue can leave gaps.
+Typing keeps working if the worker or SQLite is unavailable. Restore writable storage
 and toggle recording off and on to retry. `--json` prints all counts, their denominators and joint groups.
 
 ## Files
