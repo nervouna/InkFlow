@@ -1,9 +1,19 @@
 #!/bin/bash
-# Build a directory package only. Commit source changes before packaging.
-# Usage: bash Linux/scripts/package.sh [PREPARED_RESOURCES]
+# Build a local directory package or the two versioned release archives from a clean checkout.
+# Usage: bash Linux/scripts/package.sh [PREPARED_RESOURCES] | --release X.Y.Z
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $(uname -s) == Linux ]] || { echo 'Linux host required.' >&2; exit 1; }
+version=""
+if [[ ${1:-} == --release ]]; then
+  version=${2:?Expected --release X.Y.Z}
+  number='(0|[1-9][0-9]*)'
+  if [[ $# != 2 || ! $version =~ ^$number\.$number\.$number$ || $(uname -m) != aarch64 ]]; then
+    echo 'Release packaging requires aarch64 and a version X.Y.Z.' >&2
+    exit 1
+  fi
+  shift 2
+fi
 [[ $# -le 1 ]] || { echo 'Usage: package.sh [PREPARED_RESOURCES]' >&2; exit 1; }
 [[ -z $(git status --porcelain --untracked-files=normal) ]] || {
   echo 'Commit source changes before packaging for exact provenance.' >&2; exit 1;
@@ -42,7 +52,21 @@ DESTDIR="$stage" cmake --install build/linux/cmake
 cp "$resources/resources.json" "$stage/usr/share/inkflow/rime/resources.json"
 # The addon loader resolves a bare library name in its configured addon paths.
 sed -i 's|^Library=.*|Library=libinkflow|' "$stage/usr/share/fcitx5/addon/inkflow.conf"
-python3 Linux/scripts/package-notices.py "$stage/usr"
+python3 Linux/scripts/package-notices.py "$stage/usr" "$version"
+if [[ -n $version ]]; then
+  binary="InkFlow-$version-linux-aarch64"
+  source="InkFlow-$version-linux-source"
+  mv "$stage/usr" "$stage/$binary"
+  mv "$stage/SOURCE" "$stage/$source"
+  mkdir "$work/assets"
+  for name in "$binary" "$source"; do
+    tar -C "$stage" -cJf "$work/assets/$name.tar.xz" "$name"
+  done
+  (cd "$work/assets" && sha256sum *.tar.xz > SHA256SUMS-linux)
+  mkdir -p build/linux/releases
+  mv -T "$work/assets" "build/linux/releases/$version"
+  exit 0
+fi
 rm -rf build/linux/package
 mv "$stage/usr" build/linux/package
 printf 'Package directory: %s/build/linux/package\n' "$PWD"

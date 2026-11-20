@@ -2,7 +2,24 @@
 
 InkFlow uses Fcitx5 on Linux. ARM64 Omarchy/Hyprland is working; Steam Deck, KDE Plasma and Flatpak application checks are deferred. This installs the offline Rust/Rime engine. Linux AI and voice features are outside this build.
 
-## Build a package
+## Download the ARM64 Omarchy package
+
+In [Linux releases](https://github.com/nervouna/InkFlow/releases?q=linux-v), choose a published
+`linux-vX.Y.Z` for ARM64 Omarchy/Hyprland. Download the aarch64 archive and `SHA256SUMS-linux` to the same
+directory. The separate `InkFlow-X.Y.Z-linux-source.tar.xz` contains the corresponding source and rebuild instructions.
+With Fcitx5 and Python 3.11.4 or newer installed, replace the example version below:
+
+```sh
+version=0.1.0
+package="InkFlow-$version-linux-aarch64"
+sha256sum --check --ignore-missing SHA256SUMS-linux &&
+  tar -xf "$package.tar.xz" &&
+  python3 "$package/install.py" install "$package"
+```
+
+Select **InkFlow Pinyin** in Fcitx5. Installing preserves your other input methods, settings and personal dictionaries.
+
+## Build a local package
 
 Use a committed checkout and the [native build requirements](../Core/Portable/README.md#build-and-test), plus the Fcitx5 development files (`fcitx5` on Arch, `libfcitx5core-dev` on Ubuntu). Python 3.11 or newer, `ldd`, `pgrep` and an existing Fcitx5 installation are required on the installation target.
 
@@ -38,15 +55,15 @@ Installing a new package with the same command upgrades the installation. Reinst
 
 ## Update
 
-Run the installed package's updater to fetch the latest GitHub Release for this CPU:
+Run the installed package's updater to fetch the latest published stable Linux version for this CPU:
 
 ```sh
 python3 ~/.local/share/inkflow/current/install.py update
 # A specific release, or another Fcitx5 service:
-python3 ~/.local/share/inkflow/current/install.py update --tag vX.Y.Z --service NAME
+python3 ~/.local/share/inkflow/current/install.py update --tag linux-vX.Y.Z --service NAME
 ```
 
-Update uses the network only when you run it; there is no background or automatic check. It downloads the release's package and `SHA256SUMS-linux` over HTTPS, verifies the archive's SHA-256 before extracting it, and then runs that package's own `install.py install`. If the installed version already matches the release, it reports that and downloads nothing else. The exit status is the install's. A package installed before the `version` field existed is replaced by the first update.
+Update uses the network only when you run it; there is no background or automatic check. It downloads the release's package and `SHA256SUMS-linux` over HTTPS, verifies the archive's SHA-256 before extracting it, and then runs that package's own `install.py install`. If the installed version already matches the release, it reports that and downloads nothing else. The exit status is the install's.
 
 ## Roll back or uninstall
 
@@ -76,6 +93,19 @@ Paths below use the default XDG directories; `XDG_DATA_HOME` and `XDG_CONFIG_HOM
 | `~/.local/share/fcitx5/addon/inkflow.conf` | Addon descriptor pointing at the active package |
 | `~/.local/share/fcitx5/inputmethod/inkflow-pinyin.conf` | Input-method entry |
 | `~/.config/fcitx5/conf/inkflow.conf` | Options, custom phrases and explicit backup-import request |
+
+## Prepare a Linux release
+
+Run **Linux Release** in GitHub Actions on `main` and enter an independent `X.Y.Z` version. The native ARM64
+runner builds against the Omarchy ARM stable mirror, checks both archives, loads the extracted addon on a private
+D-Bus, and exercises install, upgrade, rollback and uninstall. A successful run links its GitHub Release draft
+in the run summary. If an upload fails, rerun the failed job to resume with the same verified artifact.
+
+While signed in, open the draft and follow its install instructions on an ARM64 Omarchy/Hyprland machine.
+Check that selecting InkFlow Pinyin and committing a candidate work. After confirming the install, edit the draft,
+leave **Set as the latest release** unchecked and publish it. Alternatively, promote it with
+`gh release edit linux-vX.Y.Z --draft=false --latest=false`. This keeps the repository's Latest link on macOS.
+The Linux updater discovers the published Linux tag.
 
 ## Focused checks
 

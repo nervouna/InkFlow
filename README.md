@@ -6,6 +6,8 @@
 
 ## 安装与启用
 
+ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release 下载。[Linux 安装和更新说明](Linux/README.md)
+
 安装已发布版本：
 
 1. 从 [最新版本下载页面](https://github.com/nervouna/InkFlow/releases/latest) 下载 `InkFlow-<版本>-<构建号>-arm64.pkg`，双击打开并按提示安装。安装包经过签名和公证，只为当前用户安装到 `~/Library/Input Methods`，不需要管理员密码。
