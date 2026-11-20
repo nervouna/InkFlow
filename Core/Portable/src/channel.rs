@@ -1,10 +1,3 @@
-//! The only host–Lua bridge: one request property that the Lua modules observe
-//! synchronously, answered in one result property. Protocol version 1:
-//!
-//! ```text
-//! request = "1\t<op>\t<field>\t<field>..."   fields carry no tab, CR or LF
-//! result  = "1\t<op>\t<status>\n<body>"       status: ok, failed, unknown or conflict
-//! ```
 pub const VERSION: &str = "1";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -13,7 +6,6 @@ pub struct Reply {
     pub body: String,
 }
 
-/// `None` when a field would break the line-oriented framing.
 pub fn request(op: &str, fields: &[&str]) -> Option<String> {
     if op.is_empty()
         || !op.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
@@ -31,7 +23,6 @@ pub fn request(op: &str, fields: &[&str]) -> Option<String> {
     Some(request)
 }
 
-/// `None` for another protocol version, another operation or a malformed header.
 pub fn reply(result: &str, op: &str) -> Option<Reply> {
     let (header, body) = match result.split_once('\n') {
         Some((header, body)) => (header, body),

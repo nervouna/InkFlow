@@ -1,20 +1,11 @@
-//! Compiling and probing target-native resources: the two operations the macOS dictionary
-//! worker runs against a candidate resource set, and `prepare-resources` against a build.
-//!
-//! Both are setup work with an isolated writable user directory, never on a key path, and
-//! need exclusive use of Rime: they fail with `Native(Error::AlreadyRunning)` while any
-//! runtime is initialized in the process, and release Rime before returning.
 use crate::{Error, Runtime, preferences::spelling_profile};
 use std::{fs, path::Path};
 
 #[derive(Debug)]
 pub enum ResourceError {
-    /// Rime could not start, deploy or answer.
     Native(Error),
     Io(std::io::Error),
-    /// A compiled file the engine needs is missing or empty; the name is relative to the cache.
     Missing(String),
-    /// The compiled cache does not produce the expected candidates; the message names the input.
     Probe(String),
 }
 
@@ -40,8 +31,6 @@ impl From<std::io::Error> for ResourceError {
     }
 }
 
-/// Compile `shared` into `cache` through Rime's maintenance, using `user` as scratch, then
-/// check that every compiled file the engine loads exists and is not empty.
 pub fn compile(shared: &Path, user: &Path, cache: &Path) -> Result<(), ResourceError> {
     fs::create_dir_all(user)?;
     fs::create_dir_all(cache)?;
@@ -69,9 +58,6 @@ pub fn compile(shared: &Path, user: &Path, cache: &Path) -> Result<(), ResourceE
     Ok(())
 }
 
-/// Serve the compiled `cache` from a clean `user` directory and select a Chinese, an English,
-/// a mixed and an Emoji candidate, as the existing worker's smoke cases do. This makes no
-/// ranking claim.
 pub fn probe(shared: &Path, user: &Path, cache: &Path) -> Result<(), ResourceError> {
     fs::create_dir_all(user)?;
     let runtime = Runtime::with_cache(shared, user, cache)?;

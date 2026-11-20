@@ -31,7 +31,6 @@ def main():
         raise SystemExit('Only Linux and macOS are supported by this probe')
     target = deployment_target()
     if target:
-        # clang, b2 and rustc read this variable; CMake also gets it explicitly below.
         os.environ['MACOSX_DEPLOYMENT_TARGET'] = target
     lock = json.loads((HERE / 'native-sources.lock.json').read_text())
     sources = BUILD / 'sources'
@@ -52,7 +51,6 @@ def main():
             dest.mkdir()
             run('tar', '-xf', archive, '-C', dest, '--strip-components=1')
             stamp.write_text(item['sha256'])
-    # The plugin's pinned thirdparty tree supplies Lua; no system Lua discovery.
     plugin = sources / 'rime/plugins/lua'
     if not plugin.exists():
         plugin.symlink_to(sources / 'rime-lua', target_is_directory=True)
@@ -76,7 +74,6 @@ def main():
           '-DHAVE_SNAPPY=OFF', '-DHAVE_CRC32C=OFF', '-DHAVE_TCMALLOC=OFF')
     cmake('marisa', '-DENABLE_TOOLS=OFF')
     cmake('yaml', '-DYAML_CPP_BUILD_TESTS=OFF', '-DYAML_CPP_BUILD_TOOLS=OFF')
-    # OpenCC's pinned source requests C++14; the matching Rime marisa needs C++17.
     opencc_cmake = sources / 'opencc/CMakeLists.txt'
     original = opencc_cmake.read_text()
     updated = original.replace('-std=c++14', '-std=c++17').replace(
@@ -89,7 +86,6 @@ def main():
     boost = sources / 'boost'
     if not (boost / 'b2').exists():
         run('bash', 'bootstrap.sh', '--with-libraries=regex', cwd=boost)
-    # Rime does not use ICU regex; without this, Linux librime records system ICU as NEEDED.
     run('./b2', '--with-regex', '--disable-icu', 'variant=release', 'link=static', 'cxxflags=-fPIC',
         '--layout=system', f'--prefix={PREFIX}', 'install', cwd=boost)
     cmake('rime', '-DBUILD_SHARED_LIBS=ON', '-DBUILD_STATIC=ON', '-DBUILD_TEST=OFF',
@@ -97,7 +93,6 @@ def main():
           '-DINSTALL_PRIVATE_HEADERS=ON', '-DENABLE_TIMESTAMP=OFF',
           '-DCMAKE_DISABLE_FIND_PACKAGE_Gflags=ON',
           f'-DBOOST_ROOT={PREFIX}', f'-DBoost_INCLUDE_DIR={PREFIX}/include',
-          # Shared librime and prefix/bin tools both need relocatable lookup.
           f'-DCMAKE_INSTALL_RPATH={PREFIX / "lib" if sys.platform == "darwin" else "$ORIGIN;$ORIGIN/../lib"}')
     cmake('bridge', source=HERE / 'native')
     cache = (BUILD / 'cmake-bridge/CMakeCache.txt').read_text().splitlines()

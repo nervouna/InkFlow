@@ -22,14 +22,12 @@ pub struct Snapshot {
 
 impl Default for Snapshot {
     fn default() -> Self {
-        // All fields are integers or nullable pointers, matching the C contract.
         unsafe { std::mem::zeroed() }
     }
 }
 
 impl Drop for Snapshot {
     fn drop(&mut self) {
-        // The native owner holds all pointers, including on conversion failure.
         unsafe { ifp_snapshot_free(self) }
     }
 }

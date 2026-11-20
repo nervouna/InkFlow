@@ -219,7 +219,6 @@ fn parse_metadata_rejects_bad_candidate_facts() {
     }
 }
 
-/// The row an engine keeps as evidence is the row it parsed, whichever form it arrived in.
 #[test]
 fn metadata_row_round_trips_through_parse_metadata() {
     for row in [
@@ -241,7 +240,6 @@ fn metadata_row_round_trips_through_parse_metadata() {
     assert_eq!(legacy[0].row(), "0,7,n,1,0,n,,0");
 }
 
-/// Without a literal spelling check, candidate facts do not change the page's order.
 #[test]
 fn candidate_facts_do_not_change_the_order() {
     let dictionary = "午餐\twu can\t100\n午参\twu can\t100\n午惨\twu can\t50\n";
@@ -260,8 +258,6 @@ fn candidate_facts_do_not_change_the_order() {
     assert_eq!(plain, facts);
 }
 
-/// A personal English row the native side marked as complete Pinyin (`exact` = 4) stays behind the best Han
-/// candidate in a technical context. The same row without the mark leads (rule 14).
 #[test]
 fn complete_pinyin_personal_english_stays_behind_han_in_a_technical_context() {
     let ranker = ContextRanker::from_dictionary("");
@@ -274,7 +270,6 @@ fn complete_pinyin_personal_english_stays_behind_han_in_a_technical_context() {
     assert_eq!(order("0,2,a,1,1,e,english_personal_1,0"), [1, 0]);
 }
 
-/// A marked row takes the place of exact English behind the Han candidate and keeps its bucket there.
 #[test]
 fn complete_pinyin_personal_english_keeps_its_bucket_among_english() {
     let ranker = ContextRanker::from_dictionary("");
@@ -290,12 +285,9 @@ fn complete_pinyin_personal_english_keeps_its_bucket_among_english() {
     );
     let order = ranker.order(&candidates, "正在使用 Swift ", metadata.as_deref(), "");
     assert_eq!(order, [0, 3, 2, 1]);
-    // Without a technical signal the order is the same: the mark changes nothing there.
     assert_eq!(ranker.order(&candidates, "", metadata.as_deref(), ""), order);
 }
 
-/// The mark names a whole-input personal English row; anything else is malformed and returns the page
-/// to native order.
 #[test]
 fn parse_metadata_rejects_a_misplaced_complete_pinyin_mark() {
     for row in [
@@ -321,27 +313,21 @@ fn order_of(candidates: &[&str], rows: &[&str], input_length: usize) -> Vec<usiz
     ContextRanker::from_dictionary("").order(&candidates, "", metadata.as_deref(), "")
 }
 
-/// One complete syllable (an uncorrected single character covers the input): exact English the user never
-/// confirmed takes the fourth place, so the homophones stay together in the first three.
 #[test]
 fn single_syllable_defers_unconfirmed_exact_english_to_the_fourth_place() {
     let page = ["吧", "BA", "把", "八", "爸"];
     let han = "0,2,n,1,0,n,phrase,0";
     let english = "0,2,a,1,0,e,english_exact,0";
     assert_eq!(order_of(&page, &[han, english, han, han, han], 2), [0, 2, 3, 1, 4]);
-    // A learned character is the same evidence as a dictionary one.
     let learned = "0,2,n,1,0,n,user_phrase,0";
     assert_eq!(order_of(&page, &[learned, english, han, han, han], 2), [0, 2, 3, 1, 4]);
-    // A short page: behind the candidates that are there.
     assert_eq!(order_of(&page[..3], &[han, english, han], 2), [0, 2, 1]);
-    // Two unconfirmed spellings keep their order.
     assert_eq!(
         order_of(&["他", "ta", "Ta", "她", "它", "塔"], &[han, english, english, han, han, han], 2),
         [0, 3, 4, 1, 2, 5]
     );
 }
 
-/// Exact English never falls behind an English completion (`den` before `deny`), on a short or a full page.
 #[test]
 fn single_syllable_keeps_exact_english_ahead_of_completions() {
     let han = "0,3,n,1,0,n,phrase,0";
@@ -352,42 +338,34 @@ fn single_syllable_keeps_exact_english_ahead_of_completions() {
         order_of(&["扽", "den", "deny", "denim", "蹬"], &[han, english, completion, completion, han], 3),
         [0, 4, 1, 2, 3]
     );
-    // Characters already order ahead of completions, so they move up and the word stays before `deny`.
     assert_eq!(
         order_of(&["扽", "den", "蹬", "deny", "等"], &[han, english, han, completion, han], 3),
         [0, 2, 4, 1, 3]
     );
 }
 
-/// The rule leaves alone: confirmed English, input that is not one syllable, and pages without the facts.
 #[test]
 fn single_syllable_rule_keeps_every_other_page() {
     let han = "0,2,n,1,0,n,phrase,0";
     let english = "0,2,a,1,0,e,english_exact,0";
     let page = ["吧", "BA", "把", "八", "爸"];
     let same = [0, 1, 2, 3, 4];
-    // The user's own word keeps the second place.
     let personal = "0,2,a,1,1,e,english_personal_1,0";
     assert_eq!(order_of(&page, &[han, personal, han, han, han], 2), same);
-    // An abbreviation or a typo correction reached every character: not a complete syllable.
     let corrected = "0,2,n,1,0,n,phrase,1";
     assert_eq!(order_of(&page, &[corrected, english, corrected, corrected, corrected], 2), same);
-    // Words, not single characters.
     let word = "0,5,n,1,0,n,phrase,0";
     let word_english = "0,5,a,1,0,e,english_exact,0";
     assert_eq!(
         order_of(&["我们", "women", "我门", "窝们", "卧们"], &[word, word_english, word, word, word], 5),
         same
     );
-    // A completion is not evidence of a complete syllable.
     let completion = "0,2,n,1,0,n,completion,0";
     assert_eq!(
         order_of(&page, &[completion, english, completion, completion, completion], 2),
         same
     );
-    // Rows without the type and corrected facts.
     let legacy = ["0,2,n,1,0,n", "0,2,a,1,0,e", "0,2,n,1,0,n", "0,2,n,1,0,n", "0,2,n,1,0,n"];
     assert_eq!(order_of(&page, &legacy, 2), same);
-    // English already at or behind the fourth place stays there.
     assert_eq!(order_of(&["吧", "把", "八", "BA", "爸"], &[han, han, han, english, han], 2), same);
 }

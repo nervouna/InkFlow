@@ -1,7 +1,3 @@
-//! Old/new comparison against the recorded Swift quality baseline: candidate order,
-//! paging, selection, commits and learning after restart on equivalent isolated fixtures.
-//! Needs prepared production resources: set INKFLOW_PORTABLE_RESOURCES to a directory
-//! holding `shared/` and `prepared/cache/` from `Core/Portable/prepare-resources.sh`.
 use inkflow_rime::{
     channel::Reply,
     engine::{Configuration, Engine, InputSession},
@@ -15,7 +11,6 @@ use std::{
     sync::Arc,
 };
 
-// Rime is process-global: one parity test runs at a time.
 static RUNTIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 fn resources() -> Option<(PathBuf, std::sync::MutexGuard<'static, ()>)> {
@@ -68,8 +63,6 @@ fn type_input(session: &InputSession, input: &str) {
     }
 }
 
-/// The Swift runner's retention pass: commit the shown-first of unrelated Han samples, in corpus order
-/// after this sample and wrapping, into the same user directory. Returns the commits made.
 fn retain(session: &InputSession, samples: &[Value], index: usize, count: usize) -> usize {
     let target = samples[index]["target"].as_str().unwrap();
     let pool = samples[index + 1..]
@@ -96,7 +89,6 @@ fn retain(session: &InputSession, samples: &[Value], index: usize, count: usize)
     made
 }
 
-/// The Swift runner's fixed recipe: type, record the first page, find and select the target.
 fn observe(session: &InputSession, input: &str, target: &str, page_limit: usize) -> Value {
     type_input(session, input);
     let first_page = session.snapshot().unwrap();
@@ -128,7 +120,6 @@ fn observe(session: &InputSession, input: &str, target: &str, page_limit: usize)
     }
     session.clear().unwrap();
     let texts: Vec<&str> = first_page.texts();
-    // Swift's Codable omits absent optionals.
     let mut observation = json!({
         "first": texts.first().copied().unwrap_or(""),
         "topThree": texts.iter().take(3).collect::<Vec<_>>(),
@@ -282,8 +273,6 @@ fn all_candidates(session: &InputSession) -> Vec<String> {
     panic!("candidate enumeration must reach the final page");
 }
 
-/// The English translator reports each segment's completed lookup to the short-conflict
-/// filter. A negative result must not suppress a different session or a later lookup.
 #[test]
 fn short_conflict_lookup_lifetime() {
     let Some((resources, _runtime)) = resources() else { return };
@@ -323,8 +312,6 @@ fn short_conflict_lookup_lifetime() {
     fs::remove_dir_all(user).unwrap();
 }
 
-/// An opt-in host supplies context before composition. Rime owns the reordered
-/// menu, so a candidate brought across a page boundary survives every input path.
 #[test]
 fn document_context_across_pages() {
     let Some((resources, _runtime)) = resources() else { return };
@@ -397,8 +384,6 @@ fn document_context_across_pages() {
     fs::remove_dir_all(user).unwrap();
 }
 
-/// Expectations copied from Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift:
-/// runCases, contextReranking, contextCustomPhrasePriority, customPhrases and inputSettings.
 #[test]
 fn swift_engine_regressions() {
     use inkflow_rime::{Error, engine::Action, phrases::CustomPhrase, preferences::InputOption};
@@ -419,7 +404,6 @@ fn swift_engine_regressions() {
         ));
     })));
 
-    // runCases: basic composition, cancel, backspace, paging, digits, counts and session isolation.
     let a = engine.session().unwrap();
     let b = engine.session().unwrap();
     type_keys(&a, "nihao");
@@ -500,7 +484,6 @@ fn swift_engine_regressions() {
     assert_eq!(texts(&a).len(), 3);
     a.clear().unwrap();
 
-    // contextReranking: bundled phrases, stable fallback, arrows, partial selection.
     let prepared = |prefix: &str, input: &str, count: usize| {
         let session = engine.session().unwrap();
         session.set_candidate_count(count).unwrap();
@@ -508,8 +491,6 @@ fn swift_engine_regressions() {
         type_keys(&session, input);
         session
     };
-    // `nia` is ni + a: the complete phrase 你啊 leads and the partial 你 consumes only `ni`. A consonant-only
-    // tail such as the ng of `neng` is erased from the spelling profiles, so it leaves no partial choices.
     let coverage = prepared("谢谢", "nia", 9);
     assert_eq!(
         texts(&coverage)[0],
@@ -726,10 +707,8 @@ fn swift_engine_regressions() {
     partial.select(&partial.snapshot().unwrap(), 0).unwrap();
     assert_eq!(partial.take_commit().unwrap(), "你好");
 
-    // Phrase reloads wait for every live session to be idle; release the composing ones.
     drop((a, b, coverage, session, partial, plain));
 
-    // contextCustomPhrasePriority and customPhrases: priority, deferred reload, pending commits.
     let session = engine.session().unwrap();
     let phrase = CustomPhrase::validated("p1", "can", "残").unwrap();
     session
@@ -814,7 +793,6 @@ fn swift_engine_regressions() {
             && a.candidate_count() == 3
     );
     a.key(32, 0).unwrap();
-    // Applying settings between a completed composition and draining its commit must not lose text.
     a.set_configuration(3, &[changed.clone()], None).unwrap();
     assert_eq!(a.take_commit().unwrap(), "地址甲");
     type_keys(&a, "dz");
@@ -859,7 +837,6 @@ fn swift_engine_regressions() {
         "Rime's native custom_phrase.txt holds the saved phrases"
     );
 
-    // inputSettings: spelling profiles, fuzzy pairs, traditional/emoji, punctuation and paging.
     let session = engine.session().unwrap();
     let defaults = InputPreferences::default();
     let configure = |preferences: &InputPreferences| {
@@ -1079,9 +1056,6 @@ fn swift_engine_regressions() {
     );
 }
 
-/// Expectations from Core/Sources/InkFlowRime/EnginePersonalLearning.swift and
-/// macOS/Tests/PersonalDataTests.swift: management at the idle boundary, portable
-/// backup/import on isolated user directories, and rollback on a rejected snapshot.
 #[test]
 fn swift_personal_learning_and_data() {
     use inkflow_rime::engine::{LearningError, LearningSource};
@@ -1128,8 +1102,6 @@ fn swift_personal_learning_and_data() {
         .iter()
         .find(|e| e.source == LearningSource::English && e.code == "email" && e.text == "email")
         .expect("learned email");
-    // Rime batches user-dictionary writes per transaction; the newest commit can still be
-    // pending until the next transaction or teardown, exactly as with the Swift engine.
     assert!(matches!(email.commits, 4 | 5), "{entries:?}");
     let commits = email.commits;
     let undo = trained.delete_personal_learning(email).unwrap();
@@ -1152,7 +1124,6 @@ fn swift_personal_learning_and_data() {
         Err(LearningError::Conflict)
     );
     let restored = trained.personal_learning_entries().unwrap();
-    // Native restore revives the tombstoned count with one confirmation, as on macOS.
     assert!(
         restored
             .iter()
@@ -1177,7 +1148,6 @@ fn swift_personal_learning_and_data() {
     drop(session);
     drop(trained);
 
-    // Export the trained directory and import it into a fresh one.
     fs::remove_dir_all(source.join("inkflow_voice_alias.userdb")).unwrap();
     let dictionaries = personal::export(&source).unwrap();
     assert!(
@@ -1241,8 +1211,6 @@ fn swift_personal_learning_and_data() {
         "import preserves the snapshot rows"
     );
 
-    // A macOS-format document with synthetic rows restores into existing data, and a rejected
-    // snapshot leaves the originals in place.
     let synthetic = |name: &str, row: &str| {
         format!(
             "# Rime user dictionary\n#@/db_name\t{name}\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n#@/user_id\tsynthetic-source\n#@/tick\t99\n{row}\tc=7 d=0.123456789 t=42\nce shi \t测试\tc=-3 d=0.0000123 t=17\n"
@@ -1363,11 +1331,6 @@ fn user_dictionary(name: &str, rows: &[(&str, &str, i32)]) -> String {
     text
 }
 
-/// Transitions recorded by the Swift engine in Core/Tests/AIAdoptionLearningTests
-/// (`personalManagement`) and macOS/Tests/PersonalDataTests.swift, on the same state: a
-/// canonical English record and a voice alias for two spellings of one word. The Swift
-/// seeding went through voice-correction learning, which `swift_voice_correction_learning`
-/// ports; the rows are restored from a snapshot here.
 #[test]
 fn swift_personal_learning_management() {
     use inkflow_rime::engine::{LearningEntry, LearningError, LearningSource};
@@ -1422,7 +1385,6 @@ fn swift_personal_learning_management() {
         "both namespaces, case variants kept apart, sorted by identity"
     );
 
-    // A later learn supersedes a captured entry.
     let stale = entry(LearningSource::English, "Codex");
     let second = configured(&engine);
     assert_eq!(
@@ -1430,7 +1392,6 @@ fn swift_personal_learning_management() {
         Err(LearningError::Conflict)
     );
 
-    // Delete only the exact alias; the canonical record and the other spelling stay.
     let alias = entry(LearningSource::Voice, "Codex");
     let undo = engine.delete_personal_learning(&alias).unwrap();
     let remaining = engine.personal_learning_entries().unwrap();
@@ -1445,7 +1406,6 @@ fn swift_personal_learning_management() {
         "the other display identity is unchanged"
     );
     assert_eq!(commits(LearningSource::English, "Codex"), 2);
-    // Native undo restores the count with one more confirmation, once.
     engine.undo_personal_learning(&undo).unwrap();
     assert_eq!(commits(LearningSource::Voice, "Codex"), 3);
     assert_eq!(
@@ -1453,7 +1413,6 @@ fn swift_personal_learning_management() {
         Err(LearningError::Conflict)
     );
 
-    // Another session's composition blocks management; the undo stays valid.
     let canonical = engine
         .delete_personal_learning(&entry(LearningSource::English, "Codex"))
         .unwrap();
@@ -1466,7 +1425,6 @@ fn swift_personal_learning_management() {
     engine.undo_personal_learning(&canonical).unwrap();
     assert_eq!(commits(LearningSource::English, "Codex"), 3);
 
-    // A learn after a delete obsoletes its undo.
     let obsolete = engine
         .delete_personal_learning(&entry(LearningSource::Voice, "Codex"))
         .unwrap();
@@ -1484,7 +1442,6 @@ fn swift_personal_learning_management() {
         Err(LearningError::Busy),
         "the commit opens the native undo window"
     );
-    // A rejected management read must not finish Rime's immediate-undo transaction.
     first.key(0xff08, 0).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(4100));
     engine.personal_learning_entries().unwrap();
@@ -1496,7 +1453,6 @@ fn swift_personal_learning_management() {
     );
     first.clear().unwrap();
 
-    // Invalidation supersedes captured entries.
     let captured = entry(LearningSource::English, "CODEX");
     engine.invalidate_personal_learning().unwrap();
     assert_eq!(
@@ -1511,10 +1467,6 @@ fn swift_personal_learning_management() {
     );
 }
 
-/// The user directory below is what the Swift engine's own personal-data worker restored
-/// from the synthetic snapshots of macOS/Tests/PersonalDataTests.swift (the app's
-/// InkFlowDictionaryWorker, 0.6.2 build 164); the `.userdb.txt` files are that worker's
-/// export of the same databases. The Rust export must write the same bytes.
 #[test]
 fn swift_personal_snapshot_export() {
     use inkflow_rime::personal::{self, DICTIONARIES};
@@ -1538,7 +1490,6 @@ fn swift_personal_snapshot_export() {
             "{name}: the Swift worker's export of the same database"
         );
     }
-    // The export is a complete backup: macOS-format document, parsed and imported again.
     let backup = personal::Backup {
         rime: personal::RIME_VERSION.into(),
         candidate_count: 5,
@@ -1555,7 +1506,6 @@ fn swift_personal_snapshot_export() {
     println!("PASS Swift personal snapshot export: byte-identical to the recorded worker output");
 }
 
-/// The channel round trip `IFEngine.call` makes, with the capacities the Swift callers pass.
 fn call(session: &InputSession, op: &str, fields: &[&str], capacity: usize) -> Option<Reply> {
     session.call(op, fields, capacity).unwrap()
 }
@@ -1566,8 +1516,6 @@ fn status(session: &InputSession, op: &str, fields: &[&str]) -> String {
         .status
 }
 
-/// `IFEngine.aiInputIdentity`: the raw input, the raw-input caret and the preedit before the
-/// selection, read from one snapshot.
 fn ai_identity(session: &InputSession) -> Option<(String, usize, String)> {
     let snapshot = session.snapshot().unwrap();
     (!snapshot.input.is_empty()).then(|| {
@@ -1579,7 +1527,6 @@ fn ai_identity(session: &InputSession) -> Option<(String, usize, String)> {
     })
 }
 
-/// Type `input`, list every candidate and clear, as the Swift tests' `candidates` helper does.
 fn candidates_of(session: &InputSession, input: &str) -> Vec<String> {
     session.clear().unwrap();
     type_keys(session, input);
@@ -1588,8 +1535,6 @@ fn candidates_of(session: &InputSession, input: &str) -> Vec<String> {
     all
 }
 
-/// Type `input`, commit its first candidate with Space and, as the Swift tests' `ordinaryCommit`
-/// does, end the undo window with Tab or undo the commit with Backspace.
 fn ordinary_commit(session: &InputSession, input: &str, expected: &str, undo: bool) {
     session.clear().unwrap();
     type_keys(session, input);
@@ -1611,8 +1556,6 @@ fn choose(session: &InputSession, input: &str, target: &str) {
     assert_eq!(session.take_commit().unwrap(), target);
 }
 
-/// The reading `AIPronunciation.resolve` accepts from `ai_readings` rows: one phrase reading
-/// whose syllable count is the text's.
 fn phrase_readings(body: &str, text: &str) -> Vec<String> {
     body.lines()
         .filter_map(|line| line.strip_prefix("P\t"))
@@ -1628,8 +1571,6 @@ fn character_readings(body: &str, character: &str) -> Vec<String> {
         .collect()
 }
 
-/// Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift `propertyChannel`: the live
-/// dispatch half. Version 1 framing is covered by the unit tests of `src/channel.rs`.
 #[test]
 fn swift_property_channel() {
     let Some((resources, _runtime)) = resources() else {
@@ -1687,10 +1628,6 @@ fn swift_property_channel() {
     println!("PASS Swift property channel: live dispatch, field validation, bounded replies");
 }
 
-/// Core/Tests/AIAdoptionLearningTests `voiceCorrectionLearning` (write, read, clear and
-/// cleared-read scenarios) and the start of `personalManagement`, through the channel
-/// operations `IFEngine.learnVoiceCorrection`, `readVoiceAliases` and
-/// `clearPersonalEnglishLearning` run. The facade keeps the code checks and idle gating.
 #[test]
 fn swift_voice_correction_learning() {
     use inkflow_rime::engine::{LearningError, LearningSource};
@@ -1709,7 +1646,6 @@ fn swift_voice_correction_learning() {
     };
     let root = scratch("voice-correction");
 
-    // voice-correction-write
     let user = root.join("user");
     {
         let engine = engine(&resources, &user);
@@ -1759,7 +1695,6 @@ fn swift_voice_correction_learning() {
             "voice correction uses the two named Rime user dictionaries: {files:?}"
         );
     }
-    // voice-correction-read
     {
         let engine = engine(&resources, &user);
         let session = configured(&engine);
@@ -1772,7 +1707,6 @@ fn swift_voice_correction_learning() {
         assert!(!candidates_of(&session, "codux").contains(&"Codex".to_string()));
     }
 
-    // voice-correction-clear, then cleared-read
     let user = root.join("clear");
     {
         let engine = engine(&resources, &user);
@@ -1815,9 +1749,6 @@ fn swift_voice_correction_learning() {
         );
     }
 
-    // personalManagement: every learn and clear supersedes captured listings and undo tokens. The
-    // entries below are never touched by the learn that follows their capture, so the learning
-    // revision alone decides; Swift's own flow also changed the captured entry's count.
     let user = root.join("management");
     {
         let engine = engine(&resources, &user);
@@ -1875,7 +1806,6 @@ fn swift_voice_correction_learning() {
             "a clear supersedes an undo token that the cleared counts would accept"
         );
         assert_eq!(engine.personal_learning_entries(), Ok(vec![]));
-        // A refused operation changes nothing.
         assert!(learn(&first, "codux", "codex", "Codex"));
         let listing = engine.personal_learning_entries().unwrap();
         assert!(!learn(&first, "co dux", "codex", "Codex"));
@@ -1892,10 +1822,6 @@ fn swift_voice_correction_learning() {
     );
 }
 
-/// Core/Tests/AIAdoptionLearningTests main scenario (write and restart): the AI input identity,
-/// native readings, the unobserved clear before an adoption, and one adoption improving the
-/// ordinary rank of a novel word. The pronunciation resolver stays in Swift: the codes below are
-/// the ones it resolves for the same typed inputs.
 #[test]
 fn swift_ai_adoption_learning() {
     let Some((resources, _runtime)) = resources() else {
@@ -1942,11 +1868,8 @@ fn swift_ai_adoption_learning() {
             "bundled Lua supports bounded user dictionary lookup"
         );
 
-        // With AI never requested, its bridge must not change ordinary undo.
         ordinary_commit(&session, "nihao", "你好", true);
 
-        // AIHeadlessPipelineTests and AIControllerNativeTests: paging and highlighting keep the
-        // request identity, and a partial selection adds the selected prefix to it.
         type_keys(&session, "nihao");
         let identity = ai_identity(&session);
         assert_eq!(identity, Some(("nihao".into(), 5, String::new())));
@@ -2058,7 +1981,6 @@ fn swift_ai_adoption_learning() {
                 "one adoption improves ordinary rank {word}"
             );
         }
-        // Whole original input includes the selected prefix: no suffix-only code is registered.
         assert_eq!(
             status(&session, "ai_learning", &["xing mo liang ", "星墨量"]),
             "ok"
@@ -2115,13 +2037,11 @@ fn swift_ai_adoption_learning() {
             "voice reads the ordinary learned entry and canonical code: {:?}",
             voice.body
         );
-        // Ordinary undo must also survive prior lookup and adoption callbacks.
         ordinary_commit(&session, "zaijian", "再见", true);
         ordinary_commit(&session, "ceshi", "测试", false);
         existing
     };
 
-    // Restart: the learned words recall first, and no unrelated user dictionary appears.
     let engine = engine(&resources, &user);
     let session = configured(&engine);
     for (full, word) in words {
@@ -2154,8 +2074,6 @@ fn swift_ai_adoption_learning() {
     );
     drop((session, engine));
 
-    // The canonical userdb export of macOS/scripts/test-ai-learning.sh: only correct full codes
-    // with exact adoption counts, no raw typo or abbreviation, and the undone commits absent.
     let exported = inkflow_rime::personal::export(&user).unwrap();
     let rows: Vec<(String, String, i64)> = exported["pinyin_simp"]
         .as_deref()
@@ -2205,9 +2123,6 @@ fn swift_ai_adoption_learning() {
     );
 }
 
-/// What `IFEngine.qualitySnapshot()` records for the displayed page, from the Rust snapshot:
-/// the raw input and its caret, the selected prefix, and per displayed candidate the native
-/// index and rank and the personal-learning source with its consumed input range.
 fn quality_evidence(session: &InputSession, label: &str) -> Value {
     use inkflow_rime::ranking::PersonalSource;
     let shown = session.snapshot().unwrap();
@@ -2246,11 +2161,6 @@ fn quality_evidence(session: &InputSession, label: &str) -> Value {
     })
 }
 
-/// The quality evidence of `fixtures/quality-evidence-cases.json` against the recording of the
-/// Swift engine's `qualitySnapshot()` for the same steps (frozen, at the revision named in
-/// `fixtures/quality-evidence.json`): raw input and caret, selected prefix, native
-/// index and rank, and the personal-learning source with its consumed input span, for every
-/// displayed candidate.
 #[test]
 fn swift_quality_evidence() {
     use inkflow_rime::phrases::CustomPhrase;
@@ -2269,7 +2179,6 @@ fn swift_quality_evidence() {
     let user = scratch("quality-evidence");
     let engine = engine(&resources, &user);
     let session = configured(&engine);
-    // Seeds are voice corrections, which write the shared English and voice-alias memories.
     for seed in spec["seeds"].as_array().unwrap() {
         let (source, text) = (seed[0].as_str().unwrap(), seed[1].as_str().unwrap());
         assert_eq!(
@@ -2365,7 +2274,6 @@ fn swift_quality_evidence() {
         mismatches.len(),
         mismatches.join("\n")
     );
-    // The corpus must keep exercising every kind of evidence the recorder reads.
     assert!(
         english > 0 && mixed > 0 && reordered > 0 && later_page > 0,
         "english {english}, mixed {mixed}, reordered {reordered}, later page {later_page}"
@@ -2383,10 +2291,6 @@ fn copy_tree(from: &Path, to: &Path) {
     }
 }
 
-/// Selecting a mixed Chinese/English candidate confirms each of its ASCII runs in the English
-/// user dictionary, like selecting the same words alone, and a sentence whose every run is
-/// confirmed then leads. Return, cancel and an immediate undo confirm nothing; one unconfirmed
-/// run, a complete Pinyin word and a custom phrase keep their places.
 #[test]
 fn mixed_selection_learning() {
     use inkflow_rime::{phrases::CustomPhrase, ranking::PersonalSource};
@@ -2397,7 +2301,6 @@ fn mixed_selection_learning() {
     let user = scratch("mixed-learning");
     let engine = engine(&resources, &user);
     let session = configured(&engine);
-    // Where the sentence sits on the first page, and whether its evidence says every run is learned.
     let state = |input: &str, target: &str| {
         session.clear().unwrap();
         type_keys(&session, input);
@@ -2410,8 +2313,6 @@ fn mixed_selection_learning() {
         let learned = page.candidates[index].personal_source() == Some(PersonalSource::ExactMixed);
         (index, learned)
     };
-    // Whether standalone `google` carries personal evidence in a technical context. Its place no
-    // longer shows that: `google` is not Pinyin-shaped, so it leads either way.
     let standalone_learned = || {
         session.clear().unwrap();
         session.set_preceding_text("代码").unwrap();
@@ -2432,7 +2333,6 @@ fn mixed_selection_learning() {
     );
     assert!(!standalone_learned());
 
-    // Raw Return and cancellation commit no candidate; an immediate undo reverts the selection.
     session.clear().unwrap();
     type_keys(&session, google);
     session.key(0xff0d, 0).unwrap();
@@ -2456,7 +2356,6 @@ fn mixed_selection_learning() {
     );
     assert!(!standalone_learned());
 
-    // A regular selection learns the run with its display and lowercase code.
     choose(&session, google, google_sentence);
     end_undo_window();
     assert_eq!(
@@ -2469,7 +2368,6 @@ fn mixed_selection_learning() {
         "the same record serves standalone English"
     );
 
-    // A sentence with one unlearned run keeps its place until every run is learned.
     let (both, both_sentence) = ("wofalegoogleheamazon", "我发了google和amazon");
     assert_eq!(
         state(both, both_sentence),
@@ -2484,7 +2382,6 @@ fn mixed_selection_learning() {
         "every run is learned"
     );
 
-    // A custom phrase keeps its explicit priority over a learned sentence.
     let phrase = CustomPhrase::validated("phrase-0", google, "自定义词").unwrap();
     session
         .set_configuration(9, &[phrase], Some(&InputPreferences::default()))
@@ -2496,7 +2393,6 @@ fn mixed_selection_learning() {
         .set_configuration(9, &[], Some(&InputPreferences::default()))
         .unwrap();
 
-    // A complete Pinyin word is never a personal token, however often it is selected.
     let (banana, banana_sentence) = ("wokanbanana", "我看banana");
     assert_eq!(state(banana, banana_sentence), (1, false));
     for _ in 0..2 {

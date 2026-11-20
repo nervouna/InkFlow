@@ -1,4 +1,3 @@
-//! Input preferences, matching InkFlowDomain/InputPreferences.swift.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InputOption {
@@ -36,7 +35,6 @@ impl InputOption {
         InputOption::Traditional,
     ];
 
-    /// The Swift raw value; the quality configuration records options by this name.
     pub fn name(self) -> &'static str {
         match self {
             InputOption::Abbreviation => "abbreviation",
@@ -68,7 +66,6 @@ impl InputOption {
     }
 }
 
-/// A value snapshot belongs to one composition, even while persisted preferences change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InputPreferences {
     values: [bool; 14],
@@ -117,7 +114,6 @@ impl InputPreferences {
         spelling_profile(mask)
     }
 
-    /// Replace entire config nodes so Rime's existing components retain their own snapshots.
     pub fn schema_patch(&self) -> String {
         let mut bindings = Vec::new();
         if self.get(InputOption::BracketPaging) {
