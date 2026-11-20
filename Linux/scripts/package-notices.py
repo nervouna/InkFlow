@@ -79,7 +79,12 @@ def main():
             raise SystemExit(f'Missing staged payload: {name}')
     copy(ROOT / 'Linux/scripts/install.py', package / 'install.py')
     notices = package / 'share/inkflow/Licenses'
-    source = package / 'share/inkflow/SOURCE'
+    version = sys.argv[2]
+    source = package.parent / 'SOURCE' if version else package / 'share/inkflow/SOURCE'
+    if version:
+        asset = f'InkFlow-{version}-linux-source.tar.xz'
+        url = f'https://github.com/nervouna/InkFlow/releases/tag/linux-v{version}'
+        (package / 'share/inkflow/SOURCE.txt').write_text(f'{asset}\n{url}\nSource revision: {revision}\n')
     source.mkdir(parents=True)
     notices.mkdir(parents=True)
     # Full committed project: recipe, modifications, data snapshots and licenses.
@@ -115,7 +120,7 @@ def main():
 
     recipe = (ROOT / 'Core/scripts/resource-dependencies.sh').read_text()
     inputs = re.findall(r'^fetch (\S+) ([0-9a-f]{64}) (https:\S+)$', recipe, re.M)
-    if len(inputs) != 3:
+    if {name for name, _, _ in inputs} != {'pinyin.tar.gz', 'emoji.txt'}:
         raise SystemExit('Review changed dictionary download recipe')
     for name, sha, _ in inputs:
         copy(ROOT / 'build/deps' / name, source / 'deps' / name, sha)
@@ -205,6 +210,8 @@ provenance record, not independent proof of how compiled cache bytes were produc
                 'files': {p.relative_to(package).as_posix(): digest(p)
                           for p in sorted(package.rglob('*'))
                           if p.is_file() and p != package / 'package.json'}}
+    if version:
+        manifest['version'] = version
     (package / 'package.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
 

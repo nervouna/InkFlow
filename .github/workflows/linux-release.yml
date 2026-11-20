@@ -1,0 +1,106 @@
+name: Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Linux version (X.Y.Z)
+        type: string
+        required: true
+  pull_request:
+    paths:
+      - '.github/workflows/linux-release.yml'
+      - 'Linux/scripts/**'
+      - 'Linux/fcitx5/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-release-${{ inputs.version || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  VERSION: ${{ inputs.version || '0.0.0' }}
+
+jobs:
+  package:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    container:
+      # arch4edu's import of the upstream generic Arch Linux ARM aarch64 rootfs.
+      image: arch4edu/archlinuxarm@sha256:1db43d1af9917db5fd34af3dab64e2b229a21240e81bb765e3d2d3c34739d587
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build tools from the Omarchy ARM stable mirror
+        run: |
+          set -eu
+          pacman-key --init
+          pacman-key --populate archlinuxarm
+          cat > /tmp/inkflow-pacman.conf <<'PACMAN'
+          [options]
+          Architecture = auto
+          SigLevel = Required DatabaseOptional
+          ParallelDownloads = 5
+          [core]
+          Server = https://arm-stable-mirror.omarchy.org/$arch/$repo
+          [extra]
+          Server = https://arm-stable-mirror.omarchy.org/$arch/$repo
+          [alarm]
+          Server = https://arm-stable-mirror.omarchy.org/$arch/$repo
+          PACMAN
+          pacman --config /tmp/inkflow-pacman.conf --disable-sandbox -Syyuu --noconfirm --needed \
+            base-devel git rustup fcitx5 extra-cmake-modules python-pip python-dbus-next dbus
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Prepare pinned build tools
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git rev-parse --verify HEAD
+          dbus-uuidgen --ensure
+          python3 -m venv /tmp/inkflow-tools
+          /tmp/inkflow-tools/bin/pip install cmake==3.31.6 ninja==1.11.1.4
+          echo /tmp/inkflow-tools/bin >> "$GITHUB_PATH"
+          rustup show active-toolchain
+          rustup component add rust-docs
+          cargo fetch --locked --manifest-path Core/Portable/Cargo.toml
+          cargo fetch --locked --manifest-path Core/Portable/dictionary/Cargo.toml
+      - name: Pack and verify the final archives
+        env:
+          PYTHON: /usr/bin/python3
+          XZ_OPT: -T2
+        run: |
+          /usr/bin/python3 -B Linux/scripts/test_install.py
+          bash Linux/scripts/package.sh --release "$VERSION"
+          bash Linux/scripts/check-release.sh "$VERSION"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: linux-release
+          path: build/linux/releases/${{ env.VERSION }}/*
+          if-no-files-found: error
+          compression-level: 0
+
+  draft:
+    needs: package
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v5
+        with:
+          name: linux-release
+          path: build/linux/assets
+      - name: Create or finish the verified Linux draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: bash Linux/scripts/draft-release.sh "$VERSION" "$GITHUB_SHA" build/linux/assets

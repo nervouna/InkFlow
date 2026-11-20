@@ -39,7 +39,7 @@ This gate covers compilation of `engine.cpp` and `candidates.cpp` against the di
 
 ## User-local installation and installed-addon test
 
-Use `Linux/scripts/package.sh` to build a package directory with the addon, target-native resources, notices, corresponding dictionary sources, and a SHA-256 file manifest. See [Linux installation](../README.md) for packaging and install commands.
+Linux releases ship the corresponding source as a separate archive. Use `Linux/scripts/package.sh` to build a local package directory with the addon, target-native resources, notices, corresponding dictionary sources, and a SHA-256 file manifest. See [Linux installation](../README.md) for packaging and install commands.
 
 `Linux/scripts/install.py` installs that directory without sudo or network access. It keeps immutable releases under `$XDG_DATA_HOME/inkflow/releases/` and switches the `current` symlink during upgrades. The generated addon descriptor names its absolute library path, so no global `FCITX_ADDON_DIRS` override is needed. Personal dictionaries remain in `$XDG_DATA_HOME/inkflow/rime`; configuration and custom phrases remain in `~/.config/fcitx5/conf/inkflow.conf`.
 

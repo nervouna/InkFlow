@@ -428,11 +428,15 @@ class UpdateTests(unittest.TestCase):
         """Publish a release whose asset names map to bytes, for both latest and tagged lookups."""
         for name, body in assets.items():
             self.server.files[f"/download/{name}"] = body
-        release = {"tag_name": f"v{version}", "assets": [
+        release = {"tag_name": f"linux-v{version}", "draft": False, "prerelease": False, "assets": [
             {"name": name, "browser_download_url": f"{self.server.base}/download/{name}"} for name in assets]}
-        body = json.dumps(release).encode()
-        self.server.files["/api/repos/nervouna/InkFlow/releases/latest"] = body
-        self.server.files[f"/api/repos/nervouna/InkFlow/releases/tags/v{version}"] = body
+        self.feed([release])
+        self.server.files[f"/api/repos/nervouna/InkFlow/releases/tags/linux-v{version}"] = json.dumps(release).encode()
+        return release
+
+    def feed(self, releases, page=1):
+        path = f"/api/repos/nervouna/InkFlow/releases?per_page=100&page={page}"
+        self.server.files[path] = json.dumps(releases).encode()
 
     @staticmethod
     def sums(*archives):
@@ -442,11 +446,11 @@ class UpdateTests(unittest.TestCase):
         self.assertFalse((self.data / "inkflow").exists())
         self.assertFalse(self.log.exists())
 
-    def test_update_installs_latest_package(self):
+    def test_update_installs_tagged_package(self):
         archive = self.build_archive("0.8.0")
         self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
-        self.assertEqual(installer.update(self.data, "v0.8.0", "fixture-fcitx5.service"), 0)
-        self.assertIn("/api/repos/nervouna/InkFlow/releases/tags/v0.8.0", self.server.requests)
+        self.assertEqual(installer.update(self.data, "linux-v0.8.0", "fixture-fcitx5.service"), 0)
+        self.assertIn("/api/repos/nervouna/InkFlow/releases/tags/linux-v0.8.0", self.server.requests)
         state = json.loads((self.data / "inkflow/installation.json").read_text())
         self.assertEqual(state, {"current": archive["identifier"], "previous": None})
         self.assertEqual(json.loads((self.data / "inkflow/current/package.json").read_text())["version"], "0.8.0")
@@ -456,9 +460,30 @@ class UpdateTests(unittest.TestCase):
 
     def test_latest_release_is_used_without_tag(self):
         archive = self.build_archive("0.8.0")
-        self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
-        installer.update(self.data, None, "fixture-fcitx5.service")
-        self.assertIn("/api/repos/nervouna/InkFlow/releases/latest", self.server.requests)
+        stable = self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
+        mac = dict(stable, tag_name="v99.0.0")
+        self.feed([mac] * 97 + [dict(stable, tag_name="linux-v0.10.0", draft=True),
+                                dict(stable, tag_name="linux-v1.0.0", prerelease=True),
+                                dict(stable, tag_name="linux-v0.7.10")])
+        self.feed([stable, dict(stable, tag_name="linux-v0.7.9")], page=2)
+        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service"), 0)
+        self.assertIn("/api/repos/nervouna/InkFlow/releases?per_page=100&page=2", self.server.requests)
+
+    def test_no_stable_linux_release(self):
+        self.feed([{"tag_name": "v1.0.0"}])
+        with self.assertRaisesRegex(RuntimeError, "No stable Linux release"):
+            installer.update(self.data, None, None)
+        with self.assertRaisesRegex(ValueError, "linux-vX.Y.Z"):
+            installer.update(self.data, "v1.0.0", None)
+        self.assert_nothing_changed()
+
+    def test_draft_install_is_not_downgraded_by_update(self):
+        self.serve("0.8.0", {f"InkFlow-0.8.0-linux-{platform.machine()}.tar.xz": b"", installer.SUMS: b""})
+        current = self.data / "inkflow/current"
+        current.mkdir(parents=True)
+        (current / "package.json").write_text(json.dumps({"version": "0.10.0"}))
+        self.assertEqual(installer.update(self.data, None, None), 0)
+        self.assertEqual(len(self.server.requests), 1)
 
     def test_checksum_mismatch_installs_nothing(self):
         archive = self.build_archive("0.8.0")
@@ -497,7 +522,7 @@ class UpdateTests(unittest.TestCase):
         current.mkdir(parents=True)
         (current / "package.json").write_text(json.dumps({"version": "0.8.0"}))
         self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service"), 0)
-        self.assertEqual(self.server.requests, ["/api/repos/nervouna/InkFlow/releases/latest"])
+        self.assertEqual(self.server.requests, ["/api/repos/nervouna/InkFlow/releases?per_page=100&page=1"])
         self.assertFalse(self.log.exists())
 
     def test_plain_http_is_refused_without_the_test_variable(self):
