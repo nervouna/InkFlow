@@ -68,6 +68,7 @@ for `n`. Daemon startup, OS cache eviction and screen painting are outside this 
 spelling then gets one warmup and 12 measured repetitions, with a reset between repetitions. The JSON reports
 client-side D-Bus key-call round trips in milliseconds (nearest-rank p50/p95/p99) and panel signal counts for
 presses and releases separately. Repeat invocations to compare first activations across fresh processes.
+Use `--latency-samples` to include each completed key-call duration in nanoseconds for pooled percentiles.
 
 ## Target verification
 

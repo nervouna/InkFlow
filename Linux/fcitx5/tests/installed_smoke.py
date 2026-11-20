@@ -48,9 +48,9 @@ async def main():
             capabilities = (1 << 1) | (1 << 4) | (1 << 39)
             await context.call_set_capability(capabilities)
             await context.call_focus_in()
-            if sys.argv[1:] == ["--latency"]:
+            if sys.argv[1:] in (["--latency"], ["--latency-samples"]):
                 from latency import measure_latency
-                await measure_latency(context, controller)
+                await measure_latency(context, controller, include_samples=sys.argv[1] == "--latency-samples")
                 return
 
             commits, preedits, panels, uppers = [], [], [], []

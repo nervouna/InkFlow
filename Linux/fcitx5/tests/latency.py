@@ -14,7 +14,7 @@ def percentiles(samples):
     }
 
 
-async def measure_latency(context, controller):
+async def measure_latency(context, controller, include_samples):
     signals = 0
     first_candidate = asyncio.get_running_loop().create_future()
 
@@ -59,4 +59,7 @@ async def measure_latency(context, controller):
             label: {"events": len(samples), "panel_signals": count, **percentiles(samples)}
             for label, samples, count in zip(("press", "release"), durations, panel_counts)
         }
+        if include_samples:
+            for label, samples in zip(("press", "release"), durations):
+                result["words"][word][label]["samples_ns"] = samples
     print(json.dumps(result, indent=2))

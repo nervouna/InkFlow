@@ -6,8 +6,8 @@ prefix=${1:-$HOME/.local}
 mode=${2:-smoke}
 case "$mode" in
   smoke) default_im=inkflow-pinyin ;;
-  --latency) default_im=keyboard-us ;;
-  *) echo "Usage: $0 [PREFIX] [--latency]" >&2
+  --latency|--latency-samples) default_im=keyboard-us ;;
+  *) echo "Usage: $0 [PREFIX] [--latency|--latency-samples]" >&2
      exit 2 ;;
 esac
 resources="$prefix/share/inkflow/rime"
