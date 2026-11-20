@@ -18,7 +18,6 @@ ScalarKind kind(uint32_t scalar) {
   return range == std::end(scalarRanges) ? ScalarKind::Other : range->kind;
 }
 
-// Matches QualityTextKind.classify; the input snapshot contains validated UTF-8.
 uint8_t chineseLength(std::string_view candidate) {
   bool han = false;
   uint8_t length = 0;
@@ -51,7 +50,7 @@ std::string_view prefix(const IFRSnapshot* snapshot) {
 bool equalsParts(std::string_view whole, std::string_view left, std::string_view right) {
   return whole.size() == left.size() + right.size() && whole.starts_with(left) && whole.ends_with(right);
 }
-}  // namespace
+}
 
 QualityWriter::QualityWriter(std::string directory)
     : worker_([this, directory = std::move(directory)] {
@@ -70,7 +69,6 @@ QualityWriter::~QualityWriter() {
 }
 
 void QualityWriter::submit(std::span<const QualityDecision> decisions) {
-  // Fcitx5's event loop is the only producer. It never waits for the writer.
   if (decisions.empty() || !accepting_.load(std::memory_order_acquire)) return;
   const unsigned end = written_.load(std::memory_order_relaxed);
   if (decisions.size() > capacity - (end - read_.load(std::memory_order_acquire))) return;
@@ -83,7 +81,6 @@ void QualityWriter::submit(std::span<const QualityDecision> decisions) {
 }
 
 void QualityWriter::run(const std::string& directory) {
-  // No dlopen, SQLite or timezone setup competes with the first candidate.
   wake_.acquire();
   if (!written_.load(std::memory_order_acquire)) return;
   Dl_info info{};
@@ -102,8 +99,6 @@ void QualityWriter::run(const std::string& directory) {
   for (;;) {
     std::array<QualityDecision, 64> batch;
     std::size_t n = 0;
-    // Coalesce bursts of selections into one transaction. A pause/shutdown
-    // posts an extra wake so queued decisions drain without waiting out the timer.
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(40);
     do {
       if (head == written_.load(std::memory_order_acquire)) break;
@@ -169,8 +164,6 @@ void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* befor
       return;
     }
     auto delivered = view(commit);
-    // The punctuation itself is excluded. Earlier segment choices are proven only
-    // if the commit consists of the exact selected prefix, candidate and optional punctuation.
     if (punctuation && delivered.starts_with(oldPrefix)) {
       auto tail = delivered.substr(oldPrefix.size());
       if (tail.starts_with(chosen)) {
@@ -195,4 +188,4 @@ void QualityComposition::observe(QualityWriter& writer, const IFRSnapshot* befor
   if (nextInput.empty()) reset();
 }
 
-}  // namespace inkflow
+}

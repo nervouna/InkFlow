@@ -233,7 +233,6 @@ class Installer:
         atomic_write(self.journal, json.dumps(record).encode())
         try:
             desktop.stop()
-            # Fcitx5 can flush its profile during shutdown.
             backup = self.snapshot()
             record["files"] = backup
             atomic_write(self.journal, json.dumps(record).encode())
@@ -295,7 +294,6 @@ class Installer:
                 shutil.copytree(package, staging, dirs_exist_ok=True)
                 if validate(staging) != identifier:
                     raise ValueError("Package changed while being copied")
-                # Persist the payload before a durable current link can refer to it.
                 for path in staging.rglob("*"):
                     if path.is_file():
                         with path.open("rb") as source:
@@ -344,8 +342,6 @@ class Installer:
 
 
 RELEASE_API = "https://api.github.com/repos/nervouna/InkFlow"
-# Test-only: update() reads this variable as the API base URL. While it is set, checked_url() also accepts
-# plain http://127.0.0.1 URLs; without it, every URL must be HTTPS.
 TEST_API_VARIABLE = "INKFLOW_TEST_RELEASE_API"
 LOCAL_TEST_PREFIX = "http://127.0.0.1:"
 TAG = re.compile(r"linux-v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))")

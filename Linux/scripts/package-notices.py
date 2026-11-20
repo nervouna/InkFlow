@@ -88,7 +88,6 @@ def main():
         (package / 'share/inkflow/SOURCE.txt').write_text(f'{asset}\n{url}\nSource revision: {revision}\n')
     source.mkdir(parents=True)
     notices.mkdir(parents=True)
-    # Full committed project: recipe, modifications, data snapshots and licenses.
     subprocess.run(['git', 'archive', '--format=tar', '-o', str(source / 'inkflow.tar'),
                     revision], cwd=ROOT, check=True)
     for name in ('LICENSE', 'NOTICE'):
@@ -112,7 +111,6 @@ def main():
     required.append(utf8)
     for name in required:
         copy(native / name, notices / 'native' / name)
-    # Preserve embedded header notices too (RapidJSON, UTF8-CPP, Darts-clone).
     for directory in ('rime/include', 'opencc/deps'):
         for path in sorted((native / directory).rglob('*')):
             if path.is_file() and (path.suffix in ('.h', '.hpp') or
@@ -133,14 +131,13 @@ def main():
             original = ROOT / 'build/deps' / ('rime-pinyin-simp-' + item['pinnedCommit']) / item['path']
         copy(original, source / 'dictionary-sources' / name, item['pinnedSHA256'])
 
-    # Both locked Rust graphs are used: engine and dictionary generator.
     for crate in ('Core/Portable', 'Core/Portable/dictionary'):
         metadata = json.loads(command('cargo', 'metadata', '--locked', '--offline',
                                       '--format-version', '1', '--manifest-path',
                                       str(ROOT / crate / 'Cargo.toml')))
         for entry in metadata['packages']:
             if entry['source'] is None:
-                continue  # Local source and its license are in inkflow.tar.
+                continue
             directory = Path(entry['manifest_path']).parent
             key = entry['name'] + '-' + entry['version']
             destination = source / 'rust' / key
@@ -198,7 +195,6 @@ provenance record, not independent proof of how compiled cache bytes were produc
                     'Architecture alone does not imply ABI compatibility; build on the oldest '
                     'supported target and check ELF dependencies on each target.')
     (package / 'share/inkflow/SYSTEM-DEPENDENCIES.txt').write_text(dependencies + '\n')
-    # Dereference installed library aliases so every delivered byte is hashed.
     for path in sorted(package.rglob('*')):
         if path.is_symlink():
             if not path.is_file():

@@ -25,7 +25,6 @@ impl Bytes {
         if self.len == 0 {
             return Ok(&[]);
         }
-        // The C caller guarantees the lifetime and readable extent of this buffer.
         Ok(unsafe { slice::from_raw_parts(self.data, self.len) })
     }
 }

@@ -53,3 +53,13 @@ Check the result with `gh api repos/nervouna/InkFlow/rulesets/26946523 --jq .byp
 **Build numbers.** A runner has no build counter and `macOS/Info.plist` holds only the floor, so the workflow seeds `build/build-number/last` with the highest build in any release's asset names, drafts included. Sparkle then sees the build increase.
 
 **Dry run.** After adding the secrets, run `gh workflow run release.yml --ref main -f bump=patch -f draft=true` (or Actions → Release → Run workflow). It checks the credentials within minutes, then bumps without pushing, verifies (`test.sh all`), signs, notarizes both artifacts and leaves draft `vX.Y.Z` with placeholder notes; no tag, push or publication. Inspect the draft, then delete it or replace its notes for the publishing run. A failed run uploads the verification log and notarization results as the `release-logs` artifact.
+
+The hosted workflow checks both signing identities before the long verification and requires one match of
+each kind. It imports the Developer ID intermediates if the runner's trust setup fails validation.
+The certificate search uses a here-string so an early `grep -q` match cannot fail under `pipefail` through SIGPIPE.
+The cleanup step restores the previous keychain search order.
+
+If a run already pushed its tag, a retry builds that revision to finish the same release. It clears assets from
+the previous attempt before uploading the fresh build. A publishing run needs Chinese release notes from its
+precreated draft. Dry runs may use marked placeholders. Hosted runners lack Speech support, so the voice unit
+validates the audio feed with a fixed format. The release job restores the same verified input caches as macOS CI.

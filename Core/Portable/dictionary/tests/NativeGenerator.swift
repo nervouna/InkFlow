@@ -1,7 +1,6 @@
 import Foundation
 import InkFlowDictionary
 
-// Standalone comparison host. Shipping preparation still uses its existing worker.
 private final class Buffer {
     private let pointer: UnsafeMutablePointer<UInt8>
     private let count: Int
@@ -71,7 +70,6 @@ private func run() throws {
     } else {
         throw Failure(detail: "Expected generate CATALOG SOURCES LEGACY CORRECTIONS NEW_OUTPUT or spelling DICTIONARY NEW_OUTPUT")
     }
-    // All input buffers have been released before results are inspected or written.
     defer { ifd_result_free(result) }
     try check(result)
     guard !FileManager.default.fileExists(atPath: destination.path) else {

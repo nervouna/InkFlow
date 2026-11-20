@@ -71,8 +71,6 @@ async def main():
             async def key(code, release=False, states=0):
                 return await context.call_process_key_event(code, 0, states, release, 0)
 
-            # Fcitx5 shows the input-method information as an overlay after a switch; the
-            # trigger's key releases reach the engine and must not clear it.
             await controller.call_set_current_im("keyboard-us")
             await controller.call_set_current_im("inkflow-pinyin")
             assert uppers and uppers[-1], "no input-method information after the switch"
@@ -91,12 +89,10 @@ async def main():
             await key(ord("n"), release=True)
             await key(0xFFE1)
             assert await key(0xFFE1, release=True, states=1)
-            # Shift+Left must pass through and disarm the standalone Shift toggle.
             await key(0xFFE1)
             assert not await key(0xFF51, states=1)
             await key(0xFF51, release=True, states=1)
             await key(0xFFE1, release=True, states=1)
-            # A client taking over the panel mid-composition needs its first full candidate list.
             await context.call_set_capability(capabilities & ~(1 << 39))
             await type_text("nih")
             assert await key(ord("a"))

@@ -25,14 +25,13 @@ FCITX_DEFINE_LOG_CATEGORY(inkflow_log, "inkflow");
 
 namespace {
 constexpr const char* kConfigFile = "conf/inkflow.conf";
-// The engine keeps 16 graphemes; a few more code points cover combining sequences.
 constexpr std::size_t kPrecedingCodePoints = 32;
 
 bool directory_exists(const std::string& path) {
   struct stat info{};
   return ::stat(path.c_str(), &info) == 0;
 }
-}  // namespace
+}
 
 Engine::Engine(fcitx::Instance* instance)
     : instance_(instance),
@@ -44,8 +43,6 @@ Engine::Engine(fcitx::Instance* instance)
 }
 
 Engine::~Engine() {
-  // The factory unregisters itself and destroys every session after this body; the
-  // last of those references finalizes Rime.
   ifr_engine_destroy(engine_);
 }
 
@@ -55,8 +52,6 @@ void Engine::createEngine() {
     INKFLOW_WARN() << "no prepared resources under XDG data directories; keys pass through";
     return;
   }
-  // A pending import can leave old and new dictionaries mixed; restore the originals
-  // before Rime opens the directory, or stay off so typing cannot build on that state.
   IFRStatus recovered = ifr_personal_recover(paths_.user.c_str());
   if (recovered != IFR_OK) {
     INKFLOW_WARN() << "personal data needs recovery; keys pass through: " << recovered << " "
@@ -74,7 +69,6 @@ void Engine::createEngine() {
   INKFLOW_INFO() << "engine ready: " << paths_.shared << " user " << paths_.user;
 }
 
-// Every session and the engine reference go, so Rime finalizes before this returns.
 void Engine::destroyEngine() {
   instance_->inputContextManager().foreach([this](fcitx::InputContext* ic) {
     State* st = state(ic);
@@ -210,7 +204,6 @@ void Engine::setConfig(const fcitx::RawConfig& raw) {
 }
 
 void Engine::importBackup(std::string file) {
-  // The request is consumed whatever happens, so a bad file cannot repeat on every reload.
   config_.importBackup.setValue(std::string());
   saveConfig();
   std::ifstream input(file, std::ios::binary);
@@ -280,8 +273,6 @@ void Engine::failed(fcitx::InputContext* ic, State* state, const char* what, IFR
   clear(ic, state);
 }
 
-// Document context is captured only when a composition starts and only through the
-// client's declared surrounding-text capability; anything else leaves native order.
 void Engine::refreshContext(fcitx::InputContext* ic, State* state) {
   std::string preceding;
   if (!sensitive(ic) && ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText)) {
@@ -300,7 +291,6 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
   State* st = state(ic);
   if (sensitive(ic)) {
     st->quality.reset();
-    // Never compose or learn in password and sensitive fields; the client gets raw keys.
     if (st->session && st->composing()) clear(ic, st);
     return;
   }
@@ -349,8 +339,6 @@ void Engine::activate(const fcitx::InputMethodEntry&, fcitx::InputContextEvent& 
 void Engine::deactivate(const fcitx::InputMethodEntry& entry, fcitx::InputContextEvent& event) {
   auto* ic = event.inputContext();
   State* st = state(ic);
-  // Switching input methods keeps what was typed, as the macOS frontend does on
-  // deactivation; focus changes drop the composition because the target is gone.
   if (st->session && st->composing() && !sensitive(ic) &&
       event.type() == fcitx::EventType::InputContextSwitchInputMethod) {
     int handled = 0;
@@ -430,7 +418,6 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
   const auto* previous = reuseUnchanged && capabilities == st->presentedCapabilities ? st->snapshot.get() : nullptr;
   status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
   const auto choice = std::exchange(st->qualityChoice, std::nullopt);
-  // A retained page is still selectable. No commit or quality decision occurs on an unchanged release.
   if (status == IFR_OK && !raw) return;
   if (quality_ && !sensitive(ic)) {
     st->quality.observe(*quality_, st->snapshot.get(), raw, commit, choice);
@@ -439,8 +426,6 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
   }
   ifr_string_free(commit);
   auto& panel = ic->inputPanel();
-  // empty() ignores the overlay message, so Fcitx5's input-method information survives
-  // the trigger's key releases.
   if (!panel.empty()) panel.reset();
   if (status != IFR_OK) {
     INKFLOW_WARN() << "snapshot failed: " << status << " " << ifr_last_error();
@@ -485,7 +470,7 @@ void Engine::clear(fcitx::InputContext* ic, State* st) {
   refresh(ic, st);
 }
 
-}  // namespace inkflow
+}
 
 #ifdef FCITX_ADDON_FACTORY_V2
 FCITX_ADDON_FACTORY_V2(inkflow, inkflow::Factory);

@@ -1,5 +1,3 @@
-// Minimum daily-use configuration: ~/.config/fcitx5/conf/inkflow.conf. Option names
-// follow the macOS preference keys so a backup's settings map one to one.
 #ifndef INKFLOW_FCITX5_CONFIG_H
 #define INKFLOW_FCITX5_CONFIG_H
 #include <fcitx-config/configuration.h>
@@ -34,5 +32,5 @@ FCITX_CONFIGURATION(
     fcitx::Option<std::string> importBackup{this, "ImportBackup",
                                             "Path of a macOS personal backup to import once"};);
 
-}  // namespace inkflow
+}
 #endif

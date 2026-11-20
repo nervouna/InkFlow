@@ -1,5 +1,4 @@
 #!/bin/bash
-# Requires dbus-next in PYTHON; never connects to the desktop's D-Bus or user data.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 prefix=${1:-$HOME/.local}
@@ -28,7 +27,6 @@ if [[ $mode == --latency* ]]; then
   mkdir -p "$scratch/config/fcitx5/conf"
   printf 'RecordQuality=%s\n' "$recording" > "$scratch/config/fcitx5/conf/inkflow.conf"
 fi
-# Let standalone left Shift reach the addon instead of Fcitx5's default global AltTriggerKeys.
 printf '[Hotkey/AltTriggerKeys]\n0=Control+Alt+F12\n' > "$scratch/config/fcitx5/config"
 cat > "$scratch/config/fcitx5/profile" <<PROFILE
 [Groups/0]

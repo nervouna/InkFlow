@@ -1,6 +1,3 @@
-// Fcitx5 candidate list over one engine snapshot. Navigation goes back through the
-// engine, which rebuilds the panel; every selection carries the snapshot it was shown
-// from so a late click on a superseded page is rejected by the engine.
 #ifndef INKFLOW_FCITX5_CANDIDATES_H
 #define INKFLOW_FCITX5_CANDIDATES_H
 #include <fcitx/candidatelist.h>
@@ -53,5 +50,5 @@ private:
   std::vector<std::unique_ptr<Candidate>> words_;
 };
 
-}  // namespace inkflow
+}
 #endif

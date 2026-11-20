@@ -7,6 +7,8 @@ the NFC phrase key (three bytes per scalar), six bytes of zero-padded lowercase 
 little-endian frequency. The 40-byte header and phrase-length tables keep their layout. The ranker also accepts
 version 1; preparing resources upgrades the index. The Swift reference emits the same version-2 bytes.
 An unsplit or unsupported code has an all-zero syllable, retaining its text evidence without claiming a terminal reading.
+The index accepts 2–8 Han graphemes, each a single scalar. The sorted fixed-width tables let the ranker
+load the index directly.
 
 ## Verify
 
@@ -34,14 +36,20 @@ build/dictionary/cargo/release/inkflow-dictionary spelling \
 ```
 
 It refuses an existing output directory. Validation completes before creating output; a write failure removes only the new directory it created.
+Callers stage this new directory before publishing prepared resources.
 
 ## In-process preparation boundary
 
 `include/inkflow_dictionary.h` and its Clang module map expose an experimental C ABI from `libinkflow_dictionary.a`. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. `Core/Sources/InkFlowDomain/DictionaryGenerator.swift` is the Swift production wrapper. The old Swift algorithm is retained only in the dictionary test target.
 
-Inputs are borrowed pointer/length buffers. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
+Inputs are borrowed pointer/length buffers. The C caller supplies valid, aligned, readable storage for
+nonempty buffers and arrays. Null input pointers are accepted for empty buffers and arrays. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
 
-Every operation returns an owned opaque result. Successful generation supplies the dictionary and manifest; spelling supplies 32 named schema files plus `pinyin_simp.context.bin`; receipt validation supplies no files. Failure supplies error JSON and no files. Output pointers and names are length-delimited, not NUL-terminated, and remain valid until the caller frees the result. Result accessors require a live non-null handle. Independent calls share no mutable generator state.
+Every operation returns an owned opaque result. Successful generation supplies the dictionary and manifest; spelling supplies 32 named schema files plus `pinyin_simp.context.bin`; receipt validation supplies no files. Failure supplies error JSON and no files. Output pointers and names are length-delimited, not NUL-terminated, and remain valid until the caller frees the result. Result accessors require a live non-null handle. Retain the result while reading its buffers and release it
+once. Freeing a null result has no effect. Out-of-range file indices produce empty buffers. File names
+are UTF-8 basenames. The error buffer is empty on success and contains JSON with `code`, `source` and
+`line` on failure. The immutable buffer returned by `ifd_catalog` lives for the process lifetime.
+Independent calls and results may be used on different threads because they share no mutable generator state.
 
 The test script compiles and links a C consumer on both desktops. On macOS it also builds a standalone Swift consumer, releases input storage before reading results, and compares the complete corpus and all spelling bytes through the ABI against the Rust CLI and original Swift implementation. `swift-ffi-corpus.json` retains that consumer's actual summary. This proves the preparation boundary, not shipping worker sandbox, packaging, or resource activation behavior.
 
@@ -54,6 +62,9 @@ The test script compiles and links a C consumer on both desktops. On macOS it al
 The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
 
 Dictionary, spelling-profile and context-index bytes must match exactly. Manifest fields must match after JSON decoding, except calibration multipliers allow relative/absolute error up to `1e-12` for platform math libraries. This tolerance does not apply to weights, hashes, counts, or content versions. JSON spacing and floating-point number spelling are not compatibility requirements.
+
+The parser preserves Foundation's whitespace character sets. Spelling profiles omit the legacy source's
+consonant-only syllables so syllable coverage leaves abbreviations available.
 
 Two details are deliberately preserved:
 

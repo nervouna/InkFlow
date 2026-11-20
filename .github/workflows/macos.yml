@@ -1,8 +1,5 @@
 name: macOS
 
-# Docs-only changes must not spend macOS minutes. Both jobs are required checks on main, so a pull request
-# always starts this workflow: for a docs-only one the `changes` job reports no code and the two jobs are
-# skipped, which a required check counts as passed.
 on:
   push:
     branches: [main]
@@ -36,7 +33,6 @@ jobs:
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
   quick:
-    # Only the quick group. `test.sh all` stays a manual release step.
     name: test.sh quick
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -44,8 +40,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
-      # resource-dependencies.sh verifies every archive by SHA-256, so a stale cache only
-      # costs a re-download. rime-cache is keyed by prepare-rime.sh's own input digest.
       - name: Cache dictionaries and prepared Rime data
         uses: actions/cache@v5
         with:
@@ -55,8 +49,6 @@ jobs:
             build/rime-cache
           key: macos-inputs-${{ hashFiles('macOS/scripts/dependencies.sh', 'Core/**', 'schemas/**') }}
           restore-keys: macos-inputs-
-      # The app links the Rust core and its source-built librime. This is the portable job's
-      # toolchain and cache: a restored build/portable turns the build below into a rebuild check.
       - name: Install CMake and Ninja
         run: |
           pipx install cmake==3.31.6
@@ -85,8 +77,6 @@ jobs:
           grep -E '^FAIL ' build/test-quick.log | sed 's/^/::error title=test.sh quick::/' || true
 
   portable:
-    # librime built from source, the Rust core tests, old/new parity on production resources and
-    # the Swift link smoke test. Not part of `quick`; runs beside it.
     name: test.sh portable
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -94,15 +84,11 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
-      # Same CMake/Ninja releases as the Linux job and Core/Portable/README.md. pipx puts them in
-      # ~/.local/bin, which later steps do not have on PATH by default.
       - name: Install CMake and Ninja
         run: |
           pipx install cmake==3.31.6
           pipx install ninja==1.11.1.4
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-      # Native dependencies, librime and the Cargo target directory. Prepared resources
-      # (build/portable/resources.*) are per run and stay out of the cache.
       - name: Cache the native runtime build
         uses: actions/cache@v5
         with:
@@ -111,8 +97,6 @@ jobs:
             !build/portable/resources.*
           key: portable-${{ runner.os }}-macos-26-${{ hashFiles('Core/Portable/native-sources.lock.json', 'Core/Portable/build-native.py', 'Core/Portable/native/**', 'Core/Portable/Cargo.lock', 'rust-toolchain.toml', 'macOS/Info.plist') }}
           restore-keys: portable-${{ runner.os }}-macos-26-
-      # Resource downloads are verified by SHA-256 and prepare-rime.sh keys its cache by its own
-      # input digest, so a stale cache only costs a rebuild.
       - name: Cache dictionary sources and prepared Rime data
         uses: actions/cache@v5
         with:

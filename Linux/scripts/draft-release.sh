@@ -1,5 +1,4 @@
 #!/bin/bash
-# Called with the verified artifact from this main workflow run.
 set -euo pipefail
 version=${1:?Expected version}
 revision=${2:?Expected commit}
@@ -11,7 +10,6 @@ files=("$binary.tar.xz" "$source" SHA256SUMS-linux)
 sha256sum --strict -c SHA256SUMS-linux
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
-# A tag (including an existing published release) is never moved or reused.
 gh api "repos/$GH_REPO/git/matching-refs/tags/$tag" > "$scratch/refs.json"
 if jq -e --arg ref "refs/tags/$tag" 'any(.[]; .ref == $ref)' "$scratch/refs.json" > /dev/null; then
   echo "Tag $tag already exists. Choose a new Linux version." >&2
@@ -41,13 +39,11 @@ NOTES
   gh release create "$tag" --draft --latest=false --target "$revision" \
     --title "InkFlow Linux $version · ARM64 Omarchy" --notes-file "$scratch/notes.md"
 fi
-# Rerunning the failed draft job uses the same Actions artifact. Keep already uploaded bytes.
 gh release view "$tag" --json assets > "$scratch/assets.json"
 for file in "${files[@]}"; do
   state=$(jq -r --arg name "$file" '.assets[] | select(.name == $name) | .state' "$scratch/assets.json")
   case "$state" in
     uploaded) continue ;;
-    # GitHub may reserve the name with an empty "starter" asset after an interrupted upload.
     starter) gh release upload "$tag" "$file" --clobber ;;
     "") gh release upload "$tag" "$file" ;;
     *) echo "Unexpected asset state for $file: $state" >&2

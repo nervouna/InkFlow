@@ -1,7 +1,5 @@
 name: Release
 
-# The inkflow-release skill on a GitHub-hosted Mac, with credentials from secrets instead of one Mac's Keychain.
-# Secrets, one-time setup and the dry run: .agents/skills/inkflow-release/references/configuration.md
 on:
   workflow_dispatch:
     inputs:
@@ -35,7 +33,6 @@ jobs:
     name: Release
     if: github.ref == 'refs/heads/main'
     runs-on: macos-26
-    # Secrets may be scoped to this environment and the environment restricted to main.
     environment: release
     timeout-minutes: 330
     env:
@@ -64,14 +61,11 @@ jobs:
             exit 1
           fi
 
-      # The deploy key pushes the bump commit and tag; the Main Required Checks ruleset lets deploy keys bypass.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
 
-      # A job keychain holds both Developer ID identities; key files are owner-only. Checked before the long
-      # verification so a wrong password or key fails in a minute.
       - name: Import the signing, notarization and Sparkle credentials
         env:
           DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
@@ -101,15 +95,12 @@ jobs:
           rm -f "$credentials/application.p12" "$credentials/installer.p12"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" \
             > /dev/null
-          # Search the job keychain first; the cleanup step restores the saved list.
           security list-keychains -d user | sed -E 's/^[[:space:]]*"(.*)"$/\1/' > "$credentials/search-list"
           search=("$keychain")
           while IFS= read -r entry; do
             search+=("$entry")
           done < "$credentials/search-list"
           security list-keychains -d user -s "${search[@]}"
-          # The image normally trusts Apple's Developer ID intermediates; add them if an identity is not valid.
-          # Here-string, not a pipe: grep -q exits at the match and pipefail would count the writer's SIGPIPE.
           identities=$(security find-identity -v -p codesigning "$keychain")
           if ! grep -Fq '"Developer ID Application: ' <<< "$identities"; then
             for ca in DeveloperIDG2CA DeveloperIDCA; do
@@ -118,7 +109,6 @@ jobs:
             done
           fi
 
-          # Exactly one identity of each kind: two matches would not form a 40-digit hash.
           application=$(security find-identity -v -p codesigning "$keychain" |
             awk 'index($0, "\"Developer ID Application: ") {print $2}')
           installer=$(security find-identity -v -p basic "$keychain" |
@@ -150,7 +140,6 @@ jobs:
       - name: Check the credentials
         run: bash .agents/skills/inkflow-release/scripts/check-credentials.sh
 
-      # Toolchain and caches as in macos.yml. Restore only: every input is verified, so a stale cache costs a rebuild.
       - name: Install CMake and Ninja
         run: |
           pipx install cmake==3.31.6
@@ -181,16 +170,12 @@ jobs:
         env:
           BUMP: ${{ inputs.bump }}
         run: |
-          # A fresh runner has no build counter and macOS/Info.plist holds only the floor. Continue after the
-          # highest build attached to any release, drafts included, so Sparkle sees the build increase.
           highest=$(gh api --paginate "repos/$GH_REPO/releases" --jq '.[].assets[].name' |
             sed -nE 's/^InkFlow-[0-9]+\.[0-9]+\.[0-9]+-([0-9]+)-arm64\.(pkg|zip)$/\1/p' | sort -n | tail -1)
           if [[ -n $highest ]]; then
             mkdir -p build/build-number
             printf '%s\n' "$highest" > build/build-number/last
           fi
-          # A run that failed after pushing its tag left main on the tagged release commit. Rebuild and finish that
-          # release from it; bumping again would skip a version.
           current="v$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)"
           tagged=$(git rev-parse -q --verify "refs/tags/$current^{commit}" || true)
           published=$(gh release view "$current" --json isDraft --jq '.isDraft | not' 2> /dev/null || echo false)
@@ -214,7 +199,6 @@ jobs:
 
       - name: Verify once (build, test.sh all, deep bundle check)
         env:
-          # A hosted runner has no Speech support; apple-voice checks the audio feed against a fixed format.
           INKFLOW_SPEECH_ASSETS_OPTIONAL: '1'
         run: |
           mkdir -p build
@@ -233,8 +217,6 @@ jobs:
       - name: Sign the release payload
         run: bash .agents/skills/inkflow-release/scripts/package.sh prepare
 
-      # CI cannot write the Chinese notes. A publishing run takes them from a draft release created beforehand;
-      # a dry run without one gets marked placeholder notes, which a publishing run refuses.
       - name: Take the public notes from the draft release
         env:
           DRAFT: ${{ inputs.draft }}
@@ -248,7 +230,6 @@ jobs:
               exit 1
             fi
             gh release view "$RELEASE_TAG" --json body --jq '.body // ""' > "$notes"
-            # This run uploads a new build; an earlier attempt's assets would fail release.sh's asset check.
             gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' | while IFS= read -r asset; do
               gh release delete-asset "$RELEASE_TAG" "$asset" --yes
             done

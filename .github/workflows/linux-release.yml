@@ -29,7 +29,6 @@ jobs:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
     container:
-      # arch4edu's import of the upstream generic Arch Linux ARM aarch64 rootfs.
       image: arch4edu/archlinuxarm@sha256:1db43d1af9917db5fd34af3dab64e2b229a21240e81bb765e3d2d3c34739d587
     defaults:
       run:

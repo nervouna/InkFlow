@@ -1,5 +1,4 @@
 #!/bin/bash
-# Run on the target userspace with the final archives and a clean checkout.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 version=${1:?Expected release version}

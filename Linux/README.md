@@ -31,6 +31,13 @@ bash Linux/scripts/package.sh /absolute/path/to/prepared-resources
 
 The result is `build/linux/package/`. It contains the addon, pinned librime, compiled resources, notices, dictionary corresponding source, `install.py`, and `package.json` with file hashes and the source revision. Packaging downloads pinned inputs if they are not already cached; it does not install or change the desktop.
 
+Reused resources are checked against the committed dictionary recipe before packaging.
+Packaging stages output before publishing it to keep a previous package intact if the build fails.
+Staging destinations are relative. The uninstalled descriptor uses a bare library name and the installer
+writes the absolute path of the active copy. The source archive includes the committed project and matching
+dictionary inputs. Notice collection preserves embedded header notices, covers both locked Rust dependency
+graphs, and dereferences installed library aliases when hashing delivered bytes.
+
 Build on the target distribution and CPU architecture. The package uses the target's Fcitx5, ICU, C/C++ runtime and other system libraries; it is not a distribution-independent binary. The installer checks architecture, hashes and library dependencies before changing anything. Hashes detect damaged files, not a malicious publisher: install packages only from a trusted source.
 
 The Linux build also uses ICU and SQLite development files (`icu` and `sqlite` on Arch,
@@ -56,6 +63,8 @@ fcitx5-remote -s inkflow-pinyin
 ```
 
 Installing a new package with the same command upgrades the installation. Reinstalling the same package is a no-op. Releases are stored separately and a `current` symlink selects the active one; an update never overwrites a loaded library. The previous managed release stays available for rollback.
+The installer stops Fcitx5 before taking the profile backup because the daemon can flush that file on
+shutdown. It persists the new package payload before updating the durable `current` link.
 
 ## Update
 
@@ -92,6 +101,9 @@ including today, and can export the same aggregate data to a new private JSON fi
 python3 ~/.local/share/inkflow/current/quality.py
 python3 ~/.local/share/inkflow/current/quality.py --export inkflow-quality.json
 ```
+
+Export publishes a fully written private file through a hard link. Two exports targeting the same path
+cannot overwrite one another.
 
 The Fcitx5 **Record local Chinese selection counts** option is on by default. Uncheck it in the addon
 configuration to pause recording, or set `RecordQuality=False` in `conf/inkflow.conf` and reload
@@ -132,7 +144,9 @@ Paths below use the default XDG directories; `XDG_DATA_HOME` and `XDG_CONFIG_HOM
 Run **Linux Release** in GitHub Actions on `main` and enter an independent `X.Y.Z` version. The native ARM64
 runner builds against the Omarchy ARM stable mirror, checks both archives, loads the extracted addon on a private
 D-Bus, and exercises install, upgrade, rollback and uninstall. A successful run links its GitHub Release draft
-in the run summary. If an upload fails, rerun the failed job to resume with the same verified artifact.
+in the run summary. The CI container uses Arch4Edu's import of the upstream generic Arch Linux ARM
+rootfs. On upload failure, rerun the failed job to resume with the same verified artifact. The job keeps
+completed uploads and clears an empty GitHub starter asset before retrying it.
 
 For input-path changes, compare the previous published package and the draft on the same target using the
 [frontend latency probe](fcitx5/README.md#frontend-latency).
@@ -151,5 +165,8 @@ bash Linux/fcitx5/test.sh
 PYTHON=/path/to/python-with-dbus-next bash Linux/fcitx5/test-installed.sh
 PYTHON=/path/to/python-with-dbus-next python3 -B Linux/scripts/test_package.py build/linux/package
 ```
+
+Run release verification on the target userspace from a clean checkout with the final archives.
+`Linux/scripts/preflight.sh` is read-only and can inspect the target over SSH as the desktop user.
 
 The installer tests use temporary directories and a fake service. The real-package test installs into a temporary prefix, upgrades to a test-only package identity containing the same binaries, rolls back, and uninstalls. It loads the addon after each switch and checks that personal files survive. The installed-addon tests use a private D-Bus, disposable configuration and personal data; they do not type into desktop applications. See [the adapter README](fcitx5/README.md) for coverage and the remaining target checks.

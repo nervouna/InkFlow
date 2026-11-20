@@ -54,7 +54,6 @@ async def measure_latency(context, controller, capabilities, include_samples):
                     handled = await context.call_process_key_event(ord(letter), 0, 0, release, 0)
                     elapsed = perf_counter_ns() - start
                     assert release or handled
-                    # A same-daemon round trip lets earlier panel messages arrive outside the timed interval.
                     await controller.call_current_input_method()
                     if trial:
                         durations[release].append(elapsed)
@@ -73,7 +72,7 @@ async def measure_latency(context, controller, capabilities, include_samples):
         result["words"][word] = await measure_spelling(word)
 
     preceding_text = "今天"
-    await context.call_set_capability(capabilities | (1 << 6))  # Fcitx5 SurroundingText
+    await context.call_set_capability(capabilities | (1 << 6))
     contextual = await measure_spelling(long_word, preceding_text)
     result["long_with_context"] = {"word": long_word, "preceding_text": preceding_text, **contextual}
     await context.call_reset()

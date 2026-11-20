@@ -1,5 +1,3 @@
-// Generate only the scalar properties used by QualityTextKind.classify and punctuation proof.
-// The target's ICU is a build tool; no Unicode data file or library is loaded while typing.
 #include <unicode/uchar.h>
 
 #include <fstream>

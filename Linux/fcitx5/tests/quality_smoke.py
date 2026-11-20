@@ -86,8 +86,6 @@ async def check_quality(context, controller, key, type_text, panels, commits, co
         expected[cell] = expected.get(cell, 0) + 1
     assert expected == after, (expected, after)
 
-    # Start collecting midway through a composition and finish it. That decision
-    # straddles the privacy boundary. A new composition after the pause is eligible.
     await type_text("zzqs")
     await recording(True)
     await context.call_select_candidate(0)
