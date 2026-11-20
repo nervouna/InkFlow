@@ -12,7 +12,7 @@ use crate::{
     Error, Result, Runtime, Session,
     phrases::{CustomPhrase, PhraseError, phrase_tsv},
     preferences::InputPreferences,
-    ranking::{ContextRanker, Metadata, PersonalSource, parse_metadata},
+    ranking::{ContextRanker, Metadata, PersonalSource, Source, parse_metadata},
 };
 use std::{
     collections::BTreeMap,
@@ -343,10 +343,9 @@ pub struct Engine {
     compiled: PathBuf,
 }
 
-fn content(raw: &crate::Snapshot) -> crate::Snapshot {
-    let mut content = raw.clone();
-    content.highlighted = 0;
-    content
+fn content(mut raw: crate::Snapshot) -> crate::Snapshot {
+    raw.highlighted = 0;
+    raw
 }
 
 impl Engine {
@@ -727,12 +726,12 @@ impl Engine {
     // Read beyond a short first page only for a document continuation. If the wider
     // ranker's preferred Han word is off-page, bring its native handle to the last
     // visible slot. Ordinary equivalent-span ranking, selection and paging then apply.
-    fn page_for_ranking(
+    fn rank_page(
         core: &mut Core,
         raw: &crate::Snapshot,
         ranker: Option<&ContextRanker>,
         input: &str,
-    ) -> Result<(Vec<String>, Option<Vec<Metadata>>)> {
+    ) -> Result<()> {
         let size = raw.candidates.len();
         if let Some(ranker) = ranker
             && core.document_context_window
@@ -746,20 +745,43 @@ impl Engine {
             if words.len() > size
                 && let Some(mut rows) = Self::input_ranking_metadata(core, 0, words.len(), input.len())?
             {
-                let first = ranker.order(&words, &core.preceding, Some(&rows), input)[0];
-                if first >= size && words[first].graphemes(true).all(crate::ranking::is_han) {
+                let order = ranker.order(&words, &core.preceding, Some(&rows), input);
+                let first = order[0];
+                let promote = first >= size && words[first].graphemes(true).all(crate::ranking::is_han);
+                if promote {
                     core.session.as_mut().unwrap().promote_context_candidate(first, size - 1)?;
                     words[size - 1..=first].rotate_right(1);
                     rows[size - 1..=first].rotate_right(1);
                 }
-                words.truncate(size);
+                let native_span = rows.iter().all(|row| {
+                    row.source == Source::Native && row.coverage == rows[0].coverage
+                });
                 rows.truncate(size);
-                return Ok((words, Some(rows)));
+                if native_span {
+                    // All slots are interchangeable and the best Han and original first Han stay
+                    // visible. Clipping the wider order keeps exactly the same relative priorities.
+                    core.order = order.into_iter().filter_map(|index| {
+                        if promote && index == first {
+                            Some(size - 1)
+                        } else {
+                            (index < size - usize::from(promote)).then_some(index)
+                        }
+                    }).collect();
+                } else {
+                    // Partial candidates retain their native slots; English precedence and
+                    // deferral depend on the candidates the user actually sees.
+                    core.order = ranker.order(&words[..size], &core.preceding, Some(&rows), input);
+                }
+                core.metadata = Some(rows);
+                return Ok(());
             }
         }
-        let words = raw.candidates.iter().map(|candidate| candidate.text.clone()).collect();
-        let rows = Self::input_ranking_metadata(core, raw.page, size, input.len())?;
-        Ok((words, rows))
+        core.metadata = Self::input_ranking_metadata(core, raw.page, size, input.len())?;
+        if let Some(ranker) = ranker {
+            let words = raw.candidates.iter().map(|candidate| candidate.text.clone()).collect::<Vec<_>>();
+            core.order = ranker.order(&words, &core.preceding, core.metadata.as_deref(), input);
+        }
+        Ok(())
     }
 
     fn update_ordering(&self, state: &mut State, id: u64, force: bool) -> Result<()> {
@@ -768,9 +790,8 @@ impl Engine {
         if !core.available() {
             return Ok(());
         }
-        let raw = Self::raw(core)?;
-        let current = content(&raw);
-        if !force && core.ordered_content.as_ref() == Some(&current) {
+        let raw = content(Self::raw(core)?);
+        if !force && core.ordered_content.as_ref() == Some(&raw) {
             return Ok(());
         }
         // Explicit custom codes keep the user's ordered phrases ahead of ordinary words.
@@ -787,16 +808,12 @@ impl Engine {
         core.metadata = None;
         if raw.selection_bytes.start == 0 && !has_custom_code {
             let ranker = self.ranker.as_ref().filter(|_| !at_start);
-            let (texts, metadata) = Self::page_for_ranking(core, &raw, ranker, &input)?;
-            if let Some(ranker) = ranker {
-                core.order = ranker.order(&texts, &core.preceding, metadata.as_deref(), &input);
-            }
-            core.metadata = metadata;
+            Self::rank_page(core, &raw, ranker, &input)?;
         }
         if let Some(&first) = core.order.first() {
             core.session.as_mut().unwrap().highlight(first)?;
         }
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         if raw.preedit.is_empty() {
             core.preceding.clear();
         }
@@ -937,7 +954,7 @@ impl Engine {
         core.session.as_mut().unwrap().highlight(native)?;
         // Highlighting a partial choice can change Rime's preedit and cursor.
         // Record the new content without overriding explicit user navigation.
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         Ok(())
     }
 

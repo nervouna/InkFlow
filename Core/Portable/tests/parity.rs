@@ -322,6 +322,17 @@ fn document_context_across_pages() {
     };
     assert_eq!(pages("非常感"), pages(""), "every candidate remains reachable exactly as often");
 
+    session.start_document_context("谢谢").unwrap();
+    type_keys(&session, "nia");
+    let shown = session.snapshot().unwrap();
+    assert_eq!(shown.texts()[0], "你啊");
+    let partial = shown.texts().iter().position(|word| *word == "你").unwrap();
+    assert!(session.select(&shown, partial).unwrap());
+    assert!(session.take_commit().unwrap().is_empty());
+    assert!(session.snapshot().unwrap().has_selected_prefix());
+    assert_eq!(session.snapshot().unwrap().preedit, "你a");
+    session.clear().unwrap();
+
     for action in [0, 1, 2, 3] {
         session.start_document_context("非常感").unwrap();
         type_keys(&session, "xie");
