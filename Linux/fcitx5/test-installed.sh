@@ -18,6 +18,8 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-installed.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/config/fcitx5" "$scratch/data" "$scratch/cache" "$scratch/runtime"
 chmod 700 "$scratch/runtime"
+# Let standalone left Shift reach the addon instead of Fcitx5's default global AltTriggerKeys.
+printf '[Hotkey/AltTriggerKeys]\n0=Control+Alt+F12\n' > "$scratch/config/fcitx5/config"
 cat > "$scratch/config/fcitx5/profile" <<PROFILE
 [Groups/0]
 Name=Default
