@@ -33,6 +33,10 @@ The result is `build/linux/package/`. It contains the addon, pinned librime, com
 
 Build on the target distribution and CPU architecture. The package uses the target's Fcitx5, ICU, C/C++ runtime and other system libraries; it is not a distribution-independent binary. The installer checks architecture, hashes and library dependencies before changing anything. Hashes detect damaged files, not a malicious publisher: install packages only from a trusted source.
 
+The Linux build also uses ICU and SQLite development files (`icu` and `sqlite` on Arch,
+`libicu-dev` and `libsqlite3-dev` on Ubuntu). ICU generates the Unicode classification ranges
+at build time. SQLite belongs to the optional statistics module.
+
 ## Install or upgrade
 
 Keep another input method enabled and finish any current composition before running the installer. Installation briefly restarts an active Fcitx5 user service.
@@ -78,6 +82,35 @@ Rollback switches to the previous managed package without restoring an old copy 
 If a write or service restart fails, the installer restores the prior descriptors, profile and release pointer automatically. If restoration itself fails, it leaves Fcitx5 stopped and retains the recovery record. Fix the reported filesystem or service error, then run `python3 Linux/scripts/install.py recover` before retrying. Recovery remembers and restarts the service that was active before an interrupted operation.
 
 Uninstall removes managed releases, InkFlow's Fcitx5 descriptors and its profile entries. It keeps personal dictionaries, custom phrases and settings. If InkFlow was the default input method, another remaining entry becomes the default. Files from an earlier manual CMake installation are not owned or removed by this installer.
+
+## Local Chinese selection quality
+
+Run the packaged reporter from your installed release. It shows the last 28 local calendar days,
+including today, and can export the same aggregate data to a new private JSON file.
+
+```sh
+python3 ~/.local/share/inkflow/current/quality.py
+python3 ~/.local/share/inkflow/current/quality.py --export inkflow-quality.json
+```
+
+The Fcitx5 **Record local Chinese selection counts** option is on by default. Uncheck it in the addon
+configuration to pause recording, or set `RecordQuality=False` in `conf/inkflow.conf` and reload
+the addon. Pausing and resuming discards evidence from an in-progress composition.
+
+The report counts displayed ranks for Chinese choices made with Space, a digit or a click, including
+segment selections that survive through a proven commit to the client. It shows top-1, top-3 and paged
+choices over known-rank decisions with Wilson 95% intervals. Length counts Unicode scalars. The context
+group means the client supplied a usable prefix at composition start. Page size is the active setting
+when the candidate was chosen. Unknown selections, interrupted input and sensitive contexts are excluded.
+An empty denominator is shown as unavailable. A selection accepted with Space still counts if the user
+later corrects the inserted text.
+
+The optional worker writes only daily counts by length, context availability, page size and rank group
+to `$XDG_DATA_HOME/inkflow/quality/counts.sqlite3` (default `~/.local/share`). The first proven selection creates the database.
+The writer prunes older days on updates. Text, key sequences, times of day and application identifiers
+are never stored. The writer batches nearby selections over up to 40 ms. Storage failures and a full queue can leave gaps.
+Typing keeps working if the worker or SQLite is unavailable. Restore writable storage
+and toggle recording off and on to retry. `--json` prints all counts, their denominators and joint groups.
 
 ## Files
 

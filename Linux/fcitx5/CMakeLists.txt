@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 
 find_package(Fcitx5Core REQUIRED)
+find_package(SQLite3 REQUIRED)
+find_package(ICU COMPONENTS uc REQUIRED)
 # Package staging uses relative paths regardless of the host Fcitx installation.
 set(INKFLOW_ADDONDIR "${FCITX_INSTALL_ADDONDIR}" CACHE STRING "Fcitx addon install directory")
 set(INKFLOW_PKGDATADIR "${FCITX_INSTALL_PKGDATADIR}" CACHE STRING "Fcitx data install directory")
@@ -23,8 +25,19 @@ foreach(file "${INKFLOW_CARGO_DIR}/libinkflow_rime.a" "${INKFLOW_NATIVE_PREFIX}/
   endif()
 endforeach()
 
-add_library(inkflow MODULE src/engine.cpp src/candidates.cpp)
-target_include_directories(inkflow PRIVATE "${INKFLOW_ROOT}/Core/Portable/include" src)
+add_executable(quality-unicode quality-unicode.cpp)
+target_link_libraries(quality-unicode PRIVATE ICU::uc)
+set(quality_unicode_header "${CMAKE_CURRENT_BINARY_DIR}/quality_unicode.inc")
+add_custom_command(OUTPUT "${quality_unicode_header}"
+  COMMAND quality-unicode "${quality_unicode_header}"
+  DEPENDS quality-unicode VERBATIM)
+add_library(inkflow-quality MODULE src/quality_backend.cpp)
+target_include_directories(inkflow-quality PRIVATE "${INKFLOW_ROOT}/Core/Portable/include")
+target_link_libraries(inkflow-quality PRIVATE SQLite::SQLite3)
+target_compile_options(inkflow-quality PRIVATE -Wall -Wextra -Werror)
+add_library(inkflow MODULE src/engine.cpp src/candidates.cpp src/quality.cpp "${quality_unicode_header}")
+add_dependencies(inkflow inkflow-quality)
+target_include_directories(inkflow PRIVATE "${INKFLOW_ROOT}/Core/Portable/include" src "${CMAKE_CURRENT_BINARY_DIR}")
 target_compile_options(inkflow PRIVATE -Wall -Wextra -Werror)
 # The staticlib bundles the Rust crate and the C++ bridge; librime stays shared.
 target_link_libraries(inkflow PRIVATE Fcitx5::Core
@@ -34,7 +47,7 @@ set(INKFLOW_LIBDIR "lib/inkflow")
 set_target_properties(inkflow PROPERTIES INSTALL_RPATH "$ORIGIN/../inkflow" BUILD_WITH_INSTALL_RPATH OFF)
 
 configure_file(inkflow.conf.in inkflow.conf @ONLY)
-install(TARGETS inkflow DESTINATION "${INKFLOW_ADDONDIR}")
+install(TARGETS inkflow inkflow-quality DESTINATION "${INKFLOW_ADDONDIR}")
 install(FILES "${CMAKE_CURRENT_BINARY_DIR}/inkflow.conf" DESTINATION "${INKFLOW_PKGDATADIR}/addon")
 install(FILES inkflow-pinyin.conf DESTINATION "${INKFLOW_PKGDATADIR}/inputmethod")
 file(GLOB INKFLOW_RIME_LIBS "${INKFLOW_NATIVE_PREFIX}/lib/librime.so*")

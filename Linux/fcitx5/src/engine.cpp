@@ -10,7 +10,9 @@
 #include <fcitx/userinterface.h>
 #include <sys/stat.h>
 
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <utility>
@@ -169,11 +171,30 @@ void Engine::applyConfigurationToSessions() {
 
 void Engine::saveConfig() { fcitx::safeSaveAsIni(config_, kConfigFile); }
 
+void Engine::configureQuality() {
+  if (static_cast<bool>(quality_) == *config_.recordQuality) return;
+  instance_->inputContextManager().foreach([this](fcitx::InputContext* ic) {
+    state(ic)->quality.reset();
+    return true;
+  });
+  if (!*config_.recordQuality) {
+    quality_.reset();
+    return;
+  }
+  try {
+    auto directory = std::filesystem::path(paths_.user).parent_path() / "quality";
+    quality_ = std::make_unique<QualityWriter>(directory.string());
+  } catch (const std::exception&) {
+    INKFLOW_WARN() << "local quality writer could not start";
+  }
+}
+
 void Engine::reloadConfig() {
   fcitx::readAsIni(config_, kConfigFile);
   if (!config_.importBackup->empty()) {
     importBackup(*config_.importBackup);
   }
+  configureQuality();
   applyConfigurationToSessions();
 }
 
@@ -183,6 +204,7 @@ void Engine::setConfig(const fcitx::RawConfig& raw) {
   if (!config_.importBackup->empty()) {
     importBackup(*config_.importBackup);
   }
+  configureQuality();
   applyConfigurationToSessions();
 }
 
@@ -267,13 +289,15 @@ void Engine::refreshContext(fcitx::InputContext* ic, State* state) {
       preceding = preceding_text(surrounding.text(), surrounding.cursor(), kPrecedingCodePoints);
     }
   }
-  ifr_session_set_preceding_text(state->session, preceding.c_str());
+  auto status = ifr_session_set_preceding_text(state->session, preceding.c_str());
+  if (quality_) state->quality.begin(status == IFR_OK && !preceding.empty());
 }
 
 void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
   auto* ic = event.inputContext();
   State* st = state(ic);
   if (sensitive(ic)) {
+    st->quality.reset();
     // Never compose or learn in password and sensitive fields; the client gets raw keys.
     if (st->session && st->composing()) clear(ic, st);
     return;
@@ -293,13 +317,24 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
     return;
   }
   if (!st->composing()) refreshContext(ic, st);
+  const auto modifiers = rime_modifiers(key.states(), event.isRelease());
+  if (quality_ && !modifiers && st->snapshot) {
+    const auto sym = static_cast<uint32_t>(key.sym());
+    if (sym >= '1' && sym <= '9') {
+      st->qualityChoice = QualityChoice{sym - '1', ifr_session_candidate_count(st->session)};
+    } else if (sym == ' ' || (sym > ' ' && sym <= '~' && std::ispunct(static_cast<unsigned char>(sym)))) {
+      st->qualityChoice = QualityChoice{ifr_snapshot_highlighted(st->snapshot.get()),
+                                        ifr_session_candidate_count(st->session), sym != ' '};
+    }
+  }
   IFRStatus status = ifr_session_key(st->session, static_cast<int32_t>(key.sym()),
-                                     static_cast<int32_t>(rime_modifiers(key.states(), event.isRelease())),
+                                     static_cast<int32_t>(modifiers),
                                      &handled);
   if (status != IFR_OK) {
     failed(ic, st, "key", status);
     return;
   }
+  if (!handled) st->qualityChoice.reset();
   refresh(ic, st, event.isRelease());
   if (handled) event.filterAndAccept();
 }
@@ -314,7 +349,7 @@ void Engine::deactivate(const fcitx::InputMethodEntry& entry, fcitx::InputContex
   State* st = state(ic);
   // Switching input methods keeps what was typed, as the macOS frontend does on
   // deactivation; focus changes drop the composition because the target is gone.
-  if (st->session && st->composing() &&
+  if (st->session && st->composing() && !sensitive(ic) &&
       event.type() == fcitx::EventType::InputContextSwitchInputMethod) {
     int handled = 0;
     IFRStatus status = ifr_session_commit(st->session, &handled);
@@ -335,7 +370,12 @@ void Engine::reset(const fcitx::InputMethodEntry&, fcitx::InputContextEvent& eve
 void Engine::selectCandidate(fcitx::InputContext* ic, const SnapshotRef& snapshot, std::size_t index) {
   State* st = state(ic);
   if (!st->session) return;
+  if (sensitive(ic)) {
+    clear(ic, st);
+    return;
+  }
   int handled = 0;
+  std::size_t pageSize = quality_ ? ifr_session_candidate_count(st->session) : 0;
   IFRStatus status = ifr_session_select(st->session, snapshot.get(), index, &handled);
   if (status == IFR_STALE_SNAPSHOT || status == IFR_INVALID_CANDIDATE) {
     INKFLOW_INFO() << "ignored late candidate action: " << status;
@@ -345,6 +385,9 @@ void Engine::selectCandidate(fcitx::InputContext* ic, const SnapshotRef& snapsho
   if (status != IFR_OK) {
     failed(ic, st, "select", status);
     return;
+  }
+  if (quality_ && handled) {
+    st->qualityChoice = QualityChoice{index, pageSize};
   }
   refresh(ic, st);
 }
@@ -378,15 +421,21 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
     INKFLOW_WARN() << "take_commit failed: " << status << " " << ifr_last_error();
   } else if (commit) {
     ic->commitString(commit);
-    ifr_string_free(commit);
     reuseUnchanged = false;
   }
   IFRSnapshot* raw = nullptr;
   const auto capabilities = ic->capabilityFlags();
   const auto* previous = reuseUnchanged && capabilities == st->presentedCapabilities ? st->snapshot.get() : nullptr;
   status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
-  // The published list still owns a selectable token. A change of token alone requires a fresh list.
+  const auto choice = std::exchange(st->qualityChoice, std::nullopt);
+  // A retained page is still selectable. No commit or quality decision occurs on an unchanged release.
   if (status == IFR_OK && !raw) return;
+  if (quality_ && !sensitive(ic)) {
+    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, choice);
+  } else {
+    st->quality.reset();
+  }
+  ifr_string_free(commit);
   auto& panel = ic->inputPanel();
   // empty() ignores the overlay message, so Fcitx5's input-method information survives
   // the trigger's key releases.
@@ -425,6 +474,8 @@ void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
 }
 
 void Engine::clear(fcitx::InputContext* ic, State* st) {
+  st->quality.reset();
+  st->qualityChoice.reset();
   IFRStatus status = ifr_session_clear(st->session);
   if (status != IFR_OK) {
     INKFLOW_WARN() << "clear failed: " << status << " " << ifr_last_error();

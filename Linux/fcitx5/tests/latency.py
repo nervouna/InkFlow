@@ -62,4 +62,23 @@ async def measure_latency(context, controller, include_samples):
         if include_samples:
             for label, samples in zip(("press", "release"), durations):
                 result["words"][word][label]["samples_ns"] = samples
+    await context.call_reset()
+    commits = []
+    context.on_commit_string(commits.append)
+    commit_times = []
+    for trial in range(121):
+        for letter in "nihao":
+            assert await context.call_process_key_event(ord(letter), 0, 0, False, 0)
+            await context.call_process_key_event(ord(letter), 0, 0, True, 0)
+        start = perf_counter_ns()
+        assert await context.call_process_key_event(32, 0, 0, False, 0)
+        elapsed = perf_counter_ns() - start
+        if trial:
+            commit_times.append(elapsed)
+        await context.call_process_key_event(32, 0, 0, True, 0)
+    await controller.call_current_input_method()
+    assert commits == ["你好"] * 121
+    result["space_commit"] = {"events": len(commit_times), **percentiles(commit_times)}
+    if include_samples:
+        result["space_commit"]["samples_ns"] = commit_times
     print(json.dumps(result, indent=2))

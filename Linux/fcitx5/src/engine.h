@@ -19,6 +19,7 @@
 #include "candidates.h"
 #include "config.h"
 #include "inkflow_rime.h"
+#include "quality.h"
 
 namespace inkflow {
 
@@ -30,6 +31,7 @@ class State final : public fcitx::InputContextProperty {
 public:
   ~State() override { release(); }
   void release() {
+    quality.reset();
     snapshot.reset();
     ifr_session_destroy(session);
     session = nullptr;
@@ -41,6 +43,8 @@ public:
   SnapshotRef snapshot;
   fcitx::CapabilityFlags presentedCapabilities;
   ShiftToggle shiftToggle;
+  QualityComposition quality;
+  std::optional<QualityChoice> qualityChoice;
 };
 
 class Engine final : public fcitx::InputMethodEngineV2 {
@@ -77,6 +81,7 @@ private:
   void applyConfiguration(IFRSession* session);
   void applyConfigurationToSessions();
   void saveConfig();
+  void configureQuality();
   // The explicit personal-data entry point: stops the engine, imports, restarts, and
   // writes the backup's settings into the configuration. Never runs on the key path.
   void importBackup(std::string file);
@@ -84,6 +89,7 @@ private:
   fcitx::Instance* instance_;
   Paths paths_;
   Config config_;
+  std::unique_ptr<QualityWriter> quality_;
   IFREngine* engine_ = nullptr;
   fcitx::FactoryFor<State> factory_;
 };
