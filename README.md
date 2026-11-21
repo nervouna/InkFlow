@@ -87,5 +87,5 @@ ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release �
 ## 开发
 
 - macOS 的构建、试用与发布见 [macOS 开发说明](macOS/DEVELOPMENT.md#workflows)，已知问题见[故障排查](macOS/DEBUGGING.md)。
-- Linux 前端见 [Fcitx5 适配器](Linux/fcitx5/README.md)，从 Linux 验证 macOS 改动见[远程 Mac 工作流](docs/remote-mac-baseline.md)。
+- Linux 前端见 [Fcitx5 适配器](Linux/fcitx5/README.md)。
 - 共享逻辑从[共享核心](Core/README.md)进入，仓库约定见 [AGENTS.md](AGENTS.md)。

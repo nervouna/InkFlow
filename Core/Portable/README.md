@@ -4,17 +4,16 @@ Rust runtime over librime for [#34](https://github.com/nervouna/InkFlow/issues/3
 
 ## Build and test
 
-Requirements: the repository's Rust 1.98.1 toolchain, a C/C++17 compiler, Python 3, CMake 3.31, Ninja, curl, tar, and a POSIX shell. CMake 3.31.6 and Ninja 1.11.1.4 can be installed without root using `uv tool install`. The Mac runner's login shell must find these tools.
+Requirements: the repository's Rust 1.98.1 toolchain, a C/C++17 compiler, Python 3, CMake 3.31, Ninja,
+curl, tar, and a POSIX shell. CMake 3.31.6 and Ninja 1.11.1.4 can be installed without root using
+`uv tool install`. Make these tools available on `PATH`.
 
 From the checkout root:
 
 ```sh
 bash Core/Portable/test.sh
-# Send a committed revision to the dedicated Mac checkout:
-python3 scripts/mac-remote.py portable
 # Compile and smoke-test full production resources in isolated directories:
 bash Core/Portable/prepare-resources.sh
-python3 scripts/mac-remote.py resources
 # Compare the Rust engine with the recorded Swift behavior on those resources:
 bash Core/Portable/parity.sh [build/portable/resources.XXXXXX]
 # Capture key latency and memory with the recorded macOS headless protocol:

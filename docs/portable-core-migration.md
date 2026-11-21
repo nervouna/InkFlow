@@ -109,7 +109,10 @@ Track quality recording/export, dictionary downloads, AI, voice backends, and ad
 
 Check each platform against the shared regression cases for preedit and caret position, candidate order, commits, partial selection, paging, cancellation, configuration boundaries, and learning after restart. The recorded Swift-engine results are frozen references ([Core/Portable/README.md](../Core/Portable/README.md)). Preserve observable behavior; do not require byte-identical databases or caches.
 
-Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and slow cases as well as typical timing; do not infer a language advantage from measurements on different machines. Use the [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits) for the recorded macOS protocol; the measurement boundaries are in [Remote Mac builds and migration baseline](remote-mac-baseline.md).
+Compare performance on the same hardware, build configuration, and resource set. Record latency distributions and
+slow cases as well as typical timing. Use the
+[macOS measurement boundaries](../Core/Fixtures/MigrationBaseline/README.md#measurement-boundaries)
+and [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits).
 
 Build, test and installation follow [AGENTS.md](../AGENTS.md). Keep another keyboard input source enabled for development testing.
 

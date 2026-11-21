@@ -6,8 +6,8 @@ The application, settings interface, registration tool, and test scenarios are w
 
 ### Build and try the development version
 
-Run the macOS build outside the sandbox from the first attempt because `iconutil` needs host access.
-From Linux, use the [remote Mac workflow](../docs/remote-mac-baseline.md#run-from-linux).
+Build on macOS outside the sandbox because `iconutil` needs host access.
+[macOS CI](../.github/workflows/macos.yml) runs the automated checks on GitHub-hosted macOS runners.
 
 ```sh
 bash macOS/scripts/build.sh
