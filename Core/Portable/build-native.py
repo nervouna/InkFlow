@@ -41,7 +41,6 @@ def main():
     sources.mkdir(parents=True, exist_ok=True)
     for name, item in lock.items():
         archive = BUILD / (name + ('.tar.bz2' if name == 'boost' else '.tar.gz'))
-        # A reused build directory, such as a restored CI cache, can hold the archive of an earlier pin.
         if archive.exists() and digest(archive) != item['sha256']:
             archive.unlink()
         if not archive.exists():
@@ -53,7 +52,7 @@ def main():
         dest = sources / name
         stamp = dest / '.inkflow-source'
         if not stamp.exists() or stamp.read_text() != item['sha256']:
-            for stale in (dest, BUILD / ('cmake-' + name)):
+            for stale in (dest, PREFIX, *BUILD.glob('cmake-*')):
                 if stale.exists():
                     shutil.rmtree(stale)
             dest.mkdir()
