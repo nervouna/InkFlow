@@ -6,7 +6,7 @@ Tests are standalone executables driven by `macOS/scripts/test.sh`. They use syn
 
 | Change | Run |
 | --- | --- |
-| SwiftUI views, layout, copy | Build only; check it in the app |
+| SwiftUI views, layout, copy | [Build only](DEVELOPMENT.md#build-and-try-the-development-version). The user checks it in the app. |
 | Engine, ranking, English mixing, controller | `test.sh quick` (about 3 min), plus the specific unit if it isn't in quick |
 | One subsystem | Name it: `test.sh quality`, `test.sh ai`, `test.sh voice`, `test.sh dictionary`, or a single unit |
 | Release | `test.sh all` once, through `release-verification.sh` |
@@ -18,7 +18,9 @@ bash macOS/scripts/test.sh --help     # lists every unit
 bash Core/scripts/test.sh             # standalone Core package, no app build
 ```
 
-`dictionary-worker`, `dictionary-activation`, `personal-data` and `termination` need a current `build.sh` app. The runner stops at the first failing unit; fix it and rerun that unit.
+Run `test.sh all` only for a release or when the user explicitly asks for it. The runner stops at the first
+failing unit. Fix it and rerun that unit. `dictionary-worker`, `dictionary-activation`, `personal-data` and
+`termination` need a current `build.sh` app.
 
 Every unit that builds Swift also builds the Rust core and its librime first (`Core/scripts/build-portable.sh`, once per `test.sh` run; the first run takes about 4 minutes longer and needs CMake and Ninja). GitHub Actions restores `build/portable` from the cache it shares with the portable job, runs `test.sh quick` and, in a second job, `test.sh portable` on `macos-26` runners for every pull request and push to `main` (docs-only changes skip them). The ubuntu jobs run the shared-core boundary check, the portable `cargo test` and the remote-runner tests.
 
@@ -75,3 +77,8 @@ GUI harnesses (`test-settings-ui.sh`, AI native/live scripts) are manual diagnos
 - The microphone diagnostic runs through LaunchServices to get its own TCC identity. Running its
   executable directly can inherit the terminal's permissions. The harness retains the production
   background/agent plist flags while using its own bundle identity.
+
+## Shell test assertions
+
+Define `fail` in each script and write assertions as `[[ ... ]] || fail` or `! cmd || fail`. macOS Bash 3.2
+can continue past a bare failed `[[ ... ]]` under `set -e`. A negated command is exempt from `set -e`.

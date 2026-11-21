@@ -28,8 +28,6 @@ ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release �
 3. 可选：删除 `~/Library/Application Support/InkFlow`。这会清除用户词典、自定义短语、设置和质量记录；如需保留，先在设置的「备份与恢复」中导出。
 4. 清除安装记录：`pkgutil --volume ~ --forget io.damao.inputmethod.inkflow.pkg`。安装记录保存在 `~/Library/Receipts`，可先用 `pkgutil --volume ~ --pkgs` 确认记录存在。
 
-源码开发、Developer ID 试用和正式发布流程见 [macOS 开发说明](macOS/DEVELOPMENT.md#workflows)。
-
 ## 日常输入
 
 以下为默认按键。中英文切换与语音按键可在「快捷键」中修改；AI 建议固定使用 Tab 采纳。
@@ -44,6 +42,8 @@ ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release �
 | 切换中文／英文 | 单击左 `Shift` |
 | 按住说话 | 按住右 `Shift`，松开结束 |
 | 连续听写 | 双击右 `Shift` 开始／结束，`Esc` 取消 |
+
+语音识别、焦点切换和取消的详细行为见[语音输入说明](macOS/VOICE_INPUT.md)。
 
 ## 设置
 
@@ -71,6 +71,8 @@ ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release �
 
 语音音频由 Apple 系统在本机识别，首次准备中文识别资源可能需要联网。「语音润色」默认关闭；开启后，只有本次转写文字会发送给你配置的服务，失败时仍使用本机识别原文。
 
+「智能预测」默认关闭。开启后，墨流会把当前拼音、已选前缀及光标前后有限的文字发送给你配置的服务；服务如何处理数据及产生的费用由服务商决定。API Key 保存在本机钥匙串。
+
 ## 词库来源与许可
 
 墨流代码采用 Apache-2.0 许可。内置词库由以下公开数据生成，编译后仍沿用各自的许可：
@@ -82,4 +84,8 @@ ARM64 Omarchy/Hyprland 的实验性 Fcitx5 版本可从独立的 Linux Release �
 
 每个发布版本附带词库源码包 `InkFlow-<版本>-<构建号>-dictionary-source.tar.gz`，内含上游数据、墨流的修改与生成脚本、许可证全文，可在[发布页面](https://github.com/nervouna/InkFlow/releases)下载；「设置 → 关于」也提供链接。详见 [NOTICE](NOTICE)、[词库说明](macOS/DICTIONARIES.md) 和 [许可证文本](macOS/Licenses/)。
 
-「智能预测」默认关闭。开启后，墨流会把当前拼音、已选前缀及光标前后有限的文字发送给你配置的服务；服务如何处理数据及产生的费用由服务商决定。API Key 保存在本机钥匙串。
+## 开发
+
+- macOS 的构建、试用与发布见 [macOS 开发说明](macOS/DEVELOPMENT.md#workflows)，已知问题见[故障排查](macOS/DEBUGGING.md)。
+- Linux 前端见 [Fcitx5 适配器](Linux/fcitx5/README.md)，从 Linux 验证 macOS 改动见[远程 Mac 工作流](docs/remote-mac-baseline.md)。
+- 共享逻辑从[共享核心](Core/README.md)进入，仓库约定见 [AGENTS.md](AGENTS.md)。

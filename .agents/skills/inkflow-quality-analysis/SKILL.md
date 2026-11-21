@@ -1,70 +1,49 @@
 ---
 name: inkflow-quality-analysis
-description: Review InkFlow's locally recorded input quality with 7-day or 28-day calendar trends, rolling metrics, version annotations, charts, recurring candidate choices, and composition evidence. Use for recorded quality evidence, not ranking changes or live input diagnosis.
+description: Review InkFlow's recorded input quality with calendar trends, version annotations, charts and evidence from prior compositions. Use for recorded quality, not live input diagnosis or ranking changes.
 ---
 
 # InkFlow Quality Analysis
 
-Use the [query script](scripts/quality.py). It uses Python's standard
-library and defaults to `~/Library/Application Support/InkFlow/quality.sqlite3`.
-Use `python3` from `PATH`; no dependency setup is needed. Run commands from this
-repository root, or use the script's absolute path.
+Run [quality.py](scripts/quality.py) with `python3` from the repository root or use its absolute path.
+It uses the standard library and defaults to `~/Library/Application Support/InkFlow/quality.sqlite3`.
+
+## Routine review
+
+Use 7 days for a short check and 28 days for a broader review. Example for 7 days:
 
 ```sh
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
 charts=$(mktemp -d)
 python3 "$query" trend --days 7 --chart "$charts"/inkflow-quality-7d.svg --format json
-python3 "$query" trend --days 28 --chart "$charts"/inkflow-quality-28d.svg --format json
-python3 "$query" summary --format json
-python3 "$query" ranking-issues --format json
-python3 "$query" inspect COMPOSITION_ID --format json
-python3 "$query" timing --format json
 ```
 
-For a routine quality review, use `trend`. Default to 7 days for a short operational
-check and 28 days for a broader review. Present the SVG chart and summarize Top1 and
-Top3 selection rates for daily, 7-day rolling and 28-day rolling windows. Both rates
-share the same validated known-display-rank denominator; Top3 means display rank 1–3.
-The same `trend` output carries the scorecard rates of
-[the metric design](../../../docs/input-quality-metrics.md#scorecard); their fields and the series that carry
-them are under `trend` in [the query contract](references/query-contract.md) and in the
-[counter tables](references/interpretation.md#denominators-and-ranking-evidence).
-Report a bucket under 200 units with its Wilson interval only.
-Charts go to `$charts`, a task-owned temporary directory, unless the user requests a durable artifact.
+Present the SVG and daily, 7-day rolling and 28-day rolling Top1 and Top3 selection rates. Use the task's
+temporary directory for charts unless the user requests a durable artifact. Report the time scope, valid and
+unknown evidence, the known-display-rank denominator shared by both rates, and version markers. Top3 covers
+display ranks 1–3. Report a bucket with fewer than 200 units using only its Wilson interval.
 
-Calendar date is the primary axis; app versions are annotations, not cohorts. Don't
-split routine metrics by fingerprint. In user-facing reports call the measurement
-fingerprint the “统计口径”.
+Use calendar date as the primary axis and app versions as annotations. The routine series uses the applicable
+measurement fingerprint and never pools rates across fingerprints. Call it “统计口径” in user-facing reports.
+Read [interpretation](references/interpretation.md) before reporting rates or comparing configurations.
+The [metric scorecard](../../../docs/input-quality-metrics.md#scorecard) and
+[query contract](references/query-contract.md#cli-and-output) define the additional counters.
 
-Use `summary` for detailed coverage or forensic identity inspection. For repeatedly choosing another
-candidate over first-page top1, use `ranking-issues`; pass `--min-count 1` when the user requests individual cases.
-For a concrete example, use an issue's `composition_ids` with `inspect`. Read
-[the interpretation](references/interpretation.md) before interpreting rates, comparing configurations or
-investigating incomplete evidence, and [the query contract](references/query-contract.md) before changing queries
-or looking up an output field.
+## Other questions
 
-Use `timing` for key intervals, last-edit waits and candidate visibility; read
-[input timing](references/query-contract.md#input-timing) first.
+| Task | Command and evidence |
+| --- | --- |
+| Check coverage or measurement identities | `summary`. See [units and filters](references/interpretation.md#units-filters-and-the-calendar). |
+| Investigate recurring alternatives to first-page Top1 | `ranking-issues`. Use `--min-count 1` for individual cases, then `inspect COMPOSITION_ID` with the returned IDs. Check compositions before calling a pair a ranking issue. |
+| Measure key intervals, last-edit waits or candidate visibility | `timing`. Read the [timing contract](references/query-contract.md#input-timing) first. |
+| Check how quickly learning takes effect and how long it lasts | `learning --days 28` on one device. Check `pair_coverage` before trusting rates. |
+| Score an offline ranking change | `replay-cases --output FILE` writes typed text for the offline [replay scorer](../../../Core/Portable/README.md#replay). Read the [file rules](../../../Core/Portable/README.md#replay-files). Report `reverted_relabelled` and `reverted_excluded` beside the ship-rule result. |
+| Analyze one or more devices' exports | Use repeatable `--input` with a file or a folder of weekly exports. Add `--exports-only` to analyze those files alone. See [cross-device analysis](../../../macOS/QUALITY-EXPORT.md#analyze-on-another-computer). |
 
-Use `learning` (one device, `--days 28`) for how fast and how long corrections take effect: time to learn, futile pairs, retention, avoidable misses and word reuse over the keyed pair hashes; read its `pair_coverage` before trusting a rate.
+Use `--format json` for inspectable results. See the [query contract](references/query-contract.md#cli-and-output)
+before changing a query or looking up output fields. Missing evidence stays unknown. Disclose text-free coverage
+when `coverage.text_free` is nonzero. Results from a test database describe the fixture.
 
-Use `replay-cases --output FILE` to export decisions as replay cases for the offline `replay` scorer. The export
-rules are under `replay-cases` in the query contract; scoring and the
-[replay file rules](../../../Core/Portable/README.md#replay-files) (the file holds typed text) are in the
-[replay README](../../../Core/Portable/README.md#replay). Report the header's `reverted_relabelled` and
-`reverted_excluded` beside a ship-rule result.
-
-Records are text-free by default: see [what that leaves out](references/interpretation.md#text-free-records), and say
-so in the report when `coverage.text_free` is nonzero.
-
-For cross-device analysis, add repeatable `--input /path/to/export.json`, or `--input FOLDER` for a folder of
-weekly exports; see
-[export and joint analysis](../../../macOS/QUALITY-EXPORT.md). Export itself
-(`python3 "$query" export --output NEW.json --format json`) writes the user's raw
-input history to a file: run it only when explicitly asked.
-
-Report the time scope, valid and unknown evidence, Top1/Top3 denominators and
-version markers. Never combine rates across measurement fingerprints. Inspect
-supporting compositions before calling a recurring pair a ranking problem; missing
-evidence stays unknown. Results from a supplied test database are synthetic, not the
-user's input quality.
+`export --output NEW.json` can write raw input history from records with text capture enabled. Run it only
+when explicitly asked. See [text-free evidence](references/interpretation.md#text-free-records) and
+[export and transfer](../../../macOS/QUALITY-EXPORT.md#export-and-transfer).

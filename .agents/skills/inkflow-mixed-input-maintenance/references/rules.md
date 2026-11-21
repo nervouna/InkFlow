@@ -1,6 +1,6 @@
 # Current mixed-input rules and correction-table contract
 
-The implemented baseline. Recheck the sources linked from the [skill entrypoint](../SKILL.md) when changing a rule.
+The implemented baseline. Recheck the relevant code or configuration in the [source map](#source-map) when changing a rule.
 
 Topic files hold the detail of rules whose full statement is long:
 
@@ -67,3 +67,41 @@ Example (literal tabs):
 plugin	4.0	Example policy: admit this existing spelling at the default gate
 WOMENS	0	Example policy: explicitly exclude this exact display spelling
 ```
+
+## Source map
+
+| Responsibility | Source |
+| --- | --- |
+| Shared admission and dictionary generation | [prepare-rime.sh](../../../../Core/scripts/prepare-rime.sh) |
+| Configurable gate/scaling and exact-word corrections | [english.conf](../../../../Core/config/english.conf), [english-overrides.tsv](../../../../Core/config/english-overrides.tsv) |
+| Spelling sources, frequency provenance, limits, regeneration and hashes | [Data/README.md](../../../../Core/Data/README.md), [Data/TECHNOLOGY.md](../../../../Core/Data/TECHNOLOGY.md), [snapshot-english-frequency.py](../../../../macOS/scripts/snapshot-english-frequency.py) |
+| Standalone lookup, canonical Rime learning, the named English and voice-alias user dictionaries, and the Lua side of forgetting | [inkflow_english.lua](../../../../schemas/lua/inkflow_english.lua) |
+| Public mixed decoding and native personal spans | [inkflow_mixed.lua](../../../../schemas/lua/inkflow_mixed.lua), [InkFlowRimeNative.cpp](../../../../Core/Sources/InkFlowRimeNative/InkFlowRimeNative.cpp) |
+| Exact-English reachability and bounded short conflicts | [inkflow_short_conflict.lua](../../../../schemas/lua/inkflow_short_conflict.lua) |
+| Candidate metadata sent to the ranker | [inkflow_input_coverage.lua](../../../../schemas/lua/inkflow_input_coverage.lua) |
+| Equivalent-coverage final ranking and metadata parsing | [ranking.rs](../../../../Core/Portable/src/ranking.rs) |
+| Sessions, display-to-native order, selection, paging and forgetting; the app reaches them through the `IFEngine` facade | [engine.rs](../../../../Core/Portable/src/engine.rs), [Engine.swift](../../../../Core/Sources/InkFlowRime/Engine.swift) |
+| Bounded preceding-text capture and the context index | [Context.swift](../../../../macOS/Sources/Context.swift), [InputRankingContext.swift](../../../../macOS/Sources/InputRankingContext.swift), [CandidateRanking.swift](../../../../Core/Sources/InkFlowDomain/CandidateRanking.swift) |
+| App side of learning: reset, voice-correction write, alias snapshot, Settings list/delete/restore | [EngineAI.swift](../../../../Core/Sources/InkFlowRime/EngineAI.swift), [EnginePersonalLearning.swift](../../../../Core/Sources/InkFlowRime/EnginePersonalLearning.swift), [PersonalLearningSettings.swift](../../../../macOS/Sources/PersonalLearningSettings.swift) |
+| Bridge to the ordinary Pinyin user dictionary: AI-adoption learning and readings, voice-lexicon read | [inkflow_ai_learning.lua](../../../../schemas/lua/inkflow_ai_learning.lua) |
+| Verified voice correction attribution and alias recall | [VoiceLearning.swift](../../../../macOS/Sources/VoiceLearning.swift), [InputControllerVoice.swift](../../../../macOS/Sources/InputControllerVoice.swift), [VoiceSession.swift](../../../../macOS/Sources/VoiceSession.swift), [VoiceLearning.swift (core)](../../../../Core/Sources/InkFlowDomain/VoiceLearning.swift), [VoiceLearningCoordinator.swift](../../../../Core/Sources/InkFlowDomain/VoiceLearningCoordinator.swift) |
+| Content-free effectiveness events | [QualityRecords.swift](../../../../Core/Sources/InkFlowRime/QualityRecords.swift), [QualityStore.swift](../../../../Core/Sources/InkFlowRime/QualityStore.swift) |
+| Translator composition and compilation dependencies | [inkflow_pinyin.schema.yaml](../../../../schemas/inkflow_pinyin.schema.yaml), [easy_en.schema.yaml](../../../../schemas/easy_en.schema.yaml), [inkflow_mixed.schema.yaml](../../../../schemas/inkflow_mixed.schema.yaml) |
+| Pinned engine behavior and deployment pitfalls | [DEPENDENCIES.md](../../../../macOS/DEPENDENCIES.md), [DEBUGGING.md](../../../../macOS/DEBUGGING.md) |
+
+## Layer-specific checks
+
+Choose units using the [focused test matrix](../../../../macOS/TESTING.md#which-tests-to-run).
+
+| Layer | Where to add or adjust cases |
+| --- | --- |
+| Static admission, generation | [test-prepare-rime.sh](../../../../Core/scripts/test-prepare-rime.sh) (`preparation`), candidate behavior in [EngineRegression.swift](../../../../Core/Tests/InkFlowEngineTestSupport/EngineRegression.swift) (`engine-english`); include prefixes and backspaces, not only completed sentences |
+| Canonical or mixed personal learning | [test-ai-learning.sh](../../../../macOS/scripts/test-ai-learning.sh) (`ai-learning`) |
+| Equivalent-span ranking and leads | `EngineRegression.swift` through `engine-context` and `engine-basic`; Rust ranker and metadata parsing in [ranking.rs tests](../../../../Core/Portable/tests/ranking.rs) (`portable`); keep page identity and native-span fail-closed behavior |
+| Voice learning | `voice-session`, `apple-voice`, `voice-lexicon`, `voice-controller`, `ai-learning`, `settings`, `quality` |
+| Dictionary deployment | [DeploymentTests.swift](../../../../macOS/Tests/DeploymentTests.swift) (`deployment`): stale English caches replaced, unchanged tables reused, Chinese user data kept |
+| Measurement | `quality`; inspect evidence with [inkflow-quality-analysis](../../inkflow-quality-analysis/SKILL.md) |
+
+## Deployment evidence
+
+Resource compilation ([resources.rs](../../../../Core/Portable/src/resources.rs) through [bridge.cpp](../../../../Core/Portable/native/bridge.cpp)) uses `start_maintenance(1)` for content checks; the app starts from that prepared cache, validated by hash, and never compiles at startup. Don't rely on version/mtime changes or delete caches and user dictionaries.
