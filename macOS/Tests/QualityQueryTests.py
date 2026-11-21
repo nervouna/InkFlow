@@ -776,9 +776,9 @@ class QueryTests(unittest.TestCase):
         payload = plain.read_bytes()
         document = json.loads(payload)
         coverage = self.result()['coverage']
-        for suffix in ('.json', '.json.gz', '.JSON.GZ', '.json.gZ'):
+        for index, suffix in enumerate(('.json', '.json.gz', '.JSON.GZ', '.json.gZ')):
             with self.subTest(suffix=suffix):
-                output = self.export_file(f'roundtrip{suffix}')
+                output = self.export_file(f'roundtrip-{index}{suffix}')
                 data = output.read_bytes()
                 if suffix != '.json':
                     self.assertEqual(data[:2], b'\x1f\x8b')
@@ -833,9 +833,9 @@ class QueryTests(unittest.TestCase):
                          (4, {1, 3}))
         self.assertTrue(all(r['applied_config_json'] == '{}' for r in document['tables']['config_revisions']))
         self.assertTrue(all('configuration' not in json.loads(r['snapshot_json']) for r in document['tables']['candidate_decisions']))
-        for suffix in ('.json.gz', '.JSON.GZ', '.json.gZ'):
+        for index, suffix in enumerate(('.json.gz', '.JSON.GZ', '.json.gZ')):
             with self.subTest(suffix=suffix):
-                packed = Path(self.temp.name) / f'native{suffix}'
+                packed = Path(self.temp.name) / f'native-{index}{suffix}'
                 subprocess.run([executable, str(self.db), str(packed)], check=True, capture_output=True)
                 with gzip.open(packed, 'rt', encoding='utf-8') as stream:
                     self.assertEqual(json.load(stream)['tables'], document['tables'])
