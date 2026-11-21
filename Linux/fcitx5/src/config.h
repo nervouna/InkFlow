@@ -1,5 +1,3 @@
-// Minimum daily-use configuration: ~/.config/fcitx5/conf/inkflow.conf. Option names
-// follow the macOS preference keys so a backup's settings map one to one.
 #ifndef INKFLOW_FCITX5_CONFIG_H
 #define INKFLOW_FCITX5_CONFIG_H
 #include <fcitx-config/configuration.h>
@@ -14,6 +12,7 @@ FCITX_CONFIGURATION(
     Config,
     fcitx::Option<int, fcitx::IntConstrain> candidateCount{this, "CandidateCount", "Candidates per page",
                                                            5, fcitx::IntConstrain(3, 9)};
+    fcitx::Option<bool> recordQuality{this, "RecordQuality", "Record local Chinese selection counts", true};
     fcitx::Option<bool> abbreviation{this, "Abbreviation", "Abbreviated pinyin", true};
     fcitx::Option<bool> typoTolerance{this, "TypoTolerance", "Typo tolerance", true};
     fcitx::Option<bool> fuzzyZ{this, "FuzzyZ", "Fuzzy z/zh", false};
@@ -33,5 +32,5 @@ FCITX_CONFIGURATION(
     fcitx::Option<std::string> importBackup{this, "ImportBackup",
                                             "Path of a macOS personal backup to import once"};);
 
-}  // namespace inkflow
+}
 #endif

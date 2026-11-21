@@ -29,8 +29,6 @@ while IFS=$'\t' read -r identifier sha bytes url; do
 done < "$staging/sources.tsv"
 [[ "$mode" == generate ]] || exit 0
 mkdir -p "$destination"
-# Cache is only a build optimization. Every raw input is verified above and the key
-# includes the executable, exact legacy bytes and local correction rules.
 "${sha256[@]}" build/dictionary-generator build/dictionary-sources/*.yaml "${legacy[0]}" \
   Core/config/chinese-overrides.tsv > "$staging/inputs.sha256"
 cache=build/generated-chinese

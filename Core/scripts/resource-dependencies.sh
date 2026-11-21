@@ -15,7 +15,6 @@ fetch() {
 }
 fetch pinyin.tar.gz 46f37114a7929ecc01003a236803c8b1e5198382e6a21f83fae036604a6b08bf https://codeload.github.com/rime/rime-pinyin-simp/tar.gz/0c6861ef7420ee780270ca6d993d18d4101049d0
 fetch emoji.txt 09e29b83ad367ea273e9ab438e572a7621649d93b36924ead28852762d2898b1 https://raw.githubusercontent.com/iDvel/rime-ice/fbb516b2786e4d5444383706d13c31c2e4d10c08/opencc/emoji.txt
-# Restore source files from verified archives if extraction is missing or changed.
 for entry in \
   'pinyin.tar.gz:rime-pinyin-simp-0c6861ef7420ee780270ca6d993d18d4101049d0/pinyin_simp.dict.yaml'; do
   archive=${entry%%:*}

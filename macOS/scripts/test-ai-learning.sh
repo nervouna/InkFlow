@@ -2,7 +2,6 @@
 set -euo pipefail
 fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
-# macOS awk collates distinct CJK strings as equal under UTF-8 locales; compare bytes.
 awk() { LC_ALL=C command awk "$@"; }
 source macOS/scripts/swift-test.sh
 source macOS/scripts/test-timing.sh
@@ -22,8 +21,6 @@ else
 fi
 [[ -s "$shared/inkflow_pinyin.custom.yaml" ]] || { echo 'Missing active-schema AI patch' >&2; exit 1; }
 inkflow_test_timing_report ai-learning resources "$stage_started"
-# One Rime user dictionary of a closed user directory through the core's personal-data export, as
-# "text<TAB>code<TAB>commits" rows with a positive count: USER NAME OUTPUT.
 export_userdb() {
   build/ai-adoption-learning-tests "$shared" "$1" export "$2" "$3.raw"
   awk -F '\t' '!/^#/ && NF == 3 { split($3, packed, " "); commits = substr(packed[1], 3) + 0; code = $1

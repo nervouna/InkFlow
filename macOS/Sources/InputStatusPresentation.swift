@@ -37,8 +37,6 @@ protocol InputStatusPresenting: AnyObject {
     func hide()
 }
 
-/// Resolves the insertion caret through the public InputMethodKit client API and
-/// delegates only passive window presentation to the panel.
 @MainActor
 final class NativeInputStatusPresentation: InputStatusPresenting {
     private var panel: InputStatusPanel?

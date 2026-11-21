@@ -12,7 +12,6 @@ build=$(plutil -extract CFBundleVersion raw "$plist")
 [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || { echo 'Expected a stable X.Y.Z version.' >&2; exit 1; }
 major=${BASH_REMATCH[1]} minor=${BASH_REMATCH[2]} patch=${BASH_REMATCH[3]}
 [[ "$build" =~ ^[1-9][0-9]*$ ]] || { echo 'Expected a positive integer build.' >&2; exit 1; }
-# Keep arithmetic within a practical, precisely representable range.
 for number in "$major" "$minor" "$patch" "$build"; do
   [[ ${#number} -le 9 ]] || { echo 'Version component exceeds supported range.' >&2; exit 1; }
 done

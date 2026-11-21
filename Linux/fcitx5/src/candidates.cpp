@@ -39,8 +39,6 @@ bool CandidateList::hasPrev() const { return ifr_snapshot_page(snapshot_.get()) 
 bool CandidateList::hasNext() const { return !ifr_snapshot_last_page(snapshot_.get()); }
 bool CandidateList::usedNextBefore() const { return false; }
 
-// Each navigation call ends by asking the engine to rebuild the panel, which destroys
-// this list; nothing of it is touched afterwards.
 void CandidateList::prev() {
   Engine* engine = engine_;
   fcitx::InputContext* ic = ic_;
@@ -62,4 +60,4 @@ void CandidateList::nextCandidate() {
   engine->moveHighlight(ic, false);
 }
 
-}  // namespace inkflow
+}

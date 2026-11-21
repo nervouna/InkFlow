@@ -1,9 +1,3 @@
-//! The frontend-facing C ABI over [`crate::engine`]. `include/inkflow_rime.h` is the
-//! hand-maintained contract; keep both in step.
-//!
-//! Every export catches panics and returns a status; nothing unwinds across the ABI.
-//! Handles are opaque boxes, outputs are written only on `IFR_OK`, and every call is
-//! serialized by the engine's own locks, so handles may be used from any thread.
 use crate::{
     Error,
     engine::{
@@ -150,7 +144,6 @@ thread_local! {
     static LAST_ERROR: RefCell<CString> = RefCell::new(CString::default());
 }
 
-/// Run one export body: panics and failures become a status and a thread-local message.
 fn guard(work: impl FnOnce() -> Result<(), Failure>) -> Status {
     let failure = match catch_unwind(AssertUnwindSafe(work)) {
         Ok(Ok(())) => return OK,
@@ -180,7 +173,6 @@ unsafe fn optional_path(pointer: *const c_char, name: &str) -> Result<Option<Pat
 }
 
 unsafe fn reference<'a, T>(pointer: *const T, name: &str) -> Result<&'a T, Failure> {
-    // Handles come from this module's boxes; the caller keeps them alive for the call.
     unsafe { pointer.as_ref() }.ok_or_else(|| Failure::argument(&format!("{name} is NULL")))
 }
 
@@ -194,7 +186,6 @@ fn c_string(value: &str) -> Result<CString, Failure> {
     CString::new(value).map_err(|_| Failure::new(NATIVE, "embedded NUL in engine text"))
 }
 
-/// Input options as a bitmask in `InputOption::ALL` order.
 fn options_from_mask(mask: u32) -> InputPreferences {
     InputOption::ALL
         .iter()
@@ -247,13 +238,11 @@ pub struct Phrase {
     pub text: *const c_char,
 }
 
-/// An immutable display snapshot with NUL-terminated copies of every string.
 pub struct SnapshotHandle {
     snapshot: Snapshot,
     input: CString,
     preedit: CString,
     candidates: Vec<(CString, CString)>,
-    /// The ranking evidence row of each candidate, if it has one.
     evidence: Vec<Option<CString>>,
 }
 
@@ -307,7 +296,6 @@ struct Observer {
     callback: ObserverCallback,
     user_data: *mut c_void,
 }
-// The caller promises the callback and its data may be used from any mutating thread.
 unsafe impl Send for Observer {}
 unsafe impl Sync for Observer {}
 
@@ -477,12 +465,26 @@ pub unsafe extern "C" fn ifr_session_snapshot(
     session: *const InputSession,
     snapshot: *mut *mut SnapshotHandle,
 ) -> Status {
+    unsafe { ifr_session_snapshot_if_changed(session, ptr::null(), snapshot) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_snapshot_if_changed(
+    session: *const InputSession,
+    previous: *const SnapshotHandle,
+    snapshot: *mut *mut SnapshotHandle,
+) -> Status {
     guard(|| {
         let session = unsafe { reference(session, "session") }?;
         if snapshot.is_null() {
             return Err(Failure::argument("snapshot is NULL"));
         }
-        let handle = SnapshotHandle::new(session.snapshot()?)?;
+        let current = session.snapshot()?;
+        if unsafe { previous.as_ref() }.is_some_and(|old| old.snapshot.reusable_as(&current)) {
+            unsafe { write(snapshot, ptr::null_mut()) };
+            return Ok(());
+        }
+        let handle = SnapshotHandle::new(current)?;
         unsafe { write(snapshot, Box::into_raw(Box::new(handle))) };
         Ok(())
     })
@@ -547,13 +549,11 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_comment(
         .map_or(ptr::null(), |(_, comment)| comment.as_ptr())
 }
 
-/// The caret in `ifr_snapshot_input`, in bytes; `ifr_snapshot_caret` is the preedit's.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_raw_caret(snapshot: *const SnapshotHandle) -> usize {
     unsafe { snapshot.as_ref() }.map_or(0, |s| s.snapshot.raw_caret_bytes)
 }
 
-/// Position on Rime's page of the displayed candidate `index`, before InkFlow's ordering.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_candidate_native_index(
     snapshot: *const SnapshotHandle,
@@ -564,7 +564,6 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_native_index(
         .map_or(0, |c| c.native_index)
 }
 
-/// One-based position across Rime's pages: `page * page size + native index + 1`; 0 out of range.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_candidate_native_rank(
     snapshot: *const SnapshotHandle,
@@ -593,8 +592,6 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_personal_source(
         })
 }
 
-/// The ranking evidence row of the displayed candidate `index`, or NULL when it has none or `index`
-/// is out of range. The string lives as long as the snapshot.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_candidate_evidence(
     snapshot: *const SnapshotHandle,
@@ -606,8 +603,6 @@ pub unsafe extern "C" fn ifr_snapshot_candidate_evidence(
         .map_or(ptr::null(), |row| row.as_ptr())
 }
 
-/// Returns 1 and writes the raw-input byte range the candidate consumes, which exists only for
-/// a candidate with a personal source; otherwise 0 and the outputs stay untouched.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_candidate_consumed_input(
     snapshot: *const SnapshotHandle,
@@ -672,7 +667,6 @@ pub unsafe extern "C" fn ifr_session_highlight(
     })
 }
 
-/// Paging is Rime's Page_Up/Page_Down through the same key policy as a frontend key.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_change_page(
     session: *const InputSession,
@@ -700,7 +694,6 @@ pub unsafe extern "C" fn ifr_session_clear(session: *const InputSession) -> Stat
     guard(|| Ok(unsafe { reference(session, "session") }?.clear()?))
 }
 
-/// Clear like `ifr_session_clear`, without a mutation for the observer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_clear_unobserved(session: *const InputSession) -> Status {
     guard(|| Ok(unsafe { reference(session, "session") }?.clear_unobserved()?))
@@ -743,6 +736,18 @@ pub unsafe extern "C" fn ifr_session_set_preceding_text(
         let session = unsafe { reference(session, "session") }?;
         let text = unsafe { self::text(text, "text") }?;
         Ok(session.set_preceding_text(text)?)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_session_start_document_context(
+    session: *const InputSession,
+    text: *const c_char,
+) -> Status {
+    guard(|| {
+        let session = unsafe { reference(session, "session") }?;
+        let text = unsafe { self::text(text, "text") }?;
+        Ok(session.start_document_context(text)?)
     })
 }
 
@@ -836,7 +841,6 @@ pub unsafe extern "C" fn ifr_session_ascii_mode(
     })
 }
 
-/// The ASCII mode the caller last asked for, which starts after the current composition.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_requested_ascii_mode(session: *const InputSession) -> c_int {
     let mut requested = 0;
@@ -859,8 +863,6 @@ pub unsafe extern "C" fn ifr_session_toggle_ascii_mode(
     })
 }
 
-/// The linked librime's version, valid for the process; NULL only after an earlier panic
-/// poisoned the Rime lock.
 #[unsafe(no_mangle)]
 pub extern "C" fn ifr_rime_version() -> *const c_char {
     static VERSION: OnceLock<CString> = OnceLock::new();
@@ -875,7 +877,6 @@ pub extern "C" fn ifr_rime_version() -> *const c_char {
     version
 }
 
-/// Compile `shared` into `cache`, with `user` as scratch. Setup work, never on a key path.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_resources_compile(
     shared: *const c_char,
@@ -890,7 +891,6 @@ pub unsafe extern "C" fn ifr_resources_compile(
     })
 }
 
-/// Serve the compiled `cache` from a clean `user` directory and select the smoke candidates.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_resources_probe(
     shared: *const c_char,
@@ -905,17 +905,14 @@ pub unsafe extern "C" fn ifr_resources_probe(
     })
 }
 
-/// A Lua module's answer to a channel request.
 pub struct ReplyHandle {
     status: CString,
     body: CString,
 }
 
-/// The largest reply a call may ask for. Personal-learning listings ask for 3 MiB.
 const MAXIMUM_REPLY_BYTES: usize = 4 * 1024 * 1024;
 const MAXIMUM_FIELDS: usize = 64;
 
-/// One synchronous round trip through the session's Lua modules; see `inkflow_rime.h`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_call(
     session: *const InputSession,
@@ -952,13 +949,11 @@ pub unsafe extern "C" fn ifr_session_call(
     })
 }
 
-/// The module's status word: "ok", "failed", "unknown" or "conflict".
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_reply_status(reply: *const ReplyHandle) -> *const c_char {
     unsafe { reply.as_ref() }.map_or(ptr::null(), |r| r.status.as_ptr())
 }
 
-/// The reply body, possibly empty.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_reply_body(reply: *const ReplyHandle) -> *const c_char {
     unsafe { reply.as_ref() }.map_or(ptr::null(), |r| r.body.as_ptr())
@@ -971,14 +966,11 @@ pub unsafe extern "C" fn ifr_reply_free(reply: *mut ReplyHandle) {
     }
 }
 
-/// Personal-learning entries captured at one learning revision, with NUL-terminated copies
-/// of their strings.
 pub struct LearningHandle {
     entries: Vec<LearningEntry>,
     strings: Vec<(CString, CString)>,
 }
 
-/// What a delete needs to be undone.
 pub struct LearningUndoHandle(LearningUndo);
 
 pub const LEARNING_ENGLISH: c_int = 0;
@@ -1062,7 +1054,6 @@ pub unsafe extern "C" fn ifr_learning_commits(
         .map_or(0, |e| e.commits)
 }
 
-/// Delete one entry of a listing. `*undo` receives the token that restores it.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_personal_learning_delete(
     engine: *const Arc<Engine>,
@@ -1105,13 +1096,11 @@ pub unsafe extern "C" fn ifr_learning_undo_free(undo: *mut LearningUndoHandle) {
     }
 }
 
-/// Drop every session's cached learning view after the dictionaries changed outside the engine.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_personal_learning_invalidate(engine: *const Arc<Engine>) -> Status {
     guard(|| Ok(unsafe { reference(engine, "engine") }?.invalidate_personal_learning()?))
 }
 
-/// The snapshots of a user directory's dictionaries; an absent dictionary has no text.
 pub struct ExportHandle(BTreeMap<String, CString>);
 
 #[unsafe(no_mangle)]
@@ -1147,8 +1136,6 @@ pub unsafe extern "C" fn ifr_personal_export_free(exported: *mut ExportHandle) {
     }
 }
 
-/// The snapshot of one of the three dictionaries by name, or NULL when it is absent or the
-/// name is none of them.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_personal_export_text(
     exported: *const ExportHandle,
@@ -1167,7 +1154,6 @@ pub unsafe extern "C" fn ifr_personal_export_text(
         .map_or(ptr::null(), |snapshot| snapshot.as_ptr())
 }
 
-/// A parsed macOS backup with NUL-terminated copies of its portable settings.
 pub struct BackupHandle {
     backup: Backup,
     phrases: Vec<(CString, CString, CString)>,
@@ -1276,8 +1262,6 @@ pub unsafe extern "C" fn ifr_backup_unsupported(
         .map_or(ptr::null(), |key| key.as_ptr())
 }
 
-/// Replace the user directory's dictionaries with the backup's. Rejected while any engine
-/// is initialized in this process; settings are applied by the frontend afterwards.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_backup_import(
     backup: *const BackupHandle,
@@ -1293,7 +1277,6 @@ pub unsafe extern "C" fn ifr_backup_import(
     })
 }
 
-/// Finish an interrupted import; a no-op without a pending transaction.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_personal_recover(user: *const c_char) -> Status {
     guard(|| {

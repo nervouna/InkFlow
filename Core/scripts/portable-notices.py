@@ -13,7 +13,6 @@ import sys
 root = Path(__file__).resolve().parents[2]
 destination = root / 'macOS/Licenses'
 sources = root / 'build/portable/sources'
-# marisa offers BSD-2-Clause or LGPL-2.1-or-later; COPYING.md carries both texts.
 native = {'glog.txt': 'glog/COPYING', 'leveldb.txt': 'leveldb/LICENSE',
           'marisa.txt': 'marisa/COPYING.md', 'yaml-cpp.txt': 'yaml/LICENSE'}
 
@@ -21,7 +20,6 @@ manifest = str(root / 'Core/Portable/Cargo.toml')
 metadata = json.loads(subprocess.check_output([
     'cargo', 'metadata', '--locked', '--offline', '--format-version', '1', '--manifest-path', manifest,
 ], cwd=root))
-# The lock file also lists packages that no build of this crate uses; take the real graph.
 tree = subprocess.check_output([
     'cargo', 'tree', '--locked', '--offline', '-e', 'normal,build', '--prefix', 'none', '--format',
     '{p}', '--manifest-path', manifest,

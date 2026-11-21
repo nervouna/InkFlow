@@ -1,7 +1,5 @@
 import Foundation
 
-/// Owns one ephemeral transcript. ASR adapters must deliver each final segment once, in order,
-/// then call finalized only after their result stream and audio finalization have both ended.
 @MainActor
 final class VoiceSession {
     struct Limits: Sendable {
@@ -47,7 +45,6 @@ final class VoiceSession {
 
     @discardableResult func start() -> UUID {
         if let id { cancel(id: id) }
-        // A completion callback may synchronously start the replacement session.
         if let id { return id }
         let token = UUID()
         id = token; stopped = false; finalTranscript = nil; aliasedTranscript = nil
@@ -58,7 +55,6 @@ final class VoiceSession {
         return token
     }
 
-    /// The volatile string is only the unfinished suffix, not the full transcript.
     func receiveVolatile(_ text: String, id token: UUID) {
         guard id == token, finalTranscript == nil else { return }
         let preview = segments.joined() + text

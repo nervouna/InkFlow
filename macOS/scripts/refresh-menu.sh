@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Refresh only the current user's menu agent, not the input method engine.
 owner_uid=$(id -u)
 agent_pids() {
   local result status
@@ -23,7 +22,6 @@ if [[ -z "$old_pids" ]]; then
 fi
 while IFS= read -r pid; do
   if ! kill -TERM "$pid"; then
-    # Exiting between lookup and termination is harmless.
     if kill -0 "$pid" 2>/dev/null; then
       echo "Unable to terminate input menu agent $pid." >&2
       exit 1

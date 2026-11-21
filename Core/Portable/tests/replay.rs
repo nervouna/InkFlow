@@ -1,6 +1,3 @@
-//! List-mode and engine-mode replay (`src/bin/replay.rs`) on the synthetic cases of
-//! `fixtures/replay-cases.json`. The live engine arms, cold and trained, need prepared resources: set
-//! INKFLOW_PORTABLE_RESOURCES as for `parity.rs`.
 use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
@@ -35,7 +32,6 @@ fn report_of(output: Output) -> Value {
     serde_json::from_slice(&output.stdout).unwrap()
 }
 
-/// Integers must match exactly; the McNemar p-values are floats.
 fn assert_same(actual: &Value, expected: &Value, path: &str) {
     match (actual, expected) {
         (Value::Object(a), Value::Object(e)) => {
@@ -74,7 +70,6 @@ impl Drop for Scratch {
     }
 }
 
-/// The prepared `IFCX` index of a dictionary, as `ContextRanker::from_index` reads it.
 fn context_index(dictionary: &str) -> Vec<u8> {
     let mut tables = vec![BTreeMap::<Vec<u8>, u64>::new(); 7];
     for line in dictionary.lines() {
@@ -107,7 +102,6 @@ fn context_index(dictionary: &str) -> Vec<u8> {
     data
 }
 
-/// The exporter's form: a header line, then one case per line.
 fn export(generated_at: &str, cases: &[Value]) -> String {
     let mut text = format!(
         "{{\"generated_at\":\"{generated_at}\",\"cases\":{}}}\n",
@@ -206,7 +200,6 @@ fn refuses_old_or_unreadable_headers_and_other_files() {
     assert!(String::from_utf8_lossy(&replay(&["list", &old]).stderr).contains("delete"));
 }
 
-/// The provenance of the fixture candidate that shows `text`, as the report names it.
 fn provenance(case: &Value, text: &str) -> &'static str {
     let candidates = case["candidates"].as_array().unwrap();
     let shown = candidates.iter().find(|c| c["text"] == json!(text));
@@ -218,8 +211,6 @@ fn provenance(case: &Value, text: &str) -> &'static str {
     }
 }
 
-/// A recorded arm file: for every fixture case, the first text it shows with that text's provenance and the
-/// longest whole-input text.
 fn record(
     scratch: &Scratch,
     name: &str,
@@ -242,15 +233,12 @@ fn record(
     scratch.write(&format!("{name}.jsonl"), &text)
 }
 
-/// The text of the fixture candidate whose `field` equals `value`.
 fn candidate_text(case: &Value, field: &str, value: u64) -> String {
     let candidates = case["candidates"].as_array().unwrap();
     let found = candidates.iter().find(|c| c[field].as_u64() == Some(value));
     found.map_or(String::new(), |c| c["text"].as_str().unwrap().to_owned())
 }
 
-/// The `native` arm (Rime's first candidate, no whole-input candidate) and the `displayed` arm (the leader
-/// when recorded, the committed text as the whole-input candidate) of list mode, as recorded arm files.
 fn native_and_displayed(scratch: &Scratch) -> (String, String) {
     let native = record(
         scratch,
@@ -267,7 +255,6 @@ fn native_and_displayed(scratch: &Scratch) -> (String, String) {
     (native, displayed)
 }
 
-/// A pair's scopes in list mode's shape: without the repeat block, ER and the regression share.
 fn list_shape(scopes: &Value) -> Value {
     let mut scopes = scopes.clone();
     for scope in scopes.as_object_mut().unwrap().values_mut() {
@@ -305,14 +292,11 @@ fn recorded_arms_give_the_list_mode_counts_pairwise() {
         (&pair["base"], &pair["arm"]),
         (&json!("native"), &json!("displayed"))
     );
-    // The pairwise machinery is list mode's: the displayed leader against Rime's first candidate.
     assert_same(
         &list_shape(&pair["scopes"]),
         &expected["arms"]["displayed"]["scopes"],
         "scopes",
     );
-    // The segmentation cases are judged again on the whole-input candidate: none for native,
-    // the committed text for displayed.
     let segmentation = &expected["arms"]["displayed"]["scopes"]["segmentation"]["cases"];
     let whole = &pair["whole_input"];
     let cases = segmentation["cases"].as_u64().unwrap();
@@ -325,7 +309,6 @@ fn recorded_arms_give_the_list_mode_counts_pairwise() {
     let distinct = whole["distinct"]["fixed"].as_u64().unwrap();
     assert!((1..=cases).contains(&distinct));
     assert!(whole["p"].as_f64().unwrap() < 0.5);
-    // Reproduction against the recorded displayed leader.
     let all = fixture()["cases"].as_array().unwrap().len() as u64;
     assert_eq!(
         actual["arms"]["displayed"]["reproduces_displayed"],
@@ -347,7 +330,6 @@ fn recorded_arms_give_the_list_mode_counts_pairwise() {
         actual["arms"]["native"]["first_hits"]["all"]["cases"]["hits"],
         expected["arms"]["displayed"]["scopes"]["all"]["cases"]["native_hits"]
     );
-    // The table names both arms, the scopes and the whole-input row.
     let table = String::from_utf8(
         replay(&[
             "engine",
@@ -382,7 +364,6 @@ fn close(actual: &Value, expected: f64) {
     );
 }
 
-/// The misses of `arm`'s first candidates by provenance, on every case and on the distinct pairs.
 fn leaders(arm: &Value, provenance: &str) -> [u64; 4] {
     let leaders = &arm["leaders"][provenance];
     let count = |block: &str, key: &str| leaders[block][key].as_u64().unwrap();
@@ -411,14 +392,11 @@ fn recorded_arms_report_er_the_repeated_pairs_and_the_leaders() {
     };
     let actual = args(&native, &displayed);
     let all = &actual["pairs"][0]["scopes"]["all"];
-    // ER is broken per fixed: 2 of 12 on the cases, 2 of 9 on the distinct pairs.
     close(&all["cases"]["er"], 2.0 / 12.0);
     close(&all["distinct"]["er"], 2.0 / 9.0);
-    // The share of regressions with the Wilson interval of quality.py: 2 of 14.
     close(&all["cases"]["regression_share"], 2.0 / 14.0);
     close(&all["cases"]["wilson_low"], 0.040093921271464966);
     close(&all["cases"]["wilson_high"], 0.3994137949697035);
-    // Four pairs recur (can, hui, zai, de); their last cases fix 2 and break none.
     let repeat = &all["repeat"];
     assert_eq!(repeat["cases"], json!(4));
     assert_eq!(
@@ -427,11 +405,9 @@ fn recorded_arms_report_er_the_repeated_pairs_and_the_leaders() {
     );
     close(&repeat["er"], 0.0);
     close(&all["repeat_p"], 0.5);
-    // Without a fixed case ER is unavailable, not 0.
     let none = &actual["pairs"][0]["scopes"]["decoder_leader"];
     assert!(none["cases"]["er"].is_null() && none["cases"]["regression_share"].is_null());
     assert_eq!(none["repeat"]["cases"], json!(0));
-    // The leaders of the fixture's first candidates: [cases, misses, distinct, distinct misses].
     let displayed_arm = &actual["arms"]["displayed"];
     assert_eq!(leaders(displayed_arm, "dictionary")[..2], [46, 23]);
     assert_eq!(leaders(displayed_arm, "assembled")[..2], [5, 3]);
@@ -452,14 +428,11 @@ fn recorded_arms_report_er_the_repeated_pairs_and_the_leaders() {
     close(&dictionary["miss_rate"], 0.5);
     close(&dictionary["wilson_low"], 0.36118937082703256);
     close(&dictionary["wilson_high"], 0.6388106291729675);
-    // A provenance without cases is unavailable, never 0%.
     let other = &displayed_arm["leaders"]["other"]["cases"];
     assert_eq!(other["cases"], json!(0));
     assert!(other["miss_rate"].is_null() && other["wilson_low"].is_null());
-    // Neither arm trained, and a recorded arm without a walk has no counts.
     assert_eq!(displayed_arm["trained"], json!(false));
     assert!(displayed_arm["walk"].is_null() && displayed_arm["training"].is_null());
-    // A record from before the provenance loads as none: L-over is unavailable.
     let stripped: String = fs::read_to_string(&displayed)
         .unwrap()
         .lines()
@@ -476,7 +449,6 @@ fn recorded_arms_report_er_the_repeated_pairs_and_the_leaders() {
     assert!(arm["leaders"]["learned"]["cases"]["miss_rate"].is_null());
     assert_eq!(arm["leaders"]["none"]["cases"]["cases"], json!(54));
     assert_eq!(displayed_arm["without_provenance"], json!(0));
-    // The table names L-over, ER, the repeat block and the training bias.
     let table = replay(&[
         "engine",
         FIXTURE,
@@ -619,7 +591,6 @@ fn engine_mode_runs_the_real_engine_and_records_its_arms() {
     let scratch = Scratch::new("engine-live");
     let recorded = scratch.0.join("a.jsonl");
     let recorded = recorded.to_str().unwrap();
-    // Two engines in turn on the same resources must show the same thing: arms do not leak into each other.
     let live = report(&[
         "engine",
         FIXTURE,
@@ -644,7 +615,6 @@ fn engine_mode_runs_the_real_engine_and_records_its_arms() {
     }
     assert_eq!(pair["whole_input"]["cases"]["fixed"], json!(0));
     assert_eq!(pair["whole_input"]["cases"]["broken"], json!(0));
-    // The record: a header, then every case once; owner-only; some long input shows a whole-input sentence.
     let body = fs::read_to_string(recorded).unwrap();
     let mut lines = body.lines();
     let header: Value = serde_json::from_str(lines.next().unwrap()).unwrap();
@@ -664,7 +634,6 @@ fn engine_mode_runs_the_real_engine_and_records_its_arms() {
         let mode = fs::metadata(recorded).unwrap().permissions().mode();
         assert_eq!(mode & 0o777, 0o600);
     }
-    // A recorded arm stands in for the live one.
     let replayed = report(&[
         "engine",
         FIXTURE,
@@ -687,7 +656,6 @@ fn engine_mode_runs_the_real_engine_and_records_its_arms() {
         live["arms"]["a"]["reproduces_displayed"]
     );
     assert_eq!(replayed["pairs"], live["pairs"]);
-    // Nothing is written over an earlier record.
     let again = replay(&[
         "engine",
         FIXTURE,
@@ -700,7 +668,6 @@ fn engine_mode_runs_the_real_engine_and_records_its_arms() {
     println!("PASS engine replay on {cases} fixture cases");
 }
 
-/// Run `replay` with its temporary directory set to `temp`, where a live arm keeps its scratch user directory.
 fn replay_in(temp: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_replay"))
         .env("TMPDIR", temp)
@@ -709,7 +676,6 @@ fn replay_in(temp: &Path, args: &[&str]) -> Output {
         .unwrap()
 }
 
-/// No arm leaves its scratch user directory behind.
 fn assert_no_user_directory(temp: &Path) {
     let left: Vec<_> = fs::read_dir(temp)
         .unwrap()
@@ -719,7 +685,6 @@ fn assert_no_user_directory(temp: &Path) {
     assert!(left.is_empty(), "left behind: {left:?}");
 }
 
-/// The header and the rows of a record file.
 fn read_record(path: &str) -> (Value, Vec<Value>) {
     let body = fs::read_to_string(path).unwrap();
     let mut lines = body.lines().map(|line| serde_json::from_str(line).unwrap());
@@ -747,7 +712,6 @@ fn a_trained_arm_walks_the_fixture_and_cleans_up() {
         cold_record.to_str().unwrap(),
         trained_record.to_str().unwrap(),
     );
-    // Two trained arms on the same resources must agree: training does not depend on anything but the cases.
     let live = report_of(replay_in(
         &temp,
         &[
@@ -783,8 +747,6 @@ fn a_trained_arm_walks_the_fixture_and_cleans_up() {
         let walk = counts(&arm["walk"], &walk_keys);
         assert_eq!(walk[..3], [54, 51, 3]);
         assert_eq!(walk[1] + walk[2], walk[0]);
-        // Every walkable composition is accounted for by its final selection or by an unfound text. The fixture's
-        // huix, shangbanx, bingx and kaihuixx leave letters behind when their text is found.
         let training = counts(
             &arm["training"],
             &["trained", "incomplete", "commit_mismatch"],
@@ -814,7 +776,6 @@ fn a_trained_arm_walks_the_fixture_and_cleans_up() {
             assert_eq!(counts[block]["broken"], json!(0), "{scope}");
         }
     }
-    // Records carry the walk, so a recorded trained arm reloads as the same arm.
     let (header, rows) = read_record(trained_record);
     assert_eq!(header["trained"], json!(true));
     assert_eq!(header["walk"], live["arms"]["trained"]["walk"]);
@@ -847,7 +808,6 @@ fn a_trained_arm_walks_the_fixture_and_cleans_up() {
         }
     }
     assert_eq!(replayed["pairs"][0], pairs[0]);
-    // The table prints the counts of the walk and the training.
     let table = replay_in(
         &temp,
         &[
@@ -939,11 +899,9 @@ fn a_trained_arm_learns_a_word_chosen_in_earlier_compositions() {
         provenance(trained),
         [word("dictionary"), word("learned"), word("learned")]
     );
-    // L-over: the trained arm has two learned leaders, neither a miss; the cold arm has none.
     assert_eq!(leaders(&arms["arms"]["trained"], "learned")[..2], [2, 0]);
     assert_eq!(leaders(&arms["arms"]["cold"], "learned")[..2], [0, 0]);
     assert_eq!(arms["arms"]["trained"]["training"]["trained"], json!(3));
-    // The word is one pair seen three times: the repeat block scores its last case.
     let all = &arms["pairs"][0]["scopes"]["all"];
     assert_eq!(all["repeat"]["cases"], json!(1));
     assert_eq!(all["cases"]["cases"], json!(3));
@@ -973,7 +931,6 @@ fn a_composition_of_several_decisions_is_walked_once() {
             "committed_text": committed,
         })
     };
-    // c1: 北京 is chosen from beijingda, daxue is typed, then 大学 is chosen. c2: the first text is on no page.
     let cases = [
         case("c1", 1, "beijingda", "北京", "北京大学"),
         case("c1", 2, "beijingdaxue", "大学", "北京大学"),
@@ -1009,8 +966,6 @@ fn a_composition_of_several_decisions_is_walked_once() {
             [2, 2, 0, 1],
             "{name}"
         );
-        // The second decision of c1 is scored after 北京 was selected: no evidence, and 大学 leads. The second
-        // decision of c2 is scored on a fresh composition because its first text was not found: evidence again.
         let path = if name == "cold" { cold } else { trained };
         let rows = read_record(path).1;
         assert_eq!(rows[1]["first"], json!("大学"), "{name}");
@@ -1018,7 +973,6 @@ fn a_composition_of_several_decisions_is_walked_once() {
         assert_eq!(rows[3]["first"], json!("北京大学"), "{name}");
         assert_ne!(rows[3]["first_provenance"], json!("none"), "{name}");
     }
-    // Only c1 trains; c2 trains nothing.
     let training = counts(
         &arms["arms"]["trained"]["training"],
         &["trained", "incomplete", "commit_mismatch"],

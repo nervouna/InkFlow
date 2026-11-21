@@ -33,7 +33,6 @@ while IFS= read -r component; do
 done < <(sparkle_components "$app") > "$fixture/expected"
 cmp "$EVENTS" "$fixture/expected"
 verify_sparkle_developer_id "$app" T7976FL2LP
-# Every nested target must fail independently, even when the outer app is valid.
 while IFS= read -r component; do
   if BAD_COMPONENT="$component" BAD_TEAM=WRONGTEAM verify_sparkle_developer_id "$app" T7976FL2LP > "$fixture/error" 2>&1; then exit 1; fi
   grep -Fq 'Unexpected Sparkle signing team:' "$fixture/error"

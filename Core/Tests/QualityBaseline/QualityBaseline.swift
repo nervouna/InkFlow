@@ -70,8 +70,6 @@ func treeDigest(_ root: URL) throws -> String {
         return engine
     }
 
-    // Observe and commit through the same shared-core boundary as production typing.
-    // Initial observation is also selection 1 of the fixed learning recipe.
     @MainActor static func observe(_ sample: Sample, engine: IFEngine, pageLimit: Int) throws -> Observation {
         engine.clear()
         engine.setPrecedingText("")
@@ -110,7 +108,6 @@ func treeDigest(_ root: URL) throws -> String {
                            committedText: committed, searchExhausted: exhausted)
     }
 
-    // Han ranges as the portable replay instrument counts them (Core/Portable/src/ranking.rs is_han).
     static func isHan(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF, 0x20000...0x2FA1F, 0x30000...0x323AF:
@@ -124,7 +121,6 @@ func treeDigest(_ root: URL) throws -> String {
         text.unicodeScalars.allSatisfy { isHan($0) }
     }
 
-    // Retention pass: commit the shown-first of unrelated Han samples into the same user directory.
     @MainActor static func retain(_ index: Int, corpus: Corpus, engine: IFEngine) throws -> Int {
         let sample = corpus.samples[index]
         let pool = (corpus.samples[(index + 1)...] + corpus.samples[..<index])
@@ -147,7 +143,6 @@ func treeDigest(_ root: URL) throws -> String {
         return made
     }
 
-    // Beneficial effort: selections after which the target is first shown-first; nil when never within the recipe.
     static func eb(_ result: Result) -> Int? {
         if result.initial.targetRank == 1 { return 0 }
         if let index = result.training.firstIndex(where: { $0.targetRank == 1 }) { return index + 1 }
@@ -166,7 +161,6 @@ func treeDigest(_ root: URL) throws -> String {
             + "learned \(rank(result.learned)) → retained \(rank(result.retained)); Eb \(eb); U \(utility)"
     }
 
-    // Learning curve over the corpus. Eb, U and ER are derived here and never stored in the baseline.
     static func summary(_ results: [Result]) -> String {
         let histogram = ((0...5).map { value in "\(value): \(results.filter { eb($0) == value }.count)" }
             + ["unlearned: \(results.filter { eb($0) == nil }.count)"]).joined(separator: ", ")

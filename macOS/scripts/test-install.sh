@@ -10,7 +10,6 @@ mkdir -p "$repo/macOS/scripts" "$repo/build/InkFlow.app/Contents/MacOS" \
 cp macOS/scripts/install.sh macOS/scripts/verify-developer-id.sh macOS/scripts/sparkle-signing.sh "$repo/macOS/scripts/"
 source "$repo/macOS/scripts/sparkle-signing.sh"
 while IFS= read -r component; do mkdir -p "$component"; done < <(sparkle_components "$repo/build/InkFlow.app")
-# Isolate the desktop preflight, including its refusal path, from the test runner's sandbox.
 sed -i '' "s|/bin/ps -p|$fixture/bin/ps -p|" "$repo/macOS/scripts/install.sh"
 cp macOS/Info.plist macOS/DeveloperID.entitlements macOS/Debug.entitlements "$repo/macOS/"
 printf executable > "$repo/build/InkFlow.app/Contents/MacOS/InkFlow"
@@ -149,14 +148,11 @@ install --developer-id > "$fixture/output" 2>&1
 [[ -x "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow" ]] || fail
 grep -Fq "register:$HOME/Library/Input Methods/InkFlow.app" "$EVENTS"
 grep -Fq ':--finish-update' "$EVENTS"
-# The lifecycle helper is told the staged app's build number, not a path.
 grep -Fxq 'expected-build:7' "$EVENTS"
 cmp "$repo/build/InkFlow.app/Contents/MacOS/InkFlow" "$HOME/Library/Input Methods/InkFlow.app/Contents/MacOS/InkFlow"
 stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]] || fail
 
-# Verify each integrity gate independently, before any existing failure leaves
-# a retained recovery directory. These fixtures never touch the real installation.
 printf old > "$target/old-marker"
 if DITTO_FAILURE=before-stage-copy install --developer-id > "$fixture/output" 2>&1; then exit 1; fi
 [[ -f "$target/old-marker" ]] || fail
@@ -190,7 +186,6 @@ for phase in source staged installed; do
     [[ -f "${stages[0]}/InkFlow.app/old-marker" && -s "${stages[0]}/state.json" ]] || fail
     grep -Fxq old-intact-before-stop "$EVENTS"
     grep -Fq ':--prepare-update' "$EVENTS"
-    # Remove only this test-owned recovery fixture before the next scenario.
     rm -rf "${stages[0]}"
   else
     [[ -f "$target/old-marker" && ${#stages[@]} -eq 0 ]] || fail
@@ -237,7 +232,6 @@ stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]] || fail
 assert_no_persistent_backups
 
-# An unconfirmed upgrade still completes, and the installer shows the instruction instead of the restored message.
 : > "$EVENTS"
 INPUT_SOURCE_UNCONFIRMED=1 install --developer-id > "$fixture/output" 2>&1
 [[ -x "$target/Contents/MacOS/InkFlow" ]] || fail
@@ -248,7 +242,6 @@ stages=("$HOME/Library/Input Methods"/.inkflow-install.*)
 [[ ${#stages[@]} -eq 0 ]] || fail
 assert_no_persistent_backups
 
-# Exercise the actual read-only wrapper with fake compiler and service diagnostics.
 cp macOS/scripts/register.sh "$repo/macOS/scripts/register.sh"
 sed -i '' "s|/bin/ps -p|$fixture/bin/ps -p|" "$repo/macOS/scripts/register.sh"
 cat > "$repo/macOS/scripts/swift-package.sh" <<'STUB'

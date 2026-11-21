@@ -16,7 +16,6 @@ for argument in "$@"; do
 done
 if [[ ${INKFLOW_NOTARY_AUTH:-keychain} == api-key ]]; then
   auth=(--key "$INKFLOW_NOTARY_KEY_FILE" --key-id "$INKFLOW_NOTARY_KEY_ID")
-  # Team keys require an issuer; individual keys must omit it.
   if [[ -n ${INKFLOW_NOTARY_ISSUER:-} ]]; then auth+=(--issuer "$INKFLOW_NOTARY_ISSUER"); fi
 else
   auth=(--keychain-profile "$INKFLOW_NOTARY_PROFILE")

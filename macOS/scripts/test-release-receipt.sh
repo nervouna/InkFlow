@@ -18,7 +18,6 @@ cp macOS/scripts/{release-receipt,release-build}.sh "$fixture/repo/macOS/scripts
   if bash macOS/scripts/release-receipt.sh create >/dev/null 2>&1; then exit 1; fi
   bash macOS/scripts/release-receipt.sh create "$receipt"
   bash macOS/scripts/release-receipt.sh verify "$receipt" >/dev/null
-  # The receipt records the verified commit and the allocated build, nothing else.
   [[ $(plutil -p "$receipt" | grep -c '=>') == 2 ]] || fail
   [[ $(plutil -extract sourceCommit raw "$receipt") == $(git rev-parse HEAD) ]] || fail
   [[ $(plutil -extract appBuild raw "$receipt") == "$((baseline + 1))" ]] || fail
@@ -28,7 +27,6 @@ cp macOS/scripts/{release-receipt,release-build}.sh "$fixture/repo/macOS/scripts
   plutil -replace CFBundleVersion -string "$((baseline + 1))" build/InkFlow.app/Contents/Info.plist
   plutil -replace LSMinimumSystemVersion -string 99.0 build/InkFlow.app/Contents/Info.plist
   if bash macOS/scripts/release-build.sh "$receipt" build/InkFlow.app/Contents/Info.plist >/dev/null 2>&1; then exit 1; fi
-  # Any change to the commit or the tree after verification invalidates the receipt.
   printf '\nchanged\n' >> macOS/Info.plist
   if bash macOS/scripts/release-receipt.sh verify "$receipt" >/dev/null 2>&1; then exit 1; fi
   if bash macOS/scripts/release-receipt.sh create build/receipt-fixture/dirty.plist >/dev/null 2>&1; then exit 1; fi

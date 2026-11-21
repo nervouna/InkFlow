@@ -1,7 +1,6 @@
 @preconcurrency import InputMethodKit
 import ObjectiveC
 
-/// Audited binding from offline engine candidates to the native IMK panel.
 @MainActor
 protocol CandidatePresentation: AnyObject {
     var candidatesVisible: Bool { get }
@@ -29,9 +28,6 @@ final class NativeCandidatePresentation: CandidatePresentation {
     func hideCandidates() { panel?.hide() }
 }
 
-/// The application owns this object until its event loop stops. IMKServer borrows
-/// the last-created candidate panel, while the panel retains its server. A weak
-/// association avoids a retain cycle and keeps exactly one extra panel alive.
 @MainActor
 final class NativeCandidateLifetime {
     private final class WeakOwner {

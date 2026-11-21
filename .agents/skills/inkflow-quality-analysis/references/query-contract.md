@@ -271,3 +271,26 @@ Pair identity: a decision with a known pair carries `snapshot.codeHash` and, on 
 ## Manual exchange
 
 Exporting and cross-device joint analysis (export file format v1, the repeatable `--input`, `--exports-only` and `--source` flags, source identity and validation rules) are specified in [quality export and joint-analysis contract](../../../../macOS/QUALITY-EXPORT.md).
+
+## Query implementation
+
+The recorder's rollback journal allows a reader on the live file to delay its writes. Start a read
+transaction with the configured busy timeout, acquire the read lock before copying, and run analysis
+on the private in-memory copy. The upfront read makes lock contention bounded because SQLite's
+backup operation can otherwise retry a busy source indefinitely. Take one snapshot and close the
+live database before formatting output. Timestamps are recorded at millisecond precision, while
+filters preserve finer precision supplied by the caller.
+
+A first-page snapshot is comparable when its reported generation and composition evidence match the
+decision. A post-commit window rides the composition that follows its commit, with one windows row
+per commit. Give the projected commit identifier SQLite's TEXT affinity to allow an automatic index
+for the join. Without that affinity the planner can scan every window for every decision. Compute
+timing percentiles in SQLite and pass only the interpolation endpoints and bounded group counts to
+Python.
+
+Composition and commit rates deduplicate by composition and use pooled counters. With a fingerprint
+filter, match the composition and its commits to the fingerprint attributed through its decisions.
+A decisionless composition inherits the unique fingerprint seen in the run when available. Most
+cancels and raw Returns have no decision kind, so rates depending on those compositions are suppressed
+under kind filtering. A candidate commit has a decision, so the revert rate remains meaningful.
+Private typed-text exports are owner-only and published atomically without replacing an existing file.

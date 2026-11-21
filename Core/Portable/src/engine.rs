@@ -1,18 +1,8 @@
-//! Session coordination and InkFlow policy, matching InkFlowRime/Engine.swift.
-//!
-//! Rime keeps editing, segmentation, lookup, paging and its own learning. This layer owns
-//! equivalent-span ordering and selection, digit/arrow key policy, custom phrases, input
-//! preferences, candidate counts and safe configuration boundaries. One policy lock
-//! serializes every session of an engine; the native engine lock nests inside it.
-//!
-//! Quality recording stays outside: an optional [`Observer`] receives each mutation with
-//! the displayed snapshots before and after, after the policy lock is released, so it can
-//! neither change input nor block a key event on storage.
 use crate::{
     Error, Result, Runtime, Session,
     phrases::{CustomPhrase, PhraseError, phrase_tsv},
     preferences::InputPreferences,
-    ranking::{ContextRanker, Metadata, PersonalSource, parse_metadata},
+    ranking::{ContextRanker, Metadata, PersonalSource, Source, parse_metadata},
 };
 use std::{
     collections::BTreeMap,
@@ -25,26 +15,19 @@ use unicode_segmentation::UnicodeSegmentation;
 
 pub const SCHEMA: &str = "inkflow_pinyin";
 pub const PHRASE_FILE: &str = "custom_phrase.txt";
-/// Preceding-text graphemes retained for context ranking.
 pub const CONTEXT_LIMIT: usize = 16;
 const PATCHED_NODES: [&str; 4] = ["menu", "translator", "key_binder", "punctuator"];
 
-/// A configuration that could not be applied. The code is stable; frontends localize it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConfigurationError {
     Phrases(PhraseError),
-    /// custom_phrase.txt could not be written; the file keeps its previous content.
     PhraseWrite,
-    /// This session could not reload the schema after a phrase change; it retries on use.
     SessionReload,
-    /// The compiled spelling profile is missing from the prepared cache.
     MissingPrism,
     SchemaOpen,
     PatchInit,
     PatchLoad,
-    /// The temporary schema configuration could not be restored; restart the engine.
     SchemaRestore,
-    /// The schema did not accept the patched configuration.
     SchemaApply,
 }
 
@@ -67,7 +50,6 @@ impl ConfigurationError {
 #[derive(Debug)]
 pub enum EngineError {
     Native(Error),
-    /// A required prepared resource is missing; the path is relative to its root.
     MissingResource(String),
     Configuration(ConfigurationError),
     ContextIndex(String),
@@ -97,13 +79,10 @@ impl From<std::io::Error> for EngineError {
     }
 }
 
-/// Prepared resources and the isolated writable user directory of one engine.
 pub struct Configuration {
     pub shared: PathBuf,
     pub user: PathBuf,
-    /// Target-native compiled cache. `None` compiles into `user/build` before any session.
     pub cache: Option<PathBuf>,
-    /// The prepared `pinyin_simp.context.bin`; `None` keeps Rime's native order.
     pub context_index: Option<PathBuf>,
 }
 
@@ -111,20 +90,15 @@ pub struct Configuration {
 pub struct Candidate {
     pub text: String,
     pub comment: String,
-    /// Position in Rime's current page; quality records keep both ranks.
     pub native_index: usize,
-    /// One-based position across Rime's pages: `page * page size + native_index + 1`.
     pub native_rank: usize,
-    /// Bounded ranking evidence for this candidate when ordering applied.
     pub evidence: Option<Metadata>,
 }
 
 impl Candidate {
-    /// The personal-learning source quality records keep, if the evidence names one.
     pub fn personal_source(&self) -> Option<PersonalSource> {
         self.evidence.as_ref()?.personal_source()
     }
-    /// The raw-input bytes the candidate consumes, present only with a personal source.
     pub fn consumed_input(&self) -> Option<Range<usize>> {
         self.personal_source()?;
         self.evidence
@@ -133,19 +107,16 @@ impl Candidate {
     }
 }
 
-/// The displayed page in InkFlow order. Offsets count UTF-8 bytes of `preedit`.
 #[derive(Debug, Clone)]
 pub struct Snapshot {
     token: Arc<()>,
     pub input: String,
-    /// Rime's caret in `input`, in bytes; `caret_bytes` is the caret in `preedit`.
     pub raw_caret_bytes: usize,
     pub preedit: String,
     pub caret_bytes: usize,
     pub selection_bytes: Range<usize>,
     pub candidates: Vec<Candidate>,
     pub page: i32,
-    /// Display index of Rime's highlighted candidate.
     pub highlighted: usize,
     pub last_page: bool,
 }
@@ -166,7 +137,10 @@ impl PartialEq for Snapshot {
 impl Eq for Snapshot {}
 
 impl Snapshot {
-    /// Once a segment is selected, the immediate prefix is inside the mark.
+    pub(crate) fn reusable_as(&self, current: &Self) -> bool {
+        Arc::ptr_eq(&self.token, &current.token) && self == current
+    }
+
     pub fn has_selected_prefix(&self) -> bool {
         self.selection_bytes.start > 0
     }
@@ -185,7 +159,6 @@ pub enum Action {
     ToggleAscii,
 }
 
-/// One completed mutation of a session, delivered outside the policy lock.
 #[derive(Debug, Clone)]
 pub struct Mutation {
     pub session: u64,
@@ -208,6 +181,7 @@ struct Core {
     buffered_commit: String,
     error: Option<ConfigurationError>,
     preceding: String,
+    document_context_window: bool,
     ordered_content: Option<crate::Snapshot>,
     order: Vec<usize>,
     metadata: Option<Vec<Metadata>>,
@@ -227,6 +201,7 @@ impl Core {
             buffered_commit: String::new(),
             error: None,
             preceding: String::new(),
+            document_context_window: false,
             ordered_content: None,
             order: Vec::new(),
             metadata: None,
@@ -250,8 +225,6 @@ impl Core {
 }
 
 struct State {
-    /// Custom phrases are Rime's native custom_phrase.txt in the user directory. The file is
-    /// written only when settings change; every live session reloads it at the next shared idle.
     requested_phrases: Vec<CustomPhrase>,
     requested_tsv: String,
     file_tsv: String,
@@ -260,7 +233,6 @@ struct State {
     loaded_phrases: Vec<CustomPhrase>,
     sessions: BTreeMap<u64, Core>,
     next: u64,
-    /// Invalidates management snapshots/undo after any observed learning or reset.
     learning_revision: u64,
     last_commit: Option<std::time::Instant>,
 }
@@ -269,14 +241,12 @@ impl State {
     fn observe_learning(&mut self) {
         self.learning_revision = self.learning_revision.wrapping_add(1);
     }
-    /// Native Rime allows undo while time(NULL) - transaction_time <= 3 seconds.
     fn can_read_learning(&self) -> bool {
         self.last_commit
             .is_none_or(|at| at.elapsed() >= std::time::Duration::from_secs(4))
     }
 }
 
-/// One personal-learning record of the shared English or voice-alias namespace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LearningEntry {
     pub source: LearningSource,
@@ -323,10 +293,8 @@ pub struct LearningUndo {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LearningError {
-    /// A session is composing, a commit is undrained, or the native undo window is open.
     Busy,
     Unavailable,
-    /// The live state changed since the entry or undo was captured.
     Conflict,
     TooLarge,
     Native(Error),
@@ -341,14 +309,12 @@ pub struct Engine {
     compiled: PathBuf,
 }
 
-fn content(raw: &crate::Snapshot) -> crate::Snapshot {
-    let mut content = raw.clone();
-    content.highlighted = 0;
-    content
+fn content(mut raw: crate::Snapshot) -> crate::Snapshot {
+    raw.highlighted = 0;
+    raw
 }
 
 impl Engine {
-    /// Initialization, compilation and the first phrase-file sync are setup work.
     pub fn new(configuration: Configuration) -> std::result::Result<Arc<Self>, EngineError> {
         fs::create_dir_all(&configuration.user)?;
         let ranker = match &configuration.context_index {
@@ -392,7 +358,6 @@ impl Engine {
             learning_revision: 0,
             last_commit: None,
         };
-        // No session exists yet: whatever the file holds now is what they all load.
         if let Some(error) = sync_phrase_file(&mut state, &file) {
             return Err(EngineError::Configuration(error));
         }
@@ -408,7 +373,6 @@ impl Engine {
         }))
     }
 
-    /// Replace the observer. It runs after each mutation, outside every engine lock.
     pub fn set_observer(&self, observer: Option<Arc<Observer>>) {
         *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = observer;
     }
@@ -459,7 +423,6 @@ impl Engine {
         self.apply_runtime_options(core)
     }
 
-    /// A session that could not be recreated during a phrase reload is retried on its next use.
     fn recover(&self, state: &mut State, id: u64) -> Result<()> {
         if !state.sessions[&id].lost {
             return Ok(());
@@ -494,8 +457,6 @@ impl Engine {
             Some(session) if !core.lost => (session.input()?, session.input_caret()?),
             _ => (String::new(), 0),
         };
-        // Rime's raw input is ASCII, so its caret is a boundary. A stray value is clamped rather than
-        // failing a key event: the raw caret only serves AI identity and quality evidence.
         let raw_caret_bytes = (0..=raw_caret_bytes.min(input.len()))
             .rev()
             .find(|&offset| input.is_char_boundary(offset))
@@ -537,7 +498,6 @@ impl Engine {
         })
     }
 
-    /// Drains Rime's commit; a non-empty commit may have trained the user dictionary.
     fn read_commit(state: &mut State, id: u64) -> Result<String> {
         let core = state.sessions.get_mut(&id).unwrap();
         let text = match &mut core.session {
@@ -571,9 +531,6 @@ impl Engine {
             return Ok(());
         }
         if state.loaded_tsv != state.file_tsv {
-            // Rime shares one loaded custom_phrase table among every session that holds it, so
-            // the phrases change for all sessions at once. A composing session keeps its
-            // snapshot and retries on its next idle key; its count still applies below.
             let core = state.sessions.get_mut(&id).unwrap();
             if Self::raw(core)?.preedit.is_empty() && Self::all_sessions_idle(state)? {
                 return self.reload_sessions(state, id);
@@ -598,9 +555,6 @@ impl Engine {
         Ok(())
     }
 
-    /// The one deploy after a phrase change: release every session's dictionary handles first,
-    /// so the next session reads the current file instead of the cached table, then recreate
-    /// each session and reapply its own settings. All sessions are idle, so nothing is lost.
     fn reload_sessions(&self, state: &mut State, caller: u64) -> Result<()> {
         let mut ids: Vec<u64> = state
             .sessions
@@ -621,7 +575,6 @@ impl Engine {
             match self.runtime.session(SCHEMA) {
                 Ok(session) => core.session = Some(session),
                 Err(_) => {
-                    // Siblings already loaded the current file; this session retries alone on its next use.
                     core.detach();
                     core.lost = true;
                     core.error = Some(ConfigurationError::SessionReload);
@@ -651,8 +604,6 @@ impl Engine {
             core.requested_input.schema_patch(),
             core.requested_count
         );
-        // select_schema resets the commit buffer as well as the schema. Preserve completed text
-        // even if settings arrive before the frontend has drained the previous key's commit.
         let commit = Self::read_commit(state, id)?;
         let core = state.sessions.get_mut(&id).unwrap();
         core.buffered_commit.push_str(&commit);
@@ -722,42 +673,83 @@ impl Engine {
             .and_then(|reply| parse_metadata(&reply.body, offset, count, input_length)))
     }
 
+    fn rank_page(
+        core: &mut Core,
+        raw: &crate::Snapshot,
+        ranker: Option<&ContextRanker>,
+        input: &str,
+    ) -> Result<()> {
+        let size = raw.candidates.len();
+        if let Some(ranker) = ranker
+            && core.document_context_window
+            && raw.page == 0
+            && !raw.last_page
+            && (3..9).contains(&size)
+            && core.preceding.graphemes(true).next_back().is_some_and(crate::ranking::is_han)
+            && ranker.can_extend_document(&raw.candidates[0].text)
+        {
+            let mut words = core.session.as_ref().unwrap().context_window()?;
+            if words.len() > size
+                && let Some(mut rows) = Self::input_ranking_metadata(core, 0, words.len(), input.len())?
+            {
+                let order = ranker.order(&words, &core.preceding, Some(&rows), input);
+                let first = order[0];
+                let promote = first >= size && words[first].graphemes(true).all(crate::ranking::is_han);
+                if promote {
+                    core.session.as_mut().unwrap().promote_context_candidate(first, size - 1)?;
+                    words[size - 1..=first].rotate_right(1);
+                    rows[size - 1..=first].rotate_right(1);
+                }
+                let native_span = rows.iter().all(|row| {
+                    row.source == Source::Native && row.coverage == rows[0].coverage
+                });
+                rows.truncate(size);
+                if native_span {
+                    core.order = order.into_iter().filter_map(|index| {
+                        if promote && index == first {
+                            Some(size - 1)
+                        } else {
+                            (index < size - usize::from(promote)).then_some(index)
+                        }
+                    }).collect();
+                } else {
+                    core.order = ranker.order(&words[..size], &core.preceding, Some(&rows), input);
+                }
+                core.metadata = Some(rows);
+                return Ok(());
+            }
+        }
+        core.metadata = Self::input_ranking_metadata(core, raw.page, size, input.len())?;
+        if let Some(ranker) = ranker {
+            let words = raw.candidates.iter().map(|candidate| candidate.text.clone()).collect::<Vec<_>>();
+            core.order = ranker.order(&words, &core.preceding, core.metadata.as_deref(), input);
+        }
+        Ok(())
+    }
+
     fn update_ordering(&self, state: &mut State, id: u64, force: bool) -> Result<()> {
         let loaded_phrases = &state.loaded_phrases;
         let core = state.sessions.get_mut(&id).unwrap();
         if !core.available() {
             return Ok(());
         }
-        let raw = Self::raw(core)?;
-        let current = content(&raw);
-        if !force && core.ordered_content.as_ref() == Some(&current) {
+        let raw = content(Self::raw(core)?);
+        if !force && core.ordered_content.as_ref() == Some(&raw) {
             return Ok(());
         }
-        // Explicit custom codes keep the user's ordered phrases ahead of ordinary words.
-        // Use the applied snapshot so deferred settings cannot change a live composition.
         let input = core.session.as_mut().unwrap().input()?;
         let has_custom_code = loaded_phrases.iter().any(|phrase| phrase.code == input);
-        // Rime rebuilds its composition while the caret is at the start of the input, which resets the
-        // highlight to its first candidate. A reordered page there could not keep its displayed first
-        // candidate highlighted, so the page keeps Rime's order until the caret moves on.
         let at_start = core.session.as_mut().unwrap().input_caret()? == 0;
-        // Once a segment is selected, the immediate prefix is inside the mark.
-        // Leave these remaining candidates to Rime instead of applying older document text.
         core.order = (0..raw.candidates.len()).collect();
         core.metadata = None;
         if raw.selection_bytes.start == 0 && !has_custom_code {
-            let metadata =
-                Self::input_ranking_metadata(core, raw.page, raw.candidates.len(), input.len())?;
-            if let Some(ranker) = self.ranker.as_ref().filter(|_| !at_start) {
-                let texts: Vec<String> = raw.candidates.iter().map(|c| c.text.clone()).collect();
-                core.order = ranker.order(&texts, &core.preceding, metadata.as_deref(), &input);
-            }
-            core.metadata = metadata;
+            let ranker = self.ranker.as_ref().filter(|_| !at_start);
+            Self::rank_page(core, &raw, ranker, &input)?;
         }
         if let Some(&first) = core.order.first() {
             core.session.as_mut().unwrap().highlight(first)?;
         }
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         if raw.preedit.is_empty() {
             core.preceding.clear();
         }
@@ -767,34 +759,29 @@ impl Engine {
 
     fn perform_key(&self, state: &mut State, id: u64, key: i32, modifiers: i32) -> Result<bool> {
         let core = state.sessions.get_mut(&id).unwrap();
-        let displayed = Self::display(core)?;
         if modifiers == 0 && (49..=57).contains(&key) {
             let index = (key - 49) as usize;
-            if index < displayed.candidates.len() {
+            if index < Self::display(core)?.candidates.len() {
                 self.select_display(state, id, index)?;
                 return Ok(true);
             }
         }
-        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !displayed.candidates.is_empty() {
+        if modifiers == 0 && (key == 0xff52 || key == 0xff54) && !Self::display(core)?.candidates.is_empty() {
             let delta = if key == 0xff54 { 1 } else { -1 };
             return self.move_highlight(state, id, delta, key);
         }
-        // Shift+Backspace forgets the highlighted candidate's learning. Without candidates it stays
-        // Rime's key, so an idle press still reaches the application.
-        if modifiers == 1 && key == 0xff08 && !displayed.candidates.is_empty() {
-            return self.forget_highlighted(state, id, &displayed);
+        if modifiers == 1 && key == 0xff08 {
+            let displayed = Self::display(core)?;
+            if !displayed.candidates.is_empty() {
+                return self.forget_highlighted(state, id, &displayed);
+            }
         }
-        // Rime's selector takes Home, and End at the end of the input, while its highlight is not its
-        // first candidate, which is where a reordered page keeps it. Highlight that candidate so the
-        // navigator moves the caret, then rank the new page again: the highlight moved even when the
-        // caret did not.
         let caret_key =
-            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !displayed.candidates.is_empty();
+            modifiers == 0 && (key == 0xff50 || key == 0xff57) && !Self::display(core)?.candidates.is_empty();
         if caret_key {
             core.session.as_mut().unwrap().highlight(0)?;
         }
         let handled = core.session.as_mut().unwrap().process_key(key, modifiers)?;
-        // Rime can undo learning while leaving Backspace unhandled for the client.
         if key == 0xff08 || key == 0xffff {
             state.observe_learning();
         }
@@ -802,12 +789,6 @@ impl Engine {
         Ok(handled)
     }
 
-    /// Rime's own delete_candidate, bound to Control+Delete, acts on the candidate Rime highlights,
-    /// which is the one the user sees highlighted. A sentence the poet makes from learned words
-    /// survives deleting its own record, because it is made again from the same words. While the
-    /// highlighted text stays where it was, forget the learned word that weighs most in it (Lua
-    /// `forget_sentence`), up to `WORDS` words. If the text still stays after all of them, they were
-    /// not what led it: revive them (`unforget_sentence`).
     fn forget_highlighted(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<bool> {
         const WORDS: usize = 8;
         let text = shown.candidates[shown.highlighted].text.as_str();
@@ -845,9 +826,6 @@ impl Engine {
         Ok(true)
     }
 
-    /// Rime recomposes at the first page and candidate after a deletion: page forward again, rank the
-    /// page and highlight the display index `shown` had, clamped to the refreshed list. Returns that
-    /// index, or `None` when nothing is left to show.
     fn restore_page(&self, state: &mut State, id: u64, shown: &Snapshot) -> Result<Option<usize>> {
         let session = state
             .sessions
@@ -894,9 +872,7 @@ impl Engine {
             return Ok(());
         };
         core.session.as_mut().unwrap().highlight(native)?;
-        // Highlighting a partial choice can change Rime's preedit and cursor.
-        // Record the new content without overriding explicit user navigation.
-        core.ordered_content = Some(content(&Self::raw(core)?));
+        core.ordered_content = Some(content(Self::raw(core)?));
         Ok(())
     }
 
@@ -908,7 +884,6 @@ impl Engine {
             Self::highlight_display(core, next as usize)?;
             return Ok(true);
         }
-        // Let Rime decide whether another page exists, starting at its native edge.
         let edge = if delta > 0 { core.order.len() - 1 } else { 0 };
         let session = core.session.as_mut().unwrap();
         session.highlight(edge)?;
@@ -928,8 +903,6 @@ impl Engine {
 }
 
 impl Engine {
-    /// No filesystem enumeration and no secondary store: the active Rime memories own both
-    /// namespaces. This lifecycle API must never run in a key callback.
     pub fn personal_learning_entries(
         &self,
     ) -> std::result::Result<Vec<LearningEntry>, LearningError> {
@@ -1012,7 +985,6 @@ impl Engine {
         self.learning_mutation(&request)
     }
 
-    /// Drop every session's cached learning view after external changes to the dictionaries.
     pub fn invalidate_personal_learning(&self) -> Result<()> {
         Self::invalidate_learning(&mut *self.lock()?)
     }
@@ -1036,8 +1008,6 @@ impl Engine {
 
     fn learning_mutation(&self, fields: &[&str]) -> std::result::Result<(), LearningError> {
         let status = self.learning_request(fields)?.0.status;
-        // A failed native write may have applied part of the operation. Do not retain a
-        // stale snapshot or allow an older undo after any attempt.
         self.invalidate_personal_learning()
             .map_err(LearningError::Native)?;
         match status.as_str() {
@@ -1076,7 +1046,6 @@ impl Engine {
     }
 }
 
-/// Returns the failure; the file keeps its previous content on failure.
 fn sync_phrase_file(state: &mut State, file: &Path) -> Option<ConfigurationError> {
     if state.requested_tsv == state.file_tsv {
         return None;
@@ -1103,7 +1072,6 @@ fn write_private(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
     fs::rename(&temporary, file)
 }
 
-/// One input context's session. Every method is synchronous and thread-agnostic.
 pub struct InputSession {
     engine: Arc<Engine>,
     id: u64,
@@ -1157,9 +1125,6 @@ impl InputSession {
             .unwrap_or(false)
     }
 
-    /// Keys and modifiers use Rime/X11 keysyms and masks. Digits select displayed candidates;
-    /// Up/Down move the displayed highlight; Shift+Backspace with candidates forgets the highlighted
-    /// candidate's learning; everything else goes to Rime.
     pub fn key(&self, key: i32, modifiers: i32) -> Result<bool> {
         let engine = self.engine.clone();
         self.mutate(
@@ -1170,14 +1135,12 @@ impl InputSession {
                 if !state.sessions[&id].available() {
                     return Ok(false);
                 }
-                // Apply existing idle configuration before capturing the values this key actually uses.
                 engine.apply_configuration_if_idle(state, id)?;
                 engine.perform_key(state, id, key, modifiers)
             },
         )
     }
 
-    /// Select a displayed candidate of `snapshot`, which must be this session's latest.
     pub fn select(&self, snapshot: &Snapshot, index: usize) -> Result<bool> {
         let engine = self.engine.clone();
         let token = snapshot.token.clone();
@@ -1221,7 +1184,6 @@ impl InputSession {
         )
     }
 
-    /// Commit the composition as Rime would for a commit key.
     pub fn commit(&self) -> Result<bool> {
         let engine = self.engine.clone();
         self.mutate(
@@ -1248,14 +1210,11 @@ impl InputSession {
         )
     }
 
-    /// Clear like [`InputSession::clear`] without delivering a mutation to the observer: the
-    /// composition ended because a feature consumed it, not because the user cancelled.
     pub fn clear_unobserved(&self) -> Result<()> {
         let mut state = self.engine.lock()?;
         self.engine.clear_session(&mut state, self.id)
     }
 
-    /// Drain completed text once, including text preserved across a settings reload.
     pub fn take_commit(&self) -> Result<String> {
         let mut state = self.engine.lock()?;
         let commit = Engine::read_commit(&mut state, self.id)?;
@@ -1264,19 +1223,29 @@ impl InputSession {
         Ok(text)
     }
 
-    /// Read-only; repeated reads return the same selection identity until a mutation.
     pub fn snapshot(&self) -> Result<Snapshot> {
         let mut state = self.engine.lock()?;
         Engine::display(state.sessions.get_mut(&self.id).unwrap())
     }
 
-    /// Bounded document text before the caret; applied to the live composition.
     pub fn set_preceding_text(&self, text: &str) -> Result<()> {
+        self.set_context(text, false)
+    }
+
+    pub fn start_document_context(&self, text: &str) -> Result<()> {
+        self.set_context(text, true)
+    }
+
+    fn set_context(&self, text: &str, document_window: bool) -> Result<()> {
         let graphemes: Vec<&str> = text.graphemes(true).collect();
         let start = graphemes.len().saturating_sub(CONTEXT_LIMIT);
         let prefix: String = graphemes[start..].concat();
         let mut state = self.engine.lock()?;
         let core = state.sessions.get_mut(&self.id).unwrap();
+        if document_window && core.ordered_content.as_ref().is_some_and(|page| !page.preedit.is_empty()) {
+            return Ok(());
+        }
+        core.document_context_window = document_window;
         if prefix == core.preceding {
             return Ok(());
         }
@@ -1298,7 +1267,6 @@ impl InputSession {
         self.set_configuration(count, &phrases, Some(&input))
     }
 
-    /// Settings apply at this session's next idle boundary; phrases apply to every idle session.
     pub fn set_configuration(
         &self,
         candidate_count: usize,
@@ -1316,9 +1284,6 @@ impl InputSession {
             state.requested_tsv = phrase_tsv(phrases);
             state.file_error = false;
         }
-        // The settings path writes the file; key events only ever reload it. Frontends may push
-        // the same settings again, so a failed write is retried only when the phrases change
-        // or the engine restarts, and the whole configuration waits.
         if let Some(error) = sync_phrase_file(&mut state, &self.engine.user.join(PHRASE_FILE)) {
             state.sessions.get_mut(&self.id).unwrap().error = Some(error);
             return Ok(());
@@ -1350,7 +1315,6 @@ impl InputSession {
             .unwrap_or(5)
     }
 
-    /// The preferences applied to this session, once a composition boundary accepted them.
     pub fn input_preferences(&self) -> Option<InputPreferences> {
         self.engine
             .lock()
@@ -1365,7 +1329,6 @@ impl InputSession {
             .unwrap_or(false)
     }
 
-    /// Rime's live ASCII switch, or the requested value while the session is unavailable.
     pub fn ascii_mode(&self) -> Result<bool> {
         let mut state = self.engine.lock()?;
         let core = state.sessions.get_mut(&self.id).unwrap();
@@ -1375,7 +1338,6 @@ impl InputSession {
         }
     }
 
-    /// Requested ASCII mode; it starts after the current composition finishes.
     pub fn set_ascii_mode(&self, value: bool) -> Result<()> {
         let mut state = self.engine.lock()?;
         state.sessions.get_mut(&self.id).unwrap().saved_ascii = value;
@@ -1399,14 +1361,6 @@ impl InputSession {
         )
     }
 
-    /// Bounded Lua channel request for optional features; never from a key callback. `None`
-    /// when the session is unavailable, no module answers, the reply does not fit `capacity`
-    /// bytes or the request cannot be framed.
-    ///
-    /// A successful learning write advances the learning revision, as the Swift engine's
-    /// `markDirty` and `invalidatePersonalLearning` do after the same operations: listings and
-    /// undo tokens captured earlier then conflict. Clearing English learning also drops every
-    /// session's cached view. The caller keeps the idle checks.
     pub fn call(
         &self,
         op: &str,

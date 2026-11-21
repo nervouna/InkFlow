@@ -1,4 +1,3 @@
-//! Equivalent-span ordering over native Rime candidates and the prepared context index.
 use std::{collections::HashMap, ops::Range};
 use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
@@ -22,33 +21,15 @@ pub struct Metadata {
     pub coverage: Range<usize>,
     pub class: CandidateClass,
     pub exact: bool,
-    /// Commits of the user's own, capped at three. For a mixed sentence this is its weakest
-    /// ASCII run, so any unconfirmed run makes it 0.
     pub personal: u8,
     pub source: Source,
-    /// An exact standalone English candidate that covers a whole input of 4 or more letters
-    /// which native Rime does not read as Pinyin up to an unfinished final syllable. The first
-    /// such candidate leads the page. Transported as `exact` = 2.
     pub lead: bool,
-    /// A personal exact standalone English candidate that covers a whole lowercase input which native Rime reads as
-    /// complete normal Pinyin syllables (`ne`, `o`, `beijing`). A technical context does not lift it above the best
-    /// Han candidate. Transported as `exact` = 4.
     pub pinyin: bool,
-    /// A native candidate that the poet composed from separate words and that covers the whole
-    /// input. When it is the page's first candidate, the user's own exact standalone English word
-    /// leads it. Transported as `exact` = 3.
     pub sentence: bool,
-    /// Rime's own `candidate.type` of the genuine candidate (`phrase`, `user_phrase`, `sentence`,
-    /// `completion`, `user_table`, ...); empty when the row did not say. Recorded; ranking reads it only to find a
-    /// single-syllable page (`ContextRanker::order`).
     pub candidate_type: String,
-    /// The candidate's spelling was reached through a fuzzy or algebra rule: the dictionary syllables of its
-    /// code differ from the typed letters (an abbreviation included). Used for literal reading checks
-    /// and single-syllable English deferral.
     pub corrected: bool,
 }
 
-/// Where a personal-learning candidate comes from, as quality records keep it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PersonalSource {
     ExactEnglish,
@@ -56,7 +37,6 @@ pub enum PersonalSource {
 }
 
 impl Metadata {
-    /// Present only for an exact record the user's own commits have strengthened.
     pub fn personal_source(&self) -> Option<PersonalSource> {
         if !self.exact || self.personal == 0 {
             return None;
@@ -68,8 +48,6 @@ impl Metadata {
         }
     }
 
-    /// The row `input_coverage` sends for this candidate: `start,end,class,exact,personal,source,type,corrected`.
-    /// A six-field row parses with an empty type and `corrected` false, so it renders as that.
     pub fn row(&self) -> String {
         let class = match self.class {
             CandidateClass::NonAscii => "n",
@@ -103,8 +81,6 @@ impl Metadata {
     }
 }
 
-/// Rime's candidate types as the row carries them: empty, or at most 32 bytes of lowercase letters, digits
-/// and underscores that do not start with a digit (`phrase`, `english_personal_2`).
 fn is_candidate_type(kind: &str) -> bool {
     let mut bytes = kind.bytes();
     kind.len() <= 32
@@ -200,7 +176,6 @@ pub fn parse_metadata(
         {
             return None;
         }
-        // Rows from before the type and corrected fields carry neither.
         let (candidate_type, corrected) = if fields.len() == 8 {
             let kind = fields[6];
             if !is_candidate_type(kind) {
@@ -231,7 +206,6 @@ pub fn parse_metadata(
     (result.len() == count).then_some(result)
 }
 
-/// One Han character, as the ranker and the replay instrument read it.
 pub fn is_han(grapheme: &str) -> bool {
     let mut chars = grapheme.chars();
     matches!(
@@ -293,11 +267,8 @@ fn technical(text: &str) -> bool {
         .any(|suffix| canonical.ends_with(suffix))
 }
 
-/// Exact Han phrase frequencies, read whole into memory before key events.
 enum Phrases {
     Map(HashMap<String, HashMap<String, i64>>),
-    /// The prepared `IFCX` index: one sorted fixed-width table per phrase length,
-    /// keyed by three bytes per NFC scalar so byte order is table order.
     Index {
         data: Vec<u8>,
         tables: [(usize, usize); PHRASE_LIMIT - 1],
@@ -305,7 +276,6 @@ enum Phrases {
     },
 }
 const PHRASE_LIMIT: usize = 8;
-/// The zero-based place unconfirmed exact English takes on a single-syllable page: the fourth candidate.
 const SYLLABLE_ENGLISH_PLACE: usize = 3;
 const INDEX_HEADER: usize = 12 + (PHRASE_LIMIT - 1) * 4;
 
@@ -355,7 +325,6 @@ impl Phrases {
                         break;
                     }
                     let reading = &data[start + key.len()..start + key.len() + reading_bytes];
-                    // Version 1 has no readings. Keep its historical behavior until resources are rebuilt.
                     if *reading_bytes == 0 || input.is_none_or(|input| reading.starts_with(input.as_bytes())) {
                         let bytes = &data[start + record - 8..start + record];
                         let frequency = u64::from_le_bytes(bytes.try_into().unwrap()) as i64;
@@ -373,7 +342,6 @@ pub struct ContextRanker {
     longest: usize,
 }
 impl ContextRanker {
-    /// Load the prepared `pinyin_simp.context.bin` written by dictionary preparation.
     pub fn from_index(data: Vec<u8>) -> Result<Self, String> {
         if data.len() < INDEX_HEADER || &data[..4] != b"IFCX" {
             return Err("Expected an InkFlow context index".into());
@@ -410,12 +378,10 @@ impl ContextRanker {
         })
     }
 
-    /// Build before accepting key events. Ranking itself does not access storage.
     pub fn from_dictionary(text: &str) -> Self {
         let mut frequencies = HashMap::<String, HashMap<String, i64>>::new();
         let mut longest = 0;
         let mut start = 0;
-        // Swift splits LF Characters, not the LF inside a CRLF grapheme.
         for (end, grapheme) in text
             .grapheme_indices(true)
             .chain(std::iter::once((text.len(), "\n")))
@@ -461,6 +427,11 @@ impl ContextRanker {
         }
     }
 
+    pub(crate) fn can_extend_document(&self, word: &str) -> bool {
+        let length = word.graphemes(true).count();
+        (1..self.longest).contains(&length) && all_han(word)
+    }
+
     pub fn order(
         &self,
         candidates: &[String],
@@ -500,8 +471,6 @@ impl ContextRanker {
                 .chain(std::iter::once(tail))
                 .collect()
         };
-        // A word that already ends the preceding text marks a likely boundary: a match may
-        // extend that word but not start inside it, as 为时 would after 行为.
         let word_start = (2..=prefix.len())
             .rev()
             .find(|&count| self.frequencies.frequency(&phrase(count, ""), None).is_some())
@@ -517,8 +486,6 @@ impl ContextRanker {
                 {
                     return (0, 0);
                 }
-                // A single-character continuation must use the phrase's terminal reading.
-                // Prefix spellings still match; corrected/fuzzy candidates keep Rime's evidence.
                 let reading = (first_length == 1
                     && rows[i].coverage == (0..input.len())
                     && !rows[i].corrected
@@ -543,14 +510,8 @@ impl ContextRanker {
         };
         let native_han = han().next();
         let leading_han = han().min_by_key(|&i| (std::cmp::Reverse(scores[i]), i));
-        // A technical context lifts the user's own exact English word, unless native evidence marks the input as
-        // complete Pinyin: that word stays with the exact English, behind the best Han candidate.
         let is_technical = technical(preceding);
-        // The first exact English candidate in English order, when the input is not Pinyin.
         let technical_lead = eligible.iter().copied().find(|&i| rows[i].lead);
-        // The user's own exact English word, the first in English order, leads a sentence the engine
-        // composed from separate words. A dictionary or learned phrase, and any other first candidate,
-        // keeps its place.
         let learned_lead = eligible.iter().copied().find(|&i| {
             rows[0].sentence
                 && rows[i].exact
@@ -571,10 +532,8 @@ impl ContextRanker {
             {
                 1
             } else if row.exact && row.personal > 0 && row.source == Source::Mixed {
-                // Every ASCII run of the sentence has personal evidence: it leads the best Han.
                 2
             } else if Some(i) == leading_han || Some(i) == native_han {
-                // A demoted native first choice stays next, ahead of exact English.
                 3
             } else if row.exact && matches!(row.source, Source::English | Source::Mixed) {
                 4
@@ -593,9 +552,6 @@ impl ContextRanker {
                 i,
             )
         });
-        // One complete syllable: an uncorrected dictionary or learned single character covers the input. Exact
-        // English the user never confirmed then waits behind the first three candidates instead of taking the
-        // second place, where it stood between the homophones the user is choosing from.
         let syllable = eligible.iter().any(|&i| {
             let row = &rows[i];
             row.source == Source::Native
@@ -615,7 +571,6 @@ impl ContextRanker {
                 .copied()
                 .enumerate()
                 .partition(|&(place, i)| place < SYLLABLE_ENGLISH_PLACE && unconfirmed(i));
-            // Exact English still precedes English completions: stop at the first one.
             let completion = kept
                 .iter()
                 .position(|&(_, i)| !rows[i].exact && rows[i].source == Source::English);
@@ -650,8 +605,16 @@ mod tests {
         }
     }
 
-    /// The condition of `IFEngine.qualitySnapshot`: an exact record with personal commits that
-    /// came from the English or the mixed translator.
+    #[test]
+    fn document_continuations_must_fit_the_index() {
+        let ranker = ContextRanker::from_dictionary("午餐\twu can\t10\n");
+        assert!(ranker.can_extend_document("餐"));
+        assert!(!ranker.can_extend_document("午餐"));
+        assert!(!ranker.can_extend_document("a"));
+        assert!(!ranker.can_extend_document(""));
+        assert!(!ContextRanker::from_dictionary("").can_extend_document("餐"));
+    }
+
     #[test]
     fn personal_source_names_exact_personal_english_and_mixed() {
         use PersonalSource::{ExactEnglish, ExactMixed};

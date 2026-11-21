@@ -22,6 +22,8 @@ The input source that was current at the start is selected again on every exit: 
 ## Metrics
 
 One sample is one composition: the full code, one Space, read back; the truth is the corpus target (T4).
+The Han scalar ranges match the portable replay scorer in `Core/Portable/src/ranking.rs`.
+The report stores unavailable E-kspc as JSON null.
 
 | Metric | Black box | Definition here |
 | --- | --- | --- |

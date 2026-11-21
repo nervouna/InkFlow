@@ -1,10 +1,3 @@
-//! Portable personal data: the macOS format-1 backup document, user-dictionary snapshots
-//! through the native helper, and a rollback-first install into an isolated user directory.
-//!
-//! Supported data: the three Rime user dictionaries, custom phrases, the candidate count and
-//! input options. macOS-only preferences (shortcuts, font size, layout, voice rules) are
-//! skipped and listed in [`Backup::unsupported`]. Nothing here runs while an engine is
-//! initialized in the process; callers stop the engine first.
 use crate::{
     Error,
     phrases::CustomPhrase,
@@ -31,19 +24,13 @@ const UNSUPPORTED_INTEGERS: [&str; 3] = ["fontSize", "vertical", "thunderMode"];
 
 #[derive(Debug)]
 pub enum PersonalError {
-    /// Another format, Rime version or dictionary set.
     Incompatible,
-    /// A field this core does not know; macOS rejects these too.
     UnknownFields,
     Settings,
     Phrases(crate::phrases::PhraseError),
-    /// A dictionary snapshot breaks the TSV contract.
     Snapshot,
-    /// The native helper rejected a snapshot or database; the user directory is unchanged.
     NativeSnapshot,
-    /// An earlier import was interrupted; call [`recover`] before importing again.
     RecoveryRequired,
-    /// An engine is still initialized in this process.
     EngineActive,
     Io(std::io::Error),
 }
@@ -64,16 +51,13 @@ impl From<std::io::Error> for PersonalError {
     }
 }
 
-/// The portable view of a macOS personal backup document.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Backup {
     pub rime: String,
     pub candidate_count: usize,
     pub input: InputPreferences,
     pub phrases: Vec<CustomPhrase>,
-    /// `None` is explicit absence: importing removes the local dictionary.
     pub dictionaries: BTreeMap<String, Option<String>>,
-    /// Document keys that were present but skipped because they are not portable.
     pub unsupported: Vec<String>,
 }
 
@@ -101,7 +85,6 @@ fn complete(names: &mut Vec<&str>) -> bool {
 }
 
 impl Backup {
-    /// Parse a format-1 document. Unknown fields are rejected; macOS-only fields are disclosed.
     pub fn from_json(bytes: &[u8]) -> Result<Self, PersonalError> {
         if bytes.len() > MAXIMUM_DOCUMENT_BYTES {
             return Err(PersonalError::Incompatible);
@@ -186,8 +169,6 @@ impl Backup {
                 return Err(PersonalError::UnknownFields);
             }
         }
-        // Neutral values (unbound shortcuts, no rules) are what this core writes; only real
-        // macOS preferences are disclosed as skipped.
         let bound = settings
             .get("shortcuts")
             .and_then(Value::as_object)
@@ -238,8 +219,6 @@ impl Backup {
         })
     }
 
-    /// Encode a document macOS can read: unsupported preferences take their neutral values.
-    /// macOS additionally requires the three fuzzy options to agree and exactly one paging pair.
     pub fn to_json(&self) -> Result<Vec<u8>, PersonalError> {
         let mut names: Vec<&str> = self.dictionaries.keys().map(String::as_str).collect();
         if !complete(&mut names) || !(3..=9).contains(&self.candidate_count) {
@@ -325,7 +304,6 @@ fn snapshot(root: &Path, name: &str, file: &Path, restore: bool) -> Result<(), P
     }
 }
 
-/// Snapshot the user directory's closed dictionaries; an absent dictionary is `None`.
 pub fn export(user: &Path) -> Result<BTreeMap<String, Option<String>>, PersonalError> {
     let root = staging(user)?;
     let result = (|| {
@@ -336,7 +314,6 @@ pub fn export(user: &Path) -> Result<BTreeMap<String, Option<String>>, PersonalE
                 dictionaries.insert(name.to_owned(), None);
                 continue;
             }
-            // Work on a copy so the live database is never opened by the helper.
             copy_tree(&live, &root.join(format!("databases/{name}.userdb")))?;
             let file = root.join(format!("{name}.userdb.txt"));
             snapshot(&root.join("databases"), name, &file, false)?;
@@ -354,8 +331,6 @@ fn transaction(user: &Path) -> PathBuf {
     user.join("PersonalData/transaction")
 }
 
-/// Replace the user directory's dictionaries with the snapshots. Originals are kept until every
-/// move succeeds and restored on failure; an interrupted run is finished by [`recover`].
 pub fn import(
     user: &Path,
     dictionaries: &BTreeMap<String, Option<String>>,
@@ -446,7 +421,6 @@ fn rollback(user: &Path, transaction: &Path) -> Result<(), PersonalError> {
     Ok(())
 }
 
-/// Restore the originals of an interrupted import. No-op without a pending transaction.
 pub fn recover(user: &Path) -> Result<(), PersonalError> {
     let transaction = transaction(user);
     if !transaction.exists() {

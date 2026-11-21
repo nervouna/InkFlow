@@ -2,7 +2,6 @@ import Foundation
 import InkFlowDomain
 import InkFlowRime
 
-/// Test host only. A separate process prevents compile/finalize from touching a serving Rime runtime.
 @main struct DictionaryPreparationFixture {
     static func main() throws {
         let arguments = CommandLine.arguments

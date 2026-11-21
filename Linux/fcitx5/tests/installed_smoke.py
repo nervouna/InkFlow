@@ -7,6 +7,7 @@ from pathlib import Path
 import sys
 
 from dbus_next.aio import MessageBus
+from quality_smoke import check_quality
 
 
 async def main():
@@ -45,6 +46,15 @@ async def main():
             context = bus.get_proxy_object("org.fcitx.Fcitx5", path, tree).get_interface(
                 "org.fcitx.Fcitx.InputContext1"
             )
+            capabilities = (1 << 1) | (1 << 4) | (1 << 39)
+            await context.call_set_capability(capabilities)
+            await context.call_focus_in()
+            if sys.argv[1:] in (["--latency"], ["--latency-samples"]):
+                from latency import measure_latency
+                await measure_latency(context, controller, capabilities,
+                                      include_samples=sys.argv[1] == "--latency-samples")
+                return
+
             commits, preedits, panels, uppers = [], [], [], []
             context.on_commit_string(lambda text: commits.append(text))
             context.on_update_formatted_preedit(lambda text, cursor: preedits.append((text, cursor)))
@@ -54,18 +64,13 @@ async def main():
                 uppers.append(upper)
 
             context.on_update_client_side_ui(panel)
-            capabilities = (1 << 1) | (1 << 4) | (1 << 39)
-            await context.call_set_capability(capabilities)
-            await context.call_focus_in()
             await controller.call_set_current_im("inkflow-pinyin")
             await controller.call_activate()
             assert await controller.call_current_input_method() == "inkflow-pinyin"
 
-            async def key(code, release=False):
-                return await context.call_process_key_event(code, 0, 0, release, 0)
+            async def key(code, release=False, states=0):
+                return await context.call_process_key_event(code, 0, states, release, 0)
 
-            # Fcitx5 shows the input-method information as an overlay after a switch; the
-            # trigger's key releases reach the engine and must not clear it.
             await controller.call_set_current_im("keyboard-us")
             await controller.call_set_current_im("inkflow-pinyin")
             assert uppers and uppers[-1], "no input-method information after the switch"
@@ -78,10 +83,33 @@ async def main():
                     assert await key(ord(char)), f"unhandled fixture key: {char}"
                     await key(ord(char), True)
 
-            await type_text("nihao")
+            await key(0xFFE1)
+            assert await key(0xFFE1, release=True, states=1)
+            assert not await key(ord("n")), "ASCII mode did not pass through"
+            await key(ord("n"), release=True)
+            await key(0xFFE1)
+            assert await key(0xFFE1, release=True, states=1)
+            await key(0xFFE1)
+            assert not await key(0xFF51, states=1)
+            await key(0xFF51, release=True, states=1)
+            await key(0xFFE1, release=True, states=1)
+            await context.call_set_capability(capabilities & ~(1 << 39))
+            await type_text("nih")
+            assert await key(ord("a"))
+            await context.call_set_capability(capabilities)
+            previous_panels = len(panels)
+            await key(ord("a"), release=True)
+            await controller.call_current_input_method()
+            assert any(panels[previous_panels:]), "new client-side panel never received the current page"
+            assert await key(ord("o"))
+            before = len(panels), len(preedits)
+            await key(ord("o"), release=True)
+            await controller.call_current_input_method()
+            assert (len(panels), len(preedits)) == before, "unchanged release resent the candidate UI"
             assert any(parts for parts, _ in preedits), "no preedit received"
             assert panels and panels[-1], "no candidates received"
             assert panels[-1][0][1] == "你好", panels[-1]
+            assert not (Path(os.environ["XDG_DATA_HOME"]) / "inkflow/quality/counts.sqlite3").exists()
             await context.call_select_candidate(0)
             assert commits == ["你好"], commits
             assert not preedits[-1][0], "preedit survived selection"
@@ -111,6 +139,22 @@ async def main():
             await type_text("nihao")
             await context.call_reset()
             print("PASS installed addon: password/sensitive pass-through and recovery")
+
+            await context.call_set_capability(capabilities | (1 << 6))
+            for prefix, code, expected in (("准备午", "can", "餐"), ("最新软", "jian", "件"),
+                                           ("正式宣", "bu", "布"), ("非常感", "xie", "谢")):
+                first, last = len(prefix), len(prefix) + 2
+                shown = None
+                for cursor, anchor in ((last, first), (first, last)):
+                    await context.call_set_surrounding_text(prefix + "占位", cursor, anchor)
+                    await type_text(code)
+                    assert len(panels[-1]) == 5 and panels[-1][0][1] == expected, panels[-1]
+                    if shown is not None:
+                        assert shown == panels[-1], "selection direction changed the candidate page"
+                    shown = panels[-1]
+                    await context.call_reset()
+            await context.call_set_capability(capabilities)
+            print("PASS installed addon: five-candidate context ranking at both selection boundaries")
 
             config = Path(os.environ["XDG_CONFIG_HOME"]) / "fcitx5/conf/inkflow.conf"
             config.parent.mkdir(exist_ok=True)
@@ -152,6 +196,7 @@ async def main():
             assert commits[-1] == "备份测试"
             assert "imported personal data from" in log.read_text()
             print("PASS installed addon: explicit backup import, engine restart, restored phrase")
+            await check_quality(context, controller, key, type_text, panels, commits, config, capabilities, log)
         finally:
             if context:
                 await context.call_destroy_ic()

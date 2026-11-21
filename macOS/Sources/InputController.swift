@@ -7,8 +7,6 @@ import InkFlowNative
 #endif
 
 @MainActor
-// The legacy superclass blocks inferred Sendable conformance. State stays on MainActor;
-// callback arguments only enter synchronous assumeIsolated scopes, never tasks or queues.
 class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     var engine: IFEngine?
     var panel: IMKCandidates?
@@ -104,7 +102,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         voice.cancel(.deactivated)
         statusPresentation?.hide()
         thunderPresentation?.hide()
-        // The server lifetime may retain this panel after the session ends.
         panel?.hide()
         panel?.setCandidateData([])
         candidatePresentation = nil
@@ -115,7 +112,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func menu() -> NSMenu! {
-        // A synchronous legacy return value cannot cross assumeIsolated's Sendable result boundary.
         nonisolated(unsafe) var result: NSMenu?
         MainActor.assumeIsolated {
             let menu = NSMenu(title: "InkFlow")
@@ -154,7 +150,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
     }
 
     nonisolated override func showPreferences(_ sender: Any!) {
-        // IMK dispatches an action dictionary, not an NSMenuItem.
         MainActor.assumeIsolated { settingsWindow.present() }
     }
 
@@ -206,7 +201,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         panel.setAttributes([IMKCandidatesSendServerKeyEventFirst: true,
                              NSAttributedString.Key.font: NSFont.systemFont(ofSize: CGFloat(settings.fontSize))])
         IFApplyCandidateFont(panel, Double(settings.fontSize))
-        // Direction/font changes rebuild native traits; apply minimum width afterward.
         IFApplyMinimumVerticalWidth(panel)
     }
 
@@ -236,8 +230,6 @@ class IFInputControllerShell: IMKInputController, @unchecked Sendable {
         observeQualityVisibility()
     }
 
-    /// Native panel show is asynchronous. Observe only visibility during an active
-    /// composition, even when AI is disabled; never read document content per tick.
     func observeQualityVisibility(at monotonicTime: TimeInterval? = nil) {
         guard let recorder = engine?.qualityRecorder else { return }
         recorder.setTimingCaptureEnabled(!secureInput())

@@ -11,7 +11,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-// Rime is process-global: the tests of this file take turns.
 static RIME: Mutex<()> = Mutex::new(());
 
 struct Fixture(PathBuf);
@@ -48,7 +47,6 @@ impl Drop for Fixture {
     }
 }
 
-// One test owns the process-global Rime runtime; concurrency is exercised inside it.
 #[test]
 fn desktop_runtime_contract() {
     let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
@@ -224,7 +222,6 @@ fn desktop_runtime_contract() {
     }
     thread.join().unwrap();
     drop(runtime);
-    // Sessions retain the runtime even after its public handle is gone.
     session.process_key('n' as i32, 0).unwrap();
     drop(session);
     assert_eq!(before.preedit, "ni hao");
@@ -267,7 +264,6 @@ fn desktop_runtime_contract() {
     );
 }
 
-/// The macOS personal-data worker test's synthetic dictionaries (macOS/Tests/PersonalDataTests.swift).
 fn synthetic(name: &str) -> String {
     let row = match name {
         "pinyin_simp" => "ni hao \t你好",
@@ -285,22 +281,16 @@ fn lines(text: &str) -> Vec<&str> {
     lines
 }
 
-// Maintenance operations the macOS frontend calls on the Swift engine today, on the probe
-// fixture. The engine-bound ones (personal learning, requested ASCII) need the production
-// schema and run in tests/parity.rs and tests/abi.c.
 #[test]
 fn maintenance_operations_on_the_probe_fixture() {
     let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
     let fixture = Fixture::new();
 
-    // The version is the linked librime's and needs no runtime.
     assert_eq!(
         inkflow_rime::rime_version().unwrap(),
         personal::RIME_VERSION
     );
 
-    // Compile deploys the source resources, then names the first production file the fixture
-    // lacks; probe needs the production schema.
     let shared = fixture.0.join("shared");
     let cache = fixture.0.join("maintenance-cache");
     let compiler = fixture.0.join("maintenance-compile");
@@ -317,7 +307,6 @@ fn maintenance_operations_on_the_probe_fixture() {
         ),
         "no inkflow_pinyin schema in the fixture"
     );
-    // Both release the runtime; while one lives they report the native conflict.
     let runtime = fixture.runtime();
     assert!(matches!(
         resources::compile(&shared, &compiler, &cache),
@@ -327,7 +316,6 @@ fn maintenance_operations_on_the_probe_fixture() {
         resources::probe(&shared, &probing, &cache),
         Err(ResourceError::Native(Error::AlreadyRunning))
     ));
-    // Personal data waits for every runtime, as for the importer.
     let busy = fixture.0.join("busy-user");
     fs::create_dir_all(busy.join("pinyin_simp.userdb")).unwrap();
     assert!(matches!(
@@ -336,8 +324,6 @@ fn maintenance_operations_on_the_probe_fixture() {
     ));
     drop(runtime);
 
-    // Snapshot export: absent dictionaries are absent, restored ones export every row in
-    // Rime's key order, and the exported text restores into another directory unchanged.
     let user = fixture.0.join("export-user");
     assert_eq!(
         personal::export(&user).unwrap(),
@@ -386,14 +372,12 @@ fn maintenance_operations_on_the_probe_fixture() {
     );
 }
 
-// Product identity: a fresh user directory records InkFlow's distribution and holds no logs.
 #[test]
 fn product_traits_record_installation_without_logs() {
     let _turn = RIME.lock().unwrap_or_else(|e| e.into_inner());
     let fixture = Fixture::new();
     {
         let mut runtime = fixture.runtime();
-        // Maintenance writes installation.yaml and compiles the probe schema.
         runtime.prepare().unwrap();
         let mut session = runtime.session("probe").unwrap();
         for byte in b"nihao" {
@@ -402,7 +386,6 @@ fn product_traits_record_installation_without_logs() {
         assert_eq!(session.snapshot().unwrap().candidates[0].text, "你好");
     }
     let installation = fs::read_to_string(fixture.0.join("user/installation.yaml")).unwrap();
-    // Rime writes string values double-quoted, so the value is compared without quotes.
     assert!(
         installation.lines().any(|line| {
             line.strip_prefix("distribution_code_name: ")

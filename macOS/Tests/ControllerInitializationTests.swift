@@ -12,8 +12,6 @@ import InkFlowTestSupport
 struct ControllerInitializationTests {
     @MainActor static func main() throws {
         check(CommandLine.arguments.count == 3)
-        // The exact production initializer uses the shared settings object. Override only
-        // this process's argument domain, never the user's persisted defaults.
         UserDefaults.standard.setVolatileDomain(["candidateCount": 5, "fontSize": 14, "vertical": false,
             "IFIsolatedAICredentials": true, "aiEnabled": false, "aiBaseURL": "", "aiModel": ""], forName: UserDefaults.argumentDomain)
         _ = NSApplication.shared
@@ -28,7 +26,6 @@ struct ControllerInitializationTests {
         weak var releasedController: InkFlowInputController?
         weak var retainedPanel: IMKCandidates?
         autoreleasepool {
-            // Exercise the exact production initializer and real panel, without stubs.
             var controller: InkFlowInputController?
             autoreleasepool { controller = InkFlowInputController(server: server, delegate: nil, client: nil) }
             check(controller != nil)
@@ -62,8 +59,6 @@ struct ControllerInitializationTests {
             check(retainedPanel != nil, "Server candidate must survive controller release")
             check(!retainedPanel!.isVisible(), "Released session leaves no visible candidate window")
         }
-        // Diagnostic-only private dispatch, matching the crash before controller callbacks.
-        // Fail explicitly if a future OS removes these inspection entry points.
         let deactivate = NSSelectorFromString("deactivateServer_CommonWithClientWrapper:controller:")
         check(server.responds(to: deactivate), "Native deactivation diagnostic is supported")
         let invoke = unsafeBitCast(server.method(for: deactivate),
@@ -77,8 +72,6 @@ struct ControllerInitializationTests {
             to: (@convention(c) (AnyObject, Selector) -> UnsafeRawPointer?).self)
         for _ in 0..<4 {
             weak var replacedPanel: IMKCandidates?
-            // Native accessors can autorelease their return values. Drain the whole
-            // inspection, deactivation and replacement before checking deallocation.
             autoreleasepool {
                 check(retainedPanel != nil)
                 let layout = retainedPanel!.selectionKeysKeylayout()!.takeUnretainedValue()
@@ -95,7 +88,6 @@ struct ControllerInitializationTests {
             check(releasedController == nil, "Lifetime must not retain controllers")
             check(replacedPanel == nil, "Only the latest retired panel remains retained")
         }
-        // Refreshing and restyling an older session must not replace the server reference.
         weak var olderPanel: IMKCandidates?
         autoreleasepool {
             var older: InkFlowInputController? = InkFlowInputController(server: server, delegate: nil, client: nil)

@@ -1,5 +1,4 @@
 #!/bin/bash
-# The receipt freezes the commit and the allocated app build that release verification approved.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 [[ $# -eq 2 && ( "$1" == create || "$1" == verify ) ]] || { echo 'Usage: release-receipt.sh create|verify RECEIPT' >&2; exit 2; }

@@ -10,7 +10,10 @@
 #include <fcitx/userinterface.h>
 #include <sys/stat.h>
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <utility>
@@ -22,14 +25,13 @@ FCITX_DEFINE_LOG_CATEGORY(inkflow_log, "inkflow");
 
 namespace {
 constexpr const char* kConfigFile = "conf/inkflow.conf";
-// The engine keeps 16 graphemes; a few more code points cover combining sequences.
 constexpr std::size_t kPrecedingCodePoints = 32;
 
 bool directory_exists(const std::string& path) {
   struct stat info{};
   return ::stat(path.c_str(), &info) == 0;
 }
-}  // namespace
+}
 
 Engine::Engine(fcitx::Instance* instance)
     : instance_(instance),
@@ -41,8 +43,6 @@ Engine::Engine(fcitx::Instance* instance)
 }
 
 Engine::~Engine() {
-  // The factory unregisters itself and destroys every session after this body; the
-  // last of those references finalizes Rime.
   ifr_engine_destroy(engine_);
 }
 
@@ -52,8 +52,6 @@ void Engine::createEngine() {
     INKFLOW_WARN() << "no prepared resources under XDG data directories; keys pass through";
     return;
   }
-  // A pending import can leave old and new dictionaries mixed; restore the originals
-  // before Rime opens the directory, or stay off so typing cannot build on that state.
   IFRStatus recovered = ifr_personal_recover(paths_.user.c_str());
   if (recovered != IFR_OK) {
     INKFLOW_WARN() << "personal data needs recovery; keys pass through: " << recovered << " "
@@ -71,7 +69,6 @@ void Engine::createEngine() {
   INKFLOW_INFO() << "engine ready: " << paths_.shared << " user " << paths_.user;
 }
 
-// Every session and the engine reference go, so Rime finalizes before this returns.
 void Engine::destroyEngine() {
   instance_->inputContextManager().foreach([this](fcitx::InputContext* ic) {
     State* st = state(ic);
@@ -169,11 +166,30 @@ void Engine::applyConfigurationToSessions() {
 
 void Engine::saveConfig() { fcitx::safeSaveAsIni(config_, kConfigFile); }
 
+void Engine::configureQuality() {
+  if (static_cast<bool>(quality_) == *config_.recordQuality) return;
+  instance_->inputContextManager().foreach([this](fcitx::InputContext* ic) {
+    state(ic)->quality.reset();
+    return true;
+  });
+  if (!*config_.recordQuality) {
+    quality_.reset();
+    return;
+  }
+  try {
+    auto directory = std::filesystem::path(paths_.user).parent_path() / "quality";
+    quality_ = std::make_unique<QualityWriter>(directory.string());
+  } catch (const std::exception&) {
+    INKFLOW_WARN() << "local quality writer could not start";
+  }
+}
+
 void Engine::reloadConfig() {
   fcitx::readAsIni(config_, kConfigFile);
   if (!config_.importBackup->empty()) {
     importBackup(*config_.importBackup);
   }
+  configureQuality();
   applyConfigurationToSessions();
 }
 
@@ -183,11 +199,11 @@ void Engine::setConfig(const fcitx::RawConfig& raw) {
   if (!config_.importBackup->empty()) {
     importBackup(*config_.importBackup);
   }
+  configureQuality();
   applyConfigurationToSessions();
 }
 
 void Engine::importBackup(std::string file) {
-  // The request is consumed whatever happens, so a bad file cannot repeat on every reload.
   config_.importBackup.setValue(std::string());
   saveConfig();
   std::ifstream input(file, std::ios::binary);
@@ -257,24 +273,24 @@ void Engine::failed(fcitx::InputContext* ic, State* state, const char* what, IFR
   clear(ic, state);
 }
 
-// Document context is captured only when a composition starts and only through the
-// client's declared surrounding-text capability; anything else leaves native order.
 void Engine::refreshContext(fcitx::InputContext* ic, State* state) {
   std::string preceding;
   if (!sensitive(ic) && ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText)) {
     const auto& surrounding = ic->surroundingText();
     if (surrounding.isValid()) {
-      preceding = preceding_text(surrounding.text(), surrounding.cursor(), kPrecedingCodePoints);
+      const auto start = std::min(surrounding.cursor(), surrounding.anchor());
+      preceding = preceding_text(surrounding.text(), start, kPrecedingCodePoints);
     }
   }
-  ifr_session_set_preceding_text(state->session, preceding.c_str());
+  auto status = ifr_session_start_document_context(state->session, preceding.c_str());
+  if (quality_) state->quality.begin(status == IFR_OK && !preceding.empty());
 }
 
 void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
   auto* ic = event.inputContext();
   State* st = state(ic);
   if (sensitive(ic)) {
-    // Never compose or learn in password and sensitive fields; the client gets raw keys.
+    st->quality.reset();
     if (st->session && st->composing()) clear(ic, st);
     return;
   }
@@ -293,14 +309,25 @@ void Engine::keyEvent(const fcitx::InputMethodEntry&, fcitx::KeyEvent& event) {
     return;
   }
   if (!st->composing()) refreshContext(ic, st);
+  const auto modifiers = rime_modifiers(key.states(), event.isRelease());
+  if (quality_ && !modifiers && st->snapshot) {
+    const auto sym = static_cast<uint32_t>(key.sym());
+    if (sym >= '1' && sym <= '9') {
+      st->qualityChoice = QualityChoice{sym - '1', ifr_session_candidate_count(st->session)};
+    } else if (sym == ' ' || (sym > ' ' && sym <= '~' && std::ispunct(static_cast<unsigned char>(sym)))) {
+      st->qualityChoice = QualityChoice{ifr_snapshot_highlighted(st->snapshot.get()),
+                                        ifr_session_candidate_count(st->session), sym != ' '};
+    }
+  }
   IFRStatus status = ifr_session_key(st->session, static_cast<int32_t>(key.sym()),
-                                     static_cast<int32_t>(rime_modifiers(key.states(), event.isRelease())),
+                                     static_cast<int32_t>(modifiers),
                                      &handled);
   if (status != IFR_OK) {
     failed(ic, st, "key", status);
     return;
   }
-  refresh(ic, st);
+  if (!handled) st->qualityChoice.reset();
+  refresh(ic, st, event.isRelease());
   if (handled) event.filterAndAccept();
 }
 
@@ -312,9 +339,7 @@ void Engine::activate(const fcitx::InputMethodEntry&, fcitx::InputContextEvent& 
 void Engine::deactivate(const fcitx::InputMethodEntry& entry, fcitx::InputContextEvent& event) {
   auto* ic = event.inputContext();
   State* st = state(ic);
-  // Switching input methods keeps what was typed, as the macOS frontend does on
-  // deactivation; focus changes drop the composition because the target is gone.
-  if (st->session && st->composing() &&
+  if (st->session && st->composing() && !sensitive(ic) &&
       event.type() == fcitx::EventType::InputContextSwitchInputMethod) {
     int handled = 0;
     IFRStatus status = ifr_session_commit(st->session, &handled);
@@ -335,7 +360,12 @@ void Engine::reset(const fcitx::InputMethodEntry&, fcitx::InputContextEvent& eve
 void Engine::selectCandidate(fcitx::InputContext* ic, const SnapshotRef& snapshot, std::size_t index) {
   State* st = state(ic);
   if (!st->session) return;
+  if (sensitive(ic)) {
+    clear(ic, st);
+    return;
+  }
   int handled = 0;
+  std::size_t pageSize = quality_ ? ifr_session_candidate_count(st->session) : 0;
   IFRStatus status = ifr_session_select(st->session, snapshot.get(), index, &handled);
   if (status == IFR_STALE_SNAPSHOT || status == IFR_INVALID_CANDIDATE) {
     INKFLOW_INFO() << "ignored late candidate action: " << status;
@@ -345,6 +375,9 @@ void Engine::selectCandidate(fcitx::InputContext* ic, const SnapshotRef& snapsho
   if (status != IFR_OK) {
     failed(ic, st, "select", status);
     return;
+  }
+  if (quality_ && handled) {
+    st->qualityChoice = QualityChoice{index, pageSize};
   }
   refresh(ic, st);
 }
@@ -371,26 +404,35 @@ void Engine::moveHighlight(fcitx::InputContext* ic, bool backward) {
   refresh(ic, st);
 }
 
-void Engine::refresh(fcitx::InputContext* ic, State* st) {
+void Engine::refresh(fcitx::InputContext* ic, State* st, bool reuseUnchanged) {
   char* commit = nullptr;
   IFRStatus status = ifr_session_take_commit(st->session, &commit);
   if (status != IFR_OK) {
     INKFLOW_WARN() << "take_commit failed: " << status << " " << ifr_last_error();
   } else if (commit) {
     ic->commitString(commit);
-    ifr_string_free(commit);
+    reuseUnchanged = false;
   }
   IFRSnapshot* raw = nullptr;
-  status = ifr_session_snapshot(st->session, &raw);
+  const auto capabilities = ic->capabilityFlags();
+  const auto* previous = reuseUnchanged && capabilities == st->presentedCapabilities ? st->snapshot.get() : nullptr;
+  status = ifr_session_snapshot_if_changed(st->session, previous, &raw);
+  const auto choice = std::exchange(st->qualityChoice, std::nullopt);
+  if (status == IFR_OK && !raw) return;
+  if (quality_ && !sensitive(ic)) {
+    st->quality.observe(*quality_, st->snapshot.get(), raw, commit, choice);
+  } else {
+    st->quality.reset();
+  }
+  ifr_string_free(commit);
   auto& panel = ic->inputPanel();
-  // empty() ignores the overlay message, so Fcitx5's input-method information survives
-  // the trigger's key releases.
   if (!panel.empty()) panel.reset();
   if (status != IFR_OK) {
     INKFLOW_WARN() << "snapshot failed: " << status << " " << ifr_last_error();
     st->snapshot.reset();
   } else {
     st->snapshot = SnapshotRef(raw, ifr_snapshot_free);
+    st->presentedCapabilities = capabilities;
     const char* preedit = ifr_snapshot_preedit(raw);
     if (preedit && *preedit) {
       PreeditLayout layout = preedit_layout(preedit, ifr_snapshot_caret(raw),
@@ -404,7 +446,7 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
         text.append(segment.text, flags);
       }
       text.setCursor(static_cast<int>(layout.cursor));
-      if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) {
+      if (capabilities.test(fcitx::CapabilityFlag::Preedit)) {
         panel.setClientPreedit(text);
       } else {
         panel.setPreedit(text);
@@ -419,6 +461,8 @@ void Engine::refresh(fcitx::InputContext* ic, State* st) {
 }
 
 void Engine::clear(fcitx::InputContext* ic, State* st) {
+  st->quality.reset();
+  st->qualityChoice.reset();
   IFRStatus status = ifr_session_clear(st->session);
   if (status != IFR_OK) {
     INKFLOW_WARN() << "clear failed: " << status << " " << ifr_last_error();
@@ -426,7 +470,7 @@ void Engine::clear(fcitx::InputContext* ic, State* st) {
   refresh(ic, st);
 }
 
-}  // namespace inkflow
+}
 
 #ifdef FCITX_ADDON_FACTORY_V2
 FCITX_ADDON_FACTORY_V2(inkflow, inkflow::Factory);

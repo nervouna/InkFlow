@@ -8,7 +8,6 @@ export CLANG_MODULE_CACHE_PATH="$PWD/build/core-swiftpm/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
 args=(--disable-sandbox --scratch-path "$PWD/build/core-boundary-swiftpm" --cache-path "$PWD/build/core-swiftpm/cache"
   --config-path "$PWD/build/core-swiftpm/config" --security-path "$PWD/build/core-swiftpm/security")
-# dump-package evaluates declarations only; it does not resolve the root's external dependencies.
 if [[ "${1:-}" != --standalone ]]; then
   "${swift[@]}" package "${args[@]}" dump-package > "$scratch/root.json"
 else

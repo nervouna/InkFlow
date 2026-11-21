@@ -1,6 +1,4 @@
 #!/bin/bash
-# Builds and runs the black-box benchmark driver (macOS/Experiments/BlackBoxBenchmark/README.md).
-# Run from a logged-in GUI session, outside the sandbox. Everything it produces stays under build/.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 app="$PWD/build/BlackBoxBenchmark.app"
@@ -18,5 +16,4 @@ PLIST
 xcrun swiftc -O -swift-version 5 -module-name BlackBoxBenchmark \
     -module-cache-path "$PWD/build/blackbox-module-cache" \
     macOS/Experiments/BlackBoxBenchmark/main.swift -o "$app/Contents/MacOS/BlackBoxBenchmark"
-# exec: SIGINT and SIGTERM reach the driver itself, which restores the input source.
 exec "$app/Contents/MacOS/BlackBoxBenchmark" "$@"

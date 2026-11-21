@@ -39,7 +39,6 @@ enum IFInputError: Error, Equatable {
     func select(_ id: String) throws
 }
 
-/// All TIS references stay on the login session's main actor. Snapshots contain only values.
 @MainActor final class IFSystemInputSources: IFInputSourceOperations {
     static func property(_ source: TISInputSource, _ key: CFString) -> AnyObject? {
         guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }

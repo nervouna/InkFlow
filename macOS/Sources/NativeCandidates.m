@@ -17,7 +17,6 @@
 @implementation IMKCandidates (InkFlowWidthCompatibility)
 - (void)if_applyMinimumVerticalWidth {
     if (self.panelType!=kIMKSingleColumnScrollingCandidatePanel) return;
-    // The SDK's protected reference is unavailable to Swift. Avoid KVC/raw offsets.
     id<IFNativeCandidateLayout> implementation=(id)_private;
     if (![implementation respondsToSelector:@selector(candidateWindowController)]) return;
     id<IFNativeCandidateLayout> controller=[implementation candidateWindowController];

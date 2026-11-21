@@ -1,6 +1,5 @@
 import Foundation
 
-/// Only finite, source-defined diagnostic enums conform. Never conform a wrapper around user text.
 package protocol DiagnosticLabel: RawRepresentable, Sendable where RawValue == String {}
 
 package struct DiagnosticContext: Codable, Sendable {
@@ -71,8 +70,6 @@ package struct DiagnosticContext: Codable, Sendable {
 
 }
 
-/// Automatic records accept compile-time labels, UUIDs and numbers only. Never pass error descriptions,
-/// URLs, application identifiers, document text or configuration values into this channel.
 package struct LocalDiagnosticEvent: Sendable {
     package enum Module: String, Codable, Sendable { case startup, input, ai, voice, dictionary, update, termination, statistics, diagnostics }
     package enum Outcome: String, Codable, Sendable { case begin, ready, completed, failed, skipped, cancelled, timeout, unavailable, handled, passThrough }
@@ -123,7 +120,6 @@ package struct LocalDiagnosticEvent: Sendable {
     }
 }
 
-/// Platform storage is explicitly injected; importing the engine never creates persistent diagnostics.
 package final class LocalDiagnostics: @unchecked Sendable {
     package static let shared = LocalDiagnostics()
     private let lock = NSLock()

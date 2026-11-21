@@ -33,7 +33,6 @@ sign_tool="$PWD/build/swiftpm/artifacts/sparkle/Sparkle/bin/sign_update"
 [[ -d "$release_dir" && ! -L "$release_dir" && -d "$app" && ! -L "$app" ]] || fail 'Missing verified release app.'
 [[ -f "$update_zip" && ! -L "$update_zip" ]] || fail 'Missing Sparkle update ZIP.'
 [[ "$account" =~ ^[A-Za-z0-9._-]+$ ]] || fail 'Invalid Sparkle signing account.'
-# The EdDSA private key comes from the Keychain account unless a key file is configured (the CI release).
 sparkle_key=(--account "$account")
 if [[ -n ${INKFLOW_SPARKLE_KEY_FILE:-} ]]; then
   key_file=$INKFLOW_SPARKLE_KEY_FILE

@@ -4,9 +4,7 @@
     <welcome file="welcome.html" mime-type="text/html"/>
     <conclusion file="conclusion.html" mime-type="text/html"/>
     <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
-    <!-- Home folder only: no administrator rights, and the same path as earlier releases. -->
     <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
-    <!-- Keep equal to LSMinimumSystemVersion in macOS/Info.plist; test-pkg.sh checks it. -->
     <volume-check>
         <allowed-os-versions>
             <os-version min="26.0"/>

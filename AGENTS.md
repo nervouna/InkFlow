@@ -1,38 +1,46 @@
 # Workspace Instructions
 
-- This codebase belongs to you. So long as you pursue the product goals, you decide what to build and how to evolve it.
-- The goal is to deliver fastest and most intelligent IME in the market.
-  - Performance (Speed): Ensure cold-start time, key-press latency, and text-rendering latency never regress.
-  - Intelligence (Accuracy): Achieve a minimum 97% success rate for top-choice candidate predictions.
+Develop InkFlow toward the fastest and most intelligent IME. Use these goals to guide implementation choices.
 
-## Product rules
-
-- Offline Rime typing is the baseline. AI, downloads and telemetry must never block or break it; keep network, disk and SQLite work off the key-event path.
-- For dictionary, learning and ranking work, try existing Rime capabilities and configuration before writing custom mechanisms.
-- Quality telemetry exists to iterate ranking and English mixing. It must not change ranking or input, and must not log secrets. AI stays default-off.
+- Prevent regressions in cold-start time, key-press latency and text-rendering latency.
+- Aim for at least 97% first-choice accuracy in the long term. See the
+  [current ranking targets and ship rule](docs/input-quality-metrics.md#the-first-choice-target).
+- Keep offline Rime typing available independently of AI, downloads and telemetry. Keep network, disk and SQLite
+  work off the key-event path.
+- Try existing Rime capabilities and configuration first for dictionary, learning and ranking changes.
+- Use quality telemetry to improve ranking and English mixing. Keep it observational and free of secrets.
+  AI stays off by default.
 
 ## Code style
 
-- One statement per line: don't chain statements with `;` (shell keeps `if …; then` and `do`). Keep code lines at most 120 columns. This applies to code you write or edit; don't reformat untouched code.
+- Write one statement per line, with shell syntax such as `if …; then` and `do` allowed. Keep new and edited code
+  within 120 columns. Leave untouched code formatting as it is.
+- Use the [shell test assertion forms](macOS/TESTING.md#shell-test-assertions) in shell tests.
+- CI rejects new code comments. Put decisions in the nearest project doc and track implementation shortcomings
+  in GitHub issues. See [comment lint](docs/comment-cleanup.md#lint-and-inventory) and use `delete-comment` for
+  cleanup batches.
 
-## Task-specific guidance
+## Build and verify
 
-- For shared-core work, read [the portable core README](Core/Portable/README.md). For new-platform work, read [the migration design](docs/portable-core-migration.md).
-- From Linux, use `scripts/mac-remote.py` for Mac builds/tests; it sends committed revisions only. Read [the remote workflow](docs/remote-mac-baseline.md) before remote execution or runner changes.
+- For shared-core work, read the [portable runtime guide](Core/Portable/README.md). For new platforms, read the
+  [migration design](docs/portable-core-migration.md).
+- Follow the [macOS build guide](macOS/DEVELOPMENT.md#build-and-try-the-development-version) and
+  [focused test matrix](macOS/TESTING.md#which-tests-to-run). See [known failures](macOS/DEBUGGING.md) when diagnosing.
+  From Linux, read the [remote workflow](docs/remote-mac-baseline.md) before using or changing
+  `scripts/mac-remote.py`. It sends committed revisions only.
+- Verify changes to default input behavior with a user action and an observable result under default settings.
+  The orchestrator verifies combined behavior when multiple PRs affect the same input path.
+- The user checks typing, focus and Settings behavior. Give them one or two lines on what to try and leave
+  follow-up to them. Installing or activating an input method requires explicit user approval.
+- For releases, follow [`inkflow-release`](.agents/skills/inkflow-release/SKILL.md) and its single verification run.
 
-## Workflow
+## Git and GitHub
 
-- Build: `bash macOS/scripts/build.sh`. Build numbers increase on every build by design; don't comment on them.
-- Test only what you touched: `bash macOS/scripts/test.sh quick` for logic changes, or name units (`test.sh engine controller`). UI-only changes (SwiftUI views, layout, copy): build and stop — the user checks them in the app.
-- Shell test assertions are `[[ ... ]] || fail` and `! cmd || fail` (each script defines `fail`): under `set -e`, bash 3.2 (macOS `/bin/bash`) ignores a bare failing `[[ ]]`, and no bash stops on `! cmd`.
-- Run `test.sh all` only for releases or when explicitly asked. If one unit fails, fix it and rerun that unit.
-- Typing, focus and Settings behavior are checked by the user. List what they should try in one or two lines; don't track it further.
-- `iconutil` fails inside the sandbox; run builds outside it from the first attempt.
-- Extra worktrees go under `.worktrees/<name>/`. Run commands from the intended worktree.
-- Stage files by name; don't `git add -A`. Worktrees collect untracked tool output (SwiftPM/SourceKit index, scratch files).
-- Installing or activating an input method requires explicit user approval.
-- Developed with the orchestrate skill: each issue body is the spec; one issue, one branch `<N>-<slug>` from `origin/main`, one PR using `.github/pull_request_template.md`.
-- `main` requires the six CI checks (ruleset "Main Required Checks"; repository admins bypass it). After opening a PR, enable auto-merge with a merge commit: GitHub merges it when the checks pass. Nothing notifies the agent of a green run.
-- Roadmap lives in GitHub Issues. Reference the issue in the PR; use `Fixes #N` only when the PR completes it, otherwise `Refs #N`. GitHub moves the Project item. Don't update Project fields by hand.
-- Release: use the `inkflow-release` skill. It runs the full suite once; don't add extra verification rounds.
-- Known failures: see [macOS/DEBUGGING.md](macOS/DEBUGGING.md).
+- Follow the `orchestrate` skill. The issue body is the spec. Use one issue, one branch `<N>-<slug>` from
+  `origin/main` and one PR with the [PR template](.github/pull_request_template.md).
+- Use `.worktrees/<name>/` for extra worktrees and run commands in the intended worktree. Stage files by name so
+  untracked tool output stays out of commits.
+- The Main Required Checks ruleset requires six CI checks on `main`. Repository admins can bypass it.
+  Enable auto-merge with a merge commit after opening a PR. Check the run for its result.
+- GitHub Issues hold the roadmap. Use `Fixes #N` if the PR completes the issue and `Refs #N` otherwise.
+  Let GitHub move the Project item automatically.

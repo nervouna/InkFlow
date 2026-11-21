@@ -3,6 +3,7 @@
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,7 +16,6 @@ spec.loader.exec_module(installer)
 
 
 class NoDesktop:
-    # Each addon check starts its own private daemon; never stop the user's service.
     service = None
 
     def stop(self):
@@ -49,7 +49,10 @@ def main():
 
             manager.install(package, desktop)
             check()
-            # A distinct test-only package exercises replacement using the same target binaries.
+            report = subprocess.check_output(
+                [sys.executable, str(manager.paths["current"] / "quality.py"), "--json"],
+                env={**os.environ, "XDG_DATA_HOME": str(scratch / "empty-quality-data")}, text=True)
+            assert json.loads(report)["overall"]["top1_rate"] is None
             newer = scratch / "upgrade-fixture"
             shutil.copytree(package, newer)
             marker = newer / "upgrade-fixture.txt"

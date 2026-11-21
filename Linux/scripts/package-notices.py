@@ -68,7 +68,7 @@ def main():
     if command('git', 'status', '--porcelain', '--untracked-files=normal'):
         raise SystemExit('Commit tracked changes before packaging')
     revision = command('git', 'rev-parse', 'HEAD')
-    for name in ('lib/fcitx5/libinkflow.so', 'lib/inkflow/librime.so',
+    for name in ('lib/fcitx5/libinkflow.so', 'lib/fcitx5/libinkflow-quality.so', 'lib/inkflow/librime.so',
                  'lib/inkflow/librime.so.1',
                  'share/inkflow/rime/prepared/complete',
                  'share/inkflow/rime/shared/pinyin_simp.context.bin',
@@ -78,11 +78,16 @@ def main():
         if not (package / name).is_file():
             raise SystemExit(f'Missing staged payload: {name}')
     copy(ROOT / 'Linux/scripts/install.py', package / 'install.py')
+    copy(ROOT / 'Linux/scripts/quality.py', package / 'quality.py')
     notices = package / 'share/inkflow/Licenses'
-    source = package / 'share/inkflow/SOURCE'
+    version = sys.argv[2]
+    source = package.parent / 'SOURCE' if version else package / 'share/inkflow/SOURCE'
+    if version:
+        asset = f'InkFlow-{version}-linux-source.tar.xz'
+        url = f'https://github.com/nervouna/InkFlow/releases/tag/linux-v{version}'
+        (package / 'share/inkflow/SOURCE.txt').write_text(f'{asset}\n{url}\nSource revision: {revision}\n')
     source.mkdir(parents=True)
     notices.mkdir(parents=True)
-    # Full committed project: recipe, modifications, data snapshots and licenses.
     subprocess.run(['git', 'archive', '--format=tar', '-o', str(source / 'inkflow.tar'),
                     revision], cwd=ROOT, check=True)
     for name in ('LICENSE', 'NOTICE'):
@@ -106,7 +111,6 @@ def main():
     required.append(utf8)
     for name in required:
         copy(native / name, notices / 'native' / name)
-    # Preserve embedded header notices too (RapidJSON, UTF8-CPP, Darts-clone).
     for directory in ('rime/include', 'opencc/deps'):
         for path in sorted((native / directory).rglob('*')):
             if path.is_file() and (path.suffix in ('.h', '.hpp') or
@@ -115,7 +119,7 @@ def main():
 
     recipe = (ROOT / 'Core/scripts/resource-dependencies.sh').read_text()
     inputs = re.findall(r'^fetch (\S+) ([0-9a-f]{64}) (https:\S+)$', recipe, re.M)
-    if len(inputs) != 3:
+    if {name for name, _, _ in inputs} != {'pinyin.tar.gz', 'emoji.txt'}:
         raise SystemExit('Review changed dictionary download recipe')
     for name, sha, _ in inputs:
         copy(ROOT / 'build/deps' / name, source / 'deps' / name, sha)
@@ -127,14 +131,13 @@ def main():
             original = ROOT / 'build/deps' / ('rime-pinyin-simp-' + item['pinnedCommit']) / item['path']
         copy(original, source / 'dictionary-sources' / name, item['pinnedSHA256'])
 
-    # Both locked Rust graphs are used: engine and dictionary generator.
     for crate in ('Core/Portable', 'Core/Portable/dictionary'):
         metadata = json.loads(command('cargo', 'metadata', '--locked', '--offline',
                                       '--format-version', '1', '--manifest-path',
                                       str(ROOT / crate / 'Cargo.toml')))
         for entry in metadata['packages']:
             if entry['source'] is None:
-                continue  # Local source and its license are in inkflow.tar.
+                continue
             directory = Path(entry['manifest_path']).parent
             key = entry['name'] + '-' + entry['version']
             destination = source / 'rust' / key
@@ -192,7 +195,6 @@ provenance record, not independent proof of how compiled cache bytes were produc
                     'Architecture alone does not imply ABI compatibility; build on the oldest '
                     'supported target and check ELF dependencies on each target.')
     (package / 'share/inkflow/SYSTEM-DEPENDENCIES.txt').write_text(dependencies + '\n')
-    # Dereference installed library aliases so every delivered byte is hashed.
     for path in sorted(package.rglob('*')):
         if path.is_symlink():
             if not path.is_file():
@@ -205,6 +207,8 @@ provenance record, not independent proof of how compiled cache bytes were produc
                 'files': {p.relative_to(package).as_posix(): digest(p)
                           for p in sorted(package.rglob('*'))
                           if p.is_file() and p != package / 'package.json'}}
+    if version:
+        manifest['version'] = version
     (package / 'package.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
 

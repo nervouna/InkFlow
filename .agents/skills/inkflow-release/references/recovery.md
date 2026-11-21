@@ -1,6 +1,8 @@
 # Release recovery
 
-`release.sh` is resumable: each step checks for its output (stapled app, package, stapled package, appcast, draft assets) and skips it if present. Fix the cause and rerun the same command. Don't bump the version again to retry.
+`release.sh` reuses a valid stapled app, assembled package and package staple. It runs signature checks,
+appcast and source-bundle generation, and draft upload checks again. Fix the cause and rerun the same
+command with the original version and mode.
 
 - **Interrupted attempt:** `package.sh prepare` refuses an existing `build/releases/InkFlow-X.Y.Z-BUILD/` left by a broken attempt. Move it aside and rerun prepare.
 - **Notarization interrupted mid-upload:** rerun `release.sh`, which resubmits it. A duplicate submission is harmless.
@@ -12,3 +14,10 @@
 - **GitHub Actions run failed before the push:** nothing carries over and `main` is unchanged; fix the cause and run the workflow again. It replaces the draft's assets and keeps its notes.
 - **GitHub Actions run failed after the push:** `main` ends on the tagged release commit. Running the workflow again rebuilds that commit and finishes the release without a bump (the `bump` input is ignored).
 - **Local release after a CI draft:** the draft's assets carry another build, so `release.sh` stops at its asset check. Delete those assets (`gh release delete-asset`) and rerun.
+
+The app-only Sparkle ZIP and installer embed the same stapled app. Package assembly moves the
+installer into place last because its presence marks a completed assembly for retry. The release
+entry point verifies the expanded package's signer, app and lifecycle tool before submitting the
+package itself. Rebuild the dictionary source bundle for the exact committed recipe on every run.
+Draft publishing reuses the release record and uploads the current asset bytes before checking the
+downloaded contents.

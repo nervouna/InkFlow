@@ -1,15 +1,11 @@
 import Foundation
 
-/// The context index builder and the preceding-text limit. The Rust core does the ranking: it
-/// reads this index (`Core/Portable/src/ranking.rs`), and tests compare its output with this
-/// builder's bytes.
 package enum IFContextRanker {
     package static let contextLimit = 16
     private static let magic = Array("IFCX".utf8)
     private static let version: UInt32 = 2
     private static let phraseLimit = 8
 
-    /// Builds the index the preparation worker and build scripts ship beside the dictionary.
     package static func buildIndex(dictionary: Data) throws -> Data {
         guard let text = String(data: dictionary, encoding: .utf8) else {
             throw IFDictionaryError("context-index", "Expected a UTF-8 dictionary")
@@ -49,7 +45,6 @@ package enum IFContextRanker {
         return data
     }
 
-    /// Three bytes per scalar in canonical form, so byte order is the table order.
     private static func encode(_ text: String) -> [UInt8] {
         var bytes: [UInt8] = []
         for scalar in text.precomposedStringWithCanonicalMapping.unicodeScalars {

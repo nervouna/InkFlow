@@ -1,7 +1,3 @@
-//! Context-ranking index, byte-identical to `IFContextRanker.buildIndex` in
-//! InkFlowDomain/CandidateRanking.swift: a sorted, fixed-width table per phrase
-//! length so the ranker reads it whole and never parses the dictionary. Version 2
-//! keys include a six-byte, zero-padded terminal syllable before the frequency.
 use crate::{Error, Result};
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
@@ -39,7 +35,6 @@ pub fn context_index(dictionary: &[u8]) -> Result<Vec<u8>> {
         {
             terminal[..reading.len()].copy_from_slice(reading.as_bytes());
         }
-        // Unsplit dictionary codes still mark word boundaries and score longer candidates.
         key.extend_from_slice(&terminal);
         let entry = frequencies.entry(key).or_insert(0);
         *entry = (*entry).max(frequency as u64);
@@ -67,7 +62,6 @@ pub fn context_index(dictionary: &[u8]) -> Result<Vec<u8>> {
     Ok(data)
 }
 
-/// Three bytes per canonical scalar for a phrase of 2–8 Han graphemes; `None` otherwise.
 fn encode(phrase: &str) -> Option<Vec<u8>> {
     let mut count = 0;
     for grapheme in phrase.graphemes(true) {

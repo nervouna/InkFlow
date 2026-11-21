@@ -12,7 +12,6 @@ private final class FixtureCancellation: @unchecked Sendable {
     }
 }
 
-/// Test-only process adapter. Production process/sandbox execution remains in the macOS target.
 package struct NativePreparationFixture: Sendable {
     private let runtime: IFDictionaryRuntime
     private let exchanges: URL

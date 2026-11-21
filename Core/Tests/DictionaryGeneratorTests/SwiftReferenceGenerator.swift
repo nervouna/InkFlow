@@ -1,7 +1,6 @@
 import Foundation
 @testable import InkFlowDomain
 
-/// Reads only the tab-separated body. Remote headers, imports and executable configuration are never interpreted.
 package enum IFReferenceDictionaryGenerator {
     package static let maximumWeight = Int(Int32.max)
     private struct Key: Hashable { let text: String; let reading: String }
@@ -46,12 +45,9 @@ package enum IFReferenceDictionaryGenerator {
             for (key, weight) in group where union[key] == nil {
                 let factor = calibration.buckets[bucket(key.reading) - 1].multiplier
                 let mapped = Double(weight) * factor
-                // Saturate only mapped source weights at Rime's signed integer boundary.
                 union[key] = weight == 0 ? 0 : max(1, Int(min(Double(maximumWeight), mapped.rounded())))
             }
         }
-        // Specialty dictionaries only fill gaps after the established calibrated union.
-        // They cannot change existing weights or the overlap used for calibration.
         for (key, weight) in groups["specialty"] ?? [:] where union[key] == nil { union[key] = weight }
         for row in try parseCorrections(corrections) { union[row.key] = row.weight }
         let keys = union.keys.sorted {
@@ -124,7 +120,6 @@ package enum IFReferenceDictionaryGenerator {
     }
 
     private static func readRows(_ data: Data, source: String, receive: (Row) -> Void) throws {
-        // generate has already verified the complete byte count and both content hashes.
         guard let string = String(data: data, encoding: .utf8) else {
             throw IFDictionaryError("source-format", source: source, "Expected complete UTF-8 dictionary")
         }
@@ -213,7 +208,6 @@ package enum IFReferenceDictionaryGenerator {
     }
 }
 
-/// Build preparation and the isolated update worker compile the same native algebra.
 package enum IFReferenceSpellingGenerator {
     package static func generate(dictionary: Data) throws -> [String: Data] {
         let syllables = try IFReferenceDictionaryGenerator.spellingSyllables(in: dictionary)
@@ -248,13 +242,10 @@ package enum IFReferenceSpellingGenerator {
     }
 
     private static func algebra(syllables: Set<String>, profile: Int) throws -> [String] {
-        // One list owns normal equivalent spellings and explicitly enabled fuzzy pairs.
-        // These simple derivations also define the legal full-spelling collision set.
         var equivalents = [("^([nl])ue$", "$1ve"), ("^([jqxy])u", "$1v")]
         for (initial, bit) in [("z", 4), ("c", 8), ("s", 16)] where profile & bit != 0 {
             equivalents += [("^\(initial)h", initial), ("^\(initial)([^h])", initial + "h$1")]
         }
-        // The legacy source's consonant-only syllables must not cover input, which would prune abbreviations.
         var rules = ["erase/^(hm|m|n|ng)$/"] + equivalents.map { "derive/\($0.0)/\($0.1)/" }
         if profile & 1 != 0 {
             rules += ["abbrev/^([a-z]).+$/$1/", "abbrev/^([zcs]h).+$/$1/"]
@@ -268,9 +259,6 @@ package enum IFReferenceSpellingGenerator {
                                                         withTemplate: replacement)
                 })
             }
-            // Only copies carry typo transformations. Rime retains fuzzy properties,
-            // ordered combinations and the original paths. Guard the final aliases,
-            // then remove the temporary marker before compiling the prism.
             rules += [
                 "derive/^(.*)$/~$1/",
                 "fuzz/^~([zcs])h/~h$1/",

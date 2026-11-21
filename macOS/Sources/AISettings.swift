@@ -54,7 +54,6 @@ final class KeychainAICredentialStore: AICredentialStore {
     init(service: String = "io.damao.inputmethod.inkflow.ai") { self.service = service }
 
     private var query: [String: Any] {
-        // Input-method startup must never interrupt typing with a Keychain prompt.
         let context = LAContext()
         context.interactionNotAllowed = true
         return [kSecClass as String: kSecClassGenericPassword,
@@ -149,7 +148,6 @@ final class IFSmartSettings: ObservableObject {
     func save(baseURL: String, apiKey: String, model: String) throws {
         let updated = AISuggestionConfiguration(baseURL: baseURL, apiKey: apiKey, model: model)
         try AIChatCompletionsClient.validateBaseURL(updated.baseURL)
-        // Keychain update is the only remaining fallible step. Never publish partially saved fields.
         do { try credentials.write(updated.apiKey) }
         catch {
             AIDiagnostics.emit(.credentialFailed, reason: .credentialWrite)

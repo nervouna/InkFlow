@@ -1,5 +1,4 @@
 #!/bin/bash
-# Sourced from scripts that have already changed to the repository root.
 swiftpm_scratch="$PWD/build/swiftpm"
 swiftpm_triple="arm64-apple-macosx26.0"
 swiftpm_cache="$swiftpm_scratch/cache"
@@ -15,7 +14,6 @@ build_swift_product() {
     return 2
   }
   bash Core/scripts/build-dictionary-generator.sh || return $?
-  # Every consumer links the Rust core; build.sh and test.sh build it once and set the flag.
   [[ "${INKFLOW_PORTABLE_BUILT:-}" == 1 ]] || bash Core/scripts/build-portable.sh || return $?
   local build_args=(--disable-sandbox --cache-path "$swiftpm_cache"
     --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch"

@@ -132,8 +132,6 @@ def main() -> None:
         texts |= {form for form in expand(dic, aff) if SPELLING.fullmatch(form)}
     rows = []
     for text in sorted(texts):
-        # Direct key lookup avoids word_frequency/zipf_frequency estimates for
-        # multi-token phrases, punctuation and digit patterns absent from data.
         probability = frequencies.get(preprocess_text(text, "en"))
         if probability is not None:
             rows.append(f"{text}\t{math.log10(probability) + 9:.2f}\n")

@@ -1,7 +1,6 @@
 import InkFlowRime
 import AppKit
 
-/// AppKit exits directly after its termination notifications; main's defer is not a cleanup hook.
 @MainActor final class IFApplicationLifecycle: NSObject, NSApplicationDelegate {
     private let stopDictionaries: () async throws -> Void
     private let stopEngine: () -> Void
@@ -32,7 +31,6 @@ import AppKit
                     try await stopDictionaries()
                     dictionariesStopped = true
                 }
-                // Interrupt recorders and destroy sessions before closing their destination store.
                 if !engineStopped { stopEngine(); engineStopped = true }
                 if !(await closeStore()) {
                     LocalDiagnostics.shared.submit(.init(module: .termination, event: "statisticsClose", outcome: .failed,

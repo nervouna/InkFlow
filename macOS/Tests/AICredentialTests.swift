@@ -7,7 +7,6 @@ import InkFlowTestSupport
 @main
 struct AICredentialTests {
     @MainActor static func main() {
-        // This adapter check owns a random service and synthetic keys; never access the real service.
         let suite = temporarySuiteName("inkflow.ai-keychain-test")
         let store = KeychainAICredentialStore(service: "io.damao.inkflow.ai-test.\(UUID().uuidString)")
         let defaults = UserDefaults(suiteName: suite)!

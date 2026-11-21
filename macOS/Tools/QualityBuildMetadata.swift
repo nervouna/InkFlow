@@ -5,7 +5,6 @@ import CryptoKit
 import InkFlowCore
 #endif
 
-/// Build-time only: stamps actual working-tree bytes and the resources copied into this bundle.
 @main
 struct QualityBuildMetadataTool {
     static func main() {
@@ -63,9 +62,6 @@ struct QualityBuildMetadataTool {
         }
     }
 
-    /// Developer ID re-signing can change Mach-O layout beyond the signature blob
-    /// that codesign removes. Signature integrity is checked by the release caller;
-    /// this mode retains every recorded provenance comparison except bundleSHA256.
     private static func matchesExceptBundleSHA256(saved: Data, expected: Data) throws -> Bool {
         let keys: Set<String> = ["sourceRevision", "sourceTreeSHA256", "sourceDirty",
             "bundledResourcesSHA256", "bundleSHA256", "rankingSourceSHA256",
@@ -131,7 +127,6 @@ struct QualityBuildMetadataTool {
     }
 
     private static func isBuildInput(_ path: String) -> Bool {
-        // The Rust core and its pinned native build: engine, ranking, bridge, ABI header and dependency locks.
         if ["Package.swift", "Package.resolved", "Core/Package.swift", "rust-toolchain.toml", "macOS/Info.plist",
             "Core/Portable/Cargo.toml", "Core/Portable/Cargo.lock", "Core/Portable/build.rs", "Core/Portable/build-native.py",
             "Core/Portable/native-sources.lock.json"].contains(path) { return true }
@@ -211,7 +206,6 @@ struct QualityBuildMetadataTool {
             let content: Data
             let kind: String
             if !FileManager.default.fileExists(atPath: url.path) {
-                // A tracked deletion is part of a dirty source tree.
                 kind = "missing"
                 content = Data()
             } else if try FileManager.default.attributesOfItem(atPath: url.path)[.type] as? FileAttributeType == .typeSymbolicLink {
@@ -222,16 +216,12 @@ struct QualityBuildMetadataTool {
                 let bytes = try Data(contentsOf: url)
                 content = canonicalizingCodeSignatures ? try unsignedMachO(bytes, path: path) : bytes
             }
-            // Length framing makes filenames/content boundaries unambiguous and excludes mtimes.
             hash.update(data: Data("\(path.utf8.count):\(path)\(kind):\(content.count):".utf8))
             hash.update(data: content)
         }
         return hash.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    /// Code signing replaces only Mach-O signature blobs and adds `_CodeSignature` files.
-    /// Hash the complete unsigned payload so the build-stamped identity survives later
-    /// ad-hoc or Developer ID signing without omitting executable code bytes.
     private static func unsignedMachO(_ data: Data, path: String) throws -> Data {
         let magics: Set<[UInt8]> = [
             [0xce, 0xfa, 0xed, 0xfe], [0xcf, 0xfa, 0xed, 0xfe],

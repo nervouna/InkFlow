@@ -22,14 +22,12 @@ pub struct Snapshot {
 
 impl Default for Snapshot {
     fn default() -> Self {
-        // All fields are integers or nullable pointers, matching the C contract.
         unsafe { std::mem::zeroed() }
     }
 }
 
 impl Drop for Snapshot {
     fn drop(&mut self) {
-        // The native owner holds all pointers, including on conversion failure.
         unsafe { ifp_snapshot_free(self) }
     }
 }
@@ -56,6 +54,8 @@ unsafe extern "C" {
     pub fn ifp_select_candidate(session: usize, index: usize) -> c_int;
     pub fn ifp_change_page(session: usize, backward: c_int, changed: *mut c_int) -> c_int;
     pub fn ifp_snapshot(session: usize, snapshot: *mut Snapshot) -> c_int;
+    pub fn ifp_context_window(session: usize, snapshot: *mut Snapshot) -> c_int;
+    pub fn ifp_promote_context_candidate(session: usize, source: usize, destination: usize) -> c_int;
     pub fn ifp_snapshot_free(snapshot: *mut Snapshot);
     pub fn ifp_take_commit(session: usize, commit: *mut *mut c_char) -> c_int;
     pub fn ifp_string_free(string: *mut c_char);

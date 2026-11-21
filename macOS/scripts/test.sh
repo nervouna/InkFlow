@@ -45,7 +45,6 @@ if $needs_app && [[ ! -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorke
 fi
 if $needs_dependencies || $needs_shared; then
   macOS/scripts/dependencies.sh
-  # Every Swift product links the Rust core: build it once for the whole run.
   bash Core/scripts/build-portable.sh
   export INKFLOW_PORTABLE_BUILT=1
 fi
@@ -54,7 +53,6 @@ source macOS/scripts/swift-test.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
 trap 'for pid in ${background_pids[@]+"${background_pids[@]}"}; do kill -- "-$pid" 2>/dev/null || true; done; rm -rf "$scratch"' EXIT
 
-# Drop librime's routine startup chatter from passing engine runs.
 filter_engine_stderr() {
   grep -vE 'Logging before InitGoogleLogging|registering components from module|rime\.lua should be either' "$1" >&2 || true
 }
@@ -92,7 +90,6 @@ run_unit() {
     preparation) bash macOS/scripts/test-prepare-rime.sh ;;
     deployment)
       build_swift_test deployment-tests build/deployment-tests
-      # The old full English cache: every inventory row coded by its lowercase letters, without the Zipf gate.
       ungated="$scratch/ungated.dict.yaml"
       awk -F '\t' '
         BEGIN {
@@ -129,8 +126,6 @@ run_unit() {
       bash macOS/scripts/test-dictionary-activation.sh
       bash macOS/scripts/test-serving-startup.sh ;;
     portable)
-      # Source-built librime and the release Rust core, then the Rust tests, old/new parity on
-      # freshly prepared production resources, the notices check and the link smoke test.
       bash Core/scripts/build-portable.sh
       bash Core/Portable/test.sh
       bash Core/Portable/parity.sh
@@ -138,14 +133,11 @@ run_unit() {
       build_swift_test portable-abi-tests build/portable-abi-tests
       build/portable-abi-tests ;;
     core-preparation)
-      # The full suite runs shared-core with --skip-covered-units; this covers the rest.
       bash Core/scripts/test-dictionaries.sh "$PWD/build/test-shared" --preparation-only ;;
     *) bash "macOS/scripts/test-$1.sh" ;;
   esac
 }
 
-# In the full suite, the two slowest units (about 6 min each) run in the background
-# while everything else runs serially. Their binaries are built first.
 background=() background_pids=()
 if $full; then
   background=(ai-learning dictionary-activation)
@@ -154,7 +146,7 @@ if $full; then
   for product in ai-pronunciation-tests ai-adoption-learning-tests dictionary-activation-tests serving-startup-tests; do
     build_swift_test "$product" "build/$product"
   done
-  set -m  # own process group per job, so a failure can stop the whole job
+  set -m
   for unit in "${background[@]}"; do
     echo "BEGIN $unit (background)"
     ( (set -e; export INKFLOW_TEST_PREBUILT=1; run_unit "$unit") > "$scratch/$unit.log" 2>&1
@@ -169,7 +161,6 @@ for unit in "${units[@]}"; do
   [[ -n "$unit" ]] || continue
   echo "BEGIN $unit"
   began=$SECONDS
-  # set -e only applies inside the subshell when it is not an if/|| condition.
   set +e
   (set -e; run_unit "$unit")
   status=$?

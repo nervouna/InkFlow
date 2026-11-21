@@ -13,7 +13,6 @@ extension IFDictionaryServices {
 
 extension IFDictionaryCoordinator {
     static let persistentLogger: IFDictionaryDiagnosticLogger = { failure in
-        // Only source/protocol/worker diagnostics enter here, never document context or learning data.
         let log = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "dictionary")
         let operation = UUID()
         LocalDiagnostics.shared.submit(.init(module: .dictionary, event: failure.stage, outcome: .failed,
@@ -26,7 +25,6 @@ extension IFDictionaryCoordinator {
         }
     }
 
-    /// Unified-log payloads truncate around 1 KiB on the target OS. Scalar-safe chunks retain bounded diagnostics.
     nonisolated static func diagnosticChunks(_ text: String) -> [String] {
         var parts: [String] = [], chunk = "", bytes = 0
         for scalar in text.unicodeScalars {

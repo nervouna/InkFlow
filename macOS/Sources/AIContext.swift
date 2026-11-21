@@ -33,7 +33,6 @@ struct AIClientAnchor: Equatable {
 struct AISurroundingContext {
     let precedingText: String
     let followingText: String
-    // Availability is diagnostic metadata; missing text is a valid empty prompt.
     let precedingAvailable: Bool
     let followingAvailable: Bool
 
@@ -45,8 +44,6 @@ struct AISurroundingContext {
             AIDiagnostics.emit(.contextRejected, reason: .anchorChanged); return nil
         }
         let start = anchor.mark.location, end = NSMaxRange(anchor.mark)
-        // Capture once per request. Length may be inconsistent with a valid owned
-        // mark, so use it only when it can clip the suffix.
         let length = client.length()
         let knownLength = length != NSNotFound && length >= end
         let prefixRange = NSRange(location: max(0, start - limit), length: min(start, limit))

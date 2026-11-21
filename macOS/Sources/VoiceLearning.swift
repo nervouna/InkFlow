@@ -70,7 +70,6 @@ extension VoiceCorrectionObservation {
                                 sessionRevision: sessionRevision, secure: secure))
     }
 
-    /// Native regression convenience; production coordination consumes the raw evidence.
     func observe(client: IMKTextInput, sessionRevision: UInt64, secure: Bool,
                  now: ContinuousClock.Instant = .now,
                  validateTarget: () -> Bool = { true }) -> Decision {

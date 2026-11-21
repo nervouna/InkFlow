@@ -18,7 +18,6 @@ struct AboutSettingsView: View {
         licensesFolder = bundle.resourceURL?.appendingPathComponent("Licenses", isDirectory: true)
     }
 
-    /// Each release attaches this archive; release.sh names it after the version and build.
     private var sourceBundleURL: URL {
         URL(string: "https://github.com/nervouna/InkFlow/releases/download/v\(version)/InkFlow-\(version)-\(build)-dictionary-source.tar.gz")!
     }

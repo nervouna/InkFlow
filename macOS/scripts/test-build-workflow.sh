@@ -110,7 +110,6 @@ chmod +x "$repo/macOS/scripts/"*.sh
   second=$(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist)
   [[ "$second" == "$((first + 1))" && $(shasum -a 256 macOS/Info.plist) == "$source_before" ]] || fail
   grep -Fxq "| Build | $second |" "$fixture/second-summary"
-  # Allocation is shared and serialized even when independent callers overlap.
   pids=()
   for ((i=0; i<8; i++)); do bash macOS/scripts/build-number.sh > "$fixture/number.$i" & pids+=("$!"); done
   for pid in "${pids[@]}"; do wait "$pid"; done
@@ -123,19 +122,16 @@ chmod +x "$repo/macOS/scripts/"*.sh
   [[ "$linked" == "$((second + 9))" && $(cat build/build-number/last) == "$linked" ]] || fail
   plutil -replace CFBundleVersion -string "$((linked + 20))" "$fixture/linked/macOS/Info.plist"
   [[ $(bash "$fixture/linked/macOS/scripts/build-number.sh") == "$((linked + 21))" ]] || fail
-  # A second app build must fail before touching the previous output.
   mkdir build/app-build.lock
   if bash macOS/scripts/build.sh >/dev/null 2>&1; then exit 1; fi
   [[ -d build/app-build.lock ]] || fail
   rmdir build/app-build.lock
-  # Corrupt state cannot reset the counter or damage the last completed bundle.
   printf invalid > build/build-number/last
   if bash macOS/scripts/build.sh > "$fixture/failed-summary" 2>&1; then exit 1; fi
   ! grep -Fq '| Artifact metadata |' "$fixture/failed-summary" || fail
   [[ $(plutil -extract CFBundleVersion raw build/InkFlow.app/Contents/Info.plist) == "$second" ]] || fail
   [[ -s build/dictionary-sources/fresh.yaml ]] || fail
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlow && ! -e build/InkFlow.app/Contents/sentinel ]] || fail
-  # The source-built librime is the only engine library; Lua is merged into it, not a plugin.
   [[ $(cat build/InkFlow.app/Contents/Frameworks/librime.1.dylib) == librime && ! -e build/InkFlow.app/Contents/Frameworks/rime-plugins ]] || fail
   [[ -s build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate ]] || fail
   [[ -d build/InkFlow.app/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc ]] || fail

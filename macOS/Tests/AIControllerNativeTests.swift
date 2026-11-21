@@ -135,11 +135,8 @@ struct AIControllerNativeTests {
         let server = IMKServer(name: "inkflow.ai-native.\(UUID().uuidString)", bundleIdentifier: Bundle.main.bundleIdentifier)!
         let candidateLifetime = NativeCandidateLifetime(server: server)
         defer { withExtendedLifetime(candidateLifetime) {} }
-        // IMK's initializer accepts only its cross-process proxy class. Reuse the existing
-        // test shim for the recording client; production controller and native panels remain real.
         IFStubHeadlessControllerFramework()
 
-        // No event, lazy coordinator access, or window allocation should be required for teardown.
         weak var released: InkFlowInputController?
         let windowsBefore = NSApp.windows.filter(AISuggestionPanel.isSuggestionWindow).count
         autoreleasepool {
@@ -252,7 +249,6 @@ struct AIControllerNativeTests {
         passive.setSuggestion("独立焦点验证")
         passive.show(relativeTo: NSRect(x: host.frame.minX + 30, y: host.frame.midY, width: 350, height: 30))
         await until("passive-panel-visible") { passive.isVisible }
-        // Negative focus contract: observing visibility alone cannot catch a later focus steal.
         await wait(0.1)
         check(passive.isVisible && host.isKeyWindow && host.firstResponder === field,
               "The suggestion panel independently preserves a text view's established focus")

@@ -5,7 +5,6 @@ import Foundation
 import OSLog
 import Speech
 
-/// Logs only fixed stage/reason names, random session IDs and elapsed milliseconds.
 enum VoiceDiagnostics {
     @TaskLocal static var preparationID: UUID?
     static let fixtureEventDiagnostics = !(ProcessInfo.processInfo.environment["INKFLOW_VOICE_FIXTURE"] ?? "").isEmpty
@@ -23,7 +22,6 @@ enum VoiceDiagnostics {
         logger.notice("stage=fixture mode=\(mode.rawValue, privacy: .public) event=\(stage.rawValue, privacy: .public)")
     }
     enum StartRejection: String, DiagnosticLabel { case engine, busy, secure, client, bundle, foreground, selection, proxy, stale }
-    /// One bounded timestamp per fixed reason; repeated shortcuts cannot flood the log.
     struct StartRejectionLimiter {
         private var last: [StartRejection: ContinuousClock.Instant] = [:]
         mutating func admit(_ reason: StartRejection, now: ContinuousClock.Instant = .now) -> Bool {
@@ -64,8 +62,6 @@ enum VoiceDiagnostics {
 
 enum VoiceRecognitionError: Error { case unavailable, permission, audio, overflow, invalidRange }
 
-/// The factory is deliberately outside MainActor. Its exact returned closure is exercised off-main.
-/// A lock serializes converter access and stream termination; no borrowed tap buffer escapes.
 final class VoiceAudioFeed: @unchecked Sendable {
     let stream: AsyncThrowingStream<AnalyzerInput, Error>
     private let continuation: AsyncThrowingStream<AnalyzerInput, Error>.Continuation
@@ -73,8 +69,6 @@ final class VoiceAudioFeed: @unchecked Sendable {
     private let outputFormat: AVAudioFormat
     private let lock = NSLock()
     private var ended = false
-    /// AVAudioConverter invokes this only during the outer locked synchronous conversion;
-    /// the borrowed buffer never leaves that call.
     private final class Input: @unchecked Sendable {
         private let buffer: AVAudioPCMBuffer
         private var supplied = false
@@ -126,7 +120,6 @@ final class VoiceAudioFeed: @unchecked Sendable {
     func finish() {
         lock.lock(); defer { lock.unlock() }
         guard !ended else { return }
-        // Signal real end-of-stream to drain converter priming/trailing samples before ASR input ends.
         for _ in 0..<4 {
             guard let output = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: 32768) else {
                 end(VoiceRecognitionError.audio); return
@@ -155,7 +148,6 @@ final class VoiceAudioFeed: @unchecked Sendable {
     }
 }
 
-/// Validates the ASR range contract before any segment can reach correction or insertion.
 struct VoiceTranscriptAccumulator {
     private(set) var transcript = ""
     private var end: CMTime?
@@ -200,7 +192,6 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
         return status() == .authorized
     }
 
-    /// Resource preparation never records audio; automatic startup cannot request permission.
     private static func prepareResources(requestPermission: Bool) async throws -> Preparation {
         let operation = VoiceDiagnostics.preparationID ?? UUID()
         VoiceDiagnostics.emit(.availability, id: operation, outcome: .begin)
@@ -346,10 +337,8 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
         }
         try engine.start()
         VoiceDiagnostics.emit(.recording, id: token)
-        // start returns once analysis has begun; explicit stop ends its input stream.
         try await analyzer.start(inputSequence: feed.stream)
         guard id == token else { return }
-        // Wait for stop without relying on start() return semantics.
         while !stopped {
             try await Task.sleep(for: .milliseconds(20))
             guard id == token else { return }
@@ -388,7 +377,6 @@ final class AppleVoiceRecognizer: VoiceRecognitionServing {
     }
 }
 
-/// Explicit process-only reproduction source. It never opens audio or network resources.
 @MainActor
 final class VoiceRecognitionFixture: VoiceRecognitionServing {
     enum Mode: String { case final, preview }

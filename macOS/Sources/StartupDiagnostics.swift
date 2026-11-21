@@ -2,8 +2,6 @@ import InkFlowRime
 import Foundation
 import os
 
-/// Fixed labels and boolean delivery facts only. Never add key metadata, input text,
-/// candidates, document values, identifiers from a client, paths or error descriptions.
 enum InputDiagnosticEvent: String, DiagnosticLabel {
     case controllerCreated, controllerReleased
     case activationReady, activationSkipped
@@ -12,8 +10,6 @@ enum InputDiagnosticEvent: String, DiagnosticLabel {
     case compositionBegan, compositionEnded, insertionIssued, insertionReturned, engineUnavailable
 }
 
-/// Bounded work sections inside one synchronous first-key callback. The labels never
-/// identify the key, client, document, candidate, or result content.
 enum InputDiagnosticOutcome: String, Sendable {
     case handled, passThrough, skipped
 }
@@ -68,7 +64,6 @@ struct InputDiagnosticRecord: Sendable {
 
 enum InputDiagnostics {
     private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "input")
-    // Focused tests observe the exact allowlisted records written to the unified log.
     @TaskLocal static var observe: (@Sendable (InputDiagnosticRecord) -> Void)?
 
     static func write(_ record: InputDiagnosticRecord) {
@@ -152,7 +147,6 @@ final class IFInputLifecycleDiagnostics {
 
     func insertionBegan(clientPresent: Bool) -> CompositionToken {
         let token = beginComposition()
-        // Reserve/end current composition before client delivery may synchronously activate another.
         composition = nil
         emitComposition(.insertionIssued, token: token, reason: clientPresent ? .none : .clientMissing,
                         outcome: clientPresent ? .handled : .skipped, clientPresent: clientPresent)
@@ -188,14 +182,12 @@ final class IFInputLifecycleDiagnostics {
         guard !recordedFirstKey else { return nil }
         let current = activation ?? UUID()
         activation = current
-        // Reserve before editor delivery, which can synchronously reenter the controller.
         recordedFirstKey = true
         let token = FirstKeyToken(activation: current, key: UUID(), started: clock())
         emit(.firstKeyEntered, activationID: token.activation, key: token.key)
         return token
     }
 
-    /// Emits only after a synchronous section returns, so it never changes input flow.
     func checkpointFirstKey(_ token: FirstKeyToken?, stage: InputDiagnosticStage) {
         guard let token, !token.completed else { return }
         emit(.firstKeyCheckpoint, activationID: token.activation, key: token.key,

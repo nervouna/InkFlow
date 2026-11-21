@@ -8,7 +8,6 @@ static NSBitmapImageRep *render(NSUInteger scale, NSBezierPath *glyph) {
     memset(rep.bitmapData,0,rep.bytesPerRow*rep.pixelsHigh);
     [NSGraphicsContext saveGraphicsState];
     [NSGraphicsContext setCurrentContext:[NSGraphicsContext graphicsContextWithBitmapImageRep:rep]];
-    // Bitmap contexts use pixel coordinates; TIFF logical size is recorded separately.
     NSAffineTransform *transform=[NSAffineTransform transform];
     [transform scaleBy:scale]; [transform concat];
     [NSColor.blackColor setFill];

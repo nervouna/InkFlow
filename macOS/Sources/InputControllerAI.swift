@@ -1,7 +1,6 @@
 @preconcurrency import InputMethodKit
 import Carbon
 
-/// AI-only controller state and behavior. The offline controller keeps only stable delegation seams.
 @MainActor
 final class IFInputControllerAI {
     private weak var controller: IFInputControllerShell?

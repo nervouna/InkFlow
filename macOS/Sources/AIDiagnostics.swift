@@ -2,8 +2,6 @@ import InkFlowRime
 import Foundation
 import OSLog
 
-/// Only allowlisted labels and scalar metadata cross this privacy boundary. Never pass
-/// document text, configuration values, provider bodies or arbitrary error descriptions.
 enum AIDiagnosticEvent: String, DiagnosticLabel {
     case settingsLoaded, settingsSaved, settingsToggled, credentialFailed
     case eligibility, anchorRejected, contextRejected, contextCaptured
@@ -64,7 +62,6 @@ enum AIDiagnostics {
     private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "ai")
     @TaskLocal static var attempt: UUID?
     @TaskLocal static var session: UUID?
-    // Focused tests observe the exact records also emitted to the system log.
     @TaskLocal static var observe: (@Sendable (AIDiagnosticRecord) -> Void)?
 
     static func emit(_ event: AIDiagnosticEvent, reason: AIDiagnosticReason = .none,
@@ -94,7 +91,6 @@ enum AIDiagnostics {
         case .credentialFailed, .failed, .transportFailed, .presentationFailed:
             logger.error("\(message, privacy: .public)")
         default:
-            // Notice remains queryable after a user's attempt; debug/info do not reliably persist.
             logger.notice("\(message, privacy: .public)")
         }
         observe?(record)

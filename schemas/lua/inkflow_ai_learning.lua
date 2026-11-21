@@ -1,17 +1,12 @@
--- Writer for the ordinary Pinyin user dictionary. No independent candidate stream.
 local channel = require("inkflow_channel")
 local M = {}
 
--- Lua Memory inherits native commit/key callbacks. Keeping its user_dict alive
--- between callbacks would prematurely commit ordinary undoable learning.
 local function with_memory(env, operation)
   local memory
   local called, status, body = pcall(function()
     memory = Memory(env.engine, env.engine.schema, "translator")
     return operation(memory)
   end)
-  -- Clear native dictionary handles even when an operation fails. The remaining
-  -- callbacks then return immediately until Lua GC destroys/disconnects the object.
   if memory then memory:disconnect() end
   return called, status, body
 end
@@ -29,8 +24,6 @@ local function readings(env, context, path, input, text, memory)
       rows[#rows + 1] = "C\t" .. character .. "\t" .. env.reverse:lookup(character)
     end
   end
-  -- Reuse the existing translator's menu: a second script translator would also
-  -- attach ordinary learning callbacks. Probe only a bounded native candidate set.
   local segment = context.composition:back()
   if utf8.len(text) > 1 and context.input == input and segment and segment.start == 0 and segment.menu then
     segment.menu:prepare(128)
@@ -51,13 +44,8 @@ local function readings(env, context, path, input, text, memory)
 end
 
 local function voice_lexicon(env)
-  -- The Swift caller waits past the native undo window before reading: releasing
-  -- a temporary UserDictionary commits any shared pending transaction. Never
-  -- call this transport directly from a key callback or retain its raw pointer.
   local called, status, body = with_memory(env, function(memory)
     if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
-    -- Empty predictive prefix caps accepted rows in native LookupWords, in key order:
-    -- keep the cap above a typical user dictionary so later codes stay visible.
     local iterator = memory.user_dict:lookup_words("", true, 8192)
     local rows, bytes = {}, 3
     for entry in iterator:iter() do
@@ -96,7 +84,6 @@ local function ai_learning(env, fields)
       entry.custom_code = code
       return memory:update_userdict(entry, 1, "")
     end)
-    -- Always close the transaction, including a failed update.
     local finished = memory:finish_session()
     return written and result and finished
   end)

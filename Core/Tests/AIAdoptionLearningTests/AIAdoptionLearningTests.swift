@@ -16,7 +16,6 @@ struct AIAdoptionLearningTests {
         let writing = scenario == "write"
         let readsDuringUndo = CommandLine.arguments.count < 5 || CommandLine.arguments[4] != "no-voice-read"
         if scenario == "export" {
-            // SHARED USER export NAME OUTPUT: the snapshot of one closed Rime user dictionary, empty when absent.
             let arguments = CommandLine.arguments
             check(arguments.count == 6 && IFPortablePersonalData.names.contains(arguments[4]), "Usage: export NAME OUTPUT")
             let text = try IFPortablePersonalData.export(user: user)[arguments[4]] ?? nil
@@ -93,7 +92,6 @@ struct AIAdoptionLearningTests {
                 }
                 engine.key(undo ? 0xff08 : 0xff09)
             }
-            // With AI never requested, its bridge must not change ordinary undo.
             ordinaryCommit("nihao", expected: "你好", undo: true)
             type(engine, "yh")
             let bankInput = engine.aiInputIdentity()!
@@ -125,7 +123,6 @@ struct AIAdoptionLearningTests {
                 engine.setConfiguration(candidateCount: 9, customPhrases: [], inputPreferences: .init())
                 check(candidates(pair.0).first == pair.1, "One adoption improves ordinary rank \(pair.1)")
             }
-            // Whole original input includes the selected prefix. No suffix-only code is registered.
             let prefix = AIInputIdentity(rawInput: "xingmoliang", caret: 11, selectedPrefix: "星")
             check(engine.learnAIAdoption(input: prefix, text: "星墨量"))
             check(!engine.learnAIAdoption(input: prefix, text: "新墨量"), "Changed prefix must not learn")
@@ -144,7 +141,6 @@ struct AIAdoptionLearningTests {
             check(VoiceAlternativeReranker.select([["星莫海", "星墨海"]], snapshot: initialVoice) == "星莫海",
                   "Same alternatives preserve Apple order before learning")
             try existing.write(toFile: user + "/expected-existing.txt", atomically: true, encoding: .utf8)
-            // Ordinary undo must also survive prior lookup/adoption callbacks.
             ordinaryCommit("zaijian", expected: "再见", undo: true)
             ordinaryCommit("ceshi", expected: "测试", undo: false)
         } else {
@@ -171,7 +167,6 @@ struct AIAdoptionLearningTests {
     }
 
     @MainActor private static func personalManagement(engine: IFEngine) async throws {
-        // Learning acts are counted in a quality store of their own, outside the Rime user directory.
         let scratch = FileManager.default.temporaryDirectory
             .appendingPathComponent("ai-personal-management-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
@@ -225,11 +220,9 @@ struct AIAdoptionLearningTests {
         engine.clear()
         type(engine, "ceshi"); engine.select(0); _ = engine.takeCommit()
         expectError(.busy) { _ = try IFEngine.personalLearningEntries() }
-        // A rejected management read must not finish Rime's immediate-undo transaction.
         engine.key(0xff08)
         try await Task.sleep(for: .milliseconds(4100))
         _ = try IFEngine.personalLearningEntries()
-        // Only the English deletion and its restoration are learning acts: voice aliases and failed undos are not.
         await store.flush()
         IFEngine.configureQualityRecording(nil)
         _ = await store.close()
@@ -237,7 +230,6 @@ struct AIAdoptionLearningTests {
               "Settings deletions count English acts only: \(learningActRows(qualityURL))")
     }
 
-    /// The `candidate_learning` rows of a closed quality store, as `event:count` in insertion order.
     @MainActor private static func learningActRows(_ url: URL) -> [String] {
         var db: OpaquePointer?
         check(sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK)
@@ -325,7 +317,6 @@ struct AIAdoptionLearningTests {
 
     @MainActor private static func learningContract(engine: IFEngine, user: String, scenario: String) throws {
         check(IFEngine.version == "1.17.0", "Learning contract is pinned to bundled librime 1.17.0")
-        // The test-only Lua module answers the channel operation `learning_contract`.
         func request(_ value: String) -> String {
             let fields = value.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
             guard let reply = engine.call("learning_contract", fields, capacity: 4096) else {
@@ -364,10 +355,9 @@ struct AIAdoptionLearningTests {
                 return
             }
             if select {
-                _ = request("selection")  // forget an earlier selection
+                _ = request("selection")
                 engine.select(index)
                 check(engine.takeCommit() == text, "Selected ShadowCandidate keeps display case")
-                // Close Rime's ordinary undo window before querying durable state.
                 engine.key(0xff09)
                 check(request("selection") == "selected", "Memory.memorize must learn selected Phrase")
             } else {
@@ -430,9 +420,6 @@ struct AIAdoptionLearningTests {
         case "contract-ranking-seed":
             check(request("update\tshared\tcodex\tCodex\t1") == "ok", "Seed one unambiguous ranking record")
             expectEntry("shared", "codex", "Codex", "Ranking seed persists")
-            // Pinyin-shaped, so only the technical context can lead it (a technical lead needs a non-Pinyin input).
-            // `agent` is Pinyin up to an unfinished final syllable; `can` is complete Pinyin, which the context
-            // does not lift (rule 14).
             check(request("update\tshared\tagent\tagent\t1") == "ok", "Seed a Pinyin-shaped ranking record")
             expectEntry("shared", "agent", "agent", "Pinyin-shaped ranking seed persists")
             check(request("update\tshared\tcan\tcan\t1") == "ok", "Seed a complete Pinyin ranking record")
@@ -449,8 +436,6 @@ struct AIAdoptionLearningTests {
                   "Seed an exact record after 512 earlier dictionary keys")
             expectEntry("shared", "zzoverflow", "Overflow", "Exact records after 512 keys remain queryable")
         case "contract-mixed-immediate":
-            // Exercise the production mixed translator after a real shared-memory
-            // update in this engine, without recompilation or process restart.
             for (code, text) in [("codex", "Codex"), ("cpp", "C++"), ("offline", "offline")] {
                 check(request("update\tshared\t\(code)\t\(text)\t1") == "ok", "Confirm an exact personal record")
                 for (input, expected) in [(code + "henhao", text + "很好"),
@@ -491,8 +476,6 @@ struct AIAdoptionLearningTests {
             check(codex.hasPrefix("ok\t2\t") && codex.contains("\tCodex\tcodex\t1")
                     && codex.contains("\tCODEX\tcodex\t1"),
                   "All exact display variants remain unchanged: \(codex)")
-            // Display never learns. Selecting a mixed candidate confirms its run once: the C++
-            // sentence is selected once in each of the mixed-read and mixed-restart scenarios.
             for (code, text, commits) in [("swiftui", "SwiftUI", 1), ("cpp", "C++", 3),
                                           ("offline", "offline", 1), ("can", "can", 1)] {
                 let result = query("shared", code)
@@ -555,8 +538,6 @@ struct AIAdoptionLearningTests {
             engine.setPrecedingText("正在使用 Swift ")
             type(engine, "codey"); engine.key(0xff08); type(engine, "x")
             check(engine.snapshot().candidates.first == "Codex", "Editing recomputes bounded evidence ranking")
-            // `codex` is not Pinyin, so it leads in every context (rule 14); `agent` is Pinyin only up to an
-            // unfinished final syllable, so only the context lifts it; `can` is complete Pinyin, so nothing does.
             engine.clear(); engine.setPrecedingText("正在使用 Swift "); type(engine, "agent")
             check(engine.snapshot().candidates.first == "agent",
                   "Personal exact Pinyin-shaped English leads in bounded technical context: \(engine.snapshot().candidates)")
@@ -622,10 +603,7 @@ struct AIAdoptionLearningTests {
               "Selecting displayed personal mixed text commits native candidate exactly")
         engine.key(0xff09)
 
-        // Select a real Chinese prefix, then continue the same composition.
         engine.clear(); type(engine, "woyongcpp")
-        // Ordinary Left uses Rime Rewind and may jump syllables. The keypad
-        // binding explicitly moves by source character to select the wo prefix.
         for _ in 0..<7 { engine.key(0xff96) }
         check(engine.qualitySnapshot().caret == 2, "Caret refers to raw ASCII input positions")
         guard let prefix = engine.snapshot().candidates.firstIndex(of: "我") else {
@@ -672,8 +650,6 @@ struct AIAdoptionLearningTests {
         check(state.rawInput == expected, "Highlight/edit must retain raw input \(expected): \(state.rawInput)")
         check((0...expected.utf8.count).contains(state.caret), "Caret remains within original input")
         if let caret { check(state.caret == caret, "Caret is an input offset, not a display-text offset") }
-        // Native Pinyin may insert syllable spaces or retain apostrophe delimiters.
-        // Neither permits replacing source letters with a fabricated carrier.
         let letters: (String) -> String = { $0.filter { $0 != " " && $0 != "'" } }
         if state.selectedPrefix.isEmpty {
             check(letters(engine.snapshot().preedit) == letters(expected),
@@ -695,7 +671,7 @@ struct AIAdoptionLearningTests {
                 check(row.consumedInputStart == 0 && row.consumedInputEnd == input.utf8.count,
                       "Mixed candidate covers its actual complete input span")
                 if input == "woyongcpp" {
-                    engine.key(0xff51, modifiers: 4) // Native Control-Left syllable navigation.
+                    engine.key(0xff51, modifiers: 4)
                     check(engine.qualitySnapshot().caret == 6,
                           "Native navigation crosses the actual cpp input span, independent of C++ output")
                     check(engine.qualitySnapshot().rawInput == input, "Syllable navigation preserves original input")
@@ -712,8 +688,6 @@ struct AIAdoptionLearningTests {
     }
 
     @MainActor private static func mixedLetterIsolation(engine: IFEngine, shared: String, user: String, learn: Bool) throws {
-        // These native dictionary records cover i/a within normally spelled
-        // syllables and alternate syllable boundaries, beyond the reported words.
         let dictionary = try String(contentsOfFile: shared + "/pinyin_simp.dict.yaml", encoding: .utf8)
         let families = [("时间", "shi jian"), ("知道", "zhi dao"), ("天气", "tian qi"),
                         ("上海", "shang hai"), ("西安", "xi an")]

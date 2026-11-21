@@ -1,10 +1,7 @@
-//! Custom phrases, matching InkFlowDomain/CustomPhrase.swift. Validation failures carry a
-//! stable code; frontends own the localized message.
 use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomPhrase {
-    /// Opaque frontend identity (a UUID on macOS); unique within one configuration.
     pub id: String,
     pub code: String,
     pub text: String,
@@ -12,14 +9,10 @@ pub struct CustomPhrase {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PhraseError {
-    /// The code must be non-empty ASCII letters a–z.
     InvalidCode,
-    /// The text contains a newline, tab or other control character.
     ControlCharacter,
     EmptyText,
-    /// A phrase differs from its validated form or repeats an identity.
     InvalidData,
-    /// The same code and text appear twice.
     Duplicate,
 }
 
@@ -75,9 +68,7 @@ impl CustomPhrase {
     }
 }
 
-/// Rime's custom_phrase.txt: text, code, weight. Earlier phrases outrank later ones.
 pub fn phrase_tsv(phrases: &[CustomPhrase]) -> String {
-    // librime's TSV reader otherwise treats phrases beginning with '#' as comments.
     let mut tsv = String::from("# no comment\n");
     for (index, phrase) in phrases.iter().enumerate() {
         tsv.push_str(&format!(

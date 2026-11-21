@@ -138,7 +138,6 @@ private final class ArchiveClock: @unchecked Sendable {
             _ = try await store.saveIncident(occurredAt: clock.now().addingTimeInterval(-7 * 86_400), clickedAt: clock.now(), note: nil)
             preconditionFailure("Expired incident accepted")
         } catch DiagnosticFeedbackError.expired {}
-        // A fresh process can read the surviving history even though bookkeeping writes fail.
         let failed = LocalDiagnosticStore(directory: directory, now: { clock.now() }, beforeWrite: { throw DiagnosticFeedbackError.unavailable })
         let partial = await failed.snapshot()
         precondition(partial.records.count == 3 && partial.status.availability == .unavailable)

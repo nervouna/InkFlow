@@ -253,7 +253,6 @@ private enum DictionaryStoreRegression {
                   runtimeFingerprint: fingerprint, preparedAt: .distantPast)
         }
 
-        // All three historical journal references remain protected even though their manifests are obsolete.
         let retained = [version(1, "1"), version(1, "2"), version(1, "3")]
         for item in retained { _ = try directory(item.directory) }
         let journal = try IFDictionaryFiles.encode(IFDictionaryState(current: retained[0], previous: retained[1],
@@ -283,7 +282,6 @@ private enum DictionaryStoreRegression {
         }
         protected.append(try directory("candidates/not-a-uuid"))
         protected += retained.map { store.root.appendingPathComponent($0.directory) }
-        // A regular file with an otherwise owned identity must not be recursively removed either.
         let regularFile = store.root.appendingPathComponent(version(1, "9").directory)
         try sentinel.write(to: regularFile)
 

@@ -1,8 +1,6 @@
 import Foundation
 import InkFlowRime
 
-/// A single rollback-first transaction for exactly three native dictionaries and allowlisted preferences.
-/// Atomic writes + file synchronization cover process interruption, not hardware power-loss durability.
 struct PersonalDataTransaction: Sendable {
     struct Journal: Codable, Sendable {
         var phase: String
@@ -38,7 +36,6 @@ struct PersonalDataTransaction: Sendable {
         var originals: [String: Bool] = [:]
         for name in PersonalBackupDocument.names { originals[name] = try PersonalDataFiles.exists(database(name, in: user)) }
         try PersonalDataFiles.directory(root)
-        // Save the original-presence record before moving even staged data into the transaction.
         let journal = Journal(phase: "prepared", originals: originals,
             steps: Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map { ($0, "pending") }),
             rollbackPreferences: rollback, incomingPreferences: incoming)
@@ -75,7 +72,6 @@ struct PersonalDataTransaction: Sendable {
                     if hasLive { try FileManager.default.removeItem(at: live) }
                     try FileManager.default.moveItem(at: old, to: live)
                 } else {
-                    // moving can be interrupted before rename; restoring can be interrupted after rename.
                     guard hasLive, step == "moving" || step == "restoring" else { throw PersonalDataError("original-missing") }
                 }
             } else if hasLive {
@@ -205,8 +201,6 @@ final class PersonalDataController {
                 }
                 try coordinator.restartPersonalData(configuration, restoring: true)
             } catch {
-                // Keep reservation and input unavailable. Application restart resolves the retained journal
-                // before constructing Settings; no additional personal-data transaction can proceed.
                 settings.personalDataRecoveryRequired = true
                 settings.shortcuts.personalDataRecoveryRequired = true
                 coordinator.finishPersonalData()

@@ -32,8 +32,6 @@ struct DeploymentTests {
         let sentinelData = Data("preserve the existing Chinese user dictionary".utf8)
         try sentinelData.write(to: sentinel)
 
-        // Reproduce a bundle built before the old engine's latest deployment.
-        // Preserve user.yaml's last_build_time while making all YAML mtimes older.
         let oldDate = Date(timeIntervalSince1970: 946684800)
         for directory in [admitted, user] {
             let entries = files.enumerator(at: directory, includingPropertiesForKeys: nil)!

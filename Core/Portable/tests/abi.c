@@ -1,7 +1,4 @@
-/* C consumer of the frontend ABI. Arguments: FIXTURE_ROOT SCRATCH [RESOURCES].
- * FIXTURE_ROOT holds shared/ with the tiny probe schema; RESOURCES holds prepared
- * production resources (shared/ and prepared/cache/). */
-#define _POSIX_C_SOURCE 200809L /* sleep() under -std=c11 */
+#define _POSIX_C_SOURCE 200809L
 #include "inkflow_rime.h"
 #include <assert.h>
 #include <stdio.h>
@@ -76,7 +73,6 @@ static IFRBackup* parsed_backup(void) {
   return backup;
 }
 
-/* A format-1 document carrying the given snapshot texts, NULL for an absent dictionary. */
 static const char* dictionary_names[3] = {"pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"};
 
 static char* append_json_string(char* out, const char* text) {
@@ -119,7 +115,6 @@ static void backup_document(char* out, size_t size, const char* const texts[3]) 
   strcpy(out, "}}");
 }
 
-/* The macOS personal-data worker test's synthetic dictionaries. */
 static void synthetic(char* out, size_t size, const char* name, const char* row) {
   snprintf(out, size,
            "# Rime user dictionary\n#@/db_name\t%s\n#@/db_type\tuserdb\n#@/rime_version\t1.17.0\n"
@@ -134,7 +129,6 @@ static size_t line_count(const char* text) {
   return count;
 }
 
-/* Same lines, ignoring order: Rime writes a snapshot in key order. */
 static int same_lines(const char* a, const char* b) {
   if (line_count(a) != line_count(b)) return 0;
   char* padded = malloc(strlen(b) + 2);
@@ -171,7 +165,6 @@ static void backup_checks(const char* scratch) {
   const char* unknown = "{\"format\":1,\"rime\":\"1.17.0\",\"settings\":{},\"dictionaries\":{},\"x\":1}";
   expect(ifr_backup_parse((const uint8_t*)unknown, strlen(unknown), &backup), IFR_UNKNOWN_FIELDS, "unknown field");
   backup = parsed_backup();
-  /* No engine is live: importing absent dictionaries into a fresh directory succeeds. */
   const char* user = path(7, scratch, "import-user");
   expect(ifr_backup_import(backup, user), IFR_OK, "import");
   expect(ifr_personal_recover(user), IFR_OK, "recover");
@@ -193,7 +186,6 @@ static char* read_text(const char* file) {
   return text;
 }
 
-/* Snapshot export on isolated user directories; no engine is live. */
 static void export_checks(const char* fixture, const char* scratch) {
   IFRPersonalExport* exported = (IFRPersonalExport*)1;
   expect(ifr_personal_export(NULL, &exported), IFR_INVALID_ARGUMENT, "null user");
@@ -202,7 +194,6 @@ static void export_checks(const char* fixture, const char* scratch) {
   assert(ifr_personal_export_text(NULL, "pinyin_simp") == NULL);
   ifr_personal_export_free(NULL);
 
-  /* Directories without dictionaries export as explicit absence. */
   const char* user = path(7, scratch, "export-user");
   exported = NULL;
   expect(ifr_personal_export(user, &exported), IFR_OK, "export of an empty directory");
@@ -210,7 +201,6 @@ static void export_checks(const char* fixture, const char* scratch) {
   for (int n = 0; n < 3; ++n) assert(ifr_personal_export_text(exported, dictionary_names[n]) == NULL);
   ifr_personal_export_free(exported);
 
-  /* Restore the synthetic dictionaries, export them and take the export through a document. */
   char texts[3][1024], json[8192], again[8192];
   synthetic(texts[0], sizeof(texts[0]), "pinyin_simp", "ni hao \t你好");
   synthetic(texts[1], sizeof(texts[1]), "inkflow_shared_english", "backupword \tBackupWord");
@@ -227,8 +217,6 @@ static void export_checks(const char* fixture, const char* scratch) {
   assert(text[2] == NULL && "an absent dictionary stays absent");
   assert(ifr_personal_export_text(exported, "unknown") == NULL && ifr_personal_export_text(exported, NULL) == NULL);
   backup_document(again, sizeof(again), text);
-  /* The exported snapshots form a document that parses and restores into another directory,
-   * where they export unchanged. */
   backup = parse_document(again);
   const char* other = path(8, scratch, "export-again");
   expect(ifr_backup_import(backup, other), IFR_OK, "import of the export");
@@ -242,8 +230,6 @@ static void export_checks(const char* fixture, const char* scratch) {
   ifr_personal_export_free(second);
   ifr_personal_export_free(exported);
 
-  /* The Swift personal-data worker restored fixture/swift-user from the same synthetic
-   * snapshots and wrote the .userdb.txt files from it: the same bytes come out here. */
   expect(ifr_personal_export(path(8, fixture, "swift-user"), &exported), IFR_OK, "export of the Swift directory");
   for (int n = 0; n < 3; ++n) {
     char recorded[4096];
@@ -263,8 +249,6 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   assert(ifr_abi_version() == 1);
   expect(ifr_engine_create(NULL, &engine), IFR_INVALID_ARGUMENT, "null config");
   expect(ifr_engine_create(&config, NULL), IFR_INVALID_ARGUMENT, "null out");
-  /* The probe schema compiles through the real runtime; the engine then rejects the
-   * missing production dictionary and finalizes Rime before returning. */
   expect(ifr_engine_create(&config, &engine), IFR_RESOURCE, "fixture engine");
   assert(engine == NULL && strstr(ifr_last_error(), "pinyin_simp") != NULL);
   expect(ifr_engine_create(&config, &engine), IFR_RESOURCE, "fixture engine again");
@@ -280,11 +264,8 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   ifr_snapshot_free(NULL);
   ifr_string_free(NULL);
 
-  /* Rime version: the linked librime's, with no engine. */
   assert(strcmp(ifr_rime_version(), "1.17.0") == 0);
 
-  /* Compile deploys the fixture's probe schema, then rejects the missing production files;
-   * probe needs the production schema. Neither keeps Rime initialized. */
   const char* compiler = path(9, scratch, "fixture-compile-user");
   const char* cache = path(10, scratch, "fixture-compile-cache");
   expect(ifr_resources_compile(path(0, fixture, "shared"), compiler, cache), IFR_RESOURCE, "fixture compile");
@@ -294,7 +275,6 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   expect(ifr_resources_compile(path(0, fixture, "shared"), NULL, cache), IFR_INVALID_ARGUMENT, "null user");
   expect(ifr_resources_probe(path(0, fixture, "shared"), compiler, "bad\xff"), IFR_INVALID_ARGUMENT, "bad cache");
 
-  /* Engine-bound maintenance rejects a missing engine and answers neutrally. */
   IFRLearning* learning = (IFRLearning*)1;
   IFRLearningUndo* undo = (IFRLearningUndo*)1;
   expect(ifr_personal_learning_entries(NULL, &learning), IFR_INVALID_ARGUMENT, "entries without an engine");
@@ -308,7 +288,6 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   ifr_learning_undo_free(NULL);
   assert(ifr_session_requested_ascii_mode(NULL) == 0);
 
-  /* AI, voice and quality hooks reject a missing session, write no output and answer neutrally. */
   IFRReply* reply = (IFRReply*)1;
   expect(ifr_session_call(NULL, "voice_aliases", NULL, 0, 512, &reply), IFR_INVALID_ARGUMENT, "call without a session");
   assert(reply == (IFRReply*)1 && "outputs are written only on success");
@@ -360,7 +339,6 @@ static void resource_checks(const char* resources, const char* scratch) {
   expect(ifr_session_set_configuration(session, 9, phrases, 1, NULL), IFR_OK, "reconfigure");
   assert(ifr_session_configuration_error(session) == NULL);
 
-  /* Composition, UTF-8 byte offsets, token-identified selection and commit draining. */
   assert(take(session) == NULL);
   type_text(session, "nihao");
   IFRSnapshot* shown = NULL;
@@ -374,6 +352,10 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(ifr_snapshot_candidate_comment(shown, 0) != NULL);
   assert(ifr_snapshot_candidate_text(shown, 9) == NULL && ifr_snapshot_highlighted(shown) == 0);
   int handled = 0;
+  IFRSnapshot* changed = NULL;
+  expect(ifr_session_key(session, 'o', 1 << 30, &handled), IFR_OK, "letter release");
+  expect(ifr_session_snapshot_if_changed(session, shown, &changed), IFR_OK, "unchanged release");
+  assert(changed == NULL);
   expect(ifr_session_select(session, shown, 9, &handled), IFR_INVALID_CANDIDATE, "out of range");
   expect(ifr_session_select(session, shown, 0, &handled), IFR_OK, "select");
   assert(handled == 1);
@@ -385,7 +367,6 @@ static void resource_checks(const char* resources, const char* scratch) {
   expect(ifr_session_highlight(session, shown, 0), IFR_STALE_SNAPSHOT, "stale highlight");
   ifr_snapshot_free(shown);
 
-  /* Paging, digit selection and highlight through the policy layer. */
   type_text(session, "shi");
   IFRSnapshot* first = NULL;
   expect(ifr_session_snapshot(session, &first), IFR_OK, "first page");
@@ -397,9 +378,14 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(strcmp(ifr_snapshot_candidate_text(next, 0), ifr_snapshot_candidate_text(first, 0)) != 0);
   ifr_snapshot_free(next);
   expect(ifr_session_change_page(session, 1, &handled), IFR_OK, "page up");
-  expect(ifr_session_snapshot(session, &next), IFR_OK, "back on first page");
+  expect(ifr_session_snapshot_if_changed(session, first, &next), IFR_OK, "revisited page needs a new token");
+  assert(next != NULL);
+  expect(ifr_session_select(session, first, 0, &handled), IFR_STALE_SNAPSHOT, "old page stays stale");
   assert(ifr_snapshot_page(next) == 0);
   expect(ifr_session_highlight(session, next, 2), IFR_OK, "highlight");
+  expect(ifr_session_snapshot_if_changed(session, next, &changed), IFR_OK, "changed highlight");
+  assert(changed != NULL && ifr_snapshot_highlighted(changed) == 2);
+  ifr_snapshot_free(changed);
   ifr_snapshot_free(next);
   expect(ifr_session_snapshot(session, &next), IFR_OK, "highlighted");
   assert(ifr_snapshot_highlighted(next) == 2);
@@ -414,7 +400,6 @@ static void resource_checks(const char* resources, const char* scratch) {
   ifr_string_free(commit);
   ifr_snapshot_free(first);
 
-  /* Custom phrases, preceding text, commit, clear and ASCII mode. */
   type_text(session, "dz");
   expect(ifr_session_snapshot(session, &shown), IFR_OK, "phrase page");
   assert(strcmp(ifr_snapshot_candidate_text(shown, 0), "地址") == 0);
@@ -448,11 +433,9 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(observed.count == before);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  /* Personal-data import waits for every engine reference, including live sessions. */
   IFRBackup* backup = parsed_backup();
   expect(ifr_backup_import(backup, user), IFR_ENGINE_ACTIVE, "import while live");
 
-  /* The session keeps the engine alive after the caller drops its reference. */
   ifr_engine_destroy(engine);
   type_text(session, "nihao");
   expect(ifr_session_snapshot(session, &shown), IFR_OK, "after engine release");
@@ -468,7 +451,6 @@ static void resource_checks(const char* resources, const char* scratch) {
   puts("PASS C ABI: engine/session lifetime, keys, snapshots, selection, paging, commits, configuration");
 }
 
-/* Type `input` and choose the candidate `target`; the commit must be exactly `target`. */
 static void choose(const IFRSession* session, const char* input, const char* target) {
   type_text(session, input);
   IFRSnapshot* shown = NULL;
@@ -503,8 +485,6 @@ static size_t entry_index(const IFRLearning* learning, int source, const char* t
   return (size_t)-1;
 }
 
-/* Maintenance operations on production resources: personal learning, requested ASCII,
- * probe and compile. The seeded dictionaries are the macOS worker test's synthetic ones. */
 static void maintenance_checks(const char* resources, const char* scratch) {
   const char* user = path(9, scratch, "maintenance-user");
   char texts[3][1024], json[8192];
@@ -523,7 +503,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   uint32_t options = ifr_input_options_default();
   expect(ifr_session_set_configuration(session, 9, NULL, 0, &options), IFR_OK, "configure");
 
-  /* Entries: both namespaces, sorted by source then code, with the seeded counts. */
   IFRLearning* learning = learning_entries(engine);
   assert(ifr_learning_count(learning) == 2);
   assert(ifr_learning_source(learning, 0) == IFR_LEARNING_ENGLISH &&
@@ -535,7 +514,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   assert(ifr_learning_source(learning, 2) == -1 && ifr_learning_code(learning, 2) == NULL);
   assert(ifr_learning_text(learning, 2) == NULL && ifr_learning_commits(learning, 2) == 0);
 
-  /* Delete returns an undo token; the listing it came from is then stale. */
   IFRLearningUndo* undo = (IFRLearningUndo*)1;
   expect(ifr_personal_learning_delete(engine, learning, 2, &undo), IFR_INVALID_ARGUMENT, "index out of range");
   expect(ifr_personal_learning_delete(engine, NULL, 0, &undo), IFR_INVALID_ARGUMENT, "no listing");
@@ -549,7 +527,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   learning = learning_entries(engine);
   assert(ifr_learning_count(learning) == 1 && entry_index(learning, IFR_LEARNING_VOICE, "备份别名") == (size_t)-1);
 
-  /* Undo restores with one more confirmation, once. */
   expect(ifr_personal_learning_undo(engine, undo), IFR_OK, "undo");
   expect(ifr_personal_learning_undo(engine, undo), IFR_CONFLICT, "undo twice");
   expect(ifr_personal_learning_undo(engine, NULL), IFR_INVALID_ARGUMENT, "no undo token");
@@ -559,12 +536,10 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   assert(ifr_learning_count(learning) == 2 && voice != (size_t)-1 && ifr_learning_commits(learning, voice) == 8);
   ifr_learning_undo_free(undo);
 
-  /* Invalidation supersedes every captured listing. */
   expect(ifr_personal_learning_invalidate(engine), IFR_OK, "invalidate");
   expect(ifr_personal_learning_delete(engine, learning, 0, &stale), IFR_CONFLICT, "invalidated listing");
   ifr_learning_free(learning);
 
-  /* Management waits for an idle engine: composition, then Rime's native undo window. */
   type_text(session, "ni");
   learning = NULL;
   expect(ifr_personal_learning_entries(engine, &learning), IFR_BUSY, "composition");
@@ -576,7 +551,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   learning = learning_entries(engine);
   ifr_learning_free(learning);
 
-  /* Requested ASCII mode is the caller's request, ahead of Rime's live switch. */
   assert(ifr_session_requested_ascii_mode(session) == 0);
   type_text(session, "ni");
   expect(ifr_session_set_ascii_mode(session, 1), IFR_OK, "ascii request");
@@ -593,7 +567,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   expect(ifr_session_toggle_ascii_mode(session, &handled), IFR_OK, "toggle back");
   assert(ifr_session_requested_ascii_mode(session) == 0);
 
-  /* Resource maintenance and personal export stay out of a live engine's way. */
   const char* probe_user = path(10, scratch, "maintenance-probe-user");
   expect(ifr_resources_probe(path(3, resources, "shared"), probe_user, path(4, resources, "prepared/cache")),
          IFR_ALREADY_RUNNING, "probe beside a live engine");
@@ -605,8 +578,6 @@ static void maintenance_checks(const char* resources, const char* scratch) {
   ifr_session_destroy(session);
   ifr_engine_destroy(engine);
 
-  /* Probe the prepared cache with a clean user directory, compile the production sources
-   * into a fresh one and probe that too, then export what the engine kept. */
   expect(ifr_resources_probe(path(3, resources, "shared"), probe_user, path(4, resources, "prepared/cache")),
          IFR_OK, "probe");
   const char* fresh = path(11, scratch, "maintenance-cache");
@@ -631,7 +602,6 @@ static IFRReply* call_reply(const IFRSession* session, const char* op, const cha
   return reply;
 }
 
-/* Run `op`, which must be answered with `status` and exactly `body`. */
 static void call_is(const IFRSession* session, const char* op, const char* const* fields, size_t count,
                     const char* status, const char* body) {
   IFRReply* reply = call_reply(session, op, fields, count, 4096);
@@ -663,8 +633,6 @@ static IFRSnapshot* snapshot_of(const IFRSession* session) {
   return snapshot;
 }
 
-/* The channel, learning revision, raw caret, quality evidence and unobserved clear on production
- * resources. Seeds go through voice learning, as the macOS voice feature does. */
 static void hooks_checks(const char* resources, const char* scratch) {
   IFREngine* engine = production(resources, path(9, scratch, "hooks-user"));
   IFRSession* session = NULL;
@@ -672,14 +640,12 @@ static void hooks_checks(const char* resources, const char* scratch) {
   uint32_t options = ifr_input_options_default();
   expect(ifr_session_set_configuration(session, 9, NULL, 0, &options), IFR_OK, "configure");
 
-  /* The channel: a module answers its own operations with a status and a body. */
   call_is(session, "learning_invalidate", NULL, 0, "ok", "");
   call_is(session, "voice_aliases", NULL, 0, "ok", "");
   const char* invalid[] = {"bad code", "你好"};
   call_is(session, "ai_learning", invalid, 2, "failed", "");
   const char* range[] = {"0", "3"};
   call_is(session, "input_coverage", range, 2, "failed", "");
-  /* No reply, which is a status of its own: no module, a reply that does not fit, an unframable request. */
   expect_no_reply(session, "no_such_operation", NULL, 0, 512);
   expect_no_reply(session, "voice_aliases", NULL, 0, 8);
   expect_no_reply(session, "Not-An-Op", NULL, 0, 512);
@@ -699,7 +665,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   expect(ifr_session_call(session, "voice_aliases", NULL, 0, (size_t)-1, &reply), IFR_INVALID_ARGUMENT, "capacity");
   assert(reply == (IFRReply*)1 && "outputs are written only on success");
 
-  /* Voice learning updates both English namespaces; the alias is readable with its native count. */
   const char* correction[] = {"codux", "codex", "Codex"};
   const char* other[] = {"swiftux", "swiftui", "SwiftUI"};
   const char* malformed[] = {"co dux", "codex", "Codex"};
@@ -708,8 +673,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   call_is(session, "voice_learning", other, 3, "ok", "");
   call_is(session, "voice_aliases", NULL, 0, "ok", "codux\tCodex\t1\nswiftux\tSwiftUI\t1\n");
 
-  /* Every learning write below leaves the entry a listing is later used on untouched, so only the
-   * learning revision can supersede that listing or its undo token. A failed learn changes nothing. */
   IFRLearning* learning = learning_entries(engine);
   assert(ifr_learning_count(learning) == 4);
   size_t swift = entry_index(learning, IFR_LEARNING_ENGLISH, "SwiftUI");
@@ -733,7 +696,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_learning_undo_free(undo);
   ifr_learning_free(learning);
 
-  /* AI adoption learns into the ordinary Chinese dictionary, which no listing shows, and supersedes too. */
   learning = learning_entries(engine);
   const char* adoption[] = {"xing mo liang ", "星墨量"};
   call_is(session, "ai_learning", adoption, 2, "ok", "");
@@ -746,8 +708,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_learning_undo_free(undo);
   ifr_learning_free(learning);
 
-  /* Clearing English learning removes both namespaces and supersedes an undo token that the cleared
-   * counts alone would still accept. */
   learning = learning_entries(engine);
   expect(ifr_personal_learning_delete(engine, learning, 0, &undo), IFR_OK, "delete before the clear");
   ifr_learning_free(learning);
@@ -759,7 +719,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_learning_free(learning);
   call_is(session, "voice_aliases", NULL, 0, "ok", "");
 
-  /* Raw caret: bytes of the raw input, apart from the preedit caret, which counts the displayed spaces. */
   call_is(session, "voice_learning", correction, 3, "ok", "");
   type_text(session, "nihao");
   IFRSnapshot* shown = snapshot_of(session);
@@ -777,7 +736,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  /* Quality evidence: native position and rank, and the personal-learning source with its input span. */
   type_text(session, "codex");
   shown = snapshot_of(session);
   size_t codex = candidate_index(shown, "Codex");
@@ -812,8 +770,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  /* Ordering changes the display, not the native evidence: a technical context moves the personal
-   * exact word to the front while it keeps its native position. */
   expect(ifr_session_set_preceding_text(session, "正在使用 Swift "), IFR_OK, "technical context");
   type_text(session, "codex");
   shown = snapshot_of(session);
@@ -824,7 +780,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  /* Later pages count from the first: rank = page * page size + native index + 1. */
   type_text(session, "shi");
   expect(ifr_session_change_page(session, 0, &handled), IFR_OK, "page down");
   shown = snapshot_of(session);
@@ -835,7 +790,6 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  /* The unobserved clear empties the composition without a mutation for the observer. */
   Observed observed = {0, ifr_session_id(session), 0};
   expect(ifr_engine_set_observer(engine, observe, &observed), IFR_OK, "observer");
   type_text(session, "nihao");

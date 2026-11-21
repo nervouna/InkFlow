@@ -1,4 +1,3 @@
-//! Offline dictionary generation. Inputs and provenance are supplied by the caller.
 mod context;
 mod ffi;
 mod model;
@@ -29,7 +28,6 @@ struct Value {
 }
 type Rows = HashMap<Key, Value>;
 
-// Foundation's whitespace sets are part of the existing parser contract.
 fn whitespace(c: char) -> bool {
     matches!(
         c as u32,
@@ -40,8 +38,6 @@ fn whitespace_or_newline(c: char) -> bool {
     whitespace(c) || matches!(c as u32, 0x0a..=0x0d | 0x85 | 0x2028 | 0x2029)
 }
 
-// Swift splits on the LF Character, so the CRLF grapheme is not a separator.
-// Preserve that behavior during migration rather than silently accepting new input.
 fn lines(input: &str) -> impl Iterator<Item = &str> {
     let mut position = 0;
     std::iter::from_fn(move || {
@@ -103,7 +99,6 @@ fn row(fields: &[&str], source: &str, line: usize) -> Result<(Key, Value)> {
         return Err(Error::new("source-format").at(source, Some(line)));
     }
     let reading = normalized_reading(fields[1]).map_err(|e| e.at(source, Some(line)))?;
-    // Swift String keys compare canonically, while output retains the first spelling.
     Ok((
         Key {
             text: text.nfc().collect(),

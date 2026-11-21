@@ -3,9 +3,7 @@ import Foundation
 import CryptoKit
 import Darwin
 
-/// All paths originate locally; no source-supplied path is ever joined to a filesystem root.
 package enum IFDictionaryFiles {
-    /// Foundation collapses /private aliases differently before and after creation; use filesystem identity instead.
     package static func canonical(_ url: URL) throws -> URL {
         guard let resolved = realpath(url.path, nil) else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .ENOENT) }
         defer { free(resolved) }
@@ -47,7 +45,6 @@ package enum IFDictionaryFiles {
               try url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink != true else { throw IFDictionaryUpdateError(.verify, "nonregular-file") }
         let file = try FileHandle(forReadingFrom: url); defer { try? file.close() }
         var hash = SHA256()
-        // One reused buffer: FileHandle chunks are autoreleased and would all stay resident until the caller's pool drains.
         var buffer = [UInt8](repeating: 0, count: 1_048_576)
         while true {
             let count = buffer.withUnsafeMutableBytes { read(file.fileDescriptor, $0.baseAddress, $0.count) }
@@ -66,7 +63,6 @@ package enum IFDictionaryFiles {
         let file = try FileHandle(forWritingTo: temporary)
         do { try file.synchronize(); try file.close() } catch { try? file.close(); throw error }
         guard rename(temporary.path, url.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        // The rename is the commit boundary. A subsequent durability hint cannot report an uncommitted transaction.
         let descriptor = open(url.deletingLastPathComponent().path, O_RDONLY)
         if descriptor >= 0 { _ = fsync(descriptor); close(descriptor) }
     }
@@ -112,15 +108,12 @@ package init(contentVersion: String, runtimeFingerprint: String, preparedAt: Dat
         self.activatedAt = activatedAt; self.artifactID = artifactID
     }
     package var directory: String { "versions/\(contentVersion)-\(runtimeFingerprint)-\(artifactID)" }
-    /// Recipes advance consecutively from 1; accept only canonical generations this app knows.
     package static func recognizesRecipe(_ prefix: String) -> Bool {
         guard prefix.first == "r", let recipe = Int(prefix.dropFirst()),
               recipe >= 1, recipe <= IFDictionaryCatalog.recipeVersion else { return false }
         return prefix == "r\(recipe)"
     }
     package func validate() throws {
-        // Keep historical journal identities readable so startup can reject incompatible
-        // manifests and confirm the new bundled dictionary through normal recovery.
         let parts = contentVersion.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 2, Self.recognizesRecipe(String(parts[0])),
               IFDictionaryHash.isHex(String(parts[1]), length: 64),
@@ -202,11 +195,9 @@ package struct IFDictionaryDescriptor: Sendable {
 
 }
 
-/// The update coordinator serializes mutations. Atomic state always keeps the last confirmed pointer.
 package struct IFDictionaryStore: Sendable {
     package let root: URL
     package var beforeStateWrite: @Sendable (IFDictionaryState) throws -> Void = { _ in }
-    /// Observes completed file hashing without replacing filesystem reads or validation.
     package var didHashFile: @Sendable (URL) -> Void = { _ in }
     package init(root: URL, beforeStateWrite: @escaping @Sendable (IFDictionaryState) throws -> Void = { _ in }) throws {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -244,7 +235,6 @@ package struct IFDictionaryStore: Sendable {
         if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
     }
     private struct Observation: Codable { let contentVersion: String; let receipts: [IFDictionarySourceReceipt] }
-    /// Save only after generation proves the sources produce the currently active content.
     package func recordContentUnchanged(_ manifest: IFDictionaryManifest, activeContentVersion: String) throws {
         guard manifest.contentVersion == activeContentVersion, manifest.sources.map(\.id) == IFDictionaryCatalog.sources.map(\.id) else {
             throw IFDictionaryUpdateError(.check, "observation-content")
@@ -278,14 +268,11 @@ package struct IFDictionaryStore: Sendable {
         return .init(version: version, manifest: manifest,
                      sharedData: directory.appendingPathComponent("shared"), cache: directory.appendingPathComponent("cache"))
     }
-    /// Inert source data for rebuilding with CURRENT app-owned schemas, Lua and correction policy.
     package func storedDictionary(_ version: IFDictionaryVersion) throws -> URL {
         try version.validate()
         let directory = try IFDictionaryFiles.child(version.directory + "/shared", in: root)
         let stored = try IFDictionaryFiles.decode(IFDictionaryManifest.self, at: IFDictionaryFiles.child(IFDictionaryManifest.filename, in: directory))
         if stored.recipeVersion != IFDictionaryCatalog.recipeVersion {
-            // An older recipe regenerates only from retained raw sources of the current catalog. Anything
-            // else can never rebuild, so recovery drops it instead of retrying forever.
             let raw = try IFDictionaryFiles.child(version.directory + "/raw", in: root)
             guard stored.contentVersion == version.contentVersion, stored.sources.map(\.id) == IFDictionaryCatalog.sources.map(\.id),
                   FileManager.default.fileExists(atPath: raw.path) else { throw IFDictionaryUpdateError(.recovery, "artifact-obsolete") }
@@ -302,7 +289,6 @@ package struct IFDictionaryStore: Sendable {
         _ = try resolve(version, fingerprint: version.runtimeFingerprint)
         try beginValidatedActivation(version)
     }
-    /// Caller already resolved the immutable artifact in this serialized operation. Compact journal write only.
     package func beginValidatedActivation(_ version: IFDictionaryVersion) throws {
         try version.validate()
         var state = try state()
@@ -319,7 +305,6 @@ package struct IFDictionaryStore: Sendable {
     package func abandonActivation() throws {
         var state = try state(); state.pending = nil; state.transaction = nil; try save(state)
     }
-    /// Never retries interrupted pending work. T3 selects fallback when confirmed cache is unavailable.
     package func recoverInterrupted() throws -> IFDictionaryState {
         var state = try state()
         if state.pending != nil { state.pending = nil; state.transaction = nil; try save(state) }
@@ -329,7 +314,6 @@ package struct IFDictionaryStore: Sendable {
         _ = try resolve(version, fingerprint: version.runtimeFingerprint)
         try confirmValidatedFallback(version)
     }
-    /// Caller has validated the artifact and successfully started its engine/sessions. No cache hashing here.
     package func confirmValidatedFallback(_ version: IFDictionaryVersion) throws {
         try version.validate()
         var state = try state(); state.current = version; state.bundled = nil; state.pending = nil; state.transaction = nil
@@ -342,7 +326,6 @@ package struct IFDictionaryStore: Sendable {
         }
         try save(state)
     }
-    /// Repair an unreadable journal only after the bundled engine has actually started.
     package func repairBundled(_ manifest: IFDictionaryManifest, now: Date = Date()) throws {
         try Self.validateMetadata(manifest)
         var fresh = IFDictionaryState()
@@ -350,8 +333,6 @@ package struct IFDictionaryStore: Sendable {
         try save(fresh)
     }
 
-    /// Bounded housekeeping within the owned store. Never visits the learning/custom-phrase root.
-    /// Serialize with other store mutations and run off MainActor while input is served.
     @discardableResult
     package func cleanup(limit: Int = 32) throws -> Int {
         let state = try state()
@@ -369,7 +350,6 @@ package struct IFDictionaryStore: Sendable {
                 let valid: Bool
                 if name == "candidates" { valid = UUID(uuidString: entry.lastPathComponent) != nil }
                 else {
-                    // version directory = rN-contentSHA-runtimeSHA-UUID, all generated locally.
                     let parts = entry.lastPathComponent.split(separator: "-", maxSplits: 3, omittingEmptySubsequences: false).map(String.init)
                     valid = parts.count == 4 && IFDictionaryVersion.recognizesRecipe(parts[0]) &&
                         IFDictionaryHash.isHex(parts[1], length: 64) && IFDictionaryHash.isHex(parts[2], length: 64) &&

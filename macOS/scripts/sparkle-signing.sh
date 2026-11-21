@@ -1,6 +1,4 @@
 #!/bin/bash
-# Sparkle 2.10 ships these nested targets. Keep its upstream bundle intact.
-# Source this helper; signing flags are supplied by the caller's artifact mode.
 sparkle_components() {
   local framework="$1/Contents/Frameworks/Sparkle.framework"
   printf '%s\n' "$framework/Versions/B/XPCServices/Installer.xpc" \
@@ -19,7 +17,6 @@ sign_sparkle() {
   local app=$1 component
   shift
   check_sparkle_components "$app" || return 1
-  # Inside out; Downloader can carry upstream entitlements of its own.
   while IFS= read -r component; do
     if [[ "$component" == */Downloader.xpc ]]; then
       codesign --force "$@" --preserve-metadata=entitlements "$component" || return 1
@@ -35,7 +32,6 @@ verify_sparkle_developer_id() {
   while IFS= read -r component; do
     codesign --verify --strict "$component" || return 1
     metadata=$(codesign -dvvv "$component" 2>&1) || return 1
-    # Here-strings, not pipes: grep -q exits at the match, and under pipefail the writer's SIGPIPE fails the check.
     grep -Fxq "TeamIdentifier=$expected_team" <<< "$metadata" || {
       echo "Unexpected Sparkle signing team: $component" >&2; return 1;
     }

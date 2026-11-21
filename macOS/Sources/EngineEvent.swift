@@ -9,7 +9,6 @@ extension IFEngine {
         guard available else { return false }
         let flags = event.modifierFlags
         guard flags.intersection([.command, .control, .option]).isEmpty else {
-            // Cmd+Z and Cmd+V reach Rime as unsupported keys like every other chord; the recorder tells them apart.
             let chord = flags.intersection([.command, .control, .option, .shift])
             let key: Int32 = switch (chord == .command, Int(event.keyCode)) {
             case (true, kVK_ANSI_Z): -3

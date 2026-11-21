@@ -1,6 +1,5 @@
 import Foundation
 
-/// Disposable readings from the active generated dictionary, never a second user dictionary.
 package struct AIPronunciation: Sendable {
     private let phrases: [String: Set<String>]
     private let characters: [Character: Set<String>]
@@ -10,7 +9,6 @@ package struct AIPronunciation: Sendable {
         self.characters = characters
     }
 
-    /// One recommendation's native readings; no corpus scan or persistent index.
     package init(text: String, nativeReadings: String) {
         var phrases: [String: Set<String>] = [:], characters: [Character: Set<String>] = [:]
         for line in nativeReadings.split(separator: "\n") {
@@ -28,7 +26,6 @@ package struct AIPronunciation: Sendable {
 
     private func phraseReadings(_ text: String) -> Set<String> { phrases[text] ?? [] }
 
-    /// Returns one supported reading only. Equal-cost alternatives remain ambiguous.
     package func resolve(input: String, text: String, preferences: InputPreferences = .init()) -> String? {
         let codes = matchingCodes(input: input, text: text, preferences: preferences)
         return codes.count == 1 ? codes.first : nil
@@ -43,7 +40,6 @@ package struct AIPronunciation: Sendable {
         let readings = text.map { Array(characters[$0] ?? []).sorted() }
         let alternatives = exact + (readings.allSatisfy({ !$0.isEmpty }) ? [readings] : [])
         guard !alternatives.isEmpty else { return [] }
-        // Learning permits isolated edits, not a rewrite. This never gates recommendation display.
         let budget = preferences[.typoTolerance] ? min(2, max(1, units.count / 8)) : 0
         var best = Int.max, winners = Set<String>()
         for (alternativeIndex, readings) in alternatives.enumerated() {
@@ -74,7 +70,6 @@ package struct AIPronunciation: Sendable {
                             } else if total == next[target]!.cost {
                                 next[target]!.codes.formUnion(codes)
                             }
-                            // Two distinct paths suffice to preserve ambiguity without exponential storage.
                             if next[target]!.codes.count > 2 { next[target]!.codes = Set(next[target]!.codes.sorted().prefix(2)) }
                         }
                     }
@@ -85,15 +80,11 @@ package struct AIPronunciation: Sendable {
                 if state.cost < best { best = state.cost; winners = state.codes }
                 else if state.cost == best { winners.formUnion(state.codes) }
             }
-            // A dictionary phrase can disambiguate abbreviation, but cannot replace an
-            // explicitly typed alternative reading with a corrected dictionary reading.
             if alternativeIndex == exact.count - 1 && best == 0 { return winners }
         }
         return winners
     }
 
-    /// Reject only positive evidence of continuation: a proper output prefix already
-    /// exactly consumes the full spelling, and the complete output has no alignment.
     package func isClearExpansion(input: String, text: String, preferences: InputPreferences = .init()) -> Bool {
         let content = text.filter { character in
             !character.unicodeScalars.allSatisfy { CharacterSet.punctuationCharacters.contains($0) || CharacterSet.whitespaces.contains($0) }

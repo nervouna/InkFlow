@@ -20,7 +20,7 @@ import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'
 REPOSITORY = Path(__file__).resolve().parents[4]
-BUSY_SECONDS = 5  # How long a query waits for a writer that holds the store.
+BUSY_SECONDS = 5
 KINDS = ('chinese', 'english', 'emoji', 'mixed', 'symbol', 'number', 'other', 'unknown')
 TABLE_COLUMNS = {
     'recording_runs': 'id started_at ended_at status engine_version build_metadata_json metric_rule_version stats_json error_code',
@@ -36,24 +36,20 @@ TABLE_COLUMNS = {
                             'selected_character_count'),
     'effectiveness_events': 'id run_id occurred_at source event reason count milliseconds',
 }
-# A first page belongs to a snapshot when these agree.
 SAME_GENERATION_FIELDS = ('generation', 'rawInput', 'caret', 'selectedPrefix', 'selectedPrefixValid',
                           'precedingContext', 'configurationRevisionID', 'pageSize')
 GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'text_kind', 'presentation')
 ISSUE_GROUP = ('ranking_fingerprint', 'measurement_fingerprint', 'raw_input', 'caret', 'selected_prefix', 'selected_prefix_valid',
                'preceding_context', 'first_page_top1', 'selected_text', 'text_kind', 'matches_custom_phrase')
-# Post-commit windows ride the composition that follows their commit: one `windows` row per commit.
 WINDOW_KEYS = {'commit_id': 'commitID', 'end': 'end', 'elapsed_ms': 'elapsedMilliseconds', 'deletions': 'deletions',
                'forward_deletions': 'forwardDeletions', 'undo': 'undo', 'direct_text': 'directText',
                'paste': 'paste', 'leading_deletions': 'leadingDeletions',
                'leading_forward_deletions': 'leadingForwardDeletions', 'leading_undo': 'leadingUndo'}
 WINDOW_ENDS = ('next_code', 'client_changed', 'deactivated', 'timeout')
-# C-rev: a window `w` whose commit was taken back at once, by Cmd+Z or by Backspaces over every committed character.
 REVERTED = '(w.leading_undo>=1 OR (character_count>0 AND w.leading_deletions>=character_count))'
 WINDOW_COLUMNS = ', '.join(f'w."{column}" AS window_{column}' for column in WINDOW_KEYS if column != 'commit_id')
 OPERATIONS = {'keypresses': 'keypresses', 'page_requests': 'pageRequests', 'page_turns': 'pageTurns',
               'candidate_moves': 'candidateMoves', 'preedit_edits': 'preeditEdits'}
-# Candidate `type` sets of the L metrics (docs/input-quality-metrics.md section 6): instrument constants of the rule.
 LEARNED_TYPES = ('user_phrase', 'english_personal_1', 'english_personal_2', 'english_personal_3',
                  'mixed_personal_0', 'mixed_personal_1', 'mixed_personal_2', 'mixed_personal_3')
 DICTIONARY_TYPES = ('phrase', 'user_table')
@@ -94,14 +90,12 @@ COUNTERS = {
 }
 SCORECARD_COUNTERS = ('onekey_selected', 'misses', 'learned_misses', 'misses_with_provenance', 'learned_leader',
                       'learned_leader_missed', 'dictionary_leader', 'dictionary_leader_missed')
-# rate: (numerator counters, denominator counters, prefix of its Wilson interval or None); counters are summed.
 DECISION_RATES = {
     'onekey_rate': (('onekey_selected',), ('valid',), 'onekey'),
     'learned_miss_share': (('learned_misses',), ('misses',), 'learned_miss'),
     'learned_leader_miss_rate': (('learned_leader_missed',), ('learned_leader',), 'learned_leader_miss'),
     'dictionary_leader_miss_rate': (('dictionary_leader_missed',), ('dictionary_leader',), 'dictionary_leader_miss'),
 }
-# One row per selected composition (`scored_compositions` in `ctes`); a mean or a ratio has no interval.
 CODE_COMPOSITION = "(decisions>0 OR outcome IN ('cancelled','interrupted') OR code_commits>0)"
 REGULAR_COMPOSITION = "(outcome='committed' AND valid_decisions>0)"
 KSPC_COMPOSITION = f'({REGULAR_COMPOSITION} AND text_captured=1)'
@@ -128,9 +122,7 @@ COMPOSITION_RATES = {
     'raw_commit_rate': (('raw_return_commits',), ('candidate_commits', 'raw_return_commits'), 'raw_commit'),
     'revert_rate': (('reverted_commits',), ('commits_with_window',), 'revert'),
 }
-# Most cancels and raw Returns have no decision, so no kind: a kind series would read near 0 for these.
 OVERALL_ONLY_RATES = ('cancel_rate', 'preedit_edit_rate', 'raw_commit_rate')
-# A `candidate` commit's composition always has a decision, so this rate also reads true under `--kind`.
 KIND_FILTER_RATES = ('revert_rate',)
 
 
@@ -148,7 +140,6 @@ def timestamp(value):
             if parsed.tzinfo is None:
                 raise ValueError('timestamp needs Z or an explicit UTC offset')
         utc = parsed.astimezone(timezone.utc)
-        # The writer stores milliseconds. Preserve finer filter precision when supplied.
         precision = 'milliseconds' if utc.microsecond % 1000 == 0 else 'microseconds'
         return utc.isoformat(timespec=precision).replace('+00:00', 'Z')
     except ValueError as error:
@@ -169,13 +160,9 @@ def connect(path):
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise QueryError(f'Database does not exist: {path}. Record input first, or pass --db PATH.')
-    # Queries run on a private in-memory copy. The store uses a rollback journal, so a reader on the file itself
-    # would block the input method's quality writes for as long as the query takes.
     db = sqlite3.connect(':memory:')
     try:
         with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=BUSY_SECONDS)) as source:
-            # `backup` retries a busy source without limit. Taking the read lock first fails after the timeout, and
-            # the copy then runs under that lock.
             source.execute('BEGIN')
             source.execute('SELECT COUNT(*) FROM sqlite_master').fetchone()
             source.backup(db)
@@ -230,8 +217,6 @@ def windows_cte(args):
     """One row per commit, with the commit named as the database names it: exports prefix every id with its source.
     `carrier_id` is the composition that holds the window, the one that followed the commit."""
     combined = getattr(args, 'input', None) or getattr(args, 'exports_only', False) or getattr(args, 'source', None)
-    # `commit_id` is cast so it has the TEXT affinity of the ids it joins: without one, SQLite builds no automatic
-    # index on this table and scans every window for every decision.
     commit = ("c.source_id || ':' || " if combined else '') + "json_extract(w.value,'$.commitID')"
     select = ', '.join(f'CAST({commit} AS TEXT) AS commit_id' if column == 'commit_id'
                        else f"json_extract(w.value,'$.{key}') AS \"{column}\"" for column, key in WINDOW_KEYS.items())
@@ -414,7 +399,6 @@ def coverage(db, sql, parameters):
     ends = {row[0]: row[1] for row in db.execute(
         sql + f'SELECT "end", COUNT(*) FROM windows WHERE commit_id IN {selected_commits} GROUP BY "end"', parameters)}
     result['windows_by_end'] = {end: ends.pop(end, 0) for end in WINDOW_ENDS} | ends
-    # Compositions attributed to a fingerprint join the decisions in the status of the composition and commit rates.
     result.update(rows(db, sql + f"""SELECT {composition_sql()},
         COALESCE(SUM(measurement_fingerprint='unknown'),0) AS unknown_fingerprint_compositions
         FROM scored_compositions""", parameters)[0])
@@ -617,7 +601,6 @@ def trend_metric(items, lengths=True, composition_rates=()):
             result[key] = sum(item.get(key, 0) for item in items)
         for name, (numerators, denominators, interval) in COMPOSITION_RATES.items():
             set_rate(result, name, interval, numerators, denominators, available and name in composition_rates)
-        # Known-rank decisions without a length (`length_unavailable`) sit beside the buckets.
         result['by_selection_length'] = {}
         for length in SELECTION_LENGTHS:
             bucket = trend_metric([item.get('_lengths', {}).get(length, {}) for item in items], lengths=False)
@@ -671,7 +654,6 @@ def trend(db, args):
         WHERE measurement_fingerprint!='unknown'
         ORDER BY composition_started_at DESC,occurred_at DESC,id DESC LIMIT 1""", parameters).fetchone()
     measurement_identity = latest_measurement['measurement_fingerprint'] if latest_measurement else None
-    # A composition without a decision takes the fingerprint of its run's decisions (see `scored_compositions`).
     scored = rows(db, sql + f"""SELECT date(composition_started_at,'localtime') AS local_day,kind,
         measurement_fingerprint,COUNT(*) AS compositions,{composition_sql()} FROM scored_compositions
         GROUP BY local_day,kind,measurement_fingerprint""", parameters)
@@ -708,8 +690,6 @@ def trend(db, args):
     series = {}
     for name, values in raw.items():
         raw_points = [values.get(day, {**{key: 0 for key in TREND_COUNTERS}, '_measurements': {}}) for day in days]
-        # Composition and commit rates need compositions without a kind, so only `overall` reports all of them.
-        # Under `--kind` the compositions kept are those with a matching decision: only KIND_FILTER_RATES read true.
         reported = tuple(
             rate for rate in COMPOSITION_RATES if rate in KIND_FILTER_RATES or (
                 args.kind is None and (name == 'overall' or rate not in OVERALL_ONLY_RATES)))
@@ -746,13 +726,11 @@ def trend(db, args):
                 identity_coverage=identity_coverage(db, sql, parameters, 'observations', 'filtered_decisions'))
 
 
-# Instrument constants of the L family (docs/input-quality-metrics.md section 6), versioned with the metric rule.
 LEARNING_CENSOR_DAYS = 7
 LEARNING_FUTILE_SELECTIONS = 3
 LEARNING_REUSE_WINDOW_DAYS = 28
 LEARNING_REUSE_SPLIT_DAYS = 14
 LEARNING_MIN_UNITS = 200
-# Learned provenance of the selected candidate: the design's provenance dimension, read from the candidate `type`.
 LEARNED_PROVENANCE = ("selected_type = 'user_phrase' OR selected_type LIKE 'english_personal_%' "
                       "OR selected_type LIKE 'mixed_personal_%'")
 LEARNING_HISTOGRAM = ('1', '2', '3+', 'never')
@@ -983,7 +961,6 @@ def decode_row(row):
 
 
 def sql_distribution(db, sql, parameters, expression, total, unit):
-    # SQLite sorts scalar values; only the four interpolation endpoints reach Python.
     result = db.execute(sql + f""", values_to_rank AS (SELECT {expression} AS value FROM cohort),
         ranked AS (SELECT value,ROW_NUMBER() OVER (ORDER BY value)-1 AS position,COUNT(*) OVER () AS n
                    FROM values_to_rank WHERE typeof(value) IN ('integer','real') AND value>=0)
@@ -1024,7 +1001,6 @@ def timing(db, args):
     intervals = sql_distribution(db, key_sql, parameters, "json_extract(sample,'$.interval')", coverage['retained_keys'], 'seconds')
     groups = rows(db, sql + """SELECT json_extract(sample,'$.kind') AS kind,json_extract(sample,'$.isRepeat') AS is_repeat,
         COUNT(*) AS count FROM keys GROUP BY kind,is_repeat ORDER BY kind,is_repeat""", parameters)
-    # The bounded category/repeat groups return only counts and interpolation endpoints.
     for group in groups:
         group_parameters = dict(parameters, key_kind=group['kind'], key_repeat=group['is_repeat'])
         group_sql = sql + """,cohort AS (SELECT sample FROM keys WHERE json_extract(sample,'$.kind') IS :key_kind
@@ -1079,7 +1055,6 @@ def inspect(db, args):
             raise QueryError('A recorded page references a missing configuration revision.')
         revisions.append(dict(revision))
     commits = rows(db, 'SELECT * FROM commits WHERE composition_id=:id ORDER BY issued_at,id', parameters)
-    # A window is stored on the composition after its commit, so it is found through the commit.
     columns = ', '.join(f'w."{column}"' for column in WINDOW_KEYS)
     windows = rows(db, f'''WITH {windows_cte(args)} SELECT {columns} FROM windows w JOIN commits m ON m.id=w.commit_id
         WHERE m.composition_id=:id ORDER BY m.issued_at,m.id''', parameters)
@@ -1155,7 +1130,6 @@ def collapse_replay_corrections(cases, timeline):
                     or not previous['raw_input'] or old['identity'] != meta['identity']):
                 continue
             between = [item for item in timeline.values() if old['started'] < item['started'] < meta['started']]
-            # A next-word attempt must exist. Crossing a different application/run is not a correction chain.
             if not between or any(item['identity'][:2] != old['identity'][:2] for item in between):
                 continue
             if not any(item['cancelled'] or item['committed'] for item in between):
@@ -1173,7 +1147,6 @@ def collapse_replay_corrections(cases, timeline):
             choice = choices[0]
             if choice['text'] == previous['selected_text']:
                 continue
-            # Reject unrelated intervening commits: their contexts must extend the original mistaken text.
             prefix = previous['preceding_context'] + previous['selected_text']
             intervening = [case for case in roots if case['decision_id'] not in removed
                            and old['started'] < timeline[case['composition_id']]['started'] < meta['started']]
@@ -1224,8 +1197,6 @@ def replay_timeline(db, cases):
 
 def replay_cases(db, args):
     sql, parameters = ctes(args)
-    # A reverted commit's retype is the composition that carries its window, read only when the window holds nothing
-    # but the Backspaces that removed the commit and closed at the next code, and the commit has this one decision.
     decisions = db.execute(sql + f""", retypes AS (
         SELECT d.id AS replacement_id, d.composition_id,
           json_extract(d.snapshot_json,'$.rawInput') AS raw_input, d.selected_text, m.text AS commit_text
@@ -1260,7 +1231,6 @@ def replay_cases(db, args):
         candidates = [replay_candidate(candidate) for candidate in page['candidates']]
         index, selected, committed = row['selected_display_index'], row['selected_text'], row['commit_text']
         if row['reverted']:
-            # The retype is the gold only when it reads the same input: the code again or continued, and on the list.
             retype = row['retype_raw_input']
             listed = [candidate for candidate in candidates if candidate['text'] == row['retype_text']]
             if retype is None or not retype.startswith(row['raw_input']) or not listed:
@@ -1284,7 +1254,6 @@ def replay_cases(db, args):
     generated_at = datetime.now(timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
     header = dict(generated_at=generated_at, window=dict(since=args.since, until=args.until), kind=args.kind,
                   **counts)
-    # Typed text: owner-only, never over an existing file, and not left half written.
     descriptor = os.open(args.output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
         try:
@@ -1316,7 +1285,6 @@ def render(result, output_format):
         for path, value in leaves(result):
             writer.writerow([path, json.dumps(value, ensure_ascii=False, allow_nan=False)])
     else:
-        # Vertical tables preserve complete fingerprints, Unicode and long context without clipping.
         print('FIELD | VALUE')
         for path, value in leaves(result):
             display = 'N/A' if value is None else json.dumps(value, ensure_ascii=False, allow_nan=False)
@@ -1379,7 +1347,6 @@ def main(argv=None):
         if args.input or args.exports_only or args.source:
             if args.exports_only and not args.input:
                 raise QueryError('--exports-only requires at least one --input file.')
-            # A folder stands for the weekly exports in it, one file per device.
             args.input = [file for path in args.input
                           for file in (sorted(path.glob('InkFlow-quality-*.json*')) if path.is_dir() else [path])]
             if not args.input and args.exports_only:
@@ -1407,7 +1374,7 @@ def main(argv=None):
                         result['by_source'][sid] = handler(db, device_args)
         else:
             with closing(connect(args.db)) as db:
-                db.execute('BEGIN')  # One consistent read snapshot; close before formatting/output.
+                db.execute('BEGIN')
                 result = handler(db, args)
         if args.command == 'trend' and args.chart is not None:
             result['chart_path'] = str(write_trend_svg(result, args.chart))

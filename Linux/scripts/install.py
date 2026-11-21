@@ -233,7 +233,6 @@ class Installer:
         atomic_write(self.journal, json.dumps(record).encode())
         try:
             desktop.stop()
-            # Fcitx5 can flush its profile during shutdown.
             backup = self.snapshot()
             record["files"] = backup
             atomic_write(self.journal, json.dumps(record).encode())
@@ -295,7 +294,6 @@ class Installer:
                 shutil.copytree(package, staging, dirs_exist_ok=True)
                 if validate(staging) != identifier:
                     raise ValueError("Package changed while being copied")
-                # Persist the payload before a durable current link can refer to it.
                 for path in staging.rglob("*"):
                     if path.is_file():
                         with path.open("rb") as source:
@@ -344,11 +342,9 @@ class Installer:
 
 
 RELEASE_API = "https://api.github.com/repos/nervouna/InkFlow"
-# Test-only: update() reads this variable as the API base URL. While it is set, checked_url() also accepts
-# plain http://127.0.0.1 URLs; without it, every URL must be HTTPS.
 TEST_API_VARIABLE = "INKFLOW_TEST_RELEASE_API"
 LOCAL_TEST_PREFIX = "http://127.0.0.1:"
-TAG = re.compile(r"v[0-9]+\.[0-9]+\.[0-9]+")
+TAG = re.compile(r"linux-v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))")
 SUMS = "SHA256SUMS-linux"
 
 
@@ -406,23 +402,53 @@ def extract(archive, directory, destination):
     return package
 
 
+def stable_linux_release(tag):
+    base = os.environ.get(TEST_API_VARIABLE, RELEASE_API) + "/releases"
+    if tag:
+        if not TAG.fullmatch(tag):
+            raise ValueError("--tag must look like linux-vX.Y.Z")
+        release = json.loads(fetch(f"{base}/tags/{tag}"))
+        if release.get("tag_name") != tag or release["draft"] or release["prerelease"]:
+            raise ValueError(f"{tag} is not a published stable Linux release")
+        return release
+
+    newest = None
+    newest_version = ()
+    page = 1
+    while True:
+        releases = json.loads(fetch(f"{base}?per_page=100&page={page}"))
+        for release in releases:
+            match = TAG.fullmatch(release["tag_name"])
+            if match and not release["draft"] and not release["prerelease"]:
+                version = tuple(map(int, match[1].split(".")))
+                if version > newest_version:
+                    newest_version = version
+                    newest = release
+        if len(releases) < 100:
+            break
+        page += 1
+    if newest is None:
+        raise RuntimeError("No stable Linux release has been published")
+    return newest
+
+
 def update(data, tag, service):
-    if tag and not TAG.fullmatch(tag):
-        raise ValueError("--tag must look like vX.Y.Z")
-    base = os.environ.get(TEST_API_VARIABLE, RELEASE_API)
-    release = json.loads(fetch(base + (f"/releases/tags/{tag}" if tag else "/releases/latest")))
-    name = release.get("tag_name") or ""
-    if not TAG.fullmatch(name):
-        raise ValueError(f"Release tag is not vX.Y.Z: {name!r}")
-    version = name[1:]
+    release = stable_linux_release(tag)
+    name = release["tag_name"]
+    version = name.removeprefix("linux-v")
     directory = f"InkFlow-{version}-linux-{platform.machine()}"
     archive_name = directory + ".tar.xz"
     assets = {asset["name"]: asset["browser_download_url"] for asset in release.get("assets", [])}
     if archive_name not in assets or SUMS not in assets:
         raise RuntimeError(f"Release {name} lacks {archive_name} or {SUMS}; nothing changed")
-    if installed_version(data) == version:
+    current = installed_version(data)
+    if current == version:
         print(f"InkFlow {version} is already up to date.")
         return 0
+    if not tag and current and TAG.fullmatch("linux-v" + current):
+        if tuple(map(int, current.split("."))) > tuple(map(int, version.split("."))):
+            print(f"Installed Linux version {current} is newer than {version}.")
+            return 0
     expected = expected_digest(fetch(assets[SUMS]).decode(), archive_name)
     with tempfile.TemporaryDirectory(prefix="inkflow-update-") as work:
         archive = Path(work) / archive_name
@@ -432,6 +458,8 @@ def update(data, tag, service):
             if hashlib.file_digest(stream, "sha256").hexdigest() != expected:
                 raise ValueError(f"SHA-256 mismatch for {archive_name}; nothing installed")
         package = extract(archive, directory, Path(work) / "extracted")
+        if json.loads((package / "package.json").read_bytes()).get("version") != version:
+            raise ValueError(f"Package version does not match {name}")
         command = [sys.executable, "-I", str(package / "install.py"), "install", str(package)]
         if service:
             command += ["--service", service]
@@ -441,14 +469,14 @@ def update(data, tag, service):
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
-        epilog="update downloads the latest InkFlow GitHub Release for this CPU, or --tag vX.Y.Z, verifies its "
+        epilog="update downloads the latest stable Linux release for this CPU, or --tag linux-vX.Y.Z, verifies its "
                "SHA-256 against SHA256SUMS-linux and runs that package's own install.py install, passing --service. "
                "It uses the network only when run and downloads nothing when the installed version matches.")
     parser.add_argument("command", choices=["install", "update", "rollback", "uninstall", "recover",
                                             "restore-manual", "status"])
     parser.add_argument("package", nargs="?", type=Path)
     parser.add_argument("--service", help="existing Fcitx5 user service, stopped and restarted during changes")
-    parser.add_argument("--tag", help="update only: release tag vX.Y.Z instead of the latest release")
+    parser.add_argument("--tag", help="update only: published Linux tag linux-vX.Y.Z")
     args = parser.parse_args()
     if (args.command == "install") != (args.package is not None):
         parser.error("Only install takes a package directory")

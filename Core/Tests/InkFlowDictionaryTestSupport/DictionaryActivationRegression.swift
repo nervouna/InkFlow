@@ -24,7 +24,6 @@ private actor TestGate {
     func open() { opened = true; continuation?.resume(); continuation = nil }
 }
 
-/// Both hosts run these assertions against the real engine and store; only resource/process assembly differs.
 package struct DictionaryActivationRegression: Sendable {
     private let makeServices: @Sendable (IFDictionaryRuntime, URL, IFDictionaryStore) -> IFDictionaryServices
     private let copyRuntime: @Sendable (IFDictionaryRuntime, URL) throws -> IFDictionaryRuntime
@@ -42,7 +41,6 @@ package struct DictionaryActivationRegression: Sendable {
         let templateStore = try IFDictionaryStore(root: root.appendingPathComponent("template/Dictionaries"))
         let services = makeServices(runtime, root.appendingPathComponent("template"), templateStore)
         let candidate = try templateStore.candidate()
-        // One real preparation proves the full generator/compiler/probe -> coordinator activation path.
         let inputs = try IFDictionaryCatalog.sources.filter(\.isUpdatable).map { spec in
             var data = try Data(contentsOf: repository.appendingPathComponent("build/dictionary-sources/\(spec.id).yaml"))
             if spec.id == "frost-8105" { data.append(Data("\n墨流更新测试\tmo liu geng xin ce shi\t7\n".utf8)) }
@@ -75,8 +73,6 @@ package struct DictionaryActivationRegression: Sendable {
     }
 
     @MainActor func qualityAcrossReplacement(root: URL, template: IFDictionaryDescriptor) async throws {
-        // This lifecycle fixture needs valid synthetic identity; unknown metadata is
-        // intentionally rejected by the store and is covered in QualityStoreTests.
         let metadata = QualityBuildMetadata(sourceRevision: "activation-fixture",
             sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,
             bundledResourcesSHA256: String(repeating: "b", count: 64), bundleSHA256: String(repeating: "c", count: 64),
@@ -198,7 +194,6 @@ package struct DictionaryActivationRegression: Sendable {
             engine.select(0); engine.highlight(0); engine.commit(); engine.clear(); engine.setPrecedingText("隔离")
             engine.setCandidateCount(5); check(engine.snapshot().preedit.isEmpty && engine.takeCommit().isEmpty)
         }
-        // Deinit of an invalidated old object must never destroy the next generation's reused native ID.
         try IFEngine.start(next)
         let newSession = IFEngine()!
         primary = nil
@@ -222,8 +217,6 @@ package struct DictionaryActivationRegression: Sendable {
         engine.asciiMode = true
         let permissions = try FileManager.default.attributesOfItem(atPath: user.path)[.posixPermissions]!
         defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user.path); IFEngine.stop() }
-        // Session restoration reads custom_phrase.txt but never writes it: an unwritable
-        // user directory after native session creation cannot fail activation.
         try IFEngine.replace(with: configuration, restoring: configuration, fault: { step, rollback in
             if !rollback && step == .session(0) {
                 try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: user.path)
@@ -232,7 +225,6 @@ package struct DictionaryActivationRegression: Sendable {
         try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: user.path)
         check(engine.available && engine.asciiMode && engine.candidateCount == 7,
               "Restoration applies settings and captured ASCII mode without writing to the user directory")
-        // A real allocated session also needs safe cleanup before schema selection has completed.
         expectFailure("session-create") {
             try IFEngine.replace(with: configuration, restoring: configuration, fault: { step, rollback in
                 if !rollback && step == .sessionCreated(0) { throw IFDictionaryUpdateError(.apply, "session-create") }
@@ -371,7 +363,6 @@ package struct DictionaryActivationRegression: Sendable {
         check(service.activity == .updateAvailable && calls.value.download == 1, "Retry repeats check without download")
         IFEngine.stop()
 
-        // Proven content-equivalent source receipts keep both active content and activation date unchanged.
         var unchangedServices = services
         unchangedServices.prepare = { _, _, _, progress in
             lateProgress.value = progress
@@ -443,7 +434,6 @@ package struct DictionaryActivationRegression: Sendable {
             let candidateIntact = TestBox(true)
             let calls = TestBox((download: 0, prepare: 0, pending: 0, activate: 0))
             let store = try IFDictionaryStore(root: base.store.root, beforeStateWrite: { state in
-                // The last producer step before an activation is journaled: hold it, and write nothing once cancelled.
                 if stage == "pre-activation", state.pending != nil {
                     entered.value = true
                     let deadline = Date(timeIntervalSinceNow: 8)
@@ -480,7 +470,6 @@ package struct DictionaryActivationRegression: Sendable {
                     guard candidateIntact.value else {
                         throw IFDictionaryUpdateError(.prepare, "test-producer-cleaned-before-stop")
                     }
-                    // A late successful producer result must still be rejected before adoption.
                     return try copyTemplate(template, to: candidate)
                 }
                 return try copyTemplate(template, to: candidate)
@@ -573,7 +562,6 @@ package struct DictionaryActivationRegression: Sendable {
         try oldManifest.encoded().write(to: shared.appendingPathComponent(IFDictionaryManifest.filename))
         try Data().write(to: shared.appendingPathComponent(IFDictionaryCatalog.correctionsFilename))
 
-        // Create real Chinese learning under the old complete dictionary, before the app upgrade.
         try IFEngine.start(shared: shared.path, user: base.user.path)
         do {
             let engine = IFEngine()!
@@ -666,7 +654,6 @@ package struct DictionaryActivationRegression: Sendable {
         check(!FileManager.default.fileExists(atPath: base.store.root.appendingPathComponent(pending.directory).path), "Unreferenced interrupted artifact removed")
         IFEngine.stop()
 
-        // Fingerprint rebuild must combine retained inert source data with CURRENT assets/corrections.
         let currentRuntime = try copyRuntime(runtime, root.appendingPathComponent("current-runtime"))
         let lua = currentRuntime.resources.appendingPathComponent("lua/inkflow_mixed.lua")
         var bytes = try Data(contentsOf: lua); bytes.append(Data("\n-- isolated current application marker\n".utf8)); try bytes.write(to: lua)
@@ -692,7 +679,6 @@ package struct DictionaryActivationRegression: Sendable {
         rebuiltSession.clear()
         IFEngine.stop()
 
-        // An artifact prepared by an older recipe regenerates from its retained raw sources (#95).
         let olderBase = try backend(root.appendingPathComponent("older-recipe"), runtime: runtime)
         let older = try installTemplate(template, store: olderBase.store, date: 300)
         let olderManifest = olderBase.store.root.appendingPathComponent(older.directory + "/shared/" + IFDictionaryManifest.filename)
@@ -709,7 +695,6 @@ package struct DictionaryActivationRegression: Sendable {
         check(try! olderBase.store.state().current?.runtimeFingerprint == (try! currentRuntime.fingerprint()))
         IFEngine.stop()
 
-        // Corrupt all recoverable dictionaries. Confirmed bundled fallback must not retry previous artifacts next launch.
         for version in [try base.store.state().current, try base.store.state().previous].compactMap({ $0 }) {
             try Data("corrupt".utf8).write(to: base.store.root.appendingPathComponent(version.directory + "/shared/pinyin_simp.dict.yaml"))
         }
@@ -726,7 +711,6 @@ package struct DictionaryActivationRegression: Sendable {
         check(try! base.store.state().current == nil && base.store.state().bundled != nil, "Malformed journal repaired after actual bundled success")
         IFEngine.stop()
 
-        // A failed real backend factory remains retryable and never makes default/shared Settings perform I/O.
         let failFactory = TestBox(true)
         let factoryOnMain = TestBox(true)
         let factory = IFDictionaryCoordinator(backendFactory: {
