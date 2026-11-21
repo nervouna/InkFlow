@@ -13,7 +13,6 @@ import sqlite3
 import sys
 import tempfile
 import time
-import threading
 from unittest import mock
 import unittest
 
@@ -2251,42 +2250,27 @@ class QueryTests(unittest.TestCase):
         db.rollback()
 
     def test_snapshot_consistency_during_intervening_write(self):
-        ready, committed = threading.Event(), threading.Event()
-        failures=[]
-
-        def writer():
-            try:
-                with sqlite3.connect(self.db,timeout=3) as db:
-                    db.execute("UPDATE candidate_decisions SET outcome='unknown' WHERE composition_id='a'")
-                    ready.set()
-                committed.set()
-            except Exception as error:
-                failures.append(error)
-                ready.set()
-
-        original=self.quality.rows
-        started=False
-        thread=threading.Thread(target=writer)
+        before = self.result()
+        original_rows = self.quality.rows
 
         def read_rows(db, sql, parameters=None):
-            nonlocal started
-            result=original(db,sql,parameters)
-            if not started:
-                started=True
-                thread.start()
-                self.assertTrue(ready.wait(2),'writer did not reach commit')
-                self.assertFalse(committed.is_set(),'writer committed through the active read snapshot')
+            result = original_rows(db, sql, parameters)
+            if 'FROM observations GROUP BY' in sql:
+                with contextlib.closing(sqlite3.connect(self.db, timeout=0)) as writer:
+                    writer.execute("UPDATE candidate_decisions SET outcome='unknown' WHERE composition_id='a'")
+                    writer.commit()
             return result
 
-        with mock.patch.object(self.quality,'rows',side_effect=read_rows):
-            result=self.result()
-        thread.join(4)
-        self.assertFalse(thread.is_alive())
-        self.assertEqual(failures,[])
-        self.assertTrue(committed.is_set())
-        self.assertEqual(result['coverage']['valid'],12)
-        self.assertEqual(sum(g['valid'] for g in result['groups']),12)
-        self.assertEqual(self.result()['coverage']['valid'],11)
+        with mock.patch.object(self.quality, 'rows', side_effect=read_rows):
+            during = self.result()
+        for field in ('coverage', 'groups', 'rank_counts'):
+            self.assertEqual(during[field], before[field], field)
+
+        after = self.result()
+        self.assertEqual((during['coverage']['valid'], after['coverage']['valid']), (12, 11))
+        self.assertEqual(sum(group['valid'] for group in after['groups']), 11)
+        self.assertEqual(sum(rank['count'] for rank in after['rank_counts']),
+                         sum(rank['count'] for rank in before['rank_counts']) - 1)
 
     def test_timing_legacy_unknown_and_one_snapshot_per_composition(self):
         legacy = self.result('timing')
