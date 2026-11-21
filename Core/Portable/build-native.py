@@ -74,13 +74,8 @@ def main():
           '-DHAVE_SNAPPY=OFF', '-DHAVE_CRC32C=OFF', '-DHAVE_TCMALLOC=OFF')
     cmake('marisa', '-DENABLE_TOOLS=OFF')
     cmake('yaml', '-DYAML_CPP_BUILD_TESTS=OFF', '-DYAML_CPP_BUILD_TOOLS=OFF')
-    opencc_cmake = sources / 'opencc/CMakeLists.txt'
-    original = opencc_cmake.read_text()
-    updated = original.replace('-std=c++14', '-std=c++17').replace(
-        'set(CMAKE_CXX_STANDARD 14)', 'set(CMAKE_CXX_STANDARD 17)')
-    if updated != original:
-        opencc_cmake.write_text(updated)
     cmake('opencc', '-DUSE_SYSTEM_MARISA=ON', '-DENABLE_GTEST=OFF', '-DENABLE_BENCHMARK=OFF',
+          '-DCMAKE_DISABLE_FIND_PACKAGE_Git=ON',
           f'-DCMAKE_CXX_FLAGS=-I{PREFIX}/include -include cstdint',
           f'-DCMAKE_EXE_LINKER_FLAGS=-L{PREFIX}/lib')
     boost = sources / 'boost'

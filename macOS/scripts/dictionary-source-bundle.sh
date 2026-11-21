@@ -66,7 +66,7 @@ record 'wordfreq 3.1.1 en/large Zipf snapshot for ESDB 2026.02.25 spellings' \
   inkflow/Core/Data/english-wordfreq.tsv
 for opencc in STPhrases.txt STCharacters.txt; do
   record "OpenCC simplified-to-traditional data $opencc" 'Apache-2.0 (LICENSES/opencc.txt)' \
-    "https://github.com/BYVoid/OpenCC/blob/556ed22496d650bd0b13b6c163be9814637970ae/data/dictionary/$opencc" "inkflow/schemas/opencc/$opencc"
+    "https://github.com/BYVoid/OpenCC/blob/025f371dc76b598d77384fbdab90c937471844d8/data/dictionary/$opencc" "inkflow/schemas/opencc/$opencc"
 done
 record 'InkFlow Chinese corrections and curated additions' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/config/chinese-overrides.tsv
 record 'InkFlow English admission policy' 'Apache-2.0 (inkflow/LICENSE)' "https://github.com/nervouna/InkFlow/tree/$commit" inkflow/Core/config/english-overrides.tsv
