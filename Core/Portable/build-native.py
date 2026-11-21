@@ -22,6 +22,10 @@ def deployment_target():
     return plistlib.loads((ROOT / 'macOS/Info.plist').read_bytes())['LSMinimumSystemVersion']
 
 
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def run(*args, cwd=None):
     subprocess.run([str(a) for a in args], cwd=cwd, check=True)
 
@@ -37,17 +41,20 @@ def main():
     sources.mkdir(parents=True, exist_ok=True)
     for name, item in lock.items():
         archive = BUILD / (name + ('.tar.bz2' if name == 'boost' else '.tar.gz'))
+        if archive.exists() and digest(archive) != item['sha256']:
+            archive.unlink()
         if not archive.exists():
             part = archive.with_suffix('.part')
             run('curl', '--fail', '--location', '--retry', '2', item['url'], '-o', part)
             part.rename(archive)
-        if hashlib.sha256(archive.read_bytes()).hexdigest() != item['sha256']:
+        if digest(archive) != item['sha256']:
             raise RuntimeError(f'Checksum mismatch: {archive}')
         dest = sources / name
         stamp = dest / '.inkflow-source'
         if not stamp.exists() or stamp.read_text() != item['sha256']:
-            if dest.exists():
-                shutil.rmtree(dest)
+            for stale in (dest, PREFIX, *BUILD.glob('cmake-*')):
+                if stale.exists():
+                    shutil.rmtree(stale)
             dest.mkdir()
             run('tar', '-xf', archive, '-C', dest, '--strip-components=1')
             stamp.write_text(item['sha256'])
@@ -74,13 +81,8 @@ def main():
           '-DHAVE_SNAPPY=OFF', '-DHAVE_CRC32C=OFF', '-DHAVE_TCMALLOC=OFF')
     cmake('marisa', '-DENABLE_TOOLS=OFF')
     cmake('yaml', '-DYAML_CPP_BUILD_TESTS=OFF', '-DYAML_CPP_BUILD_TOOLS=OFF')
-    opencc_cmake = sources / 'opencc/CMakeLists.txt'
-    original = opencc_cmake.read_text()
-    updated = original.replace('-std=c++14', '-std=c++17').replace(
-        'set(CMAKE_CXX_STANDARD 14)', 'set(CMAKE_CXX_STANDARD 17)')
-    if updated != original:
-        opencc_cmake.write_text(updated)
     cmake('opencc', '-DUSE_SYSTEM_MARISA=ON', '-DENABLE_GTEST=OFF', '-DENABLE_BENCHMARK=OFF',
+          '-DCMAKE_DISABLE_FIND_PACKAGE_Git=ON',
           f'-DCMAKE_CXX_FLAGS=-I{PREFIX}/include -include cstdint',
           f'-DCMAKE_EXE_LINKER_FLAGS=-L{PREFIX}/lib')
     boost = sources / 'boost'

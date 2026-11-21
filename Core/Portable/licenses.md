@@ -17,7 +17,7 @@ Source revisions and archive hashes are in `native-sources.lock.json`. Paths bel
 | LevelDB | BSD-3-Clause, `leveldb/LICENSE` | Include notice and disclaimer. Optional Snappy/crc32c are disabled. |
 | marisa | BSD-2-Clause **or** LGPL-2.1-or-later, `marisa/COPYING.md` | Use the BSD option and retain its notice. |
 | yaml-cpp | MIT, `yaml/LICENSE` | Include copyright and permission notice. |
-| OpenCC 1.1.9 and its standard conversion data | Apache-2.0, `opencc/LICENSE` | Include license and applicable notices; identify the C++17 build modification. |
+| OpenCC 1.4.2 and its standard conversion data | Apache-2.0, `opencc/LICENSE` | Include license and applicable notices. |
 | Darts-clone | BSD notice, `rime/include/COPYING.darts-clone`; OpenCC also vendors Darts-clone | Retain the corresponding notice for the embedded implementation. |
 | UTF8-CPP | Boost Software License notice in `rime/include/utf8.h` and related headers | Preserve the notice with source. |
 | RapidJSON | MIT notices in `opencc/deps/rapidjson-1.1.0/rapidjson/` | Include notices for the headers compiled into OpenCC. |
