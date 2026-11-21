@@ -20,9 +20,9 @@
     "revision": "3e87d53b78e15f2f43783d5e376561a8c9722051"
   },
   "opencc": {
-    "url": "https://codeload.github.com/BYVoid/OpenCC/tar.gz/556ed22496d650bd0b13b6c163be9814637970ae",
-    "sha256": "2792fc0944359c5d099bd79e08bfffce250bf3760aa0ec306e975cc58314482a",
-    "revision": "556ed22496d650bd0b13b6c163be9814637970ae"
+    "url": "https://codeload.github.com/BYVoid/OpenCC/tar.gz/025f371dc76b598d77384fbdab90c937471844d8",
+    "sha256": "8b27931630abab1136b7c3ee920e4a95e78cb84a3cab4670198172bc82104844",
+    "revision": "025f371dc76b598d77384fbdab90c937471844d8"
   },
   "yaml": {
     "url": "https://codeload.github.com/jbeder/yaml-cpp/tar.gz/2f86d13775d119edbb69af52e5f566fd65c6953b",

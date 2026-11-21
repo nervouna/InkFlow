@@ -181,7 +181,7 @@ To build the full package instead, after restoring the inputs above run:
 The packaging recipe requires clean tracked Git source and records its HEAD.
 The source archive itself has no .git directory, hence the initialization step
 when rebuilding from the archive rather than the original checkout.
-Native archives are checksum pinned. OpenCC's C++17/cstdint adjustments are in
+Native archives are checksum pinned. OpenCC's cstdint compiler flag is in
 build-native.py. Rust dependency sources are in rust/; Cargo.lock records origins
 and checksums. Cargo/toolchain and system build prerequisites may require network
 access; this is source delivery, not an offline build environment.
