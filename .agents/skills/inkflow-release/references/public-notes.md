@@ -2,13 +2,18 @@
 
 Read before writing or freezing public notes.
 
-After prepare succeeds, create the final Chinese user-facing notes at
-`build/public-release-notes.md`. Never include internal paths, credentials or
+Write the Chinese user-facing notes to `build/public-release-notes.md` after local preparation or before
+dispatching a publishing run in GitHub Actions. Never include internal paths, credentials or
 notarization logs.
 Use [the template](../assets/release-notes-template.md), the release diff, and the
-`scripts/release-note-candidates.sh` first-parent output from `previous_tag` through
-`release_commit` as evidence. Review both its suggested and excluded sections so
-a mislabeled commit cannot hide a user-visible change. Consolidate related commits
+[release-note candidate script](../scripts/release-note-candidates.sh) as evidence. Run from the repository root.
+
+```sh
+bash .agents/skills/inkflow-release/scripts/release-note-candidates.sh "$previous_tag" "$release_ref"
+```
+
+Set `previous_tag` to the previous release tag and `release_ref` to the local release commit or
+`origin/main` for GitHub Actions. Review both suggested and excluded commits for user-visible changes. Consolidate related commits
 and rewrite them in user-facing Chinese rather than copying subjects. Use three to
 five bullets when the scope supports them, include only observable changes, omit
 empty sections, and exclude release, test, documentation, dependency, skill and

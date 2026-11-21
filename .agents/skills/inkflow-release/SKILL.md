@@ -1,44 +1,72 @@
 ---
 name: inkflow-release
-description: Release InkFlow for macOS from main — version bump, one verification run, Developer ID signing, notarization, signed installer package, Sparkle appcast and GitHub Release. A request naming a version or major/minor/patch authorizes the whole workflow; `--draft` stops before tagging and publishing. Not for routine local installs.
+description: Publish or draft an InkFlow macOS release from main. Use for release requests with a version or major/minor/patch. For a local trial build, use the macOS development guide.
 ---
 
 # InkFlow release
 
-Ships a signed, notarized and stapled installer package (`InkFlow-X.Y.Z-BUILD-arm64.pkg`), `SHA256SUMS`, a Sparkle app-only ZIP, `appcast.xml` and the dictionary corresponding-source bundle (`InkFlow-X.Y.Z-BUILD-dictionary-source.tar.gz`, built by `macOS/scripts/dictionary-source-bundle.sh`; the About page and README link to it) as a GitHub Release tagged `vX.Y.Z` on `main`. Scripts live in `.agents/skills/inkflow-release/scripts/`.
+A release request naming a version or bump authorizes the requested workflow. A publishing run submits both
+the app and installer to Apple, pushes `main` and the tag, and publishes on GitHub. A `--draft` run also signs, notarizes
+and uploads assets to a GitHub draft. It stops before tagging, pushing or publishing. Continue through the
+authorized steps without intermediate confirmations. Never force-push, overwrite a published release or tag,
+create Apple credentials or install the app. Run signing, notarization and network steps outside the sandbox.
+Typing, Settings and installation checks belong to the user's pre-release testing.
 
-A release request with a version or bump type authorizes every step below, including both Apple notarization submissions, the tag/main push and publication. Don't ask for confirmation between steps. Never force-push, overwrite a published Release or tag, create Apple credentials, or install the app for the user. Run signing, notarization and network steps outside the sandbox.
+Use the local path on a Mac with the signing identities, notarization credentials and Sparkle key.
+Use [GitHub Actions](#release-from-github-actions) when requested or when local credentials or tools are unavailable.
+For setup or credential errors, read [release configuration](references/configuration.md).
 
-Input, Settings and installation behavior are the user's responsibility before they ask for a release; don't gate on them.
+## Select the version
 
-Two paths run the same scripts. The local path below needs the signing identities, notarization credentials and Sparkle key on this Mac. The [GitHub Actions path](#release-from-github-actions) needs none of them locally; use it when `check-credentials.sh` fails here or when asked.
+Base version selection on the fetched `origin/main`. For an explicit `X.Y.Z`, derive the next version for each of
+`major`, `minor` and `patch` from [the app version](../../../macOS/Info.plist). Use the bump that
+produces exactly the requested version. If none matches, stop before changing the version or dispatching CI
+and confirm the intended bump. For a request naming a bump, use it directly.
 
-## Steps
+## Local release
 
-1. **Preflight.** On a clean, up-to-date `main` (`git fetch origin --tags`; fast-forward only). Check `gh auth status` and `bash scripts/check-credentials.sh` (credentials: [configuration.md](references/configuration.md)). Confirm the tag doesn't exist yet.
-2. **Bump.** `bash scripts/bump-version.sh major|minor|patch`, then commit only `macOS/Info.plist` as `chore(release): vX.Y.Z (build N)`.
-   The bump helper bounds each numeric input component to nine digits before shell arithmetic.
-3. **Verify once.** `bash macOS/scripts/release-verification.sh` — build, `test.sh all`, deep bundle check, release receipt (commit and app build). If a unit fails: fix it and commit, or rerun that unit if it was flaky, then rerun verification. No extra rounds.
-4. **Prepare.** `bash scripts/package.sh prepare` signs a copy of the app and its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
-5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md` ([public-notes.md](references/public-notes.md)).
-6. **Release.** `bash scripts/release.sh` notarizes and staples the app, builds the package (`package.sh finish`: `build-pkg.sh --sign` with the Developer ID Installer identity, its embedded `register-input-source` signed with Developer ID Application, hardened runtime and a timestamp) plus the Sparkle ZIP, checks the package signer, the embedded tool and the app inside, notarizes and staples the package, generates the appcast and the dictionary source bundle, tags and pushes `main` + tag, uploads assets, verifies the downloaded bytes, and publishes.
+Run commands from the repository root in the release checkout.
 
-   `bash scripts/release.sh --draft` does everything except the tag, push and publish, leaving a GitHub draft for inspection. Running `release.sh` afterwards reuses that draft.
+```sh
+release_scripts=.agents/skills/inkflow-release/scripts
+```
 
-   `bash scripts/release.sh --prerelease` publishes the release as a GitHub pre-release. The Sparkle feed (`releases/latest`) keeps serving the previous stable release, so existing installs are not offered it. To promote it later without a new build: `gh release edit vX.Y.Z --prerelease=false --latest`.
+1. **Preflight.** On clean `main`, run `git fetch origin --tags` and fast-forward only. Confirm the proposed
+   tag is free. Run `gh auth status` and `bash "$release_scripts/check-credentials.sh"`.
+2. **Bump.** Set `bump` to the selected component and run `bash "$release_scripts/bump-version.sh" "$bump"`.
+   Verify the resulting version. Commit only `macOS/Info.plist` as `chore(release): vX.Y.Z (build N)`.
+3. **Verify once.** Run `bash macOS/scripts/release-verification.sh` to build, run `test.sh all`, check the
+   bundle deeply and record the commit and app build in the release receipt. If a unit fails, fix and commit
+   the change or rerun a flaky unit, then rerun verification. One successful verification is enough.
+4. **Prepare.** Run `bash "$release_scripts/package.sh" prepare` to sign a copy of the verified app and create
+   its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
+5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md`. See [public notes](references/public-notes.md).
+6. **Ship.** Run `bash "$release_scripts/release.sh"` for a stable release. Add `--draft` to leave the GitHub
+   draft, or `--prerelease` to publish while keeping the previous stable release in Sparkle's feed. The script
+   checks the package and embedded tool signatures, notarizes and staples the app and installer, generates
+   the Sparkle app-only ZIP and appcast, and bundles the dictionary corresponding source. It writes
+   `SHA256SUMS` and checks downloaded assets against the local files. A later publishing run reuses the
+   draft. To promote a pre-release without a rebuild, run `gh release edit vX.Y.Z --prerelease=false --latest`.
 
 ## Release from GitHub Actions
 
-`.github/workflows/release.yml` runs steps 1-4 and 6 on a `macos-26` runner with credentials from repository secrets ([configuration.md](references/configuration.md#github-actions-release) lists them and the one-time setup). It bumps from the dispatched `main`, seeds the build counter above every build attached to a release, and pushes the bump commit and tag with a deploy key. The default `draft: true` is the dry run.
+[The release workflow](../../../.github/workflows/release.yml) uses the same scripts on a hosted Mac.
+Fetch `origin/main` and tags before selecting the version and preparing notes. The workflow selects a build
+number above earlier release builds and uses [configured credentials](references/configuration.md#github-actions-release).
 
-1. **Notes.** CI can't write them. Write the step 5 notes from `release-note-candidates.sh "$previous_tag" origin/main`, then store them in a draft for the bumped version: `gh release create vX.Y.Z --draft --title "InkFlow X.Y.Z" --notes-file build/public-release-notes.md`. A publishing run fails without them; a dry run without a draft uses marked placeholder notes, which a publishing run refuses.
-2. **Run.** `gh workflow run release.yml --ref main -f bump=patch -f draft=false` (add `-f prerelease=true` for a pre-release). Find the run with `gh run list --workflow release.yml --limit 1` and follow it with `gh run watch RUN_ID --exit-status`.
-3. **Report** the release URL from the run summary, as for a local release.
+1. **Notes.** For publication, prepare the Chinese notes from the previous tag through `origin/main` using
+   [public notes](references/public-notes.md). Store them in the target version's draft with
+   `gh release create vX.Y.Z --draft --title "InkFlow X.Y.Z" --notes-file build/public-release-notes.md`.
+   A dry run may use placeholder notes. Publishing requires the final notes.
+2. **Run.** Set `bump` to the selected component. For a draft, run:
 
-Every CI run builds afresh: it deletes an existing draft's assets for the tag and uploads its own build, keeping the draft's notes.
+   ```sh
+   gh workflow run release.yml --ref main -f "bump=$bump" -f draft=true
+   ```
 
-## If something fails
+   For publication, set `draft=false`. For a pre-release, also add `-f prerelease=true`.
+   Find the run with `gh run list --workflow release.yml --limit 1` and follow it with
+   `gh run watch RUN_ID --exit-status`. CI replaces the draft's assets on rebuild and keeps its notes.
 
-Every `release.sh` step is skipped when its output already exists, so fix the cause and rerun the same command. Specific failures and their fixes are in [recovery.md](references/recovery.md).
-
-Report the release URL, version/build and what was verified when done.
+Read [release recovery](references/recovery.md) before retrying an interrupted run. Report the release or draft
+URL, version/build and verification result.

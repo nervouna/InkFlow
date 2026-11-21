@@ -1,6 +1,8 @@
 # Release recovery
 
-`release.sh` is resumable: each step checks for its output (stapled app, package, stapled package, appcast, draft assets) and skips it if present. Fix the cause and rerun the same command. Don't bump the version again to retry.
+`release.sh` reuses a valid stapled app, assembled package and package staple. It runs signature checks,
+appcast and source-bundle generation, and draft upload checks again. Fix the cause and rerun the same
+command with the original version and mode.
 
 - **Interrupted attempt:** `package.sh prepare` refuses an existing `build/releases/InkFlow-X.Y.Z-BUILD/` left by a broken attempt. Move it aside and rerun prepare.
 - **Notarization interrupted mid-upload:** rerun `release.sh`, which resubmits it. A duplicate submission is harmless.
