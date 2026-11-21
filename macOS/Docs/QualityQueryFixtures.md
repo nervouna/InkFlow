@@ -84,7 +84,9 @@ Punctuation and raw Return would meet the window criterion but are excluded as n
 The SQLite concurrency cases cover readers coexisting with a reserved rollback-journal writer,
 snapshot consistency across intervening writes, and safe failure when the database is busy.
 Analysis leaves the source unchanged. Export and CLI fixtures use the same gzip document and
-compare equivalent decoded values regardless of JSON key order. Learning-event identities
+compare equivalent decoded values regardless of JSON key order. The Python and Swift writers match
+the final gzip suffix case-insensitively. The Python reader also accepts plain JSON that earlier
+CLI versions wrote under mixed-case gzip suffixes. Learning-event identities
 include run and timestamp because retention can free a reused row ID.
 
 ## Native capture counts

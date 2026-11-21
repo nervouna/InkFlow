@@ -55,6 +55,10 @@ def snapshot(path, connect, columns, create_source=False):
                 range=dict(first=min(times) if times else None, last=max(times) if times else None), tables=tables)
 
 
+def has_gzip_suffix(path):
+    return path.suffix.lower() == '.gz'
+
+
 def export(path, output, connect, columns):
     output = output.expanduser().resolve()
     database = path.expanduser().resolve()
@@ -65,7 +69,7 @@ def export(path, output, connect, columns):
     payload = json.dumps(document, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
     if len(payload.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Export exceeds 1 GiB; no output file written.')
-    with (gzip.open(output, 'xt', encoding='utf-8') if output.suffix == '.gz' else output.open('x')) as stream:
+    with (gzip.open(output, 'xt', encoding='utf-8') if has_gzip_suffix(output) else output.open('x')) as stream:
         try:
             stream.write(payload)
         except BaseException:
@@ -81,7 +85,11 @@ def load(path, columns):
     if path.stat().st_size > MAX_BYTES:
         raise ValueError(f'Export exceeds 1 GiB: {path}')
     try:
-        if path.suffix == '.gz':
+        compressed = has_gzip_suffix(path)
+        if compressed and path.suffix != '.gz':
+            with path.open('rb') as stream:
+                compressed = stream.read(2) == b'\x1f\x8b'
+        if compressed:
             with gzip.open(path, 'rb') as stream:
                 payload = stream.read(MAX_BYTES + 1)
             if len(payload) > MAX_BYTES:
