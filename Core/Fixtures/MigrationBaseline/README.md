@@ -28,7 +28,24 @@ Five fresh processes each type 247 keys over the 21-sample corpus, then repeat t
 
 The five slowest samples are the first key of the first composition in each process, ranging from 9.62 to 10.53 ms. Aggregate p99 does not describe that first-key cost. With five processes, startup/memory p95/p99 equal the maximum.
 
-Measurement boundaries are defined in [the remote workflow](../../../docs/remote-mac-baseline.md#measurement-boundaries).
+## Measurement boundaries
+
+Startup measures prepared-cache descriptor validation, context-index loading, Rime initialization, session
+creation, and the default configuration. The timer starts after process launch and covers the headless
+engine with a compiled dictionary. Each process starts fresh with the operating system's filesystem
+caches intact.
+
+A key sample times synchronous `IFEngine.input`, `takeCommit`, and `snapshot`. The checked-in ASCII-letter
+corpus uses uppercase modifiers, empty preceding context, no custom phrases, and nine candidates.
+It measures headless key entry. Platform delivery, rendering, queued actor work, telemetry, deletion,
+selection, and learned-user latency fall outside that measurement.
+
+Darwin's `getrusage().ru_maxrss` reports peak resident memory in bytes after startup and after input.
+That peak includes the in-memory timing records.
+
+Percentiles use nearest rank. For an even count, the median averages the two middle values.
+Compare release builds with matching hardware, OS, toolchain, resource hashes, options, and workload.
+Review first-pass and repeated-pass distributions separately.
 
 ## Approved review limits
 

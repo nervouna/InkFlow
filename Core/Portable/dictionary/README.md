@@ -16,12 +16,14 @@ From the repository root:
 
 ```sh
 bash Core/Portable/dictionary/test.sh
-python3 scripts/mac-remote.py dictionary
 ```
 
 On Linux, the script tests Rust against the recorded Swift contract and pinned corpus. On macOS, it first runs the existing Swift dictionary-generator tests, exports a fresh contract, then compares Rust against those live results and the recorded fixtures. Both use the repository's Rust toolchain and this crate's `Cargo.lock`.
 
-Preparation may download the pinned public dictionary sources. Downloads go under ignored `build/dictionary-parity/inputs/`; byte counts and SHA-256 are checked before use, then Rust verifies the Git blob hash and SHA-256 again. Existing verified Mac source caches can be reused. There are no downloads from the library or CLI. Comparison outputs stay under `build/dictionary-parity/`; the shared Cargo artifacts live under `build/dictionary/cargo/`. The remote runner returns the catalog, reference results, Swift corpus summary (`corpus.json`), actual Rust corpus summary (`rust-corpus.json`), logs, and its usual exact-revision receipt.
+Preparation may download the pinned public dictionary sources. Downloads go under ignored
+`build/dictionary-parity/inputs/`. Preparation checks byte counts and SHA-256 before use, and Rust checks
+the Git blob hash and SHA-256 again. The library and CLI use those local inputs. Comparison outputs stay
+under `build/dictionary-parity/`. The shared Cargo artifacts live under `build/dictionary/cargo/`.
 
 The CLI uses the compiled production catalog and creates a new output directory. Tests may supply an explicit catalog before the source-directory argument:
 

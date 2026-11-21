@@ -26,8 +26,7 @@ Develop InkFlow toward the fastest and most intelligent IME. Use these goals to 
   [migration design](docs/portable-core-migration.md).
 - Follow the [macOS build guide](macOS/DEVELOPMENT.md#build-and-try-the-development-version) and
   [focused test matrix](macOS/TESTING.md#which-tests-to-run). See [known failures](macOS/DEBUGGING.md) when diagnosing.
-  From Linux, read the [remote workflow](docs/remote-mac-baseline.md) before using or changing
-  `scripts/mac-remote.py`. It sends committed revisions only.
+  Develop and test the macOS app on macOS. GitHub's [macOS CI](.github/workflows/macos.yml) runs automated checks.
 - Verify changes to default input behavior with a user action and an observable result under default settings.
   The orchestrator verifies combined behavior when multiple PRs affect the same input path.
 - The user checks typing, focus and Settings behavior. Give them one or two lines on what to try and leave

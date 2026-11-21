@@ -32,10 +32,14 @@ The preparation cache hashes the shared package, generator sources/tools/scripts
 
 ```sh
 bash Core/scripts/test-prepare-rime.sh
-python3 scripts/mac-remote.py test preparation dictionary-generator quality-baseline quality-metadata
 ```
 
-The shell fixtures use small stand-in generators to isolate admission and delivery; the Mac units exercise the real generators.
+The shell fixtures use small stand-in generators to isolate admission and delivery. On macOS, run the
+focused units to exercise the real generators.
+
+```sh
+bash macOS/scripts/test.sh preparation dictionary-generator quality-baseline quality-metadata
+```
 
 ## Migration boundary
 
