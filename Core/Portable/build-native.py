@@ -22,6 +22,10 @@ def deployment_target():
     return plistlib.loads((ROOT / 'macOS/Info.plist').read_bytes())['LSMinimumSystemVersion']
 
 
+def digest(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def run(*args, cwd=None):
     subprocess.run([str(a) for a in args], cwd=cwd, check=True)
 
@@ -37,17 +41,21 @@ def main():
     sources.mkdir(parents=True, exist_ok=True)
     for name, item in lock.items():
         archive = BUILD / (name + ('.tar.bz2' if name == 'boost' else '.tar.gz'))
+        # A reused build directory, such as a restored CI cache, can hold the archive of an earlier pin.
+        if archive.exists() and digest(archive) != item['sha256']:
+            archive.unlink()
         if not archive.exists():
             part = archive.with_suffix('.part')
             run('curl', '--fail', '--location', '--retry', '2', item['url'], '-o', part)
             part.rename(archive)
-        if hashlib.sha256(archive.read_bytes()).hexdigest() != item['sha256']:
+        if digest(archive) != item['sha256']:
             raise RuntimeError(f'Checksum mismatch: {archive}')
         dest = sources / name
         stamp = dest / '.inkflow-source'
         if not stamp.exists() or stamp.read_text() != item['sha256']:
-            if dest.exists():
-                shutil.rmtree(dest)
+            for stale in (dest, BUILD / ('cmake-' + name)):
+                if stale.exists():
+                    shutil.rmtree(stale)
             dest.mkdir()
             run('tar', '-xf', archive, '-C', dest, '--strip-components=1')
             stamp.write_text(item['sha256'])
