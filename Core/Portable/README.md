@@ -164,9 +164,8 @@ Report direct and inferred chain counts separately; the inference is not documen
 
 ### Replay files
 
-Case files hold typed text. They stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off. The record files of engine mode follow the same rules. The replay record writer currently checks
-the checkout that built the binary when applying path exclusion. Use a path outside every checkout,
-including when running a binary built elsewhere. [Tracking issue #237](https://github.com/nervouna/InkFlow/issues/237).
+Case files hold typed text. They stay outside the repository (`replay-cases` refuses a path inside it, writes the file owner-only and never over an existing file), are deleted after the run, never outlive the 28-day retention of their source records (`replay` refuses a file whose header `generated_at` is older than 28 days and says to delete it), and are deleted when text recording is turned off. The record files of engine mode follow the same rules. The replay record writer refuses
+a path inside any Git work tree, found from the output path when it runs, and inside the checkout that built it.
 
 ## Engine-mode replay
 

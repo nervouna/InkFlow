@@ -566,6 +566,24 @@ fn engine_arguments_and_record_files_are_checked() {
         assert!(error.contains(message), "{args:?}: {error}");
     }
     assert!(!Path::new(&inside).exists());
+    let checkout = Scratch::new("engine-args-checkout");
+    fs::create_dir_all(checkout.0.join("nested")).unwrap();
+    for marker in [".git", "nested/.git"] {
+        checkout.write(marker, "gitdir: elsewhere\n");
+        let elsewhere = format!("{}/nested/record.jsonl", checkout.0.display());
+        let output = replay(&[
+            "engine",
+            FIXTURE,
+            "--arm",
+            "live=/nonexistent",
+            "--record",
+            &format!("live={elsewhere}"),
+        ]);
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains("outside the repository"), "{marker}: {error}");
+        assert!(!Path::new(&elsewhere).exists());
+        fs::remove_file(checkout.0.join(marker)).unwrap();
+    }
     let overwrite = replay(&[
         "engine",
         FIXTURE,
