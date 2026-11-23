@@ -952,10 +952,6 @@ fn load_record(name: &str, path: &str, cases: &[Case]) -> Result<Run> {
 }
 
 fn outside_repository(path: &str) -> Result<()> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let Ok(root) = root.canonicalize() else {
-        return Ok(());
-    };
     let parent = match Path::new(path).parent() {
         Some(parent) if !parent.as_os_str().is_empty() => parent,
         _ => Path::new("."),
@@ -963,7 +959,14 @@ fn outside_repository(path: &str) -> Result<()> {
     let parent = parent
         .canonicalize()
         .map_err(|error| format!("cannot use {path}: {error}"))?;
-    if parent.starts_with(&root) {
+    let built_from = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .ok();
+    let in_work_tree = parent
+        .ancestors()
+        .any(|directory| directory.join(".git").symlink_metadata().is_ok());
+    if in_work_tree || built_from.is_some_and(|root| parent.starts_with(root)) {
         return Err(format!(
             "Record files hold typed text; choose a path outside the repository: {path}"
         )
