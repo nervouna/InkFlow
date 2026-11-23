@@ -342,36 +342,34 @@ class Installer:
 
 
 RELEASE_API = "https://api.github.com/repos/nervouna/InkFlow"
-TEST_API_VARIABLE = "INKFLOW_TEST_RELEASE_API"
-LOCAL_TEST_PREFIX = "http://127.0.0.1:"
 TAG = re.compile(r"linux-v((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))")
 SUMS = "SHA256SUMS-linux"
 
 
-def checked_url(url):
-    if url.startswith("https://"):
-        return url
-    if os.environ.get(TEST_API_VARIABLE) and url.startswith(LOCAL_TEST_PREFIX):
-        return url
-    raise ValueError(f"Refusing to fetch a non-HTTPS URL: {url}")
+class ReleaseSource:
+    def __init__(self, api=RELEASE_API, schemes=("https://",)):
+        self.api = api
+        self.schemes = schemes
+        source = self
 
+        class CheckedRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, headers, newurl):
+                return super().redirect_request(req, fp, code, msg, headers, source.checked_url(newurl))
 
-class CheckedRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return super().redirect_request(req, fp, code, msg, headers, checked_url(newurl))
+        self.opener = urllib.request.build_opener(CheckedRedirect)
 
+    def checked_url(self, url):
+        if url.startswith(self.schemes):
+            return url
+        raise ValueError(f"Refusing to fetch a non-HTTPS URL: {url}")
 
-OPENER = urllib.request.build_opener(CheckedRedirect)
+    def open_url(self, url):
+        request = urllib.request.Request(self.checked_url(url), headers={"User-Agent": "inkflow-install.py"})
+        return self.opener.open(request, timeout=60)
 
-
-def open_url(url):
-    request = urllib.request.Request(checked_url(url), headers={"User-Agent": "inkflow-install.py"})
-    return OPENER.open(request, timeout=60)
-
-
-def fetch(url):
-    with open_url(url) as response:
-        return response.read()
+    def fetch(self, url):
+        with self.open_url(url) as response:
+            return response.read()
 
 
 def installed_version(data):
@@ -402,12 +400,12 @@ def extract(archive, directory, destination):
     return package
 
 
-def stable_linux_release(tag):
-    base = os.environ.get(TEST_API_VARIABLE, RELEASE_API) + "/releases"
+def stable_linux_release(tag, source):
+    base = source.api + "/releases"
     if tag:
         if not TAG.fullmatch(tag):
             raise ValueError("--tag must look like linux-vX.Y.Z")
-        release = json.loads(fetch(f"{base}/tags/{tag}"))
+        release = json.loads(source.fetch(f"{base}/tags/{tag}"))
         if release.get("tag_name") != tag or release["draft"] or release["prerelease"]:
             raise ValueError(f"{tag} is not a published stable Linux release")
         return release
@@ -416,7 +414,7 @@ def stable_linux_release(tag):
     newest_version = ()
     page = 1
     while True:
-        releases = json.loads(fetch(f"{base}?per_page=100&page={page}"))
+        releases = json.loads(source.fetch(f"{base}?per_page=100&page={page}"))
         for release in releases:
             match = TAG.fullmatch(release["tag_name"])
             if match and not release["draft"] and not release["prerelease"]:
@@ -432,8 +430,9 @@ def stable_linux_release(tag):
     return newest
 
 
-def update(data, tag, service):
-    release = stable_linux_release(tag)
+def update(data, tag, service, source=None):
+    source = source or ReleaseSource()
+    release = stable_linux_release(tag, source)
     name = release["tag_name"]
     version = name.removeprefix("linux-v")
     directory = f"InkFlow-{version}-linux-{platform.machine()}"
@@ -449,10 +448,10 @@ def update(data, tag, service):
         if tuple(map(int, current.split("."))) > tuple(map(int, version.split("."))):
             print(f"Installed Linux version {current} is newer than {version}.")
             return 0
-    expected = expected_digest(fetch(assets[SUMS]).decode(), archive_name)
+    expected = expected_digest(source.fetch(assets[SUMS]).decode(), archive_name)
     with tempfile.TemporaryDirectory(prefix="inkflow-update-") as work:
         archive = Path(work) / archive_name
-        with open_url(assets[archive_name]) as response, archive.open("wb") as output:
+        with source.open_url(assets[archive_name]) as response, archive.open("wb") as output:
             shutil.copyfileobj(response, output)
         with archive.open("rb") as stream:
             if hashlib.file_digest(stream, "sha256").hexdigest() != expected:

@@ -15,6 +15,7 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+import urllib.request
 
 spec = importlib.util.spec_from_file_location("installer", Path(__file__).with_name("install.py"))
 installer = importlib.util.module_from_spec(spec)
@@ -342,12 +343,19 @@ class ReleaseServer:
 
     def __init__(self):
         self.files = {}
+        self.redirects = {}
         self.requests = []
         server = self
 
         class Handler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
                 server.requests.append(self.path)
+                target = server.redirects.get(self.path)
+                if target:
+                    self.send_response(302)
+                    self.send_header("Location", target)
+                    self.end_headers()
+                    return
                 body = server.files.get(self.path)
                 if body is None:
                     self.send_error(404)
@@ -388,9 +396,10 @@ class UpdateTests(unittest.TestCase):
         self.fake_tool("ldd", "exit 0\n")
         self.server = ReleaseServer()
         self.addCleanup(self.server.close)
+        self.source = installer.ReleaseSource(self.server.base + "/api/repos/nervouna/InkFlow",
+                                              ("https://", "http://127.0.0.1:"))
         environment = {
             "XDG_DATA_HOME": str(self.data), "XDG_CONFIG_HOME": str(self.root / "config"),
-            installer.TEST_API_VARIABLE: self.server.base + "/api/repos/nervouna/InkFlow",
             "PATH": str(self.bin),
         }
         patcher = patch.dict(os.environ, environment)
@@ -449,7 +458,7 @@ class UpdateTests(unittest.TestCase):
     def test_update_installs_tagged_package(self):
         archive = self.build_archive("0.8.0")
         self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": self.sums(archive)})
-        self.assertEqual(installer.update(self.data, "linux-v0.8.0", "fixture-fcitx5.service"), 0)
+        self.assertEqual(installer.update(self.data, "linux-v0.8.0", "fixture-fcitx5.service", self.source), 0)
         self.assertIn("/api/repos/nervouna/InkFlow/releases/tags/linux-v0.8.0", self.server.requests)
         state = json.loads((self.data / "inkflow/installation.json").read_text())
         self.assertEqual(state, {"current": archive["identifier"], "previous": None})
@@ -466,15 +475,15 @@ class UpdateTests(unittest.TestCase):
                                 dict(stable, tag_name="linux-v1.0.0", prerelease=True),
                                 dict(stable, tag_name="linux-v0.7.10")])
         self.feed([stable, dict(stable, tag_name="linux-v0.7.9")], page=2)
-        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service"), 0)
+        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service", self.source), 0)
         self.assertIn("/api/repos/nervouna/InkFlow/releases?per_page=100&page=2", self.server.requests)
 
     def test_no_stable_linux_release(self):
         self.feed([{"tag_name": "v1.0.0"}])
         with self.assertRaisesRegex(RuntimeError, "No stable Linux release"):
-            installer.update(self.data, None, None)
+            installer.update(self.data, None, None, self.source)
         with self.assertRaisesRegex(ValueError, "linux-vX.Y.Z"):
-            installer.update(self.data, "v1.0.0", None)
+            installer.update(self.data, "v1.0.0", None, self.source)
         self.assert_nothing_changed()
 
     def test_draft_install_is_not_downgraded_by_update(self):
@@ -482,7 +491,7 @@ class UpdateTests(unittest.TestCase):
         current = self.data / "inkflow/current"
         current.mkdir(parents=True)
         (current / "package.json").write_text(json.dumps({"version": "0.10.0"}))
-        self.assertEqual(installer.update(self.data, None, None), 0)
+        self.assertEqual(installer.update(self.data, None, None, self.source), 0)
         self.assertEqual(len(self.server.requests), 1)
 
     def test_checksum_mismatch_installs_nothing(self):
@@ -490,14 +499,14 @@ class UpdateTests(unittest.TestCase):
         sums = f"{'0' * 64}  {archive['name']}\n".encode()
         self.serve("0.8.0", {archive["name"]: archive["bytes"], "SHA256SUMS-linux": sums})
         with self.assertRaisesRegex(ValueError, "SHA-256 mismatch"):
-            installer.update(self.data, None, "fixture-fcitx5.service")
+            installer.update(self.data, None, "fixture-fcitx5.service", self.source)
         self.assert_nothing_changed()
 
     def test_missing_architecture_asset_changes_nothing(self):
         other = self.build_archive("0.8.0", directory="InkFlow-0.8.0-linux-other-cpu")
         self.serve("0.8.0", {other["name"]: other["bytes"], "SHA256SUMS-linux": self.sums(other)})
         with self.assertRaisesRegex(RuntimeError, "lacks"):
-            installer.update(self.data, None, "fixture-fcitx5.service")
+            installer.update(self.data, None, "fixture-fcitx5.service", self.source)
         self.assert_nothing_changed()
 
     def test_unsafe_archive_member_is_refused(self):
@@ -512,7 +521,7 @@ class UpdateTests(unittest.TestCase):
         unsafe = {"name": archive["name"], "bytes": path.read_bytes(), "identifier": archive["identifier"]}
         self.serve("0.8.0", {unsafe["name"]: unsafe["bytes"], "SHA256SUMS-linux": self.sums(unsafe)})
         with self.assertRaisesRegex(ValueError, "unsafe"):
-            installer.update(self.data, None, "fixture-fcitx5.service")
+            installer.update(self.data, None, "fixture-fcitx5.service", self.source)
         self.assert_nothing_changed()
 
     def test_installed_matching_version_downloads_no_archive(self):
@@ -521,19 +530,44 @@ class UpdateTests(unittest.TestCase):
         current = self.data / "inkflow/current"
         current.mkdir(parents=True)
         (current / "package.json").write_text(json.dumps({"version": "0.8.0"}))
-        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service"), 0)
+        self.assertEqual(installer.update(self.data, None, "fixture-fcitx5.service", self.source), 0)
         self.assertEqual(self.server.requests, ["/api/repos/nervouna/InkFlow/releases?per_page=100&page=1"])
         self.assertFalse(self.log.exists())
 
-    def test_plain_http_is_refused_without_the_test_variable(self):
-        with patch.dict(os.environ):
-            os.environ.pop(installer.TEST_API_VARIABLE)
-            with self.assertRaises(ValueError):
-                installer.checked_url("http://127.0.0.1:9/api")
-        with self.assertRaises(ValueError):
-            installer.checked_url("http://example.com/api")
-        self.assertEqual(installer.checked_url("https://api.github.com/x"), "https://api.github.com/x")
+    def test_shipped_update_ignores_the_old_test_variable_and_refuses_http(self):
+        opened = []
 
+        def refuse(opener, request, **arguments):
+            opened.append(request.full_url)
+            raise OSError("offline")
+
+        local = self.server.base + "/api/repos/nervouna/InkFlow"
+        with patch.dict(os.environ, {"INKFLOW_TEST_RELEASE_API": local}), \
+                patch.object(urllib.request.OpenerDirector, "open", refuse):
+            with self.assertRaisesRegex(OSError, "offline"):
+                installer.update(self.data, None, None)
+            shipped = installer.ReleaseSource()
+            for url in ("http://127.0.0.1:9/api", "http://example.com/api", "ftp://example.com/api"):
+                with self.assertRaises(ValueError):
+                    shipped.checked_url(url)
+        self.assertEqual(opened, ["https://api.github.com/repos/nervouna/InkFlow/releases?per_page=100&page=1"])
+        self.assertEqual(self.server.requests, [])
+        self.assertEqual(shipped.checked_url("https://api.github.com/x"), "https://api.github.com/x")
+        self.assert_nothing_changed()
+
+    def test_redirect_to_a_refused_scheme_is_not_followed(self):
+        self.server.files["/moved"] = b"moved"
+        self.server.redirects["/local"] = self.server.base + "/moved"
+        self.server.redirects["/plain"] = "http://example.invalid/asset"
+        self.assertEqual(self.source.fetch(self.server.base + "/local"), b"moved")
+        with self.assertRaisesRegex(ValueError, "non-HTTPS"):
+            self.source.fetch(self.server.base + "/plain")
+        https_only = installer.ReleaseSource()
+        handler = next(h for h in https_only.opener.handlers if isinstance(h, urllib.request.HTTPRedirectHandler))
+        request = urllib.request.Request("https://api.github.com/x")
+        with self.assertRaisesRegex(ValueError, "non-HTTPS"):
+            handler.redirect_request(request, None, 302, "Found", {}, self.server.base + "/moved")
+        self.assertEqual(self.server.requests, ["/local", "/moved", "/plain"])
 
 if __name__ == "__main__":
     unittest.main()
