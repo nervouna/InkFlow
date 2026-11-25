@@ -22,6 +22,22 @@ installer = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(installer)
 
 
+def write_payload(package, revision):
+    for name in installer.REQUIRED:
+        path = package / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(revision + "\n")
+    (package / "share/fcitx5/inputmethod/inkflow-pinyin.conf").write_text(
+        "[InputMethod]\nName=InkFlow Pinyin\nAddon=inkflow\n")
+
+
+def write_manifest(package, revision, **fields):
+    manifest = {"format": 1, "architecture": platform.machine(), "revision": revision * 40, **fields,
+                "files": {p.relative_to(package).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+                          for p in package.rglob("*") if p.is_file() and p.name != "package.json"}}
+    (package / "package.json").write_text(json.dumps(manifest))
+
+
 class Desktop:
     def __init__(self):
         self.stops = self.starts = 0
@@ -65,20 +81,9 @@ class InstallTests(unittest.TestCase):
     def package(self, revision):
         package = self.root / revision
         package.mkdir()
-        for name in installer.REQUIRED:
-            path = package / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(revision + "\n")
-        (package / "share/fcitx5/inputmethod/inkflow-pinyin.conf").write_text(
-            "[InputMethod]\nName=InkFlow Pinyin\nAddon=inkflow\n")
-        self.manifest(package, revision)
+        write_payload(package, revision)
+        write_manifest(package, revision)
         return package
-
-    def manifest(self, package, revision):
-        manifest = {"format": 1, "architecture": platform.machine(), "revision": revision * 40,
-                    "files": {p.relative_to(package).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                              for p in package.rglob("*") if p.is_file() and p.name != "package.json"}}
-        (package / "package.json").write_text(json.dumps(manifest))
 
     def profile(self):
         profile = configparser.ConfigParser(interpolation=None)
@@ -124,7 +129,7 @@ class InstallTests(unittest.TestCase):
         (package / "lib/fcitx5/libinkflow.so").write_text("corrupt")
         with self.assertRaises(ValueError):
             self.manager.install(package, self.desktop)
-        self.manifest(package, "a")
+        write_manifest(package, "a")
         manifest = json.loads((package / "package.json").read_text())
         manifest["architecture"] = "other-cpu"
         (package / "package.json").write_text(json.dumps(manifest))
@@ -271,7 +276,7 @@ class InstallTests(unittest.TestCase):
     def test_missing_compiled_resource_is_rejected_even_with_fresh_hashes(self):
         package = self.package("a")
         (package / (installer.CACHE + "inkflow_spelling_31.prism.bin")).unlink()
-        self.manifest(package, "a")
+        write_manifest(package, "a")
         with self.assertRaises(ValueError):
             self.manager.install(package, self.desktop)
         self.assertEqual(self.desktop.stops, 0)
@@ -415,18 +420,9 @@ class UpdateTests(unittest.TestCase):
         directory = directory or f"InkFlow-{version}-linux-{platform.machine()}"
         source = self.root / f"source-{version}-{revision}"
         package = source / directory
-        for name in installer.REQUIRED:
-            path = package / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(revision + "\n")
-        (package / "share/fcitx5/inputmethod/inkflow-pinyin.conf").write_text(
-            "[InputMethod]\nName=InkFlow Pinyin\nAddon=inkflow\n")
+        write_payload(package, revision)
         shutil.copyfile(Path(__file__).with_name("install.py"), package / "install.py")
-        manifest = {"format": 1, "architecture": platform.machine(), "version": version,
-                    "revision": revision * 40,
-                    "files": {p.relative_to(package).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                              for p in package.rglob("*") if p.is_file()}}
-        (package / "package.json").write_text(json.dumps(manifest))
+        write_manifest(package, revision, version=version)
         identifier = installer.validate(package)
         archive = self.root / f"{revision}-{directory}.tar.xz"
         with tarfile.open(archive, "w:xz") as tar:
