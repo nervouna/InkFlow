@@ -69,8 +69,8 @@ The comment lint rejects new code comments ([comment cleanup](comment-cleanup.md
 
 ## Task pool
 
-Status: `done` (committed on the governance branch), `dropped` (examined, not worth changing), `pending`
-(needs a decision).
+Status: `done` (committed on the governance branch), `open` (safe, not started), `dropped` (examined, not
+worth changing), `pending` (needs a decision).
 
 | ID | Area | Change | Status |
 | --- | --- | --- | --- |
@@ -99,6 +99,12 @@ Status: `done` (committed on the governance branch), `dropped` (examined, not wo
 | G1 | Swift | Drop always-true `#if SWIFT_PACKAGE` guards | done |
 | D1 | Domain | Delete `schemaPatch`, `IFSpellingGenerator.write`, `sourceURL`; one definition of the catalog constants | done |
 | E1 | Enforcement | `check-boundaries.sh` asserts the dependency rules above | done |
+| O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp`; `package.sh` calls `prepare-resources.sh` | open |
+| O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | open |
+| O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | open |
+| O4 | Source of truth | One Swift list of compiled resource files for the store receipt, packaged cache and engine checks | open |
+| O5 | Shallow layers | Fold `EngineChannel.swift` into `EngineAI.swift`; move test-only production helpers into tests | open |
+| O6 | Docs | Keep test-fixture and build-metadata contracts in `macOS/Docs` only; drop thin `prepare-*` wrapper scripts | open |
 
 Core scripts still call macOS scripts in four places (`Core/scripts/test.sh` runs the macOS dictionary-generator
 unit, `capture-migration-baseline.sh`, `Core/Portable/dictionary/test.sh` and the prepare-rime wrapper test) and
