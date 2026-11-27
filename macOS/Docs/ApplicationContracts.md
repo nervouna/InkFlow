@@ -75,7 +75,8 @@ contents alone. Failed bookkeeping must preserve data already read. Compare time
 the archive's integer Unix-millisecond time base to avoid fractional boundary errors. Decoding on-disk
 records excludes unknown fields and corrupt records. Version/build metadata is restricted to release tokens.
 Leftover `incident_*` files from builds that saved incidents stay in the rolling log's age and
-capacity budget so cleanup still deletes them; they are never read.
+capacity budget so cleanup still deletes them; they are never read. A leftover `incident.next`
+temporary file is deleted under the directory lock.
 
 `DiagnosticArchive` cleans old staging directories at activation and export. A process lease keeps
 an active export alive. A lease-free stage is abandoned if found while holding the root lock, which

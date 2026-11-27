@@ -1,3 +1,4 @@
+import InkFlowCore
 import InkFlowRime
 import Foundation
 

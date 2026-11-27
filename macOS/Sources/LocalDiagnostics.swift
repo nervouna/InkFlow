@@ -342,6 +342,12 @@ final class LocalDiagnosticStore: @unchecked Sendable {
             try remove(file.name); total -= file.size; status.loss.capacityFiles += 1
         }
         if !recovered {
+            var temporary = stat()
+            if fstatat(directoryFD, "incident.next", &temporary, AT_SYMLINK_NOFOLLOW) == 0 {
+                guard temporary.st_mode & S_IFMT == S_IFREG && temporary.st_nlink == 1 else { throw StoreError.failure(.unsafePath) }
+                try remove("incident.next")
+            }
+
             for file in try ownedFiles() where !file.incident {
                 guard file.size <= configuration.maximumFileBytes else {
                     try remove(file.name); status.loss.capacityFiles += 1; continue
