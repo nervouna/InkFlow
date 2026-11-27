@@ -13,7 +13,7 @@ extension IFDictionaryServices {
 
 extension IFDictionaryCoordinator {
     static let persistentLogger: IFDictionaryDiagnosticLogger = { failure in
-        let log = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "dictionary")
+        let log = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "dictionary")
         let operation = UUID()
         LocalDiagnostics.shared.submit(.init(module: .dictionary, event: failure.stage, outcome: .failed,
             reason: DictionaryDiagnosticCode(rawValue: failure.code), correlation: operation,

@@ -1,3 +1,4 @@
+import InkFlowRime
 import Foundation
 import Darwin
 
@@ -33,7 +34,7 @@ struct DiagnosticArchivePayload: Sendable {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         var processes: [DiagnosticProcess] = [], runs = Set<UUID>()
         for record in snapshot.records where runs.insert(record.process.run).inserted { processes.append(record.process) }
-        let modules = ["startup", "input", "ai", "voice", "dictionary", "update", "termination", "statistics", "diagnostics"]
+        let modules = LocalDiagnosticEvent.Module.allCases.map(\.rawValue)
         let observed = Set(snapshot.records.map { $0.module.rawValue })
         let manifest = Manifest(requestedStart: requestedStart, requestedEnd: requestedEnd, exportedAt: exportedAt,
             exporter: DiagnosticProcess(), eventCount: snapshot.records.count,

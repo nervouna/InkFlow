@@ -48,7 +48,7 @@ struct DiagnosticFeedbackService: Sendable {
         return Self(store: LocalDiagnostics.shared.store,
             crashReader: .init(directories: [home.appendingPathComponent("Library/Logs/DiagnosticReports"),
                                             URL(fileURLWithPath: "/Library/Logs/DiagnosticReports")]),
-            stagingRoot: home.appendingPathComponent("Library/Application Support/InkFlow/Diagnostics/Exports"))
+            stagingRoot: IFApplicationPaths.user.appendingPathComponent("Diagnostics/Exports"))
     }
 
     func export(_ selection: DiagnosticExportSelection, clickedAt: Date, destination: URL) async throws -> DiagnosticExportResult {

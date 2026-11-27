@@ -89,16 +89,12 @@ func configurationMessage(_ code: String) -> String {
 }
 
 package enum IFPortableResources {
-    private static let probeInputs = ["xiehouyu", "suranqijing", "email", "wofaleemail", "nihao"]
-
-    package static func compile(_ shared: String, _ user: String, _ cache: String) -> Int32 {
-        ifr_resources_compile(shared, user, cache) == ifrOK ? 0 : 1
+    package static func compile(_ shared: String, _ user: String, _ cache: String) -> Bool {
+        ifr_resources_compile(shared, user, cache) == ifrOK
     }
 
-    package static func probe(_ shared: String, _ user: String, _ cache: String) -> Int32 {
-        guard ifr_resources_probe(shared, user, cache) != ifrOK else { return 0 }
-        let message = ifrString(ifr_last_error())
-        return probeInputs.firstIndex { message.hasSuffix(" " + $0) }.map { Int32($0) + 2 } ?? 1
+    package static func probe(_ shared: String, _ user: String, _ cache: String) -> String? {
+        ifr_resources_probe(shared, user, cache) == ifrOK ? nil : ifrString(ifr_last_error())
     }
 }
 

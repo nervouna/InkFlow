@@ -1,11 +1,8 @@
 import InkFlowRime
 import Foundation
 
-package enum IFDictionaryWorkerBootstrap {
-    package typealias EngineOperation = IFDictionaryPreparation.EngineOperation
-
-    package static func run(arguments: [String], executablePath: String,
-                            compile: EngineOperation, probe: EngineOperation) -> Int32 {
+enum IFDictionaryWorkerBootstrap {
+    static func run(arguments: [String], executablePath: String) -> Int32 {
         func emit(_ event: IFDictionaryWorkerEvent) throws {
             var data = try JSONEncoder().encode(event)
             data.append(0x0a)
@@ -31,8 +28,7 @@ package enum IFDictionaryWorkerBootstrap {
             return 1
         }
         do {
-            _ = try IFDictionaryPreparation.prepare(request: request, runtime: runtime,
-                                                    compile: compile, probe: probe, emit: emit)
+            _ = try IFDictionaryPreparation.prepare(request: request, runtime: runtime, emit: emit)
             return 0
         } catch {
             try? emit(.init(failure: .wrapping(error, stage: .prepare)))

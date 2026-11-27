@@ -51,7 +51,8 @@ struct PersonalBackupSettings: Codable, Sendable {
     static let keys = integerKeys.union(ShortcutAction.allCases.map { "shortcut.\($0.rawValue)" }).union(["customPhrases", "voicePolishRules"])
     func validate() throws {
         guard Set(integers.keys) == Self.integerKeys,
-              (3...9).contains(integers["candidateCount"]!), [14,16,18,24,36].contains(integers["fontSize"]!),
+              IFSettings.candidateCounts.contains(integers["candidateCount"]!),
+              IFSettings.fontSizes.contains(integers["fontSize"]!),
               integers.allSatisfy({ ["candidateCount", "fontSize"].contains($0.key) || [0,1].contains($0.value) }),
               integers["input.fuzzyZ"] == integers["input.fuzzyC"], integers["input.fuzzyC"] == integers["input.fuzzyS"],
               integers["input.bracketPaging"] != integers["input.minusEqualPaging"] else { throw PersonalDataError("settings") }
@@ -75,7 +76,7 @@ struct PersonalBackupDocument: Codable, Sendable {
     var rime: String
     var settings: PersonalBackupSettings
     var dictionaries: [String: String?]
-    static let names = ["pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"]
+    static let names = IFPortablePersonalData.names
     static let maximumBytes = 128 * 1024 * 1024
     func write(to url: URL) throws {
         try validate()

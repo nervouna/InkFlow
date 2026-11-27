@@ -15,7 +15,7 @@ package struct IFStartupDiagnostics: Sendable {
         let started: TimeInterval
     }
     package static let shared = IFStartupDiagnostics()
-    private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "startup")
+    private static let logger = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "startup")
     package let run: UUID
     package let pid: Int32
     private let clock: @Sendable () -> TimeInterval

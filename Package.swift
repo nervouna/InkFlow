@@ -141,7 +141,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "InkFlowApp",
-            dependencies: ["InkFlowCore", .product(name: "Sparkle", package: "Sparkle")],
+            dependencies: ["InkFlowCore", "InkFlowRime", .product(name: "Sparkle", package: "Sparkle")],
             path: "macOS/App",
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime
@@ -150,7 +150,6 @@ let package = Package(
             name: "InkFlowDictionaryWorker",
             dependencies: ["InkFlowCore", "InkFlowRime"],
             path: "macOS/DictionaryWorker",
-            sources: ["main.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime
         ),

@@ -63,7 +63,7 @@ struct InputDiagnosticRecord: Sendable {
 }
 
 enum InputDiagnostics {
-    private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "input")
+    private static let logger = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "input")
     @TaskLocal static var observe: (@Sendable (InputDiagnosticRecord) -> Void)?
 
     static func write(_ record: InputDiagnosticRecord) {

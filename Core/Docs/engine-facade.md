@@ -37,9 +37,8 @@ explicit navigation.
 
 Swift C string arguments are borrowed, NUL-terminated and valid only for the call. Callers reject
 embedded NULs. The option mask follows the order of `InputOption.allCases`. An owned display
-snapshot keeps its strings and ranking evidence available until release. Rime probe errors preserve
-the first failing case's diagnostic number, using 1 for session setup and 2 plus the zero-based
-case index for a failing case.
+snapshot keeps its strings and ranking evidence available until release. A failed Rime probe reports
+the core's own message, which names the first failing case, as the `probe=` detail.
 
 The personal-data worker snapshots the three user dictionaries through `ifr_personal_export`.
 The core first copies their databases under the user's `PersonalData/staging` directory. An absent

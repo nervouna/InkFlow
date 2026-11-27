@@ -71,7 +71,8 @@ package struct DiagnosticContext: Codable, Sendable {
 }
 
 package struct LocalDiagnosticEvent: Sendable {
-    package enum Module: String, Codable, Sendable { case startup, input, ai, voice, dictionary, update, termination, statistics, diagnostics }
+    package static let logSubsystem = "io.damao.inputmethod.inkflow"
+    package enum Module: String, Codable, Sendable, CaseIterable { case startup, input, ai, voice, dictionary, update, termination, statistics, diagnostics }
     package enum Outcome: String, Codable, Sendable { case begin, ready, completed, failed, skipped, cancelled, timeout, unavailable, handled, passThrough }
     package enum ErrorDomain: String, Codable, Sendable { case cocoa, posix, url, speech, audio, sqlite, unknown }
     package let module: Module
