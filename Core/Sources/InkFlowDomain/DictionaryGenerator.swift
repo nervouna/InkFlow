@@ -39,12 +39,14 @@ private enum DictionaryNative {
     }
 }
 
-package enum IFDictionaryGenerator {
+extension IFDictionaryCatalog {
     package static let recipeVersion = Int(ifd_recipe_version())
     package static let maximumSourceBytes = ifd_maximum_source_bytes()
-    package static func catalog() -> [IFDictionarySourceSpec] {
-        try! JSONDecoder().decode([IFDictionarySourceSpec].self, from: DictionaryNative.copy(ifd_catalog()))
-    }
+    package static let sources = try! JSONDecoder().decode([IFDictionarySourceSpec].self,
+                                                           from: DictionaryNative.copy(ifd_catalog()))
+}
+
+package enum IFDictionaryGenerator {
 
     package static func generate(inputs: [IFDictionaryInput], corrections: Data = Data(),
                          catalog: [IFDictionarySourceSpec] = IFDictionaryCatalog.sources) throws -> IFDictionaryGeneration {
@@ -88,11 +90,5 @@ package enum IFSpellingGenerator {
         let buffer = DictionaryBuffer(dictionary)
         let result = withExtendedLifetime(buffer) { ifd_spelling(buffer.borrowed)! }
         return try DictionaryNative.consume(result)
-    }
-    package static func write(dictionary: Data, to directory: URL) throws {
-        let schemas = try generate(dictionary: dictionary)
-        for name in schemas.keys.sorted() {
-            try schemas[name]!.write(to: directory.appendingPathComponent(name), options: .atomic)
-        }
     }
 }
