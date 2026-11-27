@@ -82,7 +82,6 @@ let executableTestProducts: [(String, String)] = [
     ("apple-voice-tests", "AppleVoiceRecognizerTests"),
     ("bundle-artifact-smoke-tests", "BundleArtifactSmokeTests"),
     ("voice-controller-tests", "VoiceControllerTests"),
-    ("portable-abi-tests", "PortableABITests"),
 ]
 
 let package = Package(
@@ -119,7 +118,6 @@ let package = Package(
         .target(
             name: "InkFlowInputSources",
             path: "macOS/Shared",
-            sources: ["InputSourceManager.swift", "RegisterInputSourceBootstrap.swift", "TrialInstallationLifecycle.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: [.linkedFramework("Carbon")]
         ),
@@ -238,9 +236,6 @@ let package = Package(
                 publicHeadersPath: "include",
                 cSettings: [.unsafeFlags(["-I\(portableRoot)/include"])],
                 linkerSettings: portableLinkerSettings),
-        .executableTarget(name: "PortableABITests", dependencies: ["InkFlowPortable", "InkFlowDictionary"],
-                path: "Core/Tests/PortableABITests", swiftSettings: strictSwiftSettings,
-                linkerSettings: portableRuntime),
     ],
     swiftLanguageModes: [.v6],
     cxxLanguageStandard: .cxx17
