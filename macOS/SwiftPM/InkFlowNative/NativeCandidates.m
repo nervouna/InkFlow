@@ -1,4 +1,4 @@
-#import "NativeCandidates.h"
+#import "InkFlowNative.h"
 
 @interface IMKCandidates (InkFlowFontCompatibility)
 - (void)setFontSize:(double)size;

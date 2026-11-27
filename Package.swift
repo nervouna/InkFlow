@@ -16,25 +16,6 @@ let portableRuntime: [LinkerSetting] = [
 ]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
-let inkFlowCoreSources = [
-    "AIChatCompletions.swift", "AIContext.swift", "AIDiagnostics.swift", "AIInputPresentation.swift",
-    "AISettings.swift",
-    "AISuggestionCoordinator.swift", "AISuggestionPanel.swift", "ApplicationBootstrap.swift", "ApplicationLifecycle.swift",
-    "AppleVoiceRecognizer.swift", "VoiceSession.swift", "VoiceCorrectionClient.swift", "VoiceLearning.swift", "VoicePolishApplicationPicker.swift", "VoicePolishPrompt.swift", "VoicePolishRule.swift", "VoicePolishRuleEditor.swift", "VoicePolishRuleRow.swift", "VoicePolishRulesView.swift", "VoiceSettings.swift", "VoiceSettingsView.swift", "InputControllerVoice.swift", "CandidatePresentation.swift", "Context.swift", "InputControllerAI.swift",
-    "EngineEvent.swift", "InputControllerCore.swift", "InputRankingContext.swift", "InputStatusPanel.swift", "InputStatusPresentation.swift",
-    "ThunderPanel.swift", "ThunderPresentation.swift",
-    "CustomPhrases.swift", "DictionaryCoordinator.swift",
-    "DictionarySettings.swift",
-    "PersonalLearningSettings.swift",
-    "PersonalDataBackup.swift", "PersonalDataTransaction.swift", "PersonalDataSettingsView.swift",
-    "QualitySettingsView.swift",
-    "QualityExport.swift",
-    "DictionaryWorkerBootstrap.swift", "DictionaryWorkerProtocol.swift",
-    "DictionaryWorkerRunner.swift", "InputController.swift",
-    "Settings.swift", "KeyboardShortcuts.swift", "ShortcutsSettingsView.swift", "AboutSettingsView.swift", "FeedbackReport.swift", "FeedbackSettingsView.swift", "DiagnosticFeedbackDependencies.swift", "DiagnosticFeedbackModel.swift", "DiagnosticFeedbackView.swift",
-    "SmartSettingsView.swift", "StartupDiagnostics.swift", "LocalDiagnostics.swift", "DiagnosticIncident.swift", "DiagnosticArchive.swift", "DiagnosticCrashReader.swift",
-    "UpdateIdleInstaller.swift", "UpdateSettingsView.swift",
-]
 let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "quality_exchange.py"]
 let testSwiftSources = [
     "PersonalDataTests.swift", "QualityExportFixture.swift",
@@ -72,21 +53,16 @@ func executableTestTarget(_ name: String, sources: [String],
 
 let executableTestProducts: [(String, String)] = [
     ("personal-data-tests", "PersonalDataTests"),
-    ("voice-learning-coordinator-tests", "VoiceLearningCoordinatorTests"),
-    ("ai-adoption-learning-tests", "AIAdoptionLearningTests"),
     ("ai-credential-tests", "AICredentialTests"),
     ("ai-headless-tests", "AIHeadlessTests"),
     ("ai-live-tests", "AILiveTests"),
     ("ai-native-tests", "AINativeTests"),
-    ("ai-pronunciation-tests", "AIPronunciationTests"),
     ("ai-runtime-tests", "AIRuntimeTests"),
     ("ai-suggestion-tests", "AISuggestionTests"),
     ("controller-initialization-tests", "ControllerInitializationTests"),
     ("controller-tests", "ControllerTests"),
     ("deployment-tests", "DeploymentTests"),
     ("dictionary-activation-tests", "DictionaryActivationTests"),
-    ("dictionary-generator-tests", "DictionaryGeneratorTests"),
-    ("dictionary-store-tests", "DictionaryStoreTests"),
     ("dictionary-update-tests", "DictionaryUpdateTests"),
     ("dictionary-worker-fixture", "DictionaryWorkerFixture"),
     ("engine-tests", "EngineTests"),
@@ -106,7 +82,6 @@ let executableTestProducts: [(String, String)] = [
     ("voice-session-tests", "VoiceSessionTests"),
     ("apple-voice-tests", "AppleVoiceRecognizerTests"),
     ("bundle-artifact-smoke-tests", "BundleArtifactSmokeTests"),
-    ("voice-lexicon-tests", "VoiceLexiconTests"),
     ("voice-controller-tests", "VoiceControllerTests"),
     ("portable-abi-tests", "PortableABITests"),
 ]
@@ -115,23 +90,16 @@ let package = Package(
     name: "InkFlow",
     platforms: [.macOS(.v26)],
     products: [
-        .executable(name: "dictionary-preparation-fixture", targets: ["DictionaryPreparationFixture"]),
-        .executable(name: "core-dictionary-tests", targets: ["CoreDictionaryTests"]),
         .executable(name: "InkFlow", targets: ["InkFlowApp"]),
         .executable(name: "InkFlowDictionaryWorker", targets: ["InkFlowDictionaryWorker"]),
         .executable(name: "register-input-source", targets: ["RegisterInputSourceTool"]),
         .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
-        .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
     ] + executableTestProducts.map { .executable(name: $0.0, targets: [$0.1]) },
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
-        .executableTarget(name: "DictionaryPreparationFixture", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/DictionaryPreparationFixture", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
-        .executableTarget(name: "CoreDictionaryTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowDictionaryTestSupport"], path: "Core/Tests/CoreDictionaryTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
-        .executableTarget(name: "VoiceLearningCoordinatorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/VoiceLearningCoordinatorTests", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowDictionaryTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/InkFlowDictionaryTestSupport", swiftSettings: strictSwiftSettings),
-        .executableTarget(name: "DictionaryStoreTests", dependencies: ["InkFlowDictionaryTestSupport"], path: "Core/Tests/DictionaryStoreTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .target(name: "InkFlowEngineTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/InkFlowEngineTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowCoreTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/InkFlowCoreTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowRime", dependencies: ["InkFlowDomain", "InkFlowPortable"], path: "Core/Sources/InkFlowRime", swiftSettings: strictSwiftSettings, linkerSettings: [.linkedLibrary("sqlite3")]),
@@ -158,10 +126,8 @@ let package = Package(
         ),
         .target(
             name: "InkFlowCore",
-            dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowPortable", "InkFlowNative"],
+            dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowNative"],
             path: "macOS/Sources",
-            exclude: ["main.swift", "NativeCandidates.h", "NativeCandidates.m"],
-            sources: inkFlowCoreSources,
             swiftSettings: strictSwiftSettings,
             linkerSettings: [
                 .linkedFramework("AppKit"),
@@ -176,9 +142,7 @@ let package = Package(
         .executableTarget(
             name: "InkFlowApp",
             dependencies: ["InkFlowCore", .product(name: "Sparkle", package: "Sparkle")],
-            path: "macOS/Sources",
-            exclude: inkFlowCoreSources + ["NativeCandidates.h", "NativeCandidates.m"],
-            sources: ["main.swift"],
+            path: "macOS/App",
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime
         ),
@@ -200,15 +164,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "QualityBuildMetadataTool",
-            dependencies: ["InkFlowCore"],
+            dependencies: ["InkFlowRime"],
             path: "macOS/Tools",
             exclude: toolSources.filter { $0 != "QualityBuildMetadata.swift" },
             sources: ["QualityBuildMetadata.swift"],
             swiftSettings: strictSwiftSettings,
             linkerSettings: portableRuntime
         ),
-        .executableTarget(name: "PackagedCacheTool", dependencies: ["InkFlowRime"],
-            path: "Core/Tools/PackagedCacheTool", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .target(
             name: "InkFlowNativeTestSupport",
             path: "macOS/Tests",
@@ -239,7 +201,6 @@ let package = Package(
             swiftSettings: strictSwiftSettings,
             linkerSettings: [.linkedLibrary("sqlite3")]
         ),
-        .executableTarget(name: "AIAdoptionLearningTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Core/Tests/AIAdoptionLearningTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         executableTestTarget("PersonalDataTests", sources: ["PersonalDataTests.swift"], dependencies: ["InkFlowCore", "InkFlowRime", "InkFlowDomain"]),
         executableTestTarget("AICredentialTests", sources: ["AICredentialTests.swift"]),
         executableTestTarget("AIHeadlessTests", sources: ["AIHeadlessPipelineTests.swift"],
@@ -248,7 +209,6 @@ let package = Package(
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         executableTestTarget("AINativeTests", sources: ["AIControllerNativeTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
-        .executableTarget(name: "AIPronunciationTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/AIPronunciationTests", swiftSettings: strictSwiftSettings),
         executableTestTarget("AIRuntimeTests", sources: ["AIRuntimeTests.swift"],
             dependencies: standardTestDependencies + ["InkFlowAITestSupport"]),
         executableTestTarget("AISuggestionTests", sources: ["AISuggestionTests.swift"],
@@ -257,7 +217,6 @@ let package = Package(
         executableTestTarget("ControllerTests", sources: ["ControllerTests.swift"]),
         executableTestTarget("DeploymentTests", sources: ["DeploymentTests.swift"]),
         executableTestTarget("DictionaryActivationTests", sources: ["DictionaryActivationTests.swift"], dependencies: standardTestDependencies + ["InkFlowDictionaryTestSupport"]),
-        .executableTarget(name: "DictionaryGeneratorTests", dependencies: ["InkFlowDomain"], path: "Core/Tests/DictionaryGeneratorTests", swiftSettings: strictSwiftSettings),
         executableTestTarget("DictionaryUpdateTests", sources: ["DictionaryUpdateTests.swift"], dependencies: standardTestDependencies + ["InkFlowDictionaryTestSupport"]),
         executableTestTarget("DictionaryWorkerFixture", sources: ["DictionaryWorkerFixture.swift"]),
         executableTestTarget("EngineTests", sources: ["EngineTests.swift"], dependencies: standardTestDependencies + ["InkFlowEngineTestSupport"]),
@@ -279,7 +238,6 @@ let package = Package(
         executableTestTarget("BundleArtifactSmokeTests", sources: ["BundleArtifactSmokeTests.swift"],
             dependencies: ["InkFlowDomain", "InkFlowRime"]),
         executableTestTarget("VoiceSessionTests", sources: ["VoiceSessionTests.swift"]),
-        .executableTarget(name: "VoiceLexiconTests", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Core/Tests/VoiceLexiconTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         executableTestTarget("VoiceControllerTests", sources: ["VoiceControllerTests.swift"]),
         executableTestTarget("TerminationTests", sources: ["TerminationTests.swift"]),
         .target(name: "InkFlowPortable", path: "Core/Sources/InkFlowPortable",

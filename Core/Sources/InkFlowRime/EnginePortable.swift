@@ -115,4 +115,8 @@ package enum IFPortablePersonalData {
             (name, ifr_personal_export_text(exported, name).map { String(cString: $0) })
         })
     }
+
+    package static func restore(user: String, name: String, snapshot: String) -> Bool {
+        IFPersonalDataSnapshot(user, name, snapshot, 1) == 0
+    }
 }

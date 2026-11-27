@@ -1,7 +1,6 @@
 import Foundation
 import InkFlowDomain
 import InkFlowRime
-import InkFlowPortable
 import Darwin
 
 struct PersonalDataError: LocalizedError, Sendable {
@@ -224,7 +223,9 @@ package enum IFPersonalDataWorkerBootstrap {
                 guard try !PersonalDataFiles.exists(database),
                       String(data: try PersonalDataFiles.read(snapshot, limit: 32 * 1024 * 1024), encoding: .utf8) != nil else { throw PersonalDataError("snapshot") }
                 try PersonalDataFiles.safe(snapshot)
-                guard IFPersonalDataSnapshot(databaseRoot.path, name, snapshot.path, 1) == 0 else { throw PersonalDataError("native-snapshot") }
+                guard IFPortablePersonalData.restore(user: databaseRoot.path, name: name, snapshot: snapshot.path) else {
+                    throw PersonalDataError("native-snapshot")
+                }
             }
             return 0
         } catch {

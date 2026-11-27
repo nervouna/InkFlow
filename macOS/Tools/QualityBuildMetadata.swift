@@ -1,9 +1,6 @@
 import InkFlowRime
 import Foundation
 import CryptoKit
-#if SWIFT_PACKAGE
-import InkFlowCore
-#endif
 
 @main
 struct QualityBuildMetadataTool {
@@ -130,7 +127,9 @@ struct QualityBuildMetadataTool {
         if ["Package.swift", "Package.resolved", "Core/Package.swift", "rust-toolchain.toml", "macOS/Info.plist",
             "Core/Portable/Cargo.toml", "Core/Portable/Cargo.lock", "Core/Portable/build.rs", "Core/Portable/build-native.py",
             "Core/Portable/native-sources.lock.json"].contains(path) { return true }
-        let prefixes = ["Core/Portable/dictionary/", "Core/Portable/src/", "Core/Portable/include/", "Core/Portable/native/", "Core/Sources/", "Core/Tools/", "Core/scripts/", "macOS/Sources/", "macOS/Quality/", "macOS/SwiftPM/", "macOS/DictionaryWorker/", "macOS/Tools/", "macOS/Resources/",
+        let prefixes = ["Core/Portable/dictionary/", "Core/Portable/src/", "Core/Portable/include/",
+            "Core/Portable/native/", "Core/Sources/", "Core/Tools/", "Core/scripts/", "macOS/App/", "macOS/Sources/",
+            "macOS/Quality/", "macOS/SwiftPM/", "macOS/DictionaryWorker/", "macOS/Tools/", "macOS/Resources/",
             "macOS/Design/", "Core/Data/", "Core/config/", "macOS/Licenses/", "schemas/"]
         if prefixes.contains(where: path.hasPrefix) { return true }
         let scripts = ["build.sh", "build-number.sh", "build-summary.sh", "build-icon.sh", "build-dictionary-worker.sh",
