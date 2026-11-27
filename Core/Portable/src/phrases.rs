@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, ffi::CStr};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CustomPhrase {
@@ -17,13 +17,13 @@ pub enum PhraseError {
 }
 
 impl PhraseError {
-    pub fn code(self) -> &'static str {
+    pub fn code(self) -> &'static CStr {
         match self {
-            PhraseError::InvalidCode => "invalid-code",
-            PhraseError::ControlCharacter => "control-character",
-            PhraseError::EmptyText => "empty-text",
-            PhraseError::InvalidData => "invalid-data",
-            PhraseError::Duplicate => "duplicate",
+            PhraseError::InvalidCode => c"invalid-code",
+            PhraseError::ControlCharacter => c"control-character",
+            PhraseError::EmptyText => c"empty-text",
+            PhraseError::InvalidData => c"invalid-data",
+            PhraseError::Duplicate => c"duplicate",
         }
     }
 }

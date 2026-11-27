@@ -47,12 +47,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         return Err("Unsupported corpus".into());
     }
     let start = Instant::now();
-    let engine = Engine::new(Configuration {
-        shared: resources.join("shared"),
-        user: user.clone(),
-        cache: Some(resources.join("prepared/cache")),
-        context_index: Some(resources.join("shared/pinyin_simp.context.bin")),
-    })?;
+    let engine = Engine::new(Configuration::prepared(resources, user.clone()))?;
     let session = engine.session()?;
     session.set_configuration(count, &[], Some(&InputPreferences::default()))?;
     if session.configuration_error().is_some() {

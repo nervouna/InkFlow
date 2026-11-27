@@ -857,17 +857,13 @@ fn run_live(
         std::env::temp_dir().join(format!("inkflow-replay-{}-{name}", std::process::id())),
     );
     fs::remove_dir_all(&user.0).ok();
-    let engine = Engine::new(Configuration {
-        shared: resources.join("shared"),
-        user: user.0.clone(),
-        cache: Some(resources.join("prepared/cache")),
-        context_index: Some(resources.join("shared/pinyin_simp.context.bin")),
-    })
-    .map_err(|error| format!("arm {name}: {error}"))?;
+    let engine = Engine::new(Configuration::prepared(resources, user.0.clone()))
+        .map_err(|error| format!("arm {name}: {error}"))?;
     let session = engine.session()?;
     session.set_configuration(9, &[], Some(&InputPreferences::default()))?;
     if let Some(error) = session.configuration_error() {
-        return Err(format!("arm {name}: configuration failed: {}", error.code()).into());
+        let code = error.code().to_string_lossy();
+        return Err(format!("arm {name}: configuration failed: {code}").into());
     }
     let mut walk = Walk::default();
     let mut outcomes = Vec::with_capacity(cases.len());

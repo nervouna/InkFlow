@@ -1,7 +1,7 @@
 use crate::{
     Error,
     engine::{
-        Action, Configuration, ConfigurationError, Engine, EngineError, InputSession,
+        Action, Configuration, Engine, EngineError, InputSession,
         LearningEntry, LearningError, LearningSource, LearningUndo, Mutation, Snapshot,
     },
     personal::{self, Backup, PersonalError},
@@ -202,25 +202,6 @@ fn mask_from_options(input: &InputPreferences) -> u32 {
         .fold(0, |mask, (bit, option)| {
             mask | (u32::from(input.get(*option)) << bit)
         })
-}
-
-fn configuration_code(error: ConfigurationError) -> &'static CStr {
-    use crate::phrases::PhraseError;
-    match error {
-        ConfigurationError::Phrases(PhraseError::InvalidCode) => c"invalid-code",
-        ConfigurationError::Phrases(PhraseError::ControlCharacter) => c"control-character",
-        ConfigurationError::Phrases(PhraseError::EmptyText) => c"empty-text",
-        ConfigurationError::Phrases(PhraseError::InvalidData) => c"invalid-data",
-        ConfigurationError::Phrases(PhraseError::Duplicate) => c"duplicate",
-        ConfigurationError::PhraseWrite => c"phrase-write",
-        ConfigurationError::SessionReload => c"session-reload",
-        ConfigurationError::MissingPrism => c"missing-prism",
-        ConfigurationError::SchemaOpen => c"schema-open",
-        ConfigurationError::PatchInit => c"patch-init",
-        ConfigurationError::PatchLoad => c"patch-load",
-        ConfigurationError::SchemaRestore => c"schema-restore",
-        ConfigurationError::SchemaApply => c"schema-apply",
-    }
 }
 
 #[repr(C)]
@@ -788,7 +769,7 @@ pub unsafe extern "C" fn ifr_session_configuration_error(
     let mut code = ptr::null();
     guard(|| {
         if let Some(error) = unsafe { reference(session, "session") }?.configuration_error() {
-            code = configuration_code(error).as_ptr();
+            code = error.code().as_ptr();
         }
         Ok(())
     });
@@ -1300,10 +1281,6 @@ mod tests {
         let mask = mask_from_options(&traditional);
         assert_eq!(mask, ifr_input_options_default() | (1 << 13));
         assert_eq!(options_from_mask(mask), traditional);
-        assert_eq!(
-            configuration_code(ConfigurationError::PhraseWrite),
-            c"phrase-write"
-        );
     }
 
     #[test]

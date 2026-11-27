@@ -25,7 +25,7 @@ pub enum Error {
     InvalidCandidate,
     Poisoned,
     Native(i32),
-    Configuration(&'static str),
+    Configuration(&'static CStr),
 }
 
 impl std::fmt::Display for Error {
@@ -135,15 +135,6 @@ impl Runtime {
         })
     }
 
-    pub fn deploy(&mut self, schema: &Path) -> Result<()> {
-        let schema = path(schema)?;
-        let _lock = lock()?;
-        if Arc::strong_count(&self.owner) != 1 {
-            return Err(Error::SessionsActive);
-        }
-        check(unsafe { ffi::ifp_deploy(schema.as_ptr()) })
-    }
-
     pub fn prepare(&mut self) -> Result<()> {
         let _lock = lock()?;
         if Arc::strong_count(&self.owner) != 1 {
@@ -159,7 +150,6 @@ impl Runtime {
         check(unsafe { ffi::ifp_session_create(schema.as_ptr(), &mut id) })?;
         Ok(Session {
             id,
-            published: None,
             _runtime: self.owner.clone(),
         })
     }
@@ -172,7 +162,6 @@ pub struct Candidate {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Snapshot {
-    token: Arc<()>,
     pub preedit: String,
     pub caret_bytes: usize,
     pub selection_bytes: std::ops::Range<usize>,
@@ -184,13 +173,11 @@ pub struct Snapshot {
 
 pub struct Session {
     id: usize,
-    published: Option<(Arc<()>, usize)>,
     _runtime: Arc<RuntimeOwner>,
 }
 impl Session {
     pub fn process_key(&mut self, key: i32, modifiers: i32) -> Result<bool> {
         let _lock = lock()?;
-        self.published = None;
         let mut handled = 0;
         check(unsafe { ffi::ifp_process_key(self.id, key, modifiers, &mut handled) })?;
         Ok(handled != 0)
@@ -198,28 +185,11 @@ impl Session {
 
     pub fn clear(&mut self) -> Result<()> {
         let _lock = lock()?;
-        self.published = None;
         check(unsafe { ffi::ifp_clear(self.id) })
-    }
-
-    pub fn select_candidate(&mut self, snapshot: &Snapshot, index: usize) -> Result<()> {
-        let _lock = lock()?;
-        let Some((token, count)) = &self.published else {
-            return Err(Error::StaleSnapshot);
-        };
-        if !Arc::ptr_eq(token, &snapshot.token) {
-            return Err(Error::StaleSnapshot);
-        }
-        if index >= *count {
-            return Err(Error::InvalidCandidate);
-        }
-        self.published = None;
-        check(unsafe { ffi::ifp_select_candidate(self.id, index) })
     }
 
     pub fn change_page(&mut self, backward: bool) -> Result<bool> {
         let _lock = lock()?;
-        self.published = None;
         let mut changed = 0;
         check(unsafe { ffi::ifp_change_page(self.id, i32::from(backward), &mut changed) })?;
         Ok(changed != 0)
@@ -227,7 +197,6 @@ impl Session {
 
     pub fn snapshot(&mut self) -> Result<Snapshot> {
         let _lock = lock()?;
-        self.published = None;
         let mut raw = ffi::Snapshot::default();
         check(unsafe { ffi::ifp_snapshot(self.id, &mut raw) })?;
         let preedit = unsafe { copy(raw.preedit) }?;
@@ -246,10 +215,7 @@ impl Session {
                 comment: unsafe { copy(candidate.comment) }?,
             });
         }
-        let token = Arc::new(());
-        self.published = Some((token.clone(), candidates.len()));
         Ok(Snapshot {
-            token,
             preedit,
             caret_bytes: raw.caret,
             selection_bytes: raw.selection_start..raw.selection_end,
@@ -267,9 +233,7 @@ impl Session {
         if raw.is_null() {
             return Ok(None);
         }
-        let value = unsafe { copy(raw) };
-        unsafe { ffi::ifp_string_free(raw) };
-        value.map(Some)
+        Self::owned_string(raw).map(Some)
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -321,13 +285,11 @@ impl Session {
 
     pub(crate) fn promote_context_candidate(&mut self, source: usize, destination: usize) -> Result<()> {
         let _lock = lock()?;
-        self.published = None;
         check(unsafe { ffi::ifp_promote_context_candidate(self.id, source, destination) })
     }
 
     pub(crate) fn highlight(&mut self, index: usize) -> Result<bool> {
         let _lock = lock()?;
-        self.published = None;
         let mut handled = 0;
         check(unsafe { ffi::ifp_highlight_candidate(self.id, index, &mut handled) })?;
         Ok(handled != 0)
@@ -335,13 +297,11 @@ impl Session {
 
     pub(crate) fn select_native(&mut self, index: usize) -> Result<bool> {
         let _lock = lock()?;
-        self.published = None;
         Ok(unsafe { ffi::ifp_select_candidate(self.id, index) } == 0)
     }
 
     pub(crate) fn commit_composition(&mut self) -> Result<bool> {
         let _lock = lock()?;
-        self.published = None;
         let mut handled = 0;
         check(unsafe { ffi::ifp_commit_composition(self.id, &mut handled) })?;
         Ok(handled != 0)
@@ -394,7 +354,6 @@ impl Session {
             .collect::<Result<Vec<_>>>()?;
         let pointers: Vec<_> = paths.iter().map(|p| p.as_ptr()).collect();
         let _lock = lock()?;
-        self.published = None;
         let mut outcome = 0;
         let status = unsafe {
             ffi::ifp_apply_schema_patch(

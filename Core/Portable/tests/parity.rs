@@ -28,13 +28,7 @@ fn scratch(name: &str) -> PathBuf {
 }
 
 fn engine(resources: &Path, user: &Path) -> Arc<Engine> {
-    Engine::new(Configuration {
-        shared: resources.join("shared"),
-        user: user.to_path_buf(),
-        cache: Some(resources.join("prepared/cache")),
-        context_index: Some(resources.join("shared/pinyin_simp.context.bin")),
-    })
-    .unwrap()
+    Engine::new(Configuration::prepared(resources, user.to_path_buf())).unwrap()
 }
 
 fn configured(engine: &Arc<Engine>) -> InputSession {

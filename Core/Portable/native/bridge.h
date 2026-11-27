@@ -26,7 +26,6 @@ const char* ifp_version(void);
 int ifp_initialize(const char* shared, const char* user, const char* cache);
 int ifp_prepare(void);
 int ifp_finalize(void);
-int ifp_deploy(const char* schema_path);
 int ifp_session_create(const char* schema, uintptr_t* session);
 int ifp_session_destroy(uintptr_t session);
 int ifp_process_key(uintptr_t session, int key, int modifiers, int* handled);

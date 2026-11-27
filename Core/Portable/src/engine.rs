@@ -6,6 +6,7 @@ use crate::{
 };
 use std::{
     collections::BTreeMap,
+    ffi::CStr,
     fs,
     ops::Range,
     path::{Path, PathBuf},
@@ -32,17 +33,17 @@ pub enum ConfigurationError {
 }
 
 impl ConfigurationError {
-    pub fn code(self) -> &'static str {
+    pub fn code(self) -> &'static CStr {
         match self {
             ConfigurationError::Phrases(error) => error.code(),
-            ConfigurationError::PhraseWrite => "phrase-write",
-            ConfigurationError::SessionReload => "session-reload",
-            ConfigurationError::MissingPrism => "missing-prism",
-            ConfigurationError::SchemaOpen => "schema-open",
-            ConfigurationError::PatchInit => "patch-init",
-            ConfigurationError::PatchLoad => "patch-load",
-            ConfigurationError::SchemaRestore => "schema-restore",
-            ConfigurationError::SchemaApply => "schema-apply",
+            ConfigurationError::PhraseWrite => c"phrase-write",
+            ConfigurationError::SessionReload => c"session-reload",
+            ConfigurationError::MissingPrism => c"missing-prism",
+            ConfigurationError::SchemaOpen => c"schema-open",
+            ConfigurationError::PatchInit => c"patch-init",
+            ConfigurationError::PatchLoad => c"patch-load",
+            ConfigurationError::SchemaRestore => c"schema-restore",
+            ConfigurationError::SchemaApply => c"schema-apply",
         }
     }
 }
@@ -61,7 +62,9 @@ impl std::fmt::Display for EngineError {
         match self {
             EngineError::Native(error) => write!(f, "native: {error}"),
             EngineError::MissingResource(path) => write!(f, "missing resource {path}"),
-            EngineError::Configuration(error) => write!(f, "configuration: {}", error.code()),
+            EngineError::Configuration(error) => {
+                write!(f, "configuration: {}", error.code().to_string_lossy())
+            }
             EngineError::ContextIndex(error) => write!(f, "context index: {error}"),
             EngineError::Io(error) => write!(f, "io: {error}"),
         }
@@ -84,6 +87,17 @@ pub struct Configuration {
     pub user: PathBuf,
     pub cache: Option<PathBuf>,
     pub context_index: Option<PathBuf>,
+}
+
+impl Configuration {
+    pub fn prepared(resources: &Path, user: PathBuf) -> Self {
+        Self {
+            shared: resources.join("shared"),
+            user,
+            cache: Some(resources.join("prepared/cache")),
+            context_index: Some(resources.join("shared/pinyin_simp.context.bin")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -439,7 +453,6 @@ impl Engine {
         match &mut core.session {
             Some(session) if !core.lost => session.snapshot(),
             _ => Ok(crate::Snapshot {
-                token: Arc::new(()),
                 preedit: String::new(),
                 caret_bytes: 0,
                 selection_bytes: 0..0,
@@ -1080,9 +1093,6 @@ pub struct InputSession {
 impl InputSession {
     pub fn id(&self) -> u64 {
         self.id
-    }
-    pub fn engine(&self) -> &Arc<Engine> {
-        &self.engine
     }
 
     fn mutate<T>(
