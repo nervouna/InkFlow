@@ -961,7 +961,6 @@ package enum QualityJSON {
     }
 }
 
-#if SWIFT_PACKAGE
 package enum QualityBuildMetadataAccess {
     package static func encoded(sourceRevision: String, sourceTreeSHA256: String, sourceDirty: Bool,
                                 bundledResourcesSHA256: String, bundleSHA256: String,
@@ -974,4 +973,3 @@ package enum QualityBuildMetadataAccess {
             appVersion: appVersion, appBuild: appBuild))
     }
 }
-#endif

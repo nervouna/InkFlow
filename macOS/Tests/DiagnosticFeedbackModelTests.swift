@@ -1,8 +1,6 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 @MainActor enum DiagnosticFeedbackModelTests {
     static func run() async {

@@ -2,12 +2,10 @@
 import AppKit
 @preconcurrency import InputMethodKit
 import Darwin
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowAITestSupport
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 @MainActor
 private final class HeadlessThunderPresentation: ThunderPresenting {

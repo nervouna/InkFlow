@@ -2,11 +2,9 @@
 import CryptoKit
 import InputMethodKit
 import SQLite3
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 let qualityCaptureBuildMetadata = QualityBuildMetadata(sourceRevision: "test",
     sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,

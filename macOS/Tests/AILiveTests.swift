@@ -1,8 +1,6 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowAITestSupport
-#endif
 
 @main
 struct AILiveTests {

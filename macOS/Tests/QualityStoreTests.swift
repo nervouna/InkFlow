@@ -2,9 +2,7 @@
 import CryptoKit
 import Foundation
 import SQLite3
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private func expect(_ condition: Bool, _ message: String,
                     file: StaticString = #filePath, line: UInt = #line) {

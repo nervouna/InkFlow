@@ -4,11 +4,9 @@ import InputMethodKit
 import SwiftUI
 import ApplicationServices
 import AVFoundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 @main
 struct SettingsUITests {

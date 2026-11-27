@@ -2,10 +2,8 @@
 @testable import InkFlowRime
 import Foundation
 import AppKit
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 @main
 struct SettingsTests {

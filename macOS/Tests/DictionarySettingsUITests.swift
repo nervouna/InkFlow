@@ -1,11 +1,9 @@
 @testable import InkFlowRime
 import AppKit
 import SwiftUI
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 private final class DictionaryUIBox<Value: Sendable>: @unchecked Sendable {
     private let lock = NSLock()

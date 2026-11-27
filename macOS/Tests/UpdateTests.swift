@@ -1,8 +1,6 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 enum UpdateTests {
     @MainActor static func run() {

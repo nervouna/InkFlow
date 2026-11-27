@@ -1,8 +1,6 @@
 import Foundation
 import Darwin
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private final class ArchiveClock: @unchecked Sendable {
     private let lock = NSLock()

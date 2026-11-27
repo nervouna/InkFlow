@@ -2,9 +2,7 @@
 @testable import InkFlowRime
 import AppKit
 import InputMethodKit
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 @MainActor
 package func keyEvent(_ code: UInt16, _ text: String, _ flags: NSEvent.ModifierFlags = [],

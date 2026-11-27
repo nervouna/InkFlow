@@ -2,11 +2,9 @@
 @testable import InkFlowDomain
 import AppKit
 import InputMethodKit
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 private final class StartupGate: @unchecked Sendable {
     private let lock = NSCondition()

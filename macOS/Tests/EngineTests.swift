@@ -2,10 +2,8 @@ import InkFlowEngineTestSupport
 @testable import InkFlowRime
 @testable import InkFlowDomain
 import AppKit
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 @main
 struct EngineTests {
