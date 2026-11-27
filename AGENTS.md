@@ -24,6 +24,8 @@ Develop InkFlow toward the fastest and most intelligent IME. Use these goals to 
 
 - For shared-core work, read the [portable runtime guide](Core/Portable/README.md). For new platforms, read the
   [migration design](docs/portable-core-migration.md).
+- The [architecture map](docs/architecture.md) lists module ownership, the single source of each shared
+  constant, the boundary rules CI enforces and the open architecture decisions.
 - Follow the [macOS build guide](macOS/DEVELOPMENT.md#build-and-try-the-development-version) and
   [focused test matrix](macOS/TESTING.md#which-tests-to-run). See [known failures](macOS/DEBUGGING.md) when diagnosing.
   Develop and test the macOS app on macOS. GitHub's [macOS CI](.github/workflows/macos.yml) runs automated checks.
