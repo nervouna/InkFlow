@@ -100,5 +100,5 @@ Follow the [release skill](../.agents/skills/inkflow-release/SKILL.md).
 - `InputController.swift` connects InputMethodKit callbacks to the engine and the system candidate panel.
 - `Settings.swift` holds validated defaults and the SwiftUI settings UI; Sparkle (`IFUpdaterAccess`) owns updater preferences.
 - `NativeCandidates.m` is the only Objective-C source: private candidate-panel adaptations (see `DEBUGGING.md`).
-- `Tools/RegisterInputSource.swift` registers and verifies the input source and runs the update lifecycle (stop the old process, restore the enabled and selected state, relaunch); `Shared/` holds its code, which `install.sh` and the package scripts use. Build and test scripts never install, register or select it. `test.sh input-source-lifecycle` covers `Shared/`.
+- `Tools/RegisterInputSource/` registers and verifies the input source and runs the update lifecycle (stop the old process, restore the enabled and selected state, relaunch); `Shared/` holds its code, which `install.sh` and the package scripts use. Build and test scripts never install, register or select it. `test.sh input-source-lifecycle` covers `Shared/`.
 - `scripts/prepare-rime.sh` delegates to the [shared dictionary preparation](../docs/shared-dictionary-preparation.md); see [DEPENDENCIES.md](DEPENDENCIES.md) for pins.

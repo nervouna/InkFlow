@@ -11,7 +11,7 @@ Dependencies point down. A module never imports one above it.
 | --- | --- | --- | --- |
 | Frontend | `InkFlowApp`, `InkFlowCore`, `InkFlowNative` | `macOS/Sources`, `macOS/SwiftPM` | IMK controller, settings UI and UserDefaults, AI, voice, diagnostics, macOS personal-data backup |
 | Frontend | `InkFlowDictionaryWorker` | `macOS/DictionaryWorker` | Sandboxed dictionary and personal-data worker process |
-| Frontend | `InkFlowInputSources`, `register-input-source` | `macOS/Shared`, `macOS/Tools` | Input-source registration and the update lifecycle |
+| Frontend | `InkFlowInputSources`, `register-input-source` | `macOS/Shared`, `macOS/Tools/RegisterInputSource` | Input-source registration and the update lifecycle |
 | Frontend | Fcitx5 addon | `Linux/fcitx5` | Linux input context, UI and configuration |
 | Shared Swift | `InkFlowRime` | `Core/Sources/InkFlowRime` | `IFEngine` facade over `ifr_*`, dictionary store and activation, quality store and recorder, voice lexicon |
 | Shared Swift | `InkFlowDomain` | `Core/Sources/InkFlowDomain` | Pure value types: input preferences, custom phrases, voice learning, dictionary catalog |

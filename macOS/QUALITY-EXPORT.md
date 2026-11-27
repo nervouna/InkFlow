@@ -58,7 +58,7 @@ Recording the hashes in the text-free default is a privacy decision, not an inst
 
 ## Analyze on another computer
 
-Run these commands from the InkFlow repository. Use the analysis script and `macOS/Tools/quality_exchange.py` from this feature revision or a later version that supports export format v1.
+Run these commands from the InkFlow repository. Use the analysis script and the `quality_exchange.py` next to it from this feature revision or a later version that supports export format v1.
 
 ```sh
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py

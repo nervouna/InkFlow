@@ -16,7 +16,6 @@ let portableRuntime: [LinkerSetting] = [
 ]
 let strictSwiftSettings: [SwiftSetting] = [.unsafeFlags(["-warnings-as-errors"])]
 let strictCSettings: [CSetting] = [.unsafeFlags(["-Wall", "-Wextra", "-Werror"])]
-let toolSources = [ "QualityBuildMetadata.swift", "RegisterInputSource.swift", "quality_exchange.py"]
 let testSwiftSources = [
     "PersonalDataTests.swift", "QualityExportFixture.swift",
     "AIControllerNativeTests.swift", "AICredentialTests.swift",
@@ -156,17 +155,13 @@ let package = Package(
         .executableTarget(
             name: "RegisterInputSourceTool",
             dependencies: ["InkFlowInputSources"],
-            path: "macOS/Tools",
-            exclude: toolSources.filter { $0 != "RegisterInputSource.swift" },
-            sources: ["RegisterInputSource.swift"],
+            path: "macOS/Tools/RegisterInputSource",
             swiftSettings: strictSwiftSettings
         ),
         .executableTarget(
             name: "QualityBuildMetadataTool",
             dependencies: ["InkFlowRime"],
-            path: "macOS/Tools",
-            exclude: toolSources.filter { $0 != "QualityBuildMetadata.swift" },
-            sources: ["QualityBuildMetadata.swift"],
+            path: "macOS/Tools/QualityBuildMetadata",
             swiftSettings: strictSwiftSettings,
             linkerSettings: portableRuntime
         ),
