@@ -126,11 +126,6 @@ final class IFSettings: ObservableObject {
 
     var qualityRecordingPaused: Bool { integer(for: "qualityRecordingPaused", allowed: [0, 1], fallback: 0) != 0 }
     var qualityTextCapture: Bool { integer(for: "qualityTextCapture", allowed: [0, 1], fallback: 0) != 0 }
-    var qualityRecordingStatus: String {
-        guard qualityStore != nil else { return "未启动" }
-        if qualityStore?.statistics().disabled == true { return "本次记录不可用" }
-        return qualityRecordingPaused ? "已暂停" : "已开启"
-    }
 
     func setQualityRecordingPaused(_ paused: Bool) async {
         guard !qualityCommandPending, let qualityStore else { return }

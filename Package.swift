@@ -119,7 +119,6 @@ let package = Package(
         .executable(name: "core-dictionary-tests", targets: ["CoreDictionaryTests"]),
         .executable(name: "InkFlow", targets: ["InkFlowApp"]),
         .executable(name: "InkFlowDictionaryWorker", targets: ["InkFlowDictionaryWorker"]),
-        .executable(name: "dictionary-generator", targets: ["DictionaryGeneratorTool"]),
         .executable(name: "register-input-source", targets: ["RegisterInputSourceTool"]),
         .executable(name: "quality-build-metadata", targets: ["QualityBuildMetadataTool"]),
         .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
@@ -191,8 +190,6 @@ let package = Package(
             swiftSettings: strictSwiftSettings,
             linkerSettings: bundledRimeRuntime
         ),
-        .executableTarget(name: "DictionaryGeneratorTool", dependencies: ["InkFlowDomain"],
-            path: "Core/Tools/DictionaryGeneratorTool", swiftSettings: strictSwiftSettings),
         .executableTarget(
             name: "RegisterInputSourceTool",
             dependencies: ["InkFlowInputSources"],

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/../.."
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-build-workflow.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 repo="$fixture/repo"
-mkdir -p "$repo/macOS/scripts" "$repo/macOS/Resources" "$repo/macOS/Licenses" "$repo/macOS/Sources" "$repo/Core/Tools/DictionaryGeneratorTool" \
+mkdir -p "$repo/macOS/scripts" "$repo/macOS/Resources" "$repo/macOS/Licenses" "$repo/macOS/Sources" \
   "$repo/Core/scripts" "$repo/build/portable/prefix/lib" "$repo/build/InkFlow.app/Contents"
 cp macOS/scripts/{build,build-number,build-summary}.sh "$repo/macOS/scripts/"
 mkdir -p "$repo/.git" "$fixture/bin"
@@ -20,7 +20,6 @@ cp macOS/Info.plist "$repo/macOS/Info.plist"
 printf resource > "$repo/macOS/Resources/resource"
 printf license > "$repo/macOS/Licenses/license"
 printf input > "$repo/macOS/Sources/input"
-printf entry > "$repo/Core/Tools/DictionaryGeneratorTool/main.swift"
 printf old > "$repo/build/InkFlow.app/Contents/sentinel"
 printf librime > "$repo/build/portable/prefix/lib/librime.1.dylib"
 sparkle_framework="$repo/build/swiftpm/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
@@ -45,7 +44,6 @@ cat > "$repo/macOS/scripts/prepare-rime.sh" <<'STUB'
 #!/bin/bash
 bash macOS/scripts/prepare-chinese.sh --sources-only
 STUB
-printf 'generator script\n' > "$repo/macOS/scripts/build-dictionary-generator.sh"
 cat > "$repo/macOS/scripts/quality-metadata.sh" <<'STUB'
 #!/bin/bash
 [[ "${SKIP_METADATA:-0}" != 1 ]] || exit 0
@@ -72,8 +70,7 @@ build_swift_product() {
 [[ "$2" == --build-snapshot ]] || exit 0
 printf 'fixture clean '
 {
-  shasum -a 256 macOS/Sources/input Core/Tools/DictionaryGeneratorTool/main.swift \
-    macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh
+  shasum -a 256 macOS/Sources/input macOS/scripts/quality-metadata.sh
   find build/dictionary-sources -type f -print 2>/dev/null | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done
 } | shasum -a 256 | awk '{print $1}'
 TOOL

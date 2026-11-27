@@ -73,11 +73,10 @@ awk -F '\t' '
 
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-rime-policy.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
-mkdir -p "$fixture/Core/Portable/dictionary/src" "$fixture/Core/Tools/DictionaryGeneratorTool" "$fixture/Core/Sources/InkFlowDomain" "$fixture/Core/scripts" "$fixture/Core/config" "$fixture/Core/Data" "$fixture/schemas" \
+mkdir -p "$fixture/Core/Portable/dictionary/src" "$fixture/Core/Sources/InkFlowDomain" "$fixture/Core/scripts" "$fixture/Core/config" "$fixture/Core/Data" "$fixture/schemas" \
   "$fixture/build/deps/rime-pinyin-simp-fixture"
 cp Core/scripts/prepare-rime.sh Core/scripts/prepare-spelling.sh "$fixture/Core/scripts/"
 printf 'fixture package\n' > "$fixture/Core/Package.swift"
-printf 'fixture entry\n' > "$fixture/Core/Tools/DictionaryGeneratorTool/main.swift"
 printf 'fixture generator implementation\n' > "$fixture/Core/Sources/InkFlowDomain/DictionaryGenerator.swift"
 printf 'fixture Rust generator\n' > "$fixture/Core/Portable/dictionary/src/lib.rs"
 printf 'fixture source catalog\n' > "$fixture/Core/config/chinese-sources.json"
@@ -90,7 +89,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p "$1"
 cp build/deps/rime-pinyin-simp-fixture/pinyin_simp.dict.yaml "$1/"
-shasum -a 256 Core/Package.swift Core/Tools/DictionaryGeneratorTool/main.swift Core/Sources/InkFlowDomain/DictionaryGenerator.swift \
+shasum -a 256 Core/Package.swift Core/Sources/InkFlowDomain/DictionaryGenerator.swift \
   Core/scripts/build-dictionary-generator.sh Core/scripts/swift-package.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json | shasum -a 256 | awk '{print $1}' \
   > "$1/dictionary-manifest.json"
 STUB
@@ -173,7 +172,7 @@ bash "$fixture/macOS/scripts/prepare-rime.sh" "$fixture/wrapper-output"
 diff -r "$fixture/output" "$fixture/wrapper-output"
 [[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]] || fail
 receipt=$(cat "$fixture/output/dictionary-manifest.json")
-for changed in Core/Sources/InkFlowDomain/DictionaryGenerator.swift Core/Tools/DictionaryGeneratorTool/main.swift Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json; do
+for changed in Core/Sources/InkFlowDomain/DictionaryGenerator.swift Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json; do
   cp "$fixture/$changed" "$fixture/source-before"
   printf '\nchanged closure\n' >> "$fixture/$changed"
   generate

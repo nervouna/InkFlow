@@ -293,15 +293,13 @@ cp "$fixture/Package.resolved" "$identity_repo/Package.resolved"
 mkdir "$fixture/originals"
 cp "$identity_repo/Core/Sources/InkFlowRime/Engine.swift" "$fixture/originals/Engine.swift"
 cp "$identity_repo/macOS/scripts/quality-metadata.sh" "$fixture/originals/quality-metadata.sh"
-cp "$identity_repo/macOS/scripts/build-dictionary-generator.sh" "$fixture/originals/build-dictionary-generator.sh"
-cp "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift" "$fixture/originals/main.swift"
+cp "$identity_repo/Core/Tools/PackagedCacheTool/PackagedCacheTool.swift" "$fixture/originals/PackagedCacheTool.swift"
 printf 'build input\n' >> "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
 [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
-for changed in macOS/scripts/quality-metadata.sh macOS/scripts/build-dictionary-generator.sh Core/Tools/DictionaryGeneratorTool/main.swift; do
+for changed in macOS/scripts/quality-metadata.sh Core/Tools/PackagedCacheTool/PackagedCacheTool.swift; do
   cp "$fixture/originals/Engine.swift" "$identity_repo/Core/Sources/InkFlowRime/Engine.swift"
   cp "$fixture/originals/quality-metadata.sh" "$identity_repo/macOS/scripts/quality-metadata.sh"
-  cp "$fixture/originals/build-dictionary-generator.sh" "$identity_repo/macOS/scripts/build-dictionary-generator.sh"
-  cp "$fixture/originals/main.swift" "$identity_repo/Core/Tools/DictionaryGeneratorTool/main.swift"
+  cp "$fixture/originals/PackagedCacheTool.swift" "$identity_repo/Core/Tools/PackagedCacheTool/PackagedCacheTool.swift"
   printf '\nchanged build closure\n' >> "$identity_repo/$changed"
   [[ "$("$tool" "$identity_repo" --build-snapshot)" != "$before" ]] || fail
 done
