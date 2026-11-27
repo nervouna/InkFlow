@@ -8,7 +8,7 @@ mode=${1:-all}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-dictionary-updates.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 source macOS/scripts/swift-test.sh
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
 bash macOS/scripts/dependencies.sh
 if [[ $mode == all || $mode == --worker ]]; then

@@ -11,9 +11,9 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
-bash macOS/scripts/dependencies.sh
+bash Core/scripts/resource-dependencies.sh
 source Core/scripts/swift-package.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-core-dictionaries.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT

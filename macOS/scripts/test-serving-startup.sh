@@ -6,7 +6,7 @@ mkdir -p build
 run_dir=$(mktemp -d "$PWD/build/serving-startup-run.XXXXXX")
 echo "Startup evidence: $run_dir/run.log"
 source macOS/scripts/swift-test.sh
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
 build_swift_test serving-startup-tests build/serving-startup-tests 2>&1 | tee "$run_dir/compile.log"
 inkflow_test_timing_report serving-startup build "$stage_started"

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
 mode=deep
 metadata_option=--verify
