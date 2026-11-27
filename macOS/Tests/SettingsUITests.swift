@@ -360,11 +360,9 @@ struct SettingsUITests {
             }
         )
         let diagnostics = DiagnosticFeedbackDependencies(
-            save: { _, _, _ in preconditionFailure("The simplified log export UI must not save incidents") },
-            incidents: { .init(incidents: [], invalidIncidentCount: 0) },
             export: { selection, _, destination in
                 exportedSelection = selection
-                return .init(url: destination, incidentID: nil, eventCount: 26, isPartial: false)
+                return .init(url: destination, eventCount: 26, isPartial: false)
             },
             chooseDestination: { URL(fileURLWithPath: "/tmp/feedback-ui-diagnostics.zip") }
         )

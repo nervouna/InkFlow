@@ -71,12 +71,11 @@ bridge in addition to its individual store budgets. Diagnostics flushing is best
 `LocalDiagnostics` serializes disk work off the caller and never holds the submission lock during
 I/O. A directory lock coordinates distinct process runs. Export lock contention keeps the bounded
 queue for a later retry. Walk directory components with `O_NOFOLLOW`. Leave ancestor modes and
-contents alone. Failed bookkeeping must preserve data already read or frozen. Compare timestamps in
+contents alone. Failed bookkeeping must preserve data already read. Compare timestamps in
 the archive's integer Unix-millisecond time base to avoid fractional boundary errors. Decoding on-disk
 records excludes unknown fields and corrupt records. Version/build metadata is restricted to release tokens.
-Frozen incidents use the rolling log's age and capacity budget, including reserved bookkeeping.
-Check a prospective incident size before evicting existing data. Clean abandoned temporary files
-under the directory lock, which excludes active saves.
+Leftover `incident_*` files from builds that saved incidents stay in the rolling log's age and
+capacity budget so cleanup still deletes them; they are never read.
 
 `DiagnosticArchive` cleans old staging directories at activation and export. A process lease keeps
 an active export alive. A lease-free stage is abandoned if found while holding the root lock, which

@@ -3,7 +3,6 @@ import Darwin
 
 struct DiagnosticArchivePayload: Sendable {
     let snapshot: DiagnosticSnapshot
-    let incident: DiagnosticIncident?
     let requestedStart: Date?
     let requestedEnd: Date
     let exportedAt: Date
@@ -17,7 +16,6 @@ struct DiagnosticArchivePayload: Sendable {
             let requestedStart: Date?
             let requestedEnd: Date
             let exportedAt: Date
-            let incidentID: UUID?
             let exporter: DiagnosticProcess
             let eventCount: Int
             let oldestEvent: Date?
@@ -28,7 +26,6 @@ struct DiagnosticArchivePayload: Sendable {
             let attachments = ["README.txt", "manifest.json", "events.jsonl", "summary.json"]
         }
         struct Summary: Encodable {
-            let note: String?
             let processVersions: [DiagnosticProcess]
             let modules: [String: String]
         }
@@ -39,9 +36,10 @@ struct DiagnosticArchivePayload: Sendable {
         let modules = ["startup", "input", "ai", "voice", "dictionary", "update", "termination", "statistics", "diagnostics"]
         let observed = Set(snapshot.records.map { $0.module.rawValue })
         let manifest = Manifest(requestedStart: requestedStart, requestedEnd: requestedEnd, exportedAt: exportedAt,
-            incidentID: incident?.id, exporter: DiagnosticProcess(), eventCount: snapshot.records.count, oldestEvent: snapshot.oldest, newestEvent: snapshot.newest,
+            exporter: DiagnosticProcess(), eventCount: snapshot.records.count,
+            oldestEvent: snapshot.oldest, newestEvent: snapshot.newest,
             storage: snapshot.status, invalidRecordsObserved: snapshot.invalidRecordCount, crashCollection: crashes)
-        let summary = Summary(note: incident?.note, processVersions: processes,
+        let summary = Summary(processVersions: processes,
             modules: Dictionary(uniqueKeysWithValues: modules.map { ($0, observed.contains($0) ? "observed" : "notObserved") }))
         return ["README.txt": Data(Self.readme.utf8), "manifest.json": try encoder.encode(manifest),
                 "events.jsonl": try snapshot.jsonLines(), "summary.json": try encoder.encode(summary)]
