@@ -1,26 +1,7 @@
 #!/bin/bash
+source Core/scripts/swift-package.sh
 swiftpm_scratch="$PWD/build/swiftpm"
-swiftpm_triple="arm64-apple-macosx26.0"
-swiftpm_cache="$swiftpm_scratch/cache"
-swiftpm_config="$swiftpm_scratch/config"
-swiftpm_security="$swiftpm_scratch/security"
-export CLANG_MODULE_CACHE_PATH="$swiftpm_scratch/module-cache"
-export SWIFTPM_MODULECACHE_OVERRIDE="$swiftpm_scratch/module-cache"
 
 build_swift_product() {
-  local product="$1" output="$2" configuration="$3"
-  [[ "$configuration" == debug || "$configuration" == release ]] || {
-    echo "SwiftPM configuration must be debug or release." >&2
-    return 2
-  }
-  bash Core/scripts/build-dictionary-generator.sh || return $?
-  [[ "${INKFLOW_PORTABLE_BUILT:-}" == 1 ]] || bash Core/scripts/build-portable.sh || return $?
-  local build_args=(--disable-sandbox --cache-path "$swiftpm_cache"
-    --config-path "$swiftpm_config" --security-path "$swiftpm_security" --scratch-path "$swiftpm_scratch"
-    --triple "$swiftpm_triple" --configuration "$configuration" --product "$product")
-  xcrun swift build "${build_args[@]}" || return $?
-  local bin_path
-  bin_path=$(xcrun swift build "${build_args[@]}" --show-bin-path) || return $?
-  mkdir -p "$(dirname "$output")"
-  cp "$bin_path/$product" "$output"
+  build_package_product "$PWD" "$swiftpm_scratch" "$1" "$2" "$3"
 }

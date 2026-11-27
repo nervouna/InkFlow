@@ -1,6 +1,5 @@
 #!/bin/bash
 source macOS/scripts/swift-package.sh
-source Core/scripts/swift-package.sh
 
 build_swift_test() {
   local product="$1" output="$2"
