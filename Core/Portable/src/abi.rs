@@ -182,6 +182,21 @@ unsafe fn write<T>(pointer: *mut T, value: T) {
     }
 }
 
+unsafe fn query<T, R>(pointer: *const T, name: &str, neutral: R, read: impl FnOnce(&T) -> R) -> R {
+    let mut value = neutral;
+    guard(|| {
+        value = read(unsafe { reference(pointer, name) }?);
+        Ok(())
+    });
+    value
+}
+
+unsafe fn release<T>(pointer: *mut T) {
+    if !pointer.is_null() {
+        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(pointer) })));
+    }
+}
+
 fn c_string(value: &str) -> Result<CString, Failure> {
     CString::new(value).map_err(|_| Failure::new(NATIVE, "embedded NUL in engine text"))
 }
@@ -349,19 +364,12 @@ pub unsafe extern "C" fn ifr_engine_create(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_engine_destroy(engine: *mut Arc<Engine>) {
-    if !engine.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(engine) })));
-    }
+    unsafe { release(engine) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_engine_context_ranking_ready(engine: *const Arc<Engine>) -> c_int {
-    let mut ready = 0;
-    guard(|| {
-        ready = c_int::from(unsafe { reference(engine, "engine") }?.context_ranking_ready());
-        Ok(())
-    });
-    ready
+    unsafe { query(engine, "engine", 0, |e| c_int::from(e.context_ranking_ready())) }
 }
 
 #[unsafe(no_mangle)]
@@ -402,29 +410,17 @@ pub unsafe extern "C" fn ifr_session_create(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_destroy(session: *mut InputSession) {
-    if !session.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(session) })));
-    }
+    unsafe { release(session) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_id(session: *const InputSession) -> u64 {
-    let mut id = 0;
-    guard(|| {
-        id = unsafe { reference(session, "session") }?.id();
-        Ok(())
-    });
-    id
+    unsafe { query(session, "session", 0, InputSession::id) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_available(session: *const InputSession) -> c_int {
-    let mut available = 0;
-    guard(|| {
-        available = c_int::from(unsafe { reference(session, "session") }?.available());
-        Ok(())
-    });
-    available
+    unsafe { query(session, "session", 0, |s| c_int::from(s.available())) }
 }
 
 #[unsafe(no_mangle)]
@@ -473,11 +469,7 @@ pub unsafe extern "C" fn ifr_session_snapshot_if_changed(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_snapshot_free(snapshot: *mut SnapshotHandle) {
-    if !snapshot.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| {
-            drop(unsafe { Box::from_raw(snapshot) })
-        }));
-    }
+    unsafe { release(snapshot) }
 }
 
 #[unsafe(no_mangle)]
@@ -766,24 +758,13 @@ pub unsafe extern "C" fn ifr_session_set_configuration(
 pub unsafe extern "C" fn ifr_session_configuration_error(
     session: *const InputSession,
 ) -> *const c_char {
-    let mut code = ptr::null();
-    guard(|| {
-        if let Some(error) = unsafe { reference(session, "session") }?.configuration_error() {
-            code = error.code().as_ptr();
-        }
-        Ok(())
-    });
-    code
+    let code = |s: &InputSession| s.configuration_error().map_or(ptr::null(), |e| e.code().as_ptr());
+    unsafe { query(session, "session", ptr::null(), code) }
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_candidate_count(session: *const InputSession) -> usize {
-    let mut count = 5;
-    guard(|| {
-        count = unsafe { reference(session, "session") }?.candidate_count();
-        Ok(())
-    });
-    count
+    unsafe { query(session, "session", 5, InputSession::candidate_count) }
 }
 
 #[unsafe(no_mangle)]
@@ -824,12 +805,7 @@ pub unsafe extern "C" fn ifr_session_ascii_mode(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_requested_ascii_mode(session: *const InputSession) -> c_int {
-    let mut requested = 0;
-    guard(|| {
-        requested = c_int::from(unsafe { reference(session, "session") }?.requested_ascii_mode());
-        Ok(())
-    });
-    requested
+    unsafe { query(session, "session", 0, |s| c_int::from(s.requested_ascii_mode())) }
 }
 
 #[unsafe(no_mangle)]
@@ -942,9 +918,7 @@ pub unsafe extern "C" fn ifr_reply_body(reply: *const ReplyHandle) -> *const c_c
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_reply_free(reply: *mut ReplyHandle) {
-    if !reply.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(reply) })));
-    }
+    unsafe { release(reply) }
 }
 
 pub struct LearningHandle {
@@ -980,11 +954,7 @@ pub unsafe extern "C" fn ifr_personal_learning_entries(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_learning_free(learning: *mut LearningHandle) {
-    if !learning.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| {
-            drop(unsafe { Box::from_raw(learning) })
-        }));
-    }
+    unsafe { release(learning) }
 }
 
 #[unsafe(no_mangle)]
@@ -1072,9 +1042,7 @@ pub unsafe extern "C" fn ifr_personal_learning_undo(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_learning_undo_free(undo: *mut LearningUndoHandle) {
-    if !undo.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(undo) })));
-    }
+    unsafe { release(undo) }
 }
 
 #[unsafe(no_mangle)]
@@ -1110,11 +1078,7 @@ pub unsafe extern "C" fn ifr_personal_export(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_personal_export_free(exported: *mut ExportHandle) {
-    if !exported.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| {
-            drop(unsafe { Box::from_raw(exported) })
-        }));
-    }
+    unsafe { release(exported) }
 }
 
 #[unsafe(no_mangle)]
@@ -1182,9 +1146,7 @@ pub unsafe extern "C" fn ifr_backup_parse(
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_backup_free(backup: *mut BackupHandle) {
-    if !backup.is_null() {
-        let _ = catch_unwind(AssertUnwindSafe(|| drop(unsafe { Box::from_raw(backup) })));
-    }
+    unsafe { release(backup) }
 }
 
 #[unsafe(no_mangle)]

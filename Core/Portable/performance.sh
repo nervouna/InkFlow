@@ -11,7 +11,7 @@ cargo build --locked --release --manifest-path Core/Portable/Cargo.toml --bin pe
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-portable-performance.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 for trial in 1 2 3 4 5; do
-  build/portable/cargo/release/performance-baseline "$resources" "$scratch/user-$trial" \
+  "$CARGO_TARGET_DIR/release/performance-baseline" "$resources" "$scratch/user-$trial" \
     Core/Fixtures/QualityBaseline/corpus.json "$output/performance-$trial.json" 2>/dev/null
 done
 python3 - "$output" <<'PY'
