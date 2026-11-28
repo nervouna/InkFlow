@@ -217,6 +217,7 @@ final class IFSettings: ObservableObject {
         smart = IFSmartSettings(defaults: defaults, credentials: aiCredentials)
         loadCustomPhrases()
         loadVoicePolishRules()
+        shortcuts.writeBlocked = { [weak self] in self?.personalDataWriteBlocked ?? false }
     }
 
     private func loadCustomPhrases() {

@@ -5,7 +5,7 @@ The [runtime guide](README.md) covers resource preparation, session policy and t
 
 ## Frontend ABI
 
-The ABI version is 1. Each opaque handle has a matching release function, which accepts null.
+The ABI version is 2. Each opaque handle has a matching release function, which accepts null.
 `ifr_session_take_commit` returns an owned string when there is text and null when the buffer is empty.
 Call `ifr_string_free` on owned strings. Strings read from a snapshot, backup, learning listing, export or reply
 are borrowed for the life of that owner. A caller keeps a handle alive throughout each call. Null handles
@@ -36,12 +36,6 @@ unchanged. Offsets in the preedit are UTF-8 bytes on character boundaries. The r
 the raw input, whose text omits the spaces inserted into the preedit. An AI request identifies its input by
 the raw text, raw caret and preedit prefix before the selection start. A stray raw caret is clamped to
 the nearest preceding character boundary so an invalid optional caret does not fail a key event.
-
-The observer runs synchronously on the mutating thread after the policy lock is released. Its callback and
-user pointer must be usable on any mutating thread. Snapshot pointers in a mutation are borrowed for that
-callback. Its key and modifier fields apply to key actions, and the index to select and highlight actions.
-Keep observer work bounded and enqueue I/O elsewhere. The callback must avoid reentry into the same session.
-A null callback removes the observer.
 
 ## Native bridge
 
@@ -92,9 +86,7 @@ that explicit navigation and saves the new page content. Home and End first put 
 native first candidate so the navigator handles the caret motion. At the start of the input Rime
 rebuilds the page and pins its first candidate, so the engine keeps native order there. Shift+Backspace
 forgets a highlighted candidate when candidates exist. See the [forgetting rules][forgetting] for
-assembled sentences. An unobserved clear ends a composition consumed by a feature such as AI adoption
-without telling the quality observer that the user cancelled.
-
+assembled sentences.
 ## Candidate evidence and ordering
 
 The ranker keeps at most 16 graphemes of preceding text. When the user selects a segment, the immediate

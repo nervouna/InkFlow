@@ -380,24 +380,13 @@ fn document_context_across_pages() {
 
 #[test]
 fn swift_engine_regressions() {
-    use inkflow_rime::{Error, engine::Action, phrases::CustomPhrase, preferences::InputOption};
+    use inkflow_rime::{Error, phrases::CustomPhrase, preferences::InputOption};
     let Some((resources, _runtime)) = resources() else {
         println!("SKIP engine regression parity: INKFLOW_PORTABLE_RESOURCES is not set");
         return;
     };
     let user = scratch("engine-regressions");
     let engine = engine(&resources, &user);
-    let mutations = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let log = mutations.clone();
-    engine.set_observer(Some(Arc::new(move |mutation| {
-        log.lock().unwrap().push((
-            mutation.action.clone(),
-            mutation.handled,
-            mutation.before.input.clone(),
-            mutation.after.input.clone(),
-        ));
-    })));
-
     let a = engine.session().unwrap();
     let b = engine.session().unwrap();
     type_keys(&a, "nihao");
@@ -1023,30 +1012,10 @@ fn swift_engine_regressions() {
     configure(&exact);
     assert_eq!(session.input_preferences(), Some(exact));
 
-    let recorded = mutations.lock().unwrap();
-    assert!(
-        recorded
-            .iter()
-            .any(|(action, handled, before, after)| *action
-                == Action::Key {
-                    key: 32,
-                    modifiers: 0
-                }
-                && *handled
-                && before == "nihao"
-                && after.is_empty()),
-        "the observer sees each mutation with the input before and after"
-    );
-    assert!(
-        recorded
-            .iter()
-            .any(|(action, _, _, _)| matches!(action, Action::Select(_)))
-    );
-    drop(recorded);
     drop(engine);
     fs::remove_dir_all(&user).unwrap();
     println!(
-        "PASS Swift engine regressions on the Rust engine: basic cases, context ranking, custom phrases, input settings, ASCII boundaries, stale selection, observer"
+        "PASS Swift engine regressions on the Rust engine: basic cases, context ranking, custom phrases, input settings, ASCII boundaries, stale selection"
     );
 }
 
@@ -1846,12 +1815,7 @@ fn swift_ai_adoption_learning() {
         ("xingmohoa", "xing mo hao "),
     ];
     let existing = {
-        let observed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let engine = engine(&resources, &user);
-        let count = observed.clone();
-        engine.set_observer(Some(Arc::new(move |_| {
-            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        })));
         let session = configured(&engine);
         let lexicon = |session: &InputSession| {
             call(session, "voice_lexicon", &[], 512 * 1024 + 64).expect("lexicon reply")
@@ -1906,13 +1870,7 @@ fn swift_ai_adoption_learning() {
                 > 1,
             "unification must not hide alternate readings: {row:?}"
         );
-        let observed_before = observed.load(std::sync::atomic::Ordering::SeqCst);
-        session.clear_unobserved().unwrap();
-        assert_eq!(
-            observed.load(std::sync::atomic::Ordering::SeqCst),
-            observed_before,
-            "consumed adoption clears without a quality record"
-        );
+        session.clear().unwrap();
         assert!(
             session.snapshot().unwrap().preedit.is_empty()
                 && session.take_commit().unwrap().is_empty(),
@@ -1955,7 +1913,7 @@ fn swift_ai_adoption_learning() {
                 phrase_readings(&readings, word).len() <= 1,
                 "the typed input has at most one phrase reading to resolve: {readings:?}"
             );
-            session.clear_unobserved().unwrap();
+            session.clear().unwrap();
             assert_eq!(
                 status(&session, "ai_learning", &[code, word]),
                 "ok",
@@ -2113,7 +2071,7 @@ fn swift_ai_adoption_learning() {
     );
     fs::remove_dir_all(&user).unwrap();
     println!(
-        "PASS Swift AI adoption learning: input identity, readings, unobserved clear, novel-word adoption, existing-word preference, restart, canonical userdb export"
+        "PASS Swift AI adoption learning: input identity, readings, clear, novel-word adoption, existing-word preference, restart, canonical userdb export"
     );
 }
 

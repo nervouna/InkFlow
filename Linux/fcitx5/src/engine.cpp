@@ -26,6 +26,26 @@ FCITX_DEFINE_LOG_CATEGORY(inkflow_log, "inkflow");
 namespace {
 constexpr const char* kConfigFile = "conf/inkflow.conf";
 constexpr std::size_t kPrecedingCodePoints = 32;
+struct OptionBit {
+  fcitx::Option<bool> Config::*option;
+  uint32_t mask;
+};
+constexpr OptionBit kOptionBits[] = {
+    {&Config::abbreviation, IFR_OPTION_ABBREVIATION},
+    {&Config::typoTolerance, IFR_OPTION_TYPO_TOLERANCE},
+    {&Config::fuzzyZ, IFR_OPTION_FUZZY_Z},
+    {&Config::fuzzyC, IFR_OPTION_FUZZY_C},
+    {&Config::fuzzyS, IFR_OPTION_FUZZY_S},
+    {&Config::emoji, IFR_OPTION_EMOJI},
+    {&Config::bracketPaging, IFR_OPTION_BRACKET_PAGING},
+    {&Config::minusEqualPaging, IFR_OPTION_MINUS_EQUAL_PAGING},
+    {&Config::englishPunctuation, IFR_OPTION_ENGLISH_PUNCTUATION},
+    {&Config::cornerQuotes, IFR_OPTION_CORNER_QUOTES},
+    {&Config::middleDot, IFR_OPTION_MIDDLE_DOT},
+    {&Config::fullwidthPipe, IFR_OPTION_FULLWIDTH_PIPE},
+    {&Config::ideographicComma, IFR_OPTION_IDEOGRAPHIC_COMMA},
+    {&Config::traditional, IFR_OPTION_TRADITIONAL},
+};
 
 bool directory_exists(const std::string& path) {
   struct stat info{};
@@ -101,29 +121,9 @@ IFRSession* Engine::session(State* st) {
 }
 
 uint32_t Engine::inputOptions() const {
-  struct Bit {
-    const fcitx::Option<bool>& option;
-    uint32_t mask;
-  };
-  const Bit bits[] = {
-      {config_.abbreviation, IFR_OPTION_ABBREVIATION},
-      {config_.typoTolerance, IFR_OPTION_TYPO_TOLERANCE},
-      {config_.fuzzyZ, IFR_OPTION_FUZZY_Z},
-      {config_.fuzzyC, IFR_OPTION_FUZZY_C},
-      {config_.fuzzyS, IFR_OPTION_FUZZY_S},
-      {config_.emoji, IFR_OPTION_EMOJI},
-      {config_.bracketPaging, IFR_OPTION_BRACKET_PAGING},
-      {config_.minusEqualPaging, IFR_OPTION_MINUS_EQUAL_PAGING},
-      {config_.englishPunctuation, IFR_OPTION_ENGLISH_PUNCTUATION},
-      {config_.cornerQuotes, IFR_OPTION_CORNER_QUOTES},
-      {config_.middleDot, IFR_OPTION_MIDDLE_DOT},
-      {config_.fullwidthPipe, IFR_OPTION_FULLWIDTH_PIPE},
-      {config_.ideographicComma, IFR_OPTION_IDEOGRAPHIC_COMMA},
-      {config_.traditional, IFR_OPTION_TRADITIONAL},
-  };
   uint32_t mask = 0;
-  for (const Bit& bit : bits) {
-    if (*bit.option) mask |= bit.mask;
+  for (const OptionBit& bit : kOptionBits) {
+    if (*(config_.*bit.option)) mask |= bit.mask;
   }
   return mask;
 }
@@ -234,20 +234,9 @@ void Engine::importBackup(std::string file) {
   } else {
     config_.candidateCount.setValue(static_cast<int>(ifr_backup_candidate_count(backup)));
     uint32_t options = ifr_backup_input_options(backup);
-    config_.abbreviation.setValue((options & IFR_OPTION_ABBREVIATION) != 0);
-    config_.typoTolerance.setValue((options & IFR_OPTION_TYPO_TOLERANCE) != 0);
-    config_.fuzzyZ.setValue((options & IFR_OPTION_FUZZY_Z) != 0);
-    config_.fuzzyC.setValue((options & IFR_OPTION_FUZZY_C) != 0);
-    config_.fuzzyS.setValue((options & IFR_OPTION_FUZZY_S) != 0);
-    config_.emoji.setValue((options & IFR_OPTION_EMOJI) != 0);
-    config_.bracketPaging.setValue((options & IFR_OPTION_BRACKET_PAGING) != 0);
-    config_.minusEqualPaging.setValue((options & IFR_OPTION_MINUS_EQUAL_PAGING) != 0);
-    config_.englishPunctuation.setValue((options & IFR_OPTION_ENGLISH_PUNCTUATION) != 0);
-    config_.cornerQuotes.setValue((options & IFR_OPTION_CORNER_QUOTES) != 0);
-    config_.middleDot.setValue((options & IFR_OPTION_MIDDLE_DOT) != 0);
-    config_.fullwidthPipe.setValue((options & IFR_OPTION_FULLWIDTH_PIPE) != 0);
-    config_.ideographicComma.setValue((options & IFR_OPTION_IDEOGRAPHIC_COMMA) != 0);
-    config_.traditional.setValue((options & IFR_OPTION_TRADITIONAL) != 0);
+    for (const OptionBit& bit : kOptionBits) {
+      (config_.*bit.option).setValue((options & bit.mask) != 0);
+    }
     std::vector<std::string> entries;
     for (std::size_t i = 0; i < ifr_backup_phrase_count(backup); ++i) {
       IFRPhrase phrase = {nullptr, nullptr, nullptr};
