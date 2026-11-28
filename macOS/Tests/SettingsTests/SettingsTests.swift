@@ -309,6 +309,10 @@ struct SettingsTests {
         check(first.id != second.id && settings.customPhrases.count == 2)
         let reopened = IFSettings(defaults: defaults)
         check(reopened.customPhrases == settings.customPhrases, "IDs, normalized codes and Unicode text must persist")
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+        let joined = try settings.saveCustomPhrase(code: "jt", text: family)
+        check(joined.text == family && IFSettings(defaults: defaults).customPhrases.contains(joined))
+        try settings.deleteCustomPhrase(id: joined.id)
         let saved = defaults.data(forKey: "customPhrases")!
         for code in ["", "  ", "d1", "d z", "中文", "é", "a\tb", "a\nb", "a'"] {
             rejects { _ = try settings.saveCustomPhrase(code: code, text: "短语") }
@@ -326,10 +330,6 @@ struct SettingsTests {
                 check(error.localizedDescription == configurationMessage(message), "Rejection message for \(code)")
             }
         }
-        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
-        let joined = try settings.saveCustomPhrase(code: "jt", text: family)
-        check(joined.text == family && IFSettings(defaults: defaults).customPhrases.contains(joined))
-        try settings.deleteCustomPhrase(id: joined.id)
         rejects { _ = try settings.saveCustomPhrase(code: "DZ", text: first.text) }
         rejects { _ = try settings.saveCustomPhrase(id: first.id, code: second.code, text: second.text) }
         rejects { try settings.deleteCustomPhrase(id: UUID()) }
