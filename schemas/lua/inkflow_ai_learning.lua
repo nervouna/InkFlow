@@ -1,16 +1,6 @@
 local channel = require("inkflow_channel")
 local M = {}
 
-local function with_memory(env, operation)
-  local memory
-  local called, status, body = pcall(function()
-    memory = Memory(env.engine, env.engine.schema, "translator")
-    return operation(memory)
-  end)
-  if memory then memory:disconnect() end
-  return called, status, body
-end
-
 local function readings(env, context, path, input, text, memory)
   if env.reverse_path ~= path then
     env.reverse = ReverseDb(path)
@@ -44,7 +34,7 @@ local function readings(env, context, path, input, text, memory)
 end
 
 local function voice_lexicon(env)
-  local called, status, body = with_memory(env, function(memory)
+  local called, status, body = channel.with_memory(env, "translator", function(memory)
     if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
     local iterator = memory.user_dict:lookup_words("", true, 8192)
     local rows, bytes = {}, 3
@@ -66,7 +56,7 @@ end
 local function ai_readings(env, fields, context)
   local path, input, text = fields[1], fields[2], fields[3]
   if #fields ~= 3 or text == "" then return "failed" end
-  local called, body = with_memory(env, function(memory)
+  local called, body = channel.with_memory(env, "translator", function(memory)
     return readings(env, context, path, input, text, memory)
   end)
   if not called then return "failed" end
@@ -76,7 +66,7 @@ end
 local function ai_learning(env, fields)
   local code, text = fields[1], fields[2]
   if #fields ~= 2 or not code:match("^[a-z ]+ $") or text == "" then return "failed" end
-  local called, updated = with_memory(env, function(memory)
+  local called, updated = channel.with_memory(env, "translator", function(memory)
     if not memory:start_session() then return false end
     local written, result = pcall(function()
       local entry = DictEntry()

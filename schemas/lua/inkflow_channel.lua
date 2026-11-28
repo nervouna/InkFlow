@@ -24,4 +24,14 @@ function M.observer(handlers)
   end
 end
 
+function M.with_memory(env, name, operation)
+  local memory
+  local called, status, body = pcall(function()
+    memory = Memory(env.engine, env.engine.schema, name)
+    return operation(memory)
+  end)
+  if memory then memory:disconnect() end
+  return called, status, body
+end
+
 return M
