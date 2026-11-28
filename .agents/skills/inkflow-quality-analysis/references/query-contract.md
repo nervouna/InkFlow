@@ -294,4 +294,4 @@ Python.
 Composition and commit rates deduplicate by composition and use pooled counters. With a fingerprint
 filter, match the composition and its commits to the fingerprint attributed through its decisions.
 A decisionless composition inherits the unique fingerprint seen in the run when available.
-Private typed-text exports are owner-only and published atomically without replacing an existing file.
+Private typed-text exports are created owner-only (mode 0600) and never replace an existing file.

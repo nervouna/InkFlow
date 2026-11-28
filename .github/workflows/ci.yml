@@ -67,7 +67,7 @@ jobs:
       - name: Cache the dictionary crate build
         uses: actions/cache@v5
         with:
-          path: build/dictionary-parity/cargo
+          path: build/dictionary/cargo
           key: dictionary-${{ runner.os }}-${{ hashFiles('Core/Portable/dictionary/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: dictionary-${{ runner.os }}-
       - name: Test and verify the dictionary generator port

@@ -2,7 +2,9 @@
 from contextlib import closing
 import gzip
 from datetime import datetime, timezone
+import io
 import json
+import os
 from pathlib import Path
 import sqlite3
 import uuid
@@ -69,12 +71,15 @@ def export(path, output, connect, columns):
     payload = json.dumps(document, ensure_ascii=False, allow_nan=False, separators=(',', ':'))
     if len(payload.encode('utf-8')) > MAX_BYTES:
         raise ValueError('Export exceeds 1 GiB; no output file written.')
-    with (gzip.open(output, 'xt', encoding='utf-8') if has_gzip_suffix(output) else output.open('x')) as stream:
-        try:
-            stream.write(payload)
-        except BaseException:
-            output.unlink(missing_ok=True)
-            raise
+    descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, 'wb') as raw:
+        with (gzip.GzipFile(fileobj=raw, mode='wb') if has_gzip_suffix(output) else raw) as binary:
+            with io.TextIOWrapper(binary, encoding='utf-8') as stream:
+                try:
+                    stream.write(payload)
+                except BaseException:
+                    output.unlink(missing_ok=True)
+                    raise
     return dict(output=str(output), source_id=document['source_id'], range=document['range'],
                 counts={t: len(r) for t, r in document['tables'].items()},
                 privacy='May contain input, candidates, selected text and preceding context. Manual transfer only.')
