@@ -5,6 +5,9 @@ Rime/easy_en.schema.yaml
 Rime/inkflow_mixed.dict.yaml
 Rime/inkflow_mixed.schema.yaml
 Rime/inkflow_pinyin.schema.yaml
+Rime/inkflow_pinyin.custom.yaml
+Rime/lua/inkflow_ai_learning.lua
+Rime/lua/inkflow_channel.lua
 Rime/lua/inkflow_english.lua
 Rime/lua/inkflow_mixed.lua
 Rime/lua/inkflow_short_conflict.lua
