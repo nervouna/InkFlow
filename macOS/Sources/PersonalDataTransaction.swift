@@ -177,11 +177,7 @@ final class PersonalDataController {
         let configuration = try coordinator.beginPersonalData()
         let transaction = PersonalDataTransaction(user: user)
         settings.personalDataApplying = true
-        settings.shortcuts.personalDataRecoveryRequired = true
-        defer {
-            settings.personalDataApplying = false
-            settings.shortcuts.personalDataRecoveryRequired = settings.personalDataRecoveryRequired
-        }
+        defer { settings.personalDataApplying = false }
         do {
             let rollback = try await settings.personalRollbackPreferences()
             try await Task.detached { try transaction.prepare(staging: root, rollback: rollback, incoming: incoming); try transaction.install() }.value
@@ -202,7 +198,6 @@ final class PersonalDataController {
                 try coordinator.restartPersonalData(configuration, restoring: true)
             } catch {
                 settings.personalDataRecoveryRequired = true
-                settings.shortcuts.personalDataRecoveryRequired = true
                 coordinator.finishPersonalData()
                 throw PersonalDataError("recovery-required")
             }
