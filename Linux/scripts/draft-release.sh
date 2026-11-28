@@ -58,3 +58,5 @@ done
 gh release view "$tag" --json url,isDraft,targetCommitish > "$scratch/draft.json"
 jq -e --arg sha "$revision" '.isDraft and .targetCommitish == $sha' "$scratch/draft.json" > /dev/null
 jq -r '.url' "$scratch/draft.json" >> "$GITHUB_STEP_SUMMARY"
+printf 'Publish without taking Latest: `gh release edit %s --draft=false --latest=false`\n' "$tag" \
+  >> "$GITHUB_STEP_SUMMARY"

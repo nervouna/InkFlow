@@ -11,6 +11,17 @@ cd "$(dirname "$0")/../../../.."
 scripts=.agents/skills/inkflow-release/scripts
 fail() { echo "Release stopped: $*" >&2; exit 1; }
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
+latest_guard() {
+  local stage=$1 latest stable
+  latest=$(gh api "repos/$repo/releases/latest" --jq .tag_name) ||
+    fail "Could not read the Latest release $stage."
+  [[ $latest == v* ]] && return 0
+  stable=$(gh api --paginate "repos/$repo/releases?per_page=100" --jq '
+    .[] | select(.draft | not) | select(.prerelease | not) | select(.tag_name | startswith("v")) | .tag_name
+  ' | head -1 || true)
+  fail "GitHub Latest is $latest $stage. Restore the macOS release with:" \
+    "gh release edit ${stable:-v<newest stable>} --latest"
+}
 notarize() {
   local artifact=$1 log=$2
   bash "$scripts/notary.sh" submit "$artifact" --wait --timeout 30m --no-s3-acceleration --output-format plist > "$log" || fail "notarytool failed; see $log"
@@ -82,6 +93,7 @@ printf '%s  %s\n' "$(sha256 "$pkg")" "$(basename "$pkg")" "$(sha256 "$source_bun
 assets=("$pkg" "$checksum" "$update_zip" "$appcast" "$source_bundle")
 
 if ! $draft; then
+  latest_guard 'before tagging'
   remote_main=$(git ls-remote origin refs/heads/main | awk '{print $1}')
   commit=$(git rev-parse HEAD)
   [[ $remote_main == "$commit" ]] || git merge-base --is-ancestor "$remote_main" "$commit" || fail 'origin/main has diverged.'
@@ -113,4 +125,5 @@ if $prerelease; then
 else
   gh release edit "$tag" --repo "$repo" --draft=false --prerelease=false --latest
 fi
+latest_guard 'after publishing'
 echo "PASS release $tag build $build: $(gh release view "$tag" --repo "$repo" --json url --jq .url)"

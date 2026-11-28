@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
+fail() {
+  echo "FAIL $*" >&2
+  exit 1
+}
 cd "$(dirname "$0")/../.."
+root=$PWD
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-resume.XXXXXX")
 trap 'rm -rf "$fixture"' EXIT
 export TMPDIR="$fixture/"
@@ -12,6 +17,9 @@ cd "$fixture/repo"
 printf '#!/bin/bash\nprintf bundle > "$1"\n' > macOS/scripts/dictionary-source-bundle.sh
 git add "$scripts" macOS/scripts/dictionary-source-bundle.sh macOS/scripts/release-receipt.sh macOS/scripts/release-build.sh
 git -c user.name=Fixture -c user.email=fixture@example.invalid commit --allow-empty -qm 'fixture release scripts'
+git init -q --bare "$fixture/origin.git"
+git remote set-url origin "$fixture/origin.git"
+git push -q origin HEAD:refs/heads/main
 version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
 build=$(plutil -extract CFBundleVersion raw macOS/Info.plist)
 previous=$(git tag --merged HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "v$version" | head -1)
@@ -37,6 +45,27 @@ printf '%s\n' "$build" > "$component/Scripts/build-number"
 cat > "$fixture/bin/gh" <<'MOCK'
 #!/bin/bash
 if [[ "$1 $2" == 'repo view' ]]; then echo fixture/InkFlow; exit 0; fi
+if [[ "$1 $2" == 'api repos/fixture/InkFlow/releases/latest' ]]; then cat "$FIXTURE_LATEST"; exit 0; fi
+if [[ "$1 $2" == 'api --paginate' ]]; then cat "$FIXTURE_STABLE"; exit 0; fi
+if [[ -n ${FIXTURE_LIVE:-} && $1 == release ]]; then
+  case "$2" in
+    view)
+      if [[ "$*" == *'--json url'* ]]; then echo https://example.invalid/release; exit 0; fi
+      exit 1 ;;
+    create) exit 0 ;;
+    upload)
+      for file in "$@"; do
+        if [[ -f $file ]]; then cp "$file" "$FIXTURE_LIVE/assets/"; fi
+      done
+      exit 0 ;;
+    download) cp "$FIXTURE_LIVE"/assets/* "${@: -1}"; exit 0 ;;
+    edit)
+      if [[ "$*" == *' --latest'* && "$*" != *'--latest=false'* ]]; then
+        cat "$FIXTURE_LATEST_AFTER" > "$FIXTURE_LATEST"
+      fi
+      exit 0 ;;
+  esac
+fi
 echo 'FIXTURE_PUBLICATION_BOUNDARY'
 exit 73
 MOCK
@@ -67,6 +96,9 @@ MOCK
 for tool in xcrun spctl; do printf '#!/bin/bash\nexit 0\n' > "$fixture/bin/$tool"; done
 for tool in curl; do printf '#!/bin/bash\nexit 91\n' > "$fixture/bin/$tool"; done
 chmod +x "$fixture/bin/"*
+export FIXTURE_LATEST="$fixture/latest" FIXTURE_STABLE="$fixture/stable"
+printf 'v0.7.7\n' > "$FIXTURE_LATEST"
+printf 'v0.7.7\n' > "$FIXTURE_STABLE"
 export PATH="$fixture/bin:$PATH"
 sparkle=build/swiftpm/artifacts/sparkle/Sparkle/bin
 mkdir -p "$sparkle"
@@ -86,6 +118,7 @@ cat > "$release/appcast.xml" <<XML
 <enclosure url="https://github.com/nervouna/InkFlow/releases/download/v$version/$(basename "$zip")" length="$(stat -f '%z' "$zip")" sparkle:edSignature="$signature"/>
 </item></channel></rss>
 XML
+cp "$release/appcast.xml" "$fixture/appcast.original"
 sha256() { shasum -a 256 "$1" | awk '{print $1}'; }
 receipt="$release/sparkle-receipt.plist"
 plutil -create xml1 "$receipt"
@@ -137,3 +170,77 @@ check_release 'repacked update ZIP' 'Sparkle update ZIP changed after appcast ge
 cp "$fixture/original.zip" "$zip"
 printf '\n<!-- changed -->\n' >> "$release/appcast.xml"
 check_release 'modified appcast' 'Sparkle appcast changed after generation.'
+cp "$fixture/appcast.original" "$release/appcast.xml"
+rm -rf "$fixture/live"
+mkdir -p "$fixture/live/assets"
+live_release() {
+  local name=$1 after=$2 expected_status=$3 expected=$4 status=0
+  FIXTURE_LIVE="$fixture/live" FIXTURE_LATEST_AFTER="$fixture/$after" \
+    bash "$scripts/release.sh" > "$fixture/output" 2>&1 || status=$?
+  if [[ $status != "$expected_status" ]]; then
+    cat "$fixture/output"
+    fail "$name: exit $status, expected $expected_status"
+  fi
+  if ! grep -Fq -- "$expected" "$fixture/output"; then
+    cat "$fixture/output"
+    fail "$name: output lacks $expected"
+  fi
+  echo "PASS release resume: $name"
+}
+git tag -d "v$version" > /dev/null 2>&1 || true
+printf 'linux-v0.7.8\n' > "$FIXTURE_LATEST"
+printf 'v0.7.7\n' > "$FIXTURE_STABLE"
+printf 'v0.7.7\n' > "$fixture/latest-after"
+live_release 'Linux Latest blocks tagging' latest-after 1 \
+  'GitHub Latest is linux-v0.7.8 before tagging. Restore the macOS release with: gh release edit v0.7.7 --latest'
+[[ -z $(git tag -l "v$version") ]] || fail 'Blocked release created a local tag'
+[[ -z $(git -C "$fixture/origin.git" tag -l) ]] || fail 'Blocked release pushed a tag'
+printf 'v0.7.7\n' > "$FIXTURE_LATEST"
+printf 'v0.7.8\n' > "$FIXTURE_STABLE"
+printf 'linux-v0.7.8\n' > "$fixture/latest-after"
+live_release 'Linux Latest after publishing' latest-after 1 \
+  'GitHub Latest is linux-v0.7.8 after publishing. Restore the macOS release with: gh release edit v0.7.8 --latest'
+printf 'v0.7.7\n' > "$FIXTURE_LATEST"
+printf 'v0.7.8\n' > "$fixture/latest-after"
+live_release 'macOS Latest after publishing' latest-after 0 "PASS release v$version build $build:"
+linux_version=9.9.9
+linux_revision=0123456789abcdef0123456789abcdef01234567
+linux="$fixture/linux-assets"
+linux_bin="$fixture/linux-bin"
+mkdir -p "$linux" "$linux_bin"
+printf binary > "$linux/InkFlow-$linux_version-linux-aarch64.tar.xz"
+printf source > "$linux/InkFlow-$linux_version-linux-source.tar.xz"
+linux_binary="InkFlow-$linux_version-linux-aarch64.tar.xz"
+linux_source="InkFlow-$linux_version-linux-source.tar.xz"
+(cd "$linux" && sha256sum "$linux_binary" "$linux_source" > SHA256SUMS-linux)
+cat > "$linux_bin/assets.json" <<JSON
+{"assets":[{"name":"$linux_binary","state":"uploaded"},{"name":"$linux_source","state":"uploaded"},
+{"name":"SHA256SUMS-linux","state":"uploaded"}]}
+JSON
+cat > "$linux_bin/draft.json" <<JSON
+{"url":"https://example.invalid/linux-v$linux_version","isDraft":true,"targetCommitish":"$linux_revision"}
+JSON
+cat > "$linux_bin/gh" <<'MOCK'
+#!/bin/bash
+case "$1 $2" in
+  'api repos/'*) echo '[]' ;;
+  'api --paginate') ;;
+  'release create') ;;
+  'release view')
+    if [[ "$*" == *'--json assets'* ]]; then cat "$LINUX_STUB/assets.json"; else cat "$LINUX_STUB/draft.json"; fi ;;
+  'release download') cp "$LINUX_ASSETS"/* "${@: -1}" ;;
+  *) echo "Unexpected gh call: $*" >&2; exit 99 ;;
+esac
+MOCK
+chmod +x "$linux_bin/gh"
+summary="$fixture/summary"
+: > "$summary"
+if ! PATH="$linux_bin:$PATH" GH_REPO=fixture/InkFlow GITHUB_STEP_SUMMARY="$summary" LINUX_ASSETS="$linux" \
+  LINUX_STUB="$linux_bin" bash "$root/Linux/scripts/draft-release.sh" "$linux_version" "$linux_revision" "$linux" \
+  > "$fixture/linux-output" 2>&1; then
+  cat "$fixture/linux-output"
+  fail 'draft-release.sh failed in the fixture'
+fi
+grep -Fxq 'Publish without taking Latest: `gh release edit linux-v9.9.9 --draft=false --latest=false`' "$summary" ||
+  fail 'draft summary lacks the exact publish command'
+echo 'PASS draft-release summary: publish command'
