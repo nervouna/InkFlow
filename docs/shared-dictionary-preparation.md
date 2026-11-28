@@ -1,6 +1,6 @@
 # Shared dictionary preparation
 
-Dictionary source data and build-time policy live under `Core/`. The recipe has one implementation; the `macOS/scripts/` entry points delegate to it.
+Dictionary source data and build-time policy live under `Core/`. The recipe has one implementation.
 
 | Input or step | Owner |
 | --- | --- |
@@ -28,7 +28,7 @@ bash Core/scripts/prepare-rime.sh build/shared-rime
 
 The result contains source dictionaries and configuration. `bash macOS/scripts/dictionary-source-bundle.sh OUT.tar.gz` packs the verified pinned inputs, this recipe at `HEAD` and the license texts; releases attach it as the corresponding source. Compiled tables and prisms must be prepared by each target's runtime; never copy a macOS compiled cache to Linux.
 
-The preparation cache hashes the shared package, generator sources/tools/scripts, data, configuration, schemas, and downloaded inputs; macOS frontend changes don't invalidate it. The destination is replaced only after generation succeeds.
+The preparation cache hashes the shared package, generator sources/tools/scripts, data, configuration, schemas, and downloaded inputs; macOS frontend changes don't invalidate it. The generated Chinese dictionary is keyed on the generator executable, the legacy source bytes and the local corrections, and raw inputs are verified even on a cache hit; the spelling profiles and context index are rebuilt after it changes. The destination is replaced only after generation succeeds.
 
 ```sh
 bash Core/scripts/test-prepare-rime.sh
@@ -43,6 +43,5 @@ bash macOS/scripts/test.sh preparation dictionary-generator quality-baseline qua
 
 ## Migration boundary
 
-`Core/scripts/build-dictionary-generator.sh` builds the Rust CLI and static library. The Swift dictionary preparation/update worker calls that library in-process. The former Swift implementation exists only in the dictionary test target for [compatibility comparisons](../Core/Portable/dictionary/README.md). SwiftPM tracks a generated archive-identity header so changes in Rust relink native callers.
-
-`bash Core/Portable/prepare-resources.sh` prepares source resources, compiles them with the source-built target runtime, and runs the existing worker smoke cases in separate temporary user directories. It retains source/cache hashes in `resources.json`. The cache is not a portable personal-data backup.
+`Core/scripts/build-dictionary-generator.sh` builds the Rust CLI and static library; the Swift update worker calls the library in-process, and SwiftPM tracks a generated archive-identity header so Rust changes relink native callers.
+`bash Core/Portable/prepare-resources.sh` prepares source resources, compiles them with the source-built target runtime and runs the worker smoke cases in separate temporary user directories, keeping source and cache hashes in `resources.json`. The cache is not a portable personal-data backup.

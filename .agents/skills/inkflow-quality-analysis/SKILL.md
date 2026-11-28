@@ -39,7 +39,7 @@ The [metric scorecard](../../../docs/input-quality-metrics.md#scorecard) and
 | Investigate recurring alternatives to first-page Top1 | `ranking-issues`. Use `--min-count 1` for individual cases, then `inspect COMPOSITION_ID` with the returned IDs. Check compositions before calling a pair a ranking issue. |
 | Measure key intervals, last-edit waits or candidate visibility | `timing`. Read the [timing contract](references/query-contract.md#input-timing) first. |
 | Check how quickly learning takes effect and how long it lasts | `learning --days 28` on one device. Check `pair_coverage` before trusting rates. |
-| Score an offline ranking change | `replay-cases --output FILE` writes typed text for the offline [replay scorer](../../../Core/Portable/README.md#replay). Read the [file rules](../../../Core/Portable/README.md#replay-files). Report `reverted_relabelled` and `reverted_excluded` beside the ship-rule result. |
+| Score an offline ranking change | `replay-cases --output FILE` writes typed text for the offline [replay scorer](../../../Core/Portable/replay.md#replay). Read the [file rules](../../../Core/Portable/replay.md#replay-files). Report `reverted_relabelled` and `reverted_excluded` beside the ship-rule result. |
 | Analyze one or more devices' exports | Use repeatable `--input` with a file or a folder of weekly exports. Add `--exports-only` to analyze those files alone, and always on the exporting Mac when reading its own weekly folder: with the local database the overlap is refused (exit 2). See [cross-device analysis](../../../macOS/QUALITY-EXPORT.md#analyze-on-another-computer). |
 
 Use `--format json` for inspectable results. See the [query contract](references/query-contract.md#cli-and-output)

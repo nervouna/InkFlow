@@ -30,9 +30,7 @@ text plus explicitly supplied Pinyin, after whitespace/case normalization and
 Duplicate pairs retain the first source's weight; alternate readings remain.
 The pinned domain dictionary contains 965,919 unique pairs, including 1,941
 additions to the original 963,978-pair baseline. Original pair weights remain
-unchanged. Recipe 3 removed the rime-selected Sogou conversion (3,975 unique
-weight-1 pairs); the quality baseline was re-frozen with no candidate-order change. English, custom phrases and
-learned entries are not part of that count.
+unchanged. English, custom phrases and learned entries are not part of that count.
 
 Baseline Frost weights remain unchanged. For the Ice and legacy groups, positive
 weights on overlapping pairs are compared to Frost using
@@ -69,18 +67,17 @@ and location. English admission, emoji data, schemas and Lua remain application
 resources with separate release rules.
 
 Tests: `bash macOS/scripts/test.sh dictionary-generator` for normalization, union,
-calibration and rejection; the `deployment` and `engine-*` units cover default first
+calibration and rejection (after an intended generator change, re-record the fixtures as
+[the generator README](../Core/Portable/dictionary/README.md#re-record-the-fixtures) describes); after `build.sh`, the
+`dictionary-*` units cover fake-network failures, transaction boundaries, cache integrity, subprocess isolation and
+helper preparation; the `deployment` and `engine-*` units cover default first
 candidates such as `xiehouyu` → 歇后语 and `suranqijing` → 肃然起敬. With clean
 learning, the pinned Frost weights deliberately rank `beijing` as 背景 and
 `shanghai` as 伤害.
 
-License notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt` and the
-per-source files. No Sogou-derived source remains; the fourteen curated terms in
-`chinese-overrides.tsv` carry InkFlow readings and weights (see the notice and
-[the distribution review](../Core/Portable/licenses.md)). Each release attaches the
-corresponding source for the GPL/LGPL inputs as
-`InkFlow-<version>-<build>-dictionary-source.tar.gz`, built by
-`macOS/scripts/dictionary-source-bundle.sh` and checked by `test.sh source-bundle`.
+License notices are in `macOS/Licenses/chinese-dictionaries-NOTICE.txt` and the per-source files.
+No Sogou-derived source remains; its history, the fourteen curated terms and the source bundle that each release
+attaches for the GPL/LGPL inputs are in [the distribution review](../Core/Portable/licenses.md).
 
 THUOCL is an optional coverage audit, never a pronunciation or weight source.
 For the pinned corpus below, all 8,519 distinct listed words are present. To
@@ -100,65 +97,14 @@ awk -F '\t' '
 ' build/thu-idiom.txt build/test-chinese/pinyin_simp.dict.yaml
 ```
 
-## Verified update preparation
+## Update preparation and activation
 
-`IFDictionarySourceClient` checks only the fixed Frost and Ice repositories. A
-branch check resolves a commit and its complete Git tree; only allowlisted regular
-file paths, Git blob identifiers and sizes are accepted. Unrelated upstream
-commits do not offer an update. Downloads bind the checked immutable commit,
-reject unapproved HTTPS redirects, and validate byte count, Git blob and SHA-256
-before the shared generator parses text. The ephemeral transport has no cookies,
-credential storage or authentication header and bounds bytes during reception.
-The transport is injectable for deterministic offline tests.
+Source verification, the sandboxed worker, the store journal, activation and recovery are described in
+[the dictionary lifecycle](../Core/Docs/dictionary-lifecycle.md).
 
-`InkFlowDictionaryWorker` is a bundled Foundation/CryptoKit executable using the
-pinned Rime C API. It copies current application-owned schema, Lua, English and
-emoji resources, generates the Chinese dictionary from verified inputs, then
-compiles in an isolated user directory. A second clean user directory loads only
-the prepared cache and probes the two required first choices plus mixed English,
-standalone English and emoji candidates. Native deployment notifications report
-compilation failures separately from verification failures. No real learning or
-custom-phrase data enters the helper.
+## Settings
 
-The runner calls the local helper through `sandbox-exec`, without a shell or
-inherited credentials. Its profile denies network access and real-user-directory
-access, allowing writes only to the explicitly configured candidate UUID
-subtree. Both pipes drain concurrently; diagnostic retention and execution time
-are bounded. Cancellation or timeout terminates the child, escalating to KILL if
-necessary. `sandbox-exec` is deprecated by macOS; inability to start this sandbox
-is a preparation error, never a reason to run the helper unsandboxed.
-
-`IFDictionaryStore` keeps confirmed current, previous and pending versions in an
-atomic journal. Each artifact combines the reproducible content version, the
-current resource/library/helper fingerprint and a build UUID, so a fresh rebuild
-never overwrites an active artifact. Checksums cover prepared resources and
-cache files. A pending activation does not change the confirmed pointer or its
-date; confirmation advances them only after the caller verifies the engine and
-all sessions. Interrupted pending work is abandoned without an automatic retry.
-The caller serializes mutations and owns live-engine activation and rollback.
-
-Cache compatibility fingerprints include current schemas, Lua, English, emoji,
-corrections, helper and libraries. Rebuilding consumes inert dictionary data and
-current application resources. Downloaded artifacts retain verified raw sources
-so changed correction policy can regenerate offline. A flat-only artifact whose
-correction policy changed must fall back to the current bundled dictionary.
-Proven same-content source receipts are stored separately, bound to that active
-content version; merely checking or downloading never suppresses a future retry.
-Manifests from an older recipe fall back to the bundled dictionary through normal
-recovery. Bounded housekeeping removes unreferenced compiled artifacts, keeping
-current, previous and pending ones and ignoring unknown names and symlinks.
-
-Diagnostic errors carry a Chinese stage summary and bounded technical fields and
-can be logged through an injected sink. The journal, manifest and observations
-never contain error payloads. Settings error presentation and its close/reopen
-lifetime are owned by the UI coordinator, independently from background work.
-
-After `build.sh`, the `dictionary-*` units cover fake-network failures, transaction
-boundaries, cache integrity, subprocess isolation and helper preparation.
-
-## Live activation and Settings
-
-`main.swift` retains one `IFDictionaryCoordinator` for the process and injects it
+`ApplicationBootstrap.swift` creates one `IFDictionaryCoordinator` for the process and injects it
 into the native Settings window. The Dictionary pane only observes that service.
 Checking is manual and never downloads; a changed source offers a separate
 download/update action. There is no scheduled check. One operation runs at a
@@ -171,24 +117,9 @@ or restore. Busy states expose no duplicate action. Internal content versions, s
 commits and immutable URLs remain in this document and the shared source catalog, not
 in Settings. Recoverable failures state that current input remains available; engine
 failure instead offers restoration. Both retain selectable technical detail behind a
-collapsed disclosure.
-
-Every live native session must be free of composition, native/buffered commits
-and client-delivery callbacks before replacement. The coordinator prepares the
-context index off the main actor; existing input continues on the old engine.
-The final main-actor transaction restarts the engine, restores all sessions and
-their options, then confirms the journal. Failure restores the last working
-engine; failure of that rollback explicitly leaves the engine unavailable.
-Retry remains available even after a displayed diagnostic has been dismissed.
-
-A displayed error clears when the Settings window closes or the next operation
-starts; it is never persisted. Sanitized diagnostics go to the unified log (see
-[DEBUGGING.md](DEBUGGING.md#logs-and-diagnostic-archives)).
-
-Startup discards interrupted pending work, validates the last confirmed cache,
-and rebuilds incompatible caches using current application resources. Recovery
-tries the previous version and finally the bundled dictionary. Learning keeps
-the existing `pinyin_simp.userdb` identity and location across these switches.
+collapsed disclosure. Retry remains available after a displayed diagnostic has been
+dismissed, and a displayed error clears when the Settings window closes or the next
+operation starts.
 
 ## Manual checks
 
@@ -196,4 +127,4 @@ After an authorized install, try `xiehouyu`/`suranqijing`, a mixed phrase and an
 
 ## Resource cost
 
-One prepared version occupied about 137 MiB (30 MiB shared resources, 61 MiB compiled cache, 46 MiB retained raw data). Building the context index took about 3.5 s at ~181 MiB peak RSS; old and new indexes coexist during background preparation.
+One prepared version occupied about 137 MiB (30 MiB shared resources, 61 MiB compiled cache, 46 MiB retained raw data).

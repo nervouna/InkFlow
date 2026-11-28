@@ -1,6 +1,6 @@
 # Shared Rust dictionary generator
 
-This crate ports the Chinese dictionary generator, all 32 spelling profiles and the context-ranking index for #35. It is an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The preparation scripts run its CLI; the Swift dictionary update worker calls the same library through its C ABI.
+This crate generates the Chinese dictionary, all 32 spelling profiles and the context-ranking index. It is the only generator: an isolated library and command-line tool, with no Rime, Swift, GUI, or network dependency in generation itself. The preparation scripts run its CLI; the Swift dictionary update worker calls the same library through its C ABI.
 
 Context index version 2 keeps separate frequencies for a phrase's terminal readings. Each fixed-width record contains
 the NFC phrase key (three bytes per scalar), six bytes of zero-padded lowercase terminal Pinyin and the eight-byte
@@ -28,7 +28,7 @@ The fixtures are the reference. Rust output is the only generator, so a rule cha
 bash Core/Portable/dictionary/test.sh --record
 ```
 
-Re-record only for an intended rule or data change, and explain every moved case in the PR. Change a case in `fixtures/cases.json` only for a reasoned behaviour change. `catalog.json` is the pinned copy of `Core/config/chinese-sources.json`; update it by hand when the catalog changes.
+Re-record only for an intended rule or data change, and explain every moved case in the PR. Change a case in `fixtures/cases.json` only for a reasoned behaviour change.
 
 Preparation may download the pinned public dictionary sources. Downloads go under ignored
 `build/dictionary-parity/inputs/`. Preparation checks byte counts and SHA-256 before use, and Rust checks
@@ -52,7 +52,7 @@ Callers stage this new directory before publishing prepared resources.
 
 ## In-process preparation boundary
 
-`include/inkflow_dictionary.h` and its Clang module map expose an experimental C ABI from `libinkflow_dictionary.a`. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. `Core/Sources/InkFlowDomain/DictionaryGenerator.swift` is the Swift production wrapper.
+`include/inkflow_dictionary.h` and its Clang module map expose the generator's C ABI from `libinkflow_dictionary.a`, the production boundary of the update worker. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. `Core/Sources/InkFlowDomain/DictionaryGenerator.swift` is the Swift production wrapper.
 
 Inputs are borrowed pointer/length buffers. The C caller supplies valid, aligned, readable storage for
 nonempty buffers and arrays. Null input pointers are accepted for empty buffers and arrays. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
@@ -67,7 +67,7 @@ The test script compiles and links a C consumer on both desktops. On macOS it al
 
 ## Reference and compatibility contract
 
-`Core/config/chinese-sources.json` is the authoritative production catalog. Rust embeds it; `IFDictionaryCatalog` reads it through the ABI without filesystem access. Rust also owns the recipe version and maximum source size. `fixtures/cases.json` supplies 43 inputs. The recorded `catalog.json` is a pinned copy of the production catalog, and checks reject drift from it.
+`Core/config/chinese-sources.json` is the authoritative production catalog. Rust embeds it; `IFDictionaryCatalog` reads it through the ABI without filesystem access. Rust also owns the recipe version and maximum source size. `fixtures/cases.json` supplies 43 inputs. `catalog.json` is the one pinned copy of the production catalog: checks reject drift from it, so update it by hand when the catalog changes.
 
 `reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles and the context index for successful cases. `corpus.json` records the output for the complete pinned source set and current Chinese corrections. Comparison uses isolated build directories.
 
@@ -83,12 +83,12 @@ Two details are deliberately preserved:
 - Keys use canonical Unicode equivalence, but generated output keeps the first spelling of a key. The Rust map stores a normalized lookup key separately from its emitted text.
 - The parser splits on the LF character, treating CRLF as one grapheme, so CRLF source dictionaries fail validation. Changing it would be a separate parser fix.
 
-Generated schema headers retain the existing `IFSpellingGenerator` wording for byte compatibility. This port does not change the Pinyin algebra, English admission, ranking, or dictionary identities.
+Generated schema headers keep the `IFSpellingGenerator` wording because the recorded hashes cover it.
 
 ## Scope and dependencies
 
 Production callers share one generator; deployment, session policy, and personal-data migration still require their own verification.
 
-The Rust dependency versions and checksums are in `Cargo.lock`. Hashing uses RustCrypto SHA-1/SHA-256; SHA-1 is used only for the existing Git blob identity, alongside SHA-256 verification. Serde handles the explicit catalog/manifest format. Unicode normalization, segmentation, and general-category tables implement the Swift text contract.
+The Rust dependency versions and checksums are in `Cargo.lock`. Hashing uses RustCrypto SHA-1/SHA-256; SHA-1 is used only for the existing Git blob identity, alongside SHA-256 verification. Serde handles the explicit catalog/manifest format. Unicode normalization, segmentation, and general-category tables implement the text contract that the fixtures record.
 
 The dependency metadata lists MIT/Apache-2.0 alternatives for most crates, Apache-2.0 for `unicode-general-category`, MIT for `generic-array` and `zmij`, and an additional Unicode-3.0 requirement for the build-time `unicode-ident` crate. The app and worker statically link the library. `Core/scripts/dictionary-notices.py` collects the locked crate license files and the toolchain's standard-library notices for app packaging. The [dictionary distribution review](../licenses.md) still applies to the data.

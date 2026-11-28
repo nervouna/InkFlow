@@ -95,8 +95,8 @@ database or empty filter result, exits 0. Help is available at each command.
   so the rule only reaches records with post-commit windows (v0.7.3 on): a reverted choice in older records still
   counts as gold. `without_evidence` counts exported cases only. The file holds typed text: the path must be
   outside the repository and new, and the file is owner-only. The `replay` binary scores it; see
-  [Replay](../../../../Core/Portable/README.md#replay), and its
-  [replay files](../../../../Core/Portable/README.md#replay-files) for how to handle the file.
+  [Replay](../../../../Core/Portable/replay.md#replay), and its
+  [replay files](../../../../Core/Portable/replay.md#replay-files) for how to handle the file.
   Correction attempts are now collapsed after export selection: a directly relabelled decision keeps its original
   list and replaces its successful retry, so the two are not independent cases. Header counters
   `correction_chains_direct`, `correction_chains_inferred`, and `correction_attempts_collapsed` describe this step.

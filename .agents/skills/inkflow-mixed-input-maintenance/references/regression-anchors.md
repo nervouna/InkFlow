@@ -6,7 +6,7 @@ Fixtures behind the rules in [rules.md](rules.md). They describe the current def
 | --- | --- |
 | `d`, `niyebuxiangnid`, `womenshenzh` | Chinese leads through forward typing and backspaces; no promoted `D`, `nid` or `zh` mixed tail |
 | `women` | 我们 leads; measured `women` (5.57) remains selectable |
-| `WOMENS`, `womenfolk`, `tameness`, `Nimes`, `nimetti`, `nimetz`, `Haiti`, `Haitian`, `Haitienne`, `haitians` | Rejected at the default gate, including exact/prefix/case/alias paths, later pages and mixed boundaries; `WOMENS` is 3.40 |
+| `WOMENS`, `womenfolk`, `tameness`, `Nimes`, `nimetti`, `nimetz`, `Haiti`, `Haitian`, `Haitienne`, `haitians` | Rejected at the default gate, including exact/prefix/case/alias paths, later pages and mixed boundaries; `WOMENS` has no observation |
 | `email`, `emails`, `online`, `bug` | Measured 4.68, 4.24, 5.19, 4.20 respectively; no zero-weight exception needed; admitted does not mean first-page/first-place |
 | `email`, `wofaleemail` | 额买了 / 我发了额买了 lead at equal coverage; `email` / 我发了email remain selectable and commit exactly. Once 我发了email has been selected, it leads `wofaleemail`; Return, cancellation and an immediate undo do not count |
 | `compute`, `actual` | `computer` can complete excluded `compute`; admitted exact-code `actual` precedes frequency-ordered completions such as `actually` |
