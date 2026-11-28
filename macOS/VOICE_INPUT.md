@@ -1,6 +1,6 @@
 # Voice input
 
-Shipped in 0.4.0. Experiments and measurements are in the git history of `docs/archive/`.
+Shipped in 0.4.0. Experiments and measurements are in the git history of the removed docs archive folder.
 
 ## Usage
 
