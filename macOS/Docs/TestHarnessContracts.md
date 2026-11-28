@@ -96,8 +96,9 @@ See [macOS testing](../TESTING.md) for commands and the
 - A shutdown timeout releases the caller while the serial worker still owns the SQLite attempt.
   A second close queued behind it exposes final failure accounting. Let deliberately stalled
   workers resume before asserting, so an unbounded implementation produces a failure without
-  hanging the test. The pressure fixture needs the longer close timeout described in the
-  [debugging index](../DEBUGGING.md#quality-store-failed-under-load).
+  hanging the test. The byte-pressure part of `QualityStoreTests` closes with a 30 s timeout: the ~100 KB-per-record backlog
+  did not drain within the 1 s default on a loaded machine (`entire accepted charge released after drain`, under
+  `test.sh all` and CI `quick`). The production default is unchanged.
   The termination test starts a real detached resource factory and submits a real pending
   composition with complete synthetic build identity. A subprocess watchdog bounds failure.
 - Test packaged startup with an inert resource set and an unusable cache to force recovery.
@@ -114,8 +115,8 @@ See [Python query fixtures](QualityQueryFixtures.md) for scorecard and replay ex
 - The full runner prebuilds the two long-running Swift units before launching them as background
   process groups. It keeps other units serial and stops the whole group on failure. The wrapper
   invokes the unit outside a shell conditional so `set -e` applies inside inherited functions.
-  The shared-core run skips units already covered by the full runner. Its old-English-cache fixture
-  includes every inventory row with a lowercase code and no Zipf gate.
+  The shared-core run skips units already covered by the full runner. The `deployment` unit's
+  old-English-cache fixture includes every inventory row with a lowercase code and no Zipf gate.
 - The Rime learning fixture is a test-only observer for `learning_contract` using the versioned
   property channel. It demonstrates trailing-space termination for custom codes, durability only
   after the write transaction closes, and learning only from the namespace owning a selected

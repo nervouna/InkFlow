@@ -45,7 +45,7 @@ The report (`formatVersion: 1`) names the input source, bundle and version, the 
 
 `--score REPORT` recomputes the aggregates of a driver report (the table that a run prints) from `input`, `target` and `committed`. `--score Core/Fixtures/QualityBaseline/baseline.json` scores InkFlow's white-box run on the same four metrics, from `sample.input`, `sample.target` and `initial.first` (the shown-first, no Space typed, so `trailingSpace` is `false` throughout). The search variant (R-mrr and E-page from `targetRank` and `pagingOperations`) stays the baseline runner's own output.
 
-Reference, `--score Core/Fixtures/QualityBaseline/baseline.json`: R1 on T0 = R-sent `20/24 = 83.3% [64.1, 93.3]`, misses `ordinary-homophone`, `ordinary-paging`, `mixed-email`, `mixed-offer`; mean R-char `0.878`; Chinese-series E-kspc `146 / 48 = 3.04`; hits per category `ordinary-control 4/6`, `long-sentence 3/3`, `abbreviation 3/3`, `technical 8/8`, `mixed 2/4`.
+The baseline's numbers move with ranking changes, so none are recorded here: run the command above for the current ones.
 
 Example, `--score macOS/Experiments/BlackBoxBenchmark/example-report.json` (three hand-written rows with made-up committed values, nothing from an input method):
 
@@ -56,7 +56,3 @@ Example, `--score macOS/Experiments/BlackBoxBenchmark/example-report.json` (thre
 | `example-uncommitted` | `technical` | `API` | `API` | `""`, uncommitted | 4 | false | false | 0.000 | 0 |
 
 Overall `1/3 = 33.3% [6.1, 79.2]`, mean R-char `0.556`. `ordinary-control 1/2 = 50.0% [9.5, 90.5]`, mean `0.833`. `technical 0/1 = 0.0% [0.0, 79.3]`, mean `0.000`, E-kspc `unavailable`. Chinese series hits `1/2 = 50.0% [9.5, 90.5]`, E-kspc `17 / 5 = 3.40`.
-
-## Result: pending the first user run
-
-Replace this section after the first real run: the input method and version, the declared state, the date, whether the input method received the `NSApp.sendEvent` key events (a CGEvent/HID-tap path is a follow-up issue only if it did not), the table next to the `--score` reference above, and the decision.

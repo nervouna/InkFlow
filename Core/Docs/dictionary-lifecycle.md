@@ -37,8 +37,9 @@ core's resource probe selects the two required first choices plus mixed English,
 candidates. Compile and verification failures are reported separately, and no real learning or custom-phrase
 data enters the helper.
 
-`DictionaryWorkerRunner` starts the local helper through `sandbox-exec` without a shell, with an environment
-that excludes inherited credentials, user paths and dynamic-loader overrides. The profile denies network access
+`DictionaryWorkerRunner` starts the local helper through `IFSandboxedWorkerLauncher`, which runs `sandbox-exec`
+without a shell, with an environment that excludes inherited credentials, user paths and dynamic-loader
+overrides. The profile denies network access
 and the real user directory and allows writes only to the candidate's UUID subtree. Both pipes drain
 concurrently, and diagnostic retention and run time are bounded. Cancellation or timeout terminates the child
 and escalates to KILL. `sandbox-exec` is deprecated, but a failure to start it is a fatal preparation error,

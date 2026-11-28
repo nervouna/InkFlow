@@ -40,21 +40,9 @@ Logs contain only fixed labels, random correlation IDs, status and timing — ne
 
 The bundled `RimePrebuilt` engine starts before the IMK server is created, and the Rust core reads the context-ranking index (`pinyin_simp.context.bin`, generated with the dictionary and read whole into memory) while it starts, so candidate order is ranked from the first key. Downloaded-dictionary recovery loads in the background and switches in only when all sessions are idle. Activation spans in the same run/PID are client callbacks, not a new process. `RimePrebuilt/inkflow-cache.json` binds bundled resources; an invalid packaged cache reports the engine unavailable rather than running synchronous maintenance. Tests: `test.sh startup-diagnostics dictionary-activation`; `test-serving-startup.sh --native` for a real candidate panel.
 
-## Uppercase English drops itself and following Pinyin in mixed input
+## English mixed input drops or reorders Pinyin
 
-**Symptom:** `woyongAPIkeyihuifuwo` keeps only the Chinese prefix.
-
-**Cause:** The mixed dictionary kept only lowercase literal codes of ≥4 letters, so `API`, `SwiftUI`, `D` had no mixed code. Broadly admitting short uppercase codes lets fragments rebuild excluded words (`WOMEN` + `S`).
-
-**Fix:** For admitted ASCII words, keep sourced uppercase codes and add the exact display spelling as a code; the mixed Lua filter requires each ASCII run to be an exact admitted entry. Don't clear Shift, append raw tails or add global uppercase algebra.
-
-## English steals unfinished Pinyin / low-weight English fills later positions
-
-**Symptoms:** `d` prefers `D`; `womenshenzh` yields ASCII tails; `women` offers `WOMENS`, `nime` offers `Nimes`.
-
-**Cause:** Easy English has many unweighted aliases; a fixed mixed boost outranked Chinese; the standalone English translator queried the full upstream dictionary. Rime compares coverage length before quality.
-
-**Fix:** Generate an admitted `easy_en.dict.yaml` (pinned wordfreq snapshot, explicit overrides, one inclusive Zipf threshold) and derive the mixed dictionary from it. Both English streams sit below native Chinese at equal coverage, including unfinished final syllables. Resource compilation (packaging, dictionary updates) runs Rime's full content-checking maintenance, so older resource timestamps still replace stale caches and unchanged compiled tables are reused; the app starts from that prepared cache and never compiles at startup. Rules: the mixed-input skill's `references/rules.md`. Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
+Uppercase English dropping the following Pinyin, and English stealing unfinished Pinyin or filling later positions, are governed by rules 2 and 5-7 of [Candidate behavior and ownership](../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md#candidate-behavior-and-ownership). Tests: `test-prepare-rime.sh`, `DeploymentTests.swift`, `engine-english`.
 
 ## AI: local Ollama Qwen reports an incomplete suggestion (GitHub #4)
 
@@ -88,7 +76,7 @@ Run `bash macOS/scripts/refresh-menu.sh` (restarts the user's `TextInputMenuAgen
 
 **Cause:** While the bundle path was briefly missing during replacement, macOS rebuilt its private UI-order cache (`AppleInputSourcesInUIOrderPasteboard`) with only ABC. Restarting `TextInputMenuAgent` also causes a brief flicker.
 
-**Fix:** `install.sh` and the package use `register-input-source`'s atomic replacement (`--commit-update`: `RENAME_SWAP` for updates, `RENAME_EXCL` for first install) so the path never disappears, and it no longer restarts the menu agent. Installer's own bundle replacement leaves the path missing for a few hundred milliseconds (probe, 2026-10-16), so the package stages its payload in `~/Library/Caches/io.damao.inkflow.installer` and `postinstall` swaps it in. **Manual recovery:** remove and re-add InkFlow in Keyboard Settings. AX dumps and menu-bar screenshots are unreliable detectors here.
+**Fix:** `install.sh` and the package use `register-input-source`'s atomic replacement (see the [input-source lifecycle](Docs/InputSourceLifecycle.md)) and no longer restart the menu agent. Installer's own bundle replacement leaves the path missing for a few hundred milliseconds (probe, 2026-10-16), so the package stages its payload in `~/Library/Caches/io.damao.inkflow.installer` and `postinstall` swaps it in. **Manual recovery:** remove and re-add InkFlow in Keyboard Settings. AX dumps and menu-bar screenshots are unreliable detectors here.
 
 ## Blank name or icon in Keyboard Settings
 
@@ -104,11 +92,7 @@ The switch waits until every live session (including inactive clients) has no co
 
 ## Settings GUI tests: no accessible content or window won't activate
 
-Run in a logged-in, unlocked session with Accessibility access. SwiftUI builds its accessibility tree lazily, so the harness reads it from a short-lived child process. A timeout reports the foreground app's bundle ID/PID.
-
-## Settings windows ignore standard Command shortcuts
-
-Accessory apps have no storyboard main menu. An Edit-only menu handles Command-V but leaves Command-W and Command-M unbound. Settings and personal-learning presentation install the application, File, Edit and Window menus with standard nil-target actions, so AppKit routes commands to the active window or field editor. Repeated presentation reuses the same menu items. The background input method has no Quit command. Check closing, minimizing, hiding and field editing in the app.
+Run in a logged-in, unlocked session with Accessibility access. The harness reads SwiftUI's lazy accessibility tree from a child process ([fixture notes](Docs/TestHarnessContracts.md#native-controller-and-settings-fixtures)). A timeout reports the foreground app's bundle ID/PID.
 
 ## Disabled prediction item looks clickable in the input menu
 
@@ -117,11 +101,3 @@ IMK serialization enables any item with an action. An unavailable item needs bot
 ## Dictionary error details missing from accessibility
 
 An `accessibilityIdentifier` on a SwiftUI `DisclosureGroup` overrides its descendants' identifiers. Put the identifier on the diagnostic text instead.
-
-## quality-store failed under load
-
-**Symptom:** `entire accepted charge released after drain` in the byte-pressure part of `QualityStoreTests`; the unit passed when run alone.
-
-**Cause:** `close()` waits 1 s by default; on a loaded machine the ~100 KB-per-record backlog did not drain in time. Seen under `test.sh all` (2026-10-31) and in CI `test.sh quick` (2026-11-10).
-
-**Fix:** that test closes with a 30 s timeout. The production default is unchanged.

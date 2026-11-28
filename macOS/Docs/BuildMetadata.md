@@ -10,6 +10,10 @@ The ranking source digest uses exact bytes of the audited sources from
 recorded ranking fingerprint even when it leaves the executable policy unchanged. Do not interpret
 a fingerprint change from those edits as a change in ranking accuracy.
 
+The build verifies the generator's declared dictionary inputs before taking the identity snapshot.
+It bootstraps the snapshot tool with SwiftPM and re-enters SwiftPM afterward so a source edit during
+bootstrap cannot leave the embedded metadata tool out of sync.
+
 Ordinary metadata verification compares the complete bundle digest after removing embedded
 signatures and excluding signature artifacts. Re-signing can also change Mach-O layout beyond the
 removed blobs. Signed metadata verification keeps the source, resource, ranking, version and build
