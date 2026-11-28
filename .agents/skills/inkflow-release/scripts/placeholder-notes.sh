@@ -1,7 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-[[ $# -eq 1 ]] || { echo 'Usage: placeholder-notes.sh PREVIOUS_TAG' >&2; exit 2; }
+if [[ $# -ne 1 ]]; then
+  echo 'Usage: placeholder-notes.sh PREVIOUS_TAG' >&2
+  exit 2
+fi
 here=$(cd "$(dirname "$0")" && pwd)
 printf '%s\n' '<!-- inkflow-ci-placeholder-notes -->'
 printf '### 更新内容\n\n'
