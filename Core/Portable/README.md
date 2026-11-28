@@ -31,6 +31,18 @@ Cargo starts the tests from the crate directory.
 
 The first build downloads checksum-verified source archives. Subsequent builds reuse them under `build/portable/`. Set `CMAKE_BUILD_PARALLEL_LEVEL` to change the native build parallelism (default 4). Do not run two builds in the same checkout. Remove `build/portable/` for a clean rebuild or after changing compiler, SDK, architecture or the minimum macOS version in `macOS/Info.plist`.
 
+## Native build
+
+`native-sources.lock.json` pins every source archive. A changed pin in a reused build directory, such as a restored
+CI cache, downloads the archive again and removes the install prefix and every CMake build directory: extracted
+headers keep their archive dates, so Ninja would not recompile their includers. librime is the shipping 1.17.0
+revision and its glog, LevelDB, marisa and yaml-cpp pins follow its submodules. OpenCC is pinned to 1.4.2 for the
+out-of-bounds read fixes of GHSA-7fqq-q52p-2jjg, builds unmodified apart from an explicit `cstdint` include for
+GCC 15, and runs its configuration with Git hidden so it does not take its version from this repository's tags.
+Static dependencies and the Lua plugin link into one shared librime with external plugin discovery off and no host
+librime or Homebrew headers. Boost.Regex builds without ICU, and optional gflags, libunwind, Snappy, crc32c and
+tcmalloc are off, so the libraries take no host-dependent linkage.
+
 ## Modules
 
 - `src/engine.rs`: `Engine` and `InputSession`, the session policy over Rime.
