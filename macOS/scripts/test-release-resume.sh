@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
-fail() { echo "FAIL $*" >&2; exit 1; }
+fail() {
+  echo "FAIL $*" >&2
+  exit 1
+}
 cd "$(dirname "$0")/../.."
 root=$PWD
 fixture=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-release-resume.XXXXXX")
