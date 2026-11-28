@@ -97,6 +97,12 @@ class AssertionTests(unittest.TestCase):
             b"done\n"
             b"[[ -f a ]] ||\\\n"
             b"  fail\n"
+            b"[[ -z $(ls) ]] || fail 'message'\n"
+            b"if ! PATH=x A=1 bash y \\\n"
+            b"  --flag z \\\n"
+            b"  > out 2>&1; then\n"
+            b"  :\n"
+            b"fi\n"
         )
         found = rows("Core/scripts/test-x.sh", source)
         self.assertEqual(found, [])

@@ -23,7 +23,6 @@ SEMICOLON_SKIPPED_PARENTS = {
 }
 SWIFT_CONTAINERS = {"source_file", "statements"}
 SHELL_TEST = re.compile(r"(?:.*/)?scripts/test-[^/]*\.sh")
-GUARD = re.compile(r"\|\|[\s\\]*fail$")
 SHELL_CONTINUATION = re.compile(rb"^(?:then|do)\b")
 CONDITION_PARENTS = {"if_statement", "elif_clause", "while_statement"}
 
@@ -90,6 +89,14 @@ def swift_statements(root, comment_starts):
             previous = child
 
 
+def guarded(statement):
+    if statement.type != "list" or statement.children[-2].type != "||":
+        return False
+    last = statement.children[-1]
+    name = last.child_by_field_name("name")
+    return last.type == "command" and name is not None and name.text == b"fail"
+
+
 def assertions(path, source):
     if not SHELL_TEST.fullmatch(path.as_posix()):
         return
@@ -98,15 +105,14 @@ def assertions(path, source):
         if node.type not in {"test_command", "negated_command"}:
             continue
         statement = node
-        while statement.parent.type == "list":
+        while statement.parent.type in {"list", "redirected_statement"}:
             statement = statement.parent
         if statement.start_byte != node.start_byte:
             continue
         parent = statement.parent
         if parent.type in CONDITION_PARENTS and statement in parent.children_by_field_name("condition"):
             continue
-        text = statement.text.decode(errors="replace").rstrip()
-        if not GUARD.search(text):
+        if not guarded(statement):
             kind = "[[ … ]]" if node.type == "test_command" else "! cmd"
             yield statement.start_point.row + 1, f"bare {kind} assertion must end in `|| fail`."
 
