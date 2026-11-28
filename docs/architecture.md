@@ -109,7 +109,7 @@ worth changing), `pending` (needs a decision, see #254).
 | P8 | macOS | Delete the one-time pre-Sparkle preference migration | done |
 | P13 | Docs | The Chinese dictionary notice names the Rust generator and the catalog file | done |
 | O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp` | done (#261) |
-| O1b | Linux | `package.sh` repeats `prepare-resources.sh` | open: `prepare-resources.sh` takes no output directory |
+| O1b | Linux | `package.sh` calls `prepare-resources.sh`, which writes the one `resources.json` report | done |
 | O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | dropped: `sign_sparkle` is shared; the rest differs on purpose |
 | O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | done (#277, with P6) |
 | O4 | Source of truth | One list of compiled resource files for the receipts and engine checks | done (#264, with P12) |

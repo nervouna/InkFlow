@@ -13,7 +13,7 @@ From the checkout root:
 ```sh
 bash Core/Portable/test.sh
 # Compile and smoke-test full production resources in isolated directories:
-bash Core/Portable/prepare-resources.sh
+bash Core/Portable/prepare-resources.sh [OUTPUT_DIRECTORY]
 # Compare the Rust engine with the recorded Swift behavior on those resources:
 bash Core/Portable/parity.sh [build/portable/resources.XXXXXX]
 # Capture key latency and memory with the recorded macOS headless protocol:

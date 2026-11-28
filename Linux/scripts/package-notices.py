@@ -41,26 +41,20 @@ def check_resources(resources, reused):
     shared = hashes(resources / 'shared')
     cache = hashes(resources / 'prepared/cache')
     manifest = json.loads((resources / 'shared/dictionary-manifest.json').read_text())
-    if reused:
-        report_path = resources / 'resources.json'
-        if not report_path.is_file():
-            raise SystemExit('Reused resources require resources.json; run package.sh without arguments to rebuild')
-        report = json.loads(report_path.read_text())
-        expected = hashes(ROOT / 'build/linux/package-shared')
-        old_native = report.get('nativeBuild', {})
-        if (report.get('platform') != 'Linux' or
-                report.get('architecture') != platform.machine() or
-                any(old_native.get(key) != native.get(key)
-                    for key in ('platform', 'machine', 'sources', 'revision')) or
-                report.get('sourceSHA256') != shared or
-                report.get('cacheSHA256') != cache or
-                report.get('manifest') != manifest or shared != expected):
-            raise SystemExit('Reused resources do not match this Linux target/revision/recipe; rebuild without arguments')
-    else:
-        report = {'platform': 'Linux', 'architecture': platform.machine(),
-                  'nativeBuild': native, 'sourceSHA256': shared,
-                  'cacheSHA256': cache, 'manifest': manifest}
-        (resources / 'resources.json').write_text(json.dumps(report, indent=2) + '\n')
+    report_path = resources / 'resources.json'
+    if not report_path.is_file():
+        raise SystemExit('Prepared resources require resources.json; run package.sh without arguments to rebuild')
+    report = json.loads(report_path.read_text())
+    old_native = report.get('nativeBuild', {})
+    if (report.get('platform') != 'Linux' or
+            report.get('architecture') != platform.machine() or
+            any(old_native.get(key) != native.get(key)
+                for key in ('platform', 'machine', 'sources', 'revision')) or
+            report.get('sourceSHA256') != shared or
+            report.get('cacheSHA256') != cache or
+            report.get('manifest') != manifest or
+            reused and shared != hashes(ROOT / 'build/linux/package-shared')):
+        raise SystemExit('Prepared resources do not match this Linux target/revision/recipe; rebuild without arguments')
 
 
 def main():
