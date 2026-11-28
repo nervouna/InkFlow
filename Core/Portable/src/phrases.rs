@@ -55,8 +55,7 @@ impl CustomPhrase {
         let mut ids = HashSet::new();
         let mut pairs = HashSet::new();
         for phrase in phrases {
-            let valid = Self::validated(&phrase.id, &phrase.code, &phrase.text)
-                .map_err(|_| PhraseError::InvalidData)?;
+            let valid = Self::validated(&phrase.id, &phrase.code, &phrase.text)?;
             if valid != *phrase || !ids.insert(&phrase.id) {
                 return Err(PhraseError::InvalidData);
             }
@@ -105,13 +104,29 @@ mod tests {
             CustomPhrase::validated("a", "x", "  "),
             Err(PhraseError::EmptyText)
         );
-        let raw = CustomPhrase {
+        let raw = |code: &str, text: &str| CustomPhrase {
             id: "a".into(),
-            code: "x\ty".into(),
-            text: "invalid".into(),
+            code: code.into(),
+            text: text.into(),
         };
         assert_eq!(
-            CustomPhrase::validate(&[raw]),
+            CustomPhrase::validate(&[raw("x\ty", "invalid")]),
+            Err(PhraseError::InvalidCode)
+        );
+        assert_eq!(
+            CustomPhrase::validate(&[raw("x", "a\tb")]),
+            Err(PhraseError::ControlCharacter)
+        );
+        assert_eq!(
+            CustomPhrase::validate(&[raw("x", "")]),
+            Err(PhraseError::EmptyText)
+        );
+        assert_eq!(
+            CustomPhrase::validate(&[raw("X", "ok")]),
+            Err(PhraseError::InvalidData)
+        );
+        assert_eq!(
+            CustomPhrase::validate(&[raw("x", " ok ")]),
             Err(PhraseError::InvalidData)
         );
         let twice = CustomPhrase::validated("b", "dz", "地址").unwrap();
@@ -123,6 +138,12 @@ mod tests {
         assert_eq!(
             CustomPhrase::validate(&[phrase.clone(), same_id]),
             Err(PhraseError::InvalidData)
+        );
+        let emoji = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        assert_eq!(CustomPhrase::validated("e", "fam", emoji).unwrap().text, emoji);
+        assert_eq!(
+            CustomPhrase::validated("e", "\u{212A}", "x"),
+            Err(PhraseError::InvalidCode)
         );
         assert_eq!(phrase_tsv(&[]), "# no comment\n");
         let second = CustomPhrase::validated("c", "dz", "# no comment").unwrap();

@@ -316,6 +316,20 @@ struct SettingsTests {
         for phrase in ["", "  ", "a\tb", "a\nb", "a\rb", "a\0b", "a\u{2028}b", "a\u{7f}b"] {
             rejects { _ = try settings.saveCustomPhrase(code: "test", text: phrase) }
         }
+        let messages = [("a\tb", "短语", "invalid-code"), ("\u{212A}", "短语", "invalid-code"),
+            ("test", "a\nb", "control-character"), ("test", "  ", "empty-text"), ("DZ", first.text, "duplicate")]
+        for (code, text, message) in messages {
+            do {
+                _ = try settings.saveCustomPhrase(code: code, text: text)
+                check(false, "Rejected phrase must throw")
+            } catch {
+                check(error.localizedDescription == configurationMessage(message), "Rejection message for \(code)")
+            }
+        }
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+        let joined = try settings.saveCustomPhrase(code: "jt", text: family)
+        check(joined.text == family && IFSettings(defaults: defaults).customPhrases.contains(joined))
+        try settings.deleteCustomPhrase(id: joined.id)
         rejects { _ = try settings.saveCustomPhrase(code: "DZ", text: first.text) }
         rejects { _ = try settings.saveCustomPhrase(id: first.id, code: second.code, text: second.text) }
         rejects { try settings.deleteCustomPhrase(id: UUID()) }

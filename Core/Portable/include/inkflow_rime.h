@@ -136,6 +136,9 @@ IFRStatus ifr_session_set_configuration(const IFRSession* session, size_t candid
                                         const IFRPhrase* phrases, size_t phrase_count,
                                         const uint32_t* options);
 const char* ifr_session_configuration_error(const IFRSession* session);
+IFRStatus ifr_phrase_normalize(const char* code, const char* text, char** normalized_code,
+                               char** normalized_text);
+IFRStatus ifr_phrases_validate(const IFRPhrase* phrases, size_t phrase_count);
 size_t ifr_session_candidate_count(const IFRSession* session);
 int ifr_session_input_options(const IFRSession* session, uint32_t* options);
 

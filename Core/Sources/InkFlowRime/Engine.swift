@@ -347,7 +347,7 @@ package final class IFEngine {
     }
 
     package func setConfiguration(candidateCount: Int, customPhrases: [CustomPhrase], inputPreferences: InputPreferences? = nil) {
-        do { try CustomPhrase.validate(customPhrases) }
+        do { try IFPhraseRules.validate(customPhrases) }
         catch { reportConfigurationError(error.localizedDescription); return }
         let previous = (requestedCount, requestedInput, Self.requestedPhrases)
         Self.requestedPhrases = customPhrases
