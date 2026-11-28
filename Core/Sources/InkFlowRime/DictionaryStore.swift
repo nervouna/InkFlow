@@ -310,10 +310,6 @@ package struct IFDictionaryStore: Sendable {
         if state.pending != nil { state.pending = nil; state.transaction = nil; try save(state) }
         return state
     }
-    package func confirmFallback(_ version: IFDictionaryVersion) throws {
-        _ = try resolve(version, fingerprint: version.runtimeFingerprint)
-        try confirmValidatedFallback(version)
-    }
     package func confirmValidatedFallback(_ version: IFDictionaryVersion) throws {
         try version.validate()
         var state = try state(); state.current = version; state.bundled = nil; state.pending = nil; state.transaction = nil

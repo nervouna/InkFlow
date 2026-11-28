@@ -85,7 +85,6 @@ package final class QualityRecorder {
 
     package var activeCompositionID: String? { captureAllowed() && !suppressed ? envelope?.composition.id : nil }
     package var timingSnapshot: QualityTiming? { snapshotTiming(at: offsetNow) }
-    package var lastEditMonotonicTime: TimeInterval? { timing?.lastEditOffset.map { monotonicStart + $0 } }
     private var offsetNow: TimeInterval { max(0, clock.monotonic() - monotonicStart) }
 
     private func captureAllowed(cleanBoundary: Bool = false) -> Bool {

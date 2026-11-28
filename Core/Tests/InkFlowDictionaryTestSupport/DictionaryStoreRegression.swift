@@ -2,6 +2,13 @@ import Foundation
 @testable import InkFlowDomain
 @testable import InkFlowRime
 
+private extension IFDictionaryStore {
+    func confirmFallback(_ version: IFDictionaryVersion) throws {
+        _ = try resolve(version, fingerprint: version.runtimeFingerprint)
+        try confirmValidatedFallback(version)
+    }
+}
+
 private func check(_ value: Bool, _ message: String, file: StaticString = #filePath, line: UInt = #line) {
     if !value { fatalError(message, file: (file), line: line) }
 }

@@ -553,7 +553,6 @@ package struct QualityTiming: Codable, Equatable, Sendable {
     package var phaseObservedVisibleDuration: TimeInterval? = nil
     package var visibilityObservationInterval: TimeInterval? = nil
 
-    package var lastEditAt: Date? { lastEditOffset.map { startedAt.addingTimeInterval($0) } }
     package init(version: Int = 1,
         startedAt: Date,
         keySamples: [QualityKeySample] = [],

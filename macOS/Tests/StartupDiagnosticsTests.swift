@@ -2,6 +2,14 @@
 import Foundation
 @testable import InkFlowCore
 
+private extension IFInputLifecycleDiagnostics {
+    func recordFirstKey(outcome: InputDiagnosticOutcome, reason: InputDiagnosticReason,
+                        delivery: InputDeliveryDiagnostic? = nil) {
+        guard let token = beginFirstKey() else { return }
+        finishFirstKey(token, outcome: outcome, reason: reason, delivery: delivery)
+    }
+}
+
 private final class Capture: @unchecked Sendable {
     private let lock = NSLock()
     private var lines: [String] = []
