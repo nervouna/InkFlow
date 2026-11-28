@@ -17,7 +17,7 @@ binary="$PWD/build/serving-startup-tests"
 if [[ "${1:-}" == --native ]]; then
   harness="$run_dir/ServingStartupHarness.app"
   mkdir -p "$harness/Contents/MacOS"
-  cp macOS/Tests/ServingStartupHarness.plist "$harness/Contents/Info.plist"
+  cp macOS/Tests/ServingStartup/ServingStartupHarness.plist "$harness/Contents/Info.plist"
   cp "$binary" "$harness/Contents/MacOS/ServingStartupHarness"
   binary="$harness/Contents/MacOS/ServingStartupHarness"
 fi
