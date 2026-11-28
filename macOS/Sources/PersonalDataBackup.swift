@@ -251,23 +251,23 @@ struct PersonalDataWorker: Sendable {
         guard root.deletingLastPathComponent() == user.appendingPathComponent("PersonalData/staging"),
               UUID(uuidString: root.lastPathComponent) != nil else { throw PersonalDataError("staging") }
         try PersonalDataFiles.write(Data((restore ? "restore" : "export").utf8), root.appendingPathComponent("request.json"))
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        process.arguments = ["-D", "USER_ROOT=\(user.path)", "-D", "STORE_ROOT=\(user.appendingPathComponent("PersonalData").path)",
-            "-D", "CANDIDATES_ROOT=\(root.deletingLastPathComponent().path)", "-D", "CANDIDATE_ROOT=\(root.path)",
-            "-p", IFDictionaryWorkerRunner.sandboxProfile, helper.path, "--personal-data", root.appendingPathComponent("request.json").path]
-        process.environment = ["PATH": "/usr/bin:/bin", "TMPDIR": root.path, "LANG": "en_US.UTF-8"]
-        process.currentDirectoryURL = root
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
-        try process.run()
-        let deadline = ProcessInfo.processInfo.systemUptime + 120
-        while process.isRunning && ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.02) }
-        if process.isRunning { process.terminate(); Thread.sleep(forTimeInterval: 0.1); if process.isRunning { kill(process.processIdentifier, SIGKILL) } }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
+        let launcher = IFSandboxedWorkerLauncher(
+            profile: IFDictionaryWorkerRunner.sandboxProfile,
+            roots: [
+                (name: "USER_ROOT", path: user.path),
+                (name: "STORE_ROOT", path: user.appendingPathComponent("PersonalData").path),
+                (name: "CANDIDATES_ROOT", path: root.deletingLastPathComponent().path),
+                (name: "CANDIDATE_ROOT", path: root.path)
+            ],
+            helper: helper,
+            arguments: ["--personal-data", root.appendingPathComponent("request.json").path],
+            directory: root,
+            timeout: 120,
+            killGrace: 0.1)
+        let ended = try launcher.run()
+        guard ended.status == 0 else {
             let stages: [Int32: String] = [2: "request", 3: "path", 4: "snapshot", 5: "native-map", 6: "size", 7: "filesystem"]
-            throw PersonalDataError("worker-" + (stages[process.terminationStatus] ?? "exit"))
+            throw PersonalDataError("worker-" + (stages[ended.status] ?? "exit"))
         }
     }
 }

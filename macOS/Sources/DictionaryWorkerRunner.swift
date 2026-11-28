@@ -1,7 +1,6 @@
 import InkFlowRime
 import InkFlowDomain
 import Foundation
-import Darwin
 
 final class IFDictionaryCancellation: @unchecked Sendable {
     private let lock = NSLock()
@@ -10,42 +9,25 @@ final class IFDictionaryCancellation: @unchecked Sendable {
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
 }
 
-private final class IFDictionaryPipeCapture: @unchecked Sendable {
+private final class IFDictionaryWorkerEvents: @unchecked Sendable {
     private let lock = NSLock()
-    private let limit: Int
-    private var data = Data()
-    private var partial = Data()
-    private var truncated = false
+    private let progress: @Sendable (IFDictionaryProgress) -> Void
     private var stage = IFDictionaryStage.prepare
     private var result: IFDictionaryWorkerResult?
     private var failure: IFDictionaryUpdateError?
-    init(limit: Int) { self.limit = limit }
-    func drain(_ handle: FileHandle, events: (@Sendable (IFDictionaryProgress) -> Void)? = nil) {
-        defer { try? handle.close() }
-        while let bytes = try? handle.read(upToCount: 8192), !bytes.isEmpty {
-            lock.lock()
-            let available = max(0, limit - data.count)
-            data.append(bytes.prefix(available)); truncated = truncated || bytes.count > available
-            var progress = [IFDictionaryProgress]()
-            if events != nil {
-                partial.append(bytes)
-                while let newline = partial.firstIndex(of: 0x0a) {
-                    let line = Data(partial[..<newline]); partial.removeSubrange(...newline)
-                    if let event = try? JSONDecoder().decode(IFDictionaryWorkerEvent.self, from: line) {
-                        if let update = event.progress { stage = update.stage; progress.append(update) }
-                        if let value = event.result { result = value }
-                        if let value = event.failure { failure = value; stage = value.stage }
-                    }
-                }
-                if partial.count > limit { partial.removeAll(); truncated = true }
-            }
-            lock.unlock()
-            for update in progress { events?(update) }
-        }
+    init(progress: @escaping @Sendable (IFDictionaryProgress) -> Void) { self.progress = progress }
+    func consume(_ line: Data) {
+        guard let event = try? JSONDecoder().decode(IFDictionaryWorkerEvent.self, from: line) else { return }
+        lock.lock()
+        if let update = event.progress { stage = update.stage }
+        if let value = event.result { result = value }
+        if let value = event.failure { failure = value; stage = value.stage }
+        lock.unlock()
+        if let update = event.progress { progress(update) }
     }
-    func snapshot() -> (String, IFDictionaryStage, IFDictionaryWorkerResult?, IFDictionaryUpdateError?) {
+    func snapshot() -> (IFDictionaryStage, IFDictionaryWorkerResult?, IFDictionaryUpdateError?) {
         lock.lock(); defer { lock.unlock() }
-        return (String(decoding: data, as: UTF8.self) + (truncated ? "\n[diagnostic output truncated]" : ""), stage, result, failure)
+        return (stage, result, failure)
     }
 }
 
@@ -122,56 +104,45 @@ struct IFDictionaryWorkerRunner: Sendable {
         if cancellation.isCancelled || Task.isCancelled { outcome = .cancelled; throw IFDictionaryUpdateError(.prepare, "cancelled") }
         let requestURL = try IFDictionaryFiles.child("request.json", in: request.candidate)
         try IFDictionaryFiles.atomicWrite(IFDictionaryFiles.encode(request), to: requestURL)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
-        process.arguments = ["-D", "USER_ROOT=\((try IFDictionaryFiles.canonical(protectedUserRoot)).path)",
-                             "-D", "STORE_ROOT=\((try IFDictionaryFiles.canonical(candidatesRoot.deletingLastPathComponent())).path)",
-                             "-D", "CANDIDATES_ROOT=\((try IFDictionaryFiles.canonical(candidatesRoot)).path)",
-                             "-D", "CANDIDATE_ROOT=\(request.candidate.path)", "-p", Self.sandboxProfile,
-                             runtime.helper.path, requestURL.path]
-        process.environment = ["PATH": "/usr/bin:/bin",
-                               "TMPDIR": request.candidate.path, "LANG": "en_US.UTF-8"]
-        process.currentDirectoryURL = request.candidate
-        let stdout = Pipe(), stderr = Pipe()
-        process.standardOutput = stdout; process.standardError = stderr; process.standardInput = FileHandle.nullDevice
-        let output = IFDictionaryPipeCapture(limit: 262_144), diagnostics = IFDictionaryPipeCapture(limit: 16_000)
-        let readers = DispatchGroup()
+        let roots = [
+            (name: "USER_ROOT", path: try IFDictionaryFiles.canonical(protectedUserRoot).path),
+            (name: "STORE_ROOT",
+             path: try IFDictionaryFiles.canonical(candidatesRoot.deletingLastPathComponent()).path),
+            (name: "CANDIDATES_ROOT", path: try IFDictionaryFiles.canonical(candidatesRoot).path),
+            (name: "CANDIDATE_ROOT", path: request.candidate.path)
+        ]
+        let events = IFDictionaryWorkerEvents(progress: progress)
+        var launcher = IFSandboxedWorkerLauncher(profile: Self.sandboxProfile, roots: roots, helper: runtime.helper,
+            arguments: [requestURL.path], directory: request.candidate, timeout: timeout, killGrace: 1)
+        launcher.isCancelled = { cancellation.isCancelled || Task.isCancelled }
+        launcher.stdoutLimit = 262_144
+        launcher.onStdoutLine = { events.consume($0) }
+        launcher.stderrLimit = 16_000
         try checkCancellation(cancellation)
-        do { try process.run() } catch {
-            throw IFDictionaryUpdateError(.prepare, "worker-launch", detail: "\((error as NSError).domain) (\((error as NSError).code))")
+        let ended: IFSandboxedWorkerLauncher.Exit
+        do {
+            ended = try launcher.run()
+        } catch {
+            let detail = "\((error as NSError).domain) (\((error as NSError).code))"
+            throw IFDictionaryUpdateError(.prepare, "worker-launch", detail: detail)
         }
-        try? stdout.fileHandleForWriting.close(); try? stderr.fileHandleForWriting.close()
-        readers.enter()
-        DispatchQueue.global().async { output.drain(stdout.fileHandleForReading, events: progress); readers.leave() }
-        readers.enter()
-        DispatchQueue.global().async { diagnostics.drain(stderr.fileHandleForReading); readers.leave() }
-        let start = ProcessInfo.processInfo.systemUptime
-        var interrupted: String?
-        while process.isRunning {
-            if cancellation.isCancelled || Task.isCancelled { interrupted = "cancelled"; break }
-            if ProcessInfo.processInfo.systemUptime - start >= timeout { interrupted = "worker-timeout"; break }
-            Thread.sleep(forTimeInterval: 0.02)
+        let (stage, result, failure) = events.snapshot()
+        let diagnosticText = ended.stderr
+        let interrupted: String? = switch ended.interruption {
+        case .cancelled: "cancelled"
+        case .timeout: "worker-timeout"
+        case nil: nil
         }
-        if interrupted != nil, process.isRunning {
-            process.terminate()
-            let deadline = ProcessInfo.processInfo.systemUptime + 1
-            while process.isRunning, ProcessInfo.processInfo.systemUptime < deadline { Thread.sleep(forTimeInterval: 0.02) }
-            if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
-        }
-        process.waitUntilExit(); readers.wait()
-        if cancellation.isCancelled || Task.isCancelled { interrupted = "cancelled" }
-        let (_, stage, result, failure) = output.snapshot()
-        let diagnosticText = diagnostics.snapshot().0
         if let interrupted {
             outcome = interrupted == "cancelled" ? .cancelled : .timeout
-            throw IFDictionaryUpdateError(stage, interrupted, exitStatus: process.terminationStatus, stderr: diagnosticText)
+            throw IFDictionaryUpdateError(stage, interrupted, exitStatus: ended.status, stderr: diagnosticText)
         }
         if let failure {
             throw IFDictionaryUpdateError(failure.stage, failure.code, source: failure.source, file: failure.file,
-                exitStatus: process.terminationStatus, detail: failure.detail, stderr: diagnosticText)
+                exitStatus: ended.status, detail: failure.detail, stderr: diagnosticText)
         }
-        guard process.terminationStatus == 0, let result else {
-            throw IFDictionaryUpdateError(stage, "worker-exit", exitStatus: process.terminationStatus, stderr: diagnosticText)
+        guard ended.status == 0, let result else {
+            throw IFDictionaryUpdateError(stage, "worker-exit", exitStatus: ended.status, stderr: diagnosticText)
         }
         outcome = .ready
         return result
