@@ -99,7 +99,7 @@ Choose units using the [focused test matrix](../../../../macOS/TESTING.md#which-
 | Canonical or mixed personal learning | [test-ai-learning.sh](../../../../macOS/scripts/test-ai-learning.sh) (`ai-learning`) |
 | Equivalent-span ranking and leads | `EngineRegression.swift` through `engine-context` and `engine-basic`; Rust ranker and metadata parsing in [ranking.rs tests](../../../../Core/Portable/tests/ranking.rs) (`portable`); keep page identity and native-span fail-closed behavior |
 | Voice learning | `voice-session`, `apple-voice`, `voice-lexicon`, `voice-controller`, `ai-learning`, `settings`, `quality` |
-| Dictionary deployment | [DeploymentTests.swift](../../../../macOS/Tests/DeploymentTests.swift) (`deployment`): stale English caches replaced, unchanged tables reused, Chinese user data kept |
+| Dictionary deployment | [DeploymentTests.swift](../../../../macOS/Tests/DeploymentTests/DeploymentTests.swift) (`deployment`): stale English caches replaced, unchanged tables reused, Chinese user data kept |
 | Measurement | `quality`; inspect evidence with [inkflow-quality-analysis](../../inkflow-quality-analysis/SKILL.md) |
 
 ## Deployment evidence

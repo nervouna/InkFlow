@@ -49,7 +49,7 @@ for name, target in outer_targets.items():
     path = target.get('path', '')
     if path.startswith('Core/'):
         assert name in core_targets, f'{name}: declare Core targets in Core/Package.swift'
-    elif not path.startswith('macOS/Tests'):
+    else:
         assert not target.get('sources') and not target.get('exclude'), f'{name}: list no sources; use a directory'
 portable = {('Core', 'Sources', 'InkFlowRime'), ('Core', 'Tests', 'PortableABITests')}
 for path in [*(root / 'Core').rglob('*.swift'), *(root / 'macOS').rglob('*.swift')]:
