@@ -1,6 +1,20 @@
+import CryptoKit
 import Foundation
 @testable import InkFlowDomain
 @testable import InkFlowRime
+
+extension IFDictionaryHash {
+    static func gitBlob(_ data: Data) -> String {
+        var hash = Insecure.SHA1()
+        hash.update(data: Data("blob \(data.count)\0".utf8))
+        hash.update(data: data)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+extension IFDictionaryCatalog {
+    static let initialEntryCount = 965_919
+}
 
 private func check(_ value: Bool, _ message: String, file: StaticString = #filePath, line: UInt = #line) {
     if !value { fatalError(message, file: (file), line: line) }

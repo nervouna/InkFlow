@@ -172,12 +172,6 @@ final class IFInputLifecycleDiagnostics {
              engineAvailable: engineAvailable)
     }
 
-    func recordFirstKey(outcome: InputDiagnosticOutcome, reason: InputDiagnosticReason,
-                        delivery: InputDeliveryDiagnostic? = nil) {
-        guard let token = beginFirstKey() else { return }
-        finishFirstKey(token, outcome: outcome, reason: reason, delivery: delivery)
-    }
-
     func beginFirstKey() -> FirstKeyToken? {
         guard !recordedFirstKey else { return nil }
         let current = activation ?? UUID()
