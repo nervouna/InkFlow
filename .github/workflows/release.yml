@@ -242,12 +242,7 @@ jobs:
           elif ! grep -q '[^[:space:]]' "$notes"; then
             previous=$(git tag --merged HEAD --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' |
               grep -vx "$RELEASE_TAG" | head -1)
-            {
-              echo "$marker"
-              echo 'Placeholder from a CI dry run. Replace it with the public notes before publishing.'
-              echo
-              bash .agents/skills/inkflow-release/scripts/release-note-candidates.sh "$previous" HEAD
-            } > "$notes"
+            bash .agents/skills/inkflow-release/scripts/placeholder-notes.sh "$previous" > "$notes"
           fi
 
       - name: Notarize, package and publish
