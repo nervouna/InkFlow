@@ -1,5 +1,6 @@
 import InkFlowRime
 import AppKit
+import os
 
 @MainActor final class IFApplicationLifecycle: NSObject, NSApplicationDelegate {
     private let stopDictionaries: () async throws -> Void
@@ -46,7 +47,8 @@ import AppKit
                     correlation: operation, errorDomain: safe.0, errorCode: safe.1))
                 await LocalDiagnostics.shared.store?.drain()
                 failure = String(describing: error)
-                NSLog("InkFlow termination cleanup failed: %@", String(describing: error))
+                Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "termination")
+                    .error("cleanup failed: \(safe.0.rawValue, privacy: .public) \(safe.1, privacy: .public)")
                 cleanup = nil
                 sender.reply(toApplicationShouldTerminate: false)
             }

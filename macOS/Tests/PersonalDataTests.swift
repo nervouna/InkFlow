@@ -230,7 +230,7 @@ import InkFlowRime
         }
         try await coordinator.shutdown()
         IFEngine.stop()
-        settings.personalDataRecoveryRequired = true; settings.shortcuts.personalDataRecoveryRequired = true
+        settings.personalDataRecoveryRequired = true
         settings.candidateCount = 3; settings.setInputOption(.traditional, enabled: true)
         expect(settings.candidateCount == 9 && !settings.inputPreferences[.traditional], "frozen settings")
         expect(!settings.shortcuts.set(.leftShift, for: .inputMode), "frozen shortcuts")

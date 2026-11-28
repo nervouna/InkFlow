@@ -5,7 +5,7 @@ See [application contracts](Docs/ApplicationContracts.md) and the [test harness 
 
 ## Logs and diagnostic archives
 
-Unified log subsystem `io.damao.inputmethod.inkflow`; categories `startup`, `input`, `dictionary`, `ai`:
+Unified log subsystem `io.damao.inputmethod.inkflow`; categories `startup`, `input`, `dictionary`, `ai`, `voice`, `termination`:
 
 ```sh
 /usr/bin/log show --last 1h --style compact \
