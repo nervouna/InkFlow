@@ -189,7 +189,7 @@ are the whole composition's totals.
 | regular_committed_compositions / regular_decisions / decisions_per_composition | compositions with outcome `committed` and at least one `valid` decision, and the `valid` decisions they hold; the mean is `regular_decisions / regular_committed_compositions` (E-dec) |
 | kspc_compositions / kspc_keypresses / kspc_characters / kspc | regular committed compositions whose decisions are all text-captured; their summed `keypresses` (letters, edits, paging, moves, selection) and the summed `length(text)` of their `candidate` commits (Unicode scalars); `kspc` is keys over characters, null when there are no characters (E-kspc). Overall pools every kind; the scorecard's Chinese E-kspc is the `chinese` series |
 | kspc_text_free_compositions | regular committed compositions with a text-free decision: counted and left out of E-kspc, whose characters come from the commit text (the commit `character_count` is recorded in either mode, but the cohort is unchanged) |
-| candidate_commits / raw_return_commits / raw_commit_rate | commits of those kinds in the selected compositions; `raw_commit_rate` is `raw_return_commits / (candidate_commits + raw_return_commits)` (C-raw). The design's "commits of Chinese-kind compositions" cannot be read: a Return on raw pinyin records a decision with trigger `return_raw` and kind `unknown`, or none, so the denominator is the commits of pinyin compositions of every kind. `ascii`, `punctuation`, `direct_symbol`, `forced_flush` and `mode_toggle` commits are in neither term |
+| candidate_commits / raw_return_commits / raw_commit_rate | commits of those kinds in the selected compositions; `raw_commit_rate` is `raw_return_commits / (candidate_commits + raw_return_commits)` (C-raw); `ascii`, `punctuation`, `direct_symbol`, `forced_flush` and `mode_toggle` commits are in neither term |
 | commits_with_window / reverted_commits / revert_rate | C-rev (unit commit, truth T2 against T3). `commits_with_window` is the denominator: `candidate` commits of the selected compositions that have a post-commit window (a `windows` row) of any end reason; a window that ended `client_changed` or `timeout` with every count 0 was observed, and that commit was kept. `reverted_commits` is those with `leading_undo >= 1` (Cmd+Z), or with `character_count > 0` and `leading_deletions >= character_count` (Backspaces); the `leading_*` counts stop at the first direct-text or paste key, so they already mean "before other typing". Forward Delete never counts, and a commit whose `character_count` is NULL or 0 can only be reverted by Cmd+Z, so a zero threshold never makes every commit a revert. `revert_rate = reverted_commits / commits_with_window`, null for a zero denominator and never 0%, with `revert_wilson_low` / `revert_wilson_high` in `trend`. A commit is counted once, from `commits` and `windows`, whatever the number of decisions that link to it; `observations` is not used because it repeats a commit's window on every decision that links to it. The window rides the composition that follows its commit, which may start after `--until` and is still read. The instrument constants of C-rev, versioned with it, are `W` (`QualityLimits.postCommitWindowSeconds`, 10 s) and the deletion threshold, the commit's `character_count`. `commit_windows` and `windows_by_end` of `summary` count the windows of every kind of commit and are not this denominator |
 
 ### Learning effectiveness
@@ -224,23 +224,8 @@ Only visited pages and decision snapshots are retained; unseen candidates are no
 Tentative segments become committed only through verified final paths. Undo can
 mark a decision reverted; ambiguous edits and interruptions remain explicit.
 
-One serialized utility worker writes SQLite using DELETE rollback journaling.
-The event path only submits bounded in-memory envelopes; it performs no SQL,
-filesystem I/O, JSON encoding or disk waiting. Event data has a 64 KiB budget;
-unique applied configurations within each envelope have a separate 256 KiB budget,
-including input options and configurations carried by reference-only pages. Equal
-values under the same revision ID share Swift copy-on-write storage after validation.
-These are conservative logical retained-byte limits, not measurements of process RSS.
-At most 128 envelopes and 8 MiB of total logical bytes may be pending or in flight;
-the accepted byte charge is released only when its batch finishes or fails.
-Configuration overflow is checked before history trimming; conflicts are invalid
-evidence. Event overflow removes history first, then drops an oversized core. The
-worker separately checks compact event and unique configuration encoded-byte limits
-before persistence, including JSON escaping growth. Batches contain at most 16 envelopes
-or flush on a 1-second timer, atomically writing referenced revisions/composition/
-decisions/commits. Busy writes wait up to 250 ms on the worker, then roll back/drop.
-Fatal FULL/CORRUPT/IO errors disable recording for that run; persistence of the
-error itself is best effort. Abrupt exit can lose the asynchronous tail.
+The event path only submits bounded in-memory envelopes ([writer limits](../../../../Core/Docs/quality-recording.md#storage-and-privacy)).
+An abrupt exit loses the asynchronous tail, and drops cannot be attributed to filters.
 
 `recording_runs.scope=whole_db_lifetime_unfiltered` applies to every recorder
 counter/status displayed by summary, regardless of date/app/config/kind filters.

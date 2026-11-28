@@ -1,12 +1,14 @@
 ---
 name: inkflow-quality-analysis
-description: Review InkFlow's recorded input quality with calendar trends, version annotations, charts and evidence from prior compositions. Use for recorded quality, not live input diagnosis or ranking changes.
+description: Review InkFlow's recorded input quality with calendar trends, version annotations, charts and evidence from prior compositions. Use for recorded quality, including scoring a ranking change on recorded decisions; not for live input diagnosis or designing ranking changes.
 ---
 
 # InkFlow Quality Analysis
 
 Run [quality.py](scripts/quality.py) with `python3` from the repository root or use its absolute path.
 It uses the standard library and defaults to `~/Library/Application Support/InkFlow/quality.sqlite3`.
+It reads macOS records only. Linux has its own reporter, `Linux/scripts/quality.py`, whose aggregate export this script rejects:
+see the [Linux README](../../../Linux/README.md#local-chinese-selection-quality).
 
 ## Routine review
 
@@ -38,7 +40,7 @@ The [metric scorecard](../../../docs/input-quality-metrics.md#scorecard) and
 | Measure key intervals, last-edit waits or candidate visibility | `timing`. Read the [timing contract](references/query-contract.md#input-timing) first. |
 | Check how quickly learning takes effect and how long it lasts | `learning --days 28` on one device. Check `pair_coverage` before trusting rates. |
 | Score an offline ranking change | `replay-cases --output FILE` writes typed text for the offline [replay scorer](../../../Core/Portable/README.md#replay). Read the [file rules](../../../Core/Portable/README.md#replay-files). Report `reverted_relabelled` and `reverted_excluded` beside the ship-rule result. |
-| Analyze one or more devices' exports | Use repeatable `--input` with a file or a folder of weekly exports. Add `--exports-only` to analyze those files alone. See [cross-device analysis](../../../macOS/QUALITY-EXPORT.md#analyze-on-another-computer). |
+| Analyze one or more devices' exports | Use repeatable `--input` with a file or a folder of weekly exports. Add `--exports-only` to analyze those files alone, and always on the exporting Mac when reading its own weekly folder: with the local database the overlap is refused (exit 2). See [cross-device analysis](../../../macOS/QUALITY-EXPORT.md#analyze-on-another-computer). |
 
 Use `--format json` for inspectable results. See the [query contract](references/query-contract.md#cli-and-output)
 before changing a query or looking up output fields. Missing evidence stays unknown. Disclose text-free coverage

@@ -15,5 +15,3 @@ signatures and excluding signature artifacts. Re-signing can also change Mach-O 
 removed blobs. Signed metadata verification keeps the source, resource, ranking, version and build
 checks. The release caller runs separate signature verification. Verifying the signed executable
 payload against the build output is tracked separately. [Issue #233](https://github.com/nervouna/InkFlow/issues/233)
-
-See [quality export](../QUALITY-EXPORT.md) for the Python exchange format.
