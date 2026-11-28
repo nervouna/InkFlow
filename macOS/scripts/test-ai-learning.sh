@@ -15,7 +15,7 @@ user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-ai-learning.XXXXXX")
 trap 'rm -rf "$user_dir"' EXIT
 if [[ $# -eq 0 ]]; then
   shared="$user_dir/fresh-shared"
-  bash macOS/scripts/prepare-rime.sh "$shared"
+  bash Core/scripts/prepare-rime.sh "$shared"
 else
   shared="$1"
 fi

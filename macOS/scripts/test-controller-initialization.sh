@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 macOS/scripts/dependencies.sh
-bash macOS/scripts/prepare-rime.sh build/test-shared
+bash Core/scripts/prepare-rime.sh build/test-shared
 source macOS/scripts/swift-test.sh
 build_swift_test controller-initialization-tests build/controller-initialization-tests
 user_dir=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-initialization-tests.XXXXXX")

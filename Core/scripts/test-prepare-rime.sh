@@ -165,12 +165,6 @@ touch -t 200001010000 "$cached_english"
 generate
 [[ ! "$fixture/output/easy_en.dict.yaml" -nt "$cached_english" && ! "$cached_english" -nt "$fixture/output/easy_en.dict.yaml" ]] || fail
 [[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]] || fail
-[[ ! -e "$fixture/macOS" ]] || fail
-mkdir -p "$fixture/macOS/scripts"
-cp macOS/scripts/prepare-rime.sh "$fixture/macOS/scripts/"
-bash "$fixture/macOS/scripts/prepare-rime.sh" "$fixture/wrapper-output"
-diff -r "$fixture/output" "$fixture/wrapper-output"
-[[ $(find "$fixture/build/rime-cache" -name complete -type f | wc -l | tr -d ' ') == "$cache_count" ]] || fail
 receipt=$(cat "$fixture/output/dictionary-manifest.json")
 for changed in Core/Sources/InkFlowDomain/DictionaryGenerator.swift Core/scripts/build-dictionary-generator.sh Core/Portable/dictionary/src/lib.rs Core/config/chinese-sources.json; do
   cp "$fixture/$changed" "$fixture/source-before"

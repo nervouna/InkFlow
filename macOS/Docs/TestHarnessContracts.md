@@ -108,3 +108,39 @@ See [macOS testing](../TESTING.md) for commands and the
   while preserving `user.yaml`'s last build time.
 
 See [Python query fixtures](QualityQueryFixtures.md) for scorecard and replay expectations.
+
+## Test fixture constraints
+
+- The full runner prebuilds the two long-running Swift units before launching them as background
+  process groups. It keeps other units serial and stops the whole group on failure. The wrapper
+  invokes the unit outside a shell conditional so `set -e` applies inside inherited functions.
+  The shared-core run skips units already covered by the full runner. Its old-English-cache fixture
+  includes every inventory row with a lowercase code and no Zipf gate.
+- The Rime learning fixture is a test-only observer for `learning_contract` using the versioned
+  property channel. It demonstrates trailing-space termination for custom codes, durability only
+  after the write transaction closes, and learning only from the namespace owning a selected
+  Phrase. Compiled Phrase learning needs the compiled entry code. Explicit arbitrary-code writes
+  use `custom_code`. The shell comparison selects the C locale because macOS awk can collate
+  distinct CJK strings as equal under UTF-8 locales.
+- The package tests avoid a real installation with a temporary home, minimal ad-hoc signed fixture,
+  and stand-in lifecycle tool and signing processes. They exercise both stages, missing parent
+  directories, a failed preflight and failures before and after swapping. Signing and restoration
+  checks isolate individual failures. The local install fixture separately covers recovery after
+  an unconfirmed update and runs read-only desktop preflight diagnostics through stand-ins.
+- Release workflow fixtures use a real receipt, fake platform commands and synthetic extracted
+  package layouts. This lets the resume tests cover both Keychain and owner-only key-file signing
+  without submitting a notarization. Configuration lookup lets the fixture's explicit environment
+  override a developer's private configuration.
+- Quality build metadata tests isolate executable byte changes, resource drift and signed bundle
+  checks. Re-signing rules are in [build metadata](BuildMetadata.md); a synthetic digest change
+  tests that signing-dependent boundary deterministically. Framework symlinks contribute their
+  relative targets, and both lexical and resolved destinations must stay within the framework.
+  The build closure covers new untracked helpers before the commit.
+- Controller initialization and black-box benchmarks use a logged-in GUI session. The benchmark
+  wrapper uses `exec` so the driver receives signals and restores its input source. The IMK lifetime
+  probe builds a temporary diagnostic only. It reads pointer identity without retaining or messaging
+  the possibly freed object. Match the probe's outcome, since LLDB can exit successfully after a
+  deliberate diagnostic breakpoint. The private framework probe is outside the shipping link.
+- The microphone diagnostic runs through LaunchServices to get its own TCC identity. Running its
+  executable directly can inherit the terminal's permissions. The harness retains the production
+  background/agent plist flags while using its own bundle identity.
