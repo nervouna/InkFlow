@@ -86,7 +86,7 @@ worth changing), `pending` (needs a decision, see #254).
 | ID | Area | Change | Status |
 | --- | --- | --- | --- |
 | T1 | Tooling | Delete the unused Swift `DictionaryGeneratorTool`, its bootstrap and the macOS wrapper script | done |
-| T2 | Tooling | Fix stale lines: retired remote-runner tests in TESTING.md, the missing `macOS/DictionaryTool/` prefix | done |
+| T2 | Tooling | Fix stale lines: retired remote-runner tests in TESTING.md, the missing DictionaryTool prefix | done |
 | T3 | Tooling | Delete the unread `INKFLOW_TEST_DEPENDENCIES_PREPARED` knob | done |
 | M1 | macOS | Delete the `IFPackageInput*` mirror left by the deleted installer | done |
 | M2 | macOS | Delete the saved-incident backend whose UI was removed in 6264576; leftover files still expire | done |
