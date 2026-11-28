@@ -1,8 +1,8 @@
 use crate::{
     Error,
     engine::{
-        Action, Configuration, Engine, EngineError, InputSession,
-        LearningEntry, LearningError, LearningSource, LearningUndo, Mutation, Snapshot,
+        Configuration, Engine, EngineError, InputSession, LearningEntry, LearningError,
+        LearningSource, LearningUndo, Snapshot,
     },
     personal::{self, Backup, PersonalError},
     phrases::CustomPhrase,
@@ -20,7 +20,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-pub const ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 2;
 
 pub type Status = i32;
 pub const OK: Status = 0;
@@ -266,65 +266,6 @@ impl SnapshotHandle {
     }
 }
 
-pub const ACTION_KEY: c_int = 0;
-pub const ACTION_SELECT: c_int = 1;
-pub const ACTION_HIGHLIGHT: c_int = 2;
-pub const ACTION_COMMIT: c_int = 3;
-pub const ACTION_CLEAR: c_int = 4;
-pub const ACTION_TOGGLE_ASCII: c_int = 5;
-
-#[repr(C)]
-pub struct MutationRecord {
-    pub session: u64,
-    pub action: c_int,
-    pub key: i32,
-    pub modifiers: i32,
-    pub index: usize,
-    pub handled: c_int,
-    pub before: *const SnapshotHandle,
-    pub after: *const SnapshotHandle,
-}
-
-pub type ObserverCallback =
-    unsafe extern "C" fn(user_data: *mut c_void, mutation: *const MutationRecord);
-
-struct Observer {
-    callback: ObserverCallback,
-    user_data: *mut c_void,
-}
-unsafe impl Send for Observer {}
-unsafe impl Sync for Observer {}
-
-impl Observer {
-    fn deliver(&self, mutation: &Mutation) {
-        let (Ok(before), Ok(after)) = (
-            SnapshotHandle::new(mutation.before.clone()),
-            SnapshotHandle::new(mutation.after.clone()),
-        ) else {
-            return;
-        };
-        let (action, key, modifiers, index) = match mutation.action {
-            Action::Key { key, modifiers } => (ACTION_KEY, key, modifiers, 0),
-            Action::Select(index) => (ACTION_SELECT, 0, 0, index),
-            Action::Highlight(index) => (ACTION_HIGHLIGHT, 0, 0, index),
-            Action::Commit => (ACTION_COMMIT, 0, 0, 0),
-            Action::Clear => (ACTION_CLEAR, 0, 0, 0),
-            Action::ToggleAscii => (ACTION_TOGGLE_ASCII, 0, 0, 0),
-        };
-        let record = MutationRecord {
-            session: mutation.session,
-            action,
-            key,
-            modifiers,
-            index,
-            handled: c_int::from(mutation.handled),
-            before: &before,
-            after: &after,
-        };
-        unsafe { (self.callback)(self.user_data, &record) };
-    }
-}
-
 #[unsafe(no_mangle)]
 pub extern "C" fn ifr_abi_version() -> u32 {
     ABI_VERSION
@@ -370,26 +311,6 @@ pub unsafe extern "C" fn ifr_engine_destroy(engine: *mut Arc<Engine>) {
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_engine_context_ranking_ready(engine: *const Arc<Engine>) -> c_int {
     unsafe { query(engine, "engine", 0, |e| c_int::from(e.context_ranking_ready())) }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn ifr_engine_set_observer(
-    engine: *const Arc<Engine>,
-    callback: Option<ObserverCallback>,
-    user_data: *mut c_void,
-) -> Status {
-    guard(|| {
-        let engine = unsafe { reference(engine, "engine") }?;
-        engine.set_observer(callback.map(|callback| {
-            let observer = Observer {
-                callback,
-                user_data,
-            };
-            Arc::new(move |mutation: &Mutation| observer.deliver(mutation))
-                as Arc<crate::engine::Observer>
-        }));
-        Ok(())
-    })
 }
 
 #[unsafe(no_mangle)]
@@ -665,11 +586,6 @@ pub unsafe extern "C" fn ifr_session_commit(
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_clear(session: *const InputSession) -> Status {
     guard(|| Ok(unsafe { reference(session, "session") }?.clear()?))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn ifr_session_clear_unobserved(session: *const InputSession) -> Status {
-    guard(|| Ok(unsafe { reference(session, "session") }?.clear_unobserved()?))
 }
 
 #[unsafe(no_mangle)]

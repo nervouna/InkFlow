@@ -266,7 +266,7 @@ Per bucket, each with its interval; targets exist today only for the R family:
 - **Instrument constants** (`W`, the deletion threshold, the function-word set, 200-unit minimum, page limit 20,
   `M`) are listed with their metric and versioned with the rule. `W` = 10 s
   (`QualityLimits.postCommitWindowSeconds`) belongs to R-adj and C-rev.
-- **Recording-source changes** (for example recording through the Rust mutation observer, #91) must reproduce the
+- **Recording-source changes** (for example moving recording into the Rust core) must reproduce the
   same counts on the same scripted input; the capture parity test is the acceptance.
 - **Cohort proposal.** Punctuation that commits the highlighted candidate (scenario 10) is an implicit acceptance of
   the first choice. It stays outside the regular cohort so the adopted series is unchanged; adopting it is a rule

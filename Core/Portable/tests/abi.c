@@ -33,21 +33,6 @@ static char* take(const IFRSession* session) {
   return commit;
 }
 
-typedef struct {
-  int count;
-  uint64_t session;
-  int bad;
-} Observed;
-
-static void observe(void* user_data, const IFRMutation* mutation) {
-  Observed* observed = (Observed*)user_data;
-  observed->count++;
-  if (mutation->session != observed->session || !mutation->before || !mutation->after ||
-      !ifr_snapshot_preedit(mutation->before) || !ifr_snapshot_preedit(mutation->after)) {
-    observed->bad++;
-  }
-}
-
 static const char* backup_json =
     "{\"format\":1,\"rime\":\"1.17.0\",\"settings\":{\"integers\":{\"candidateCount\":7,\"fontSize\":18,"
     "\"input.abbreviation\":1,\"input.typoTolerance\":1,\"input.fuzzyZ\":0,\"input.fuzzyC\":0,"
@@ -246,7 +231,7 @@ static void export_checks(const char* fixture, const char* scratch) {
 static void fixture_checks(const char* fixture, const char* scratch) {
   IFREngine* engine = NULL;
   IFREngineConfig config = {path(0, fixture, "shared"), path(1, scratch, "fixture-user"), NULL, NULL};
-  assert(ifr_abi_version() == 1);
+  assert(ifr_abi_version() == 2);
   expect(ifr_engine_create(NULL, &engine), IFR_INVALID_ARGUMENT, "null config");
   expect(ifr_engine_create(&config, NULL), IFR_INVALID_ARGUMENT, "null out");
   expect(ifr_engine_create(&config, &engine), IFR_RESOURCE, "fixture engine");
@@ -291,7 +276,6 @@ static void fixture_checks(const char* fixture, const char* scratch) {
   IFRReply* reply = (IFRReply*)1;
   expect(ifr_session_call(NULL, "voice_aliases", NULL, 0, 512, &reply), IFR_INVALID_ARGUMENT, "call without a session");
   assert(reply == (IFRReply*)1 && "outputs are written only on success");
-  expect(ifr_session_clear_unobserved(NULL), IFR_INVALID_ARGUMENT, "unobserved clear without a session");
   assert(ifr_reply_status(NULL) == NULL && ifr_reply_body(NULL) == NULL);
   ifr_reply_free(NULL);
   size_t start = 7, end = 9;
@@ -322,9 +306,7 @@ static void resource_checks(const char* resources, const char* scratch) {
 
   IFRSession* session = NULL;
   expect(ifr_session_create(engine, &session), IFR_OK, "session");
-  Observed observed = {0, ifr_session_id(session), 0};
-  assert(observed.session != 0 && ifr_session_available(session) == 1);
-  expect(ifr_engine_set_observer(engine, observe, &observed), IFR_OK, "observer");
+  assert(ifr_session_id(session) != 0 && ifr_session_available(session) == 1);
 
   IFRPhrase phrases[] = {{"a", "dz", "地址"}};
   uint32_t options = ifr_input_options_default();
@@ -426,11 +408,6 @@ static void resource_checks(const char* resources, const char* scratch) {
   expect(ifr_session_toggle_ascii_mode(session, &handled), IFR_OK, "toggle");
   expect(ifr_session_ascii_mode(session, &ascii), IFR_OK, "ascii read");
   assert(handled == 1 && ascii == 0);
-  assert(observed.count > 10 && observed.bad == 0);
-  expect(ifr_engine_set_observer(engine, NULL, NULL), IFR_OK, "remove observer");
-  int before = observed.count;
-  type_text(session, "ni");
-  assert(observed.count == before);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
   IFRBackup* backup = parsed_backup();
@@ -790,26 +767,17 @@ static void hooks_checks(const char* resources, const char* scratch) {
   ifr_snapshot_free(shown);
   expect(ifr_session_clear(session), IFR_OK, "clear");
 
-  Observed observed = {0, ifr_session_id(session), 0};
-  expect(ifr_engine_set_observer(engine, observe, &observed), IFR_OK, "observer");
   type_text(session, "nihao");
-  int typed = observed.count;
-  assert(typed == 5);
-  expect(ifr_session_clear_unobserved(session), IFR_OK, "unobserved clear");
-  assert(observed.count == typed);
+  expect(ifr_session_clear(session), IFR_OK, "clear");
   shown = snapshot_of(session);
   assert(ifr_snapshot_preedit(shown)[0] == 0 && ifr_snapshot_candidate_count(shown) == 0 &&
          ifr_snapshot_input(shown)[0] == 0 && ifr_snapshot_raw_caret(shown) == 0);
   ifr_snapshot_free(shown);
   assert(take(session) == NULL);
-  type_text(session, "ni");
-  expect(ifr_session_clear(session), IFR_OK, "observed clear");
-  assert(observed.count == typed + 3 && observed.bad == 0);
-  expect(ifr_engine_set_observer(engine, NULL, NULL), IFR_OK, "remove observer");
 
   ifr_session_destroy(session);
   ifr_engine_destroy(engine);
-  puts("PASS C ABI: session call, learning revision, raw caret, quality evidence and unobserved clear");
+  puts("PASS C ABI: session call, learning revision, raw caret, quality evidence and clear");
 }
 
 int main(int argc, char** argv) {
