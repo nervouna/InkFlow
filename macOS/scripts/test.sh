@@ -7,6 +7,7 @@ all_units=(shared-core quality-baseline quality-identity quality-store quality-t
   preparation dictionary-generator deployment engine-basic engine-options engine-english engine-context engine-custom-phrases
   controller settings personal-data dictionary-source dictionary-store dictionary-worker dictionary-activation
   startup-diagnostics local-diagnostics diagnostic-archive termination input-source-lifecycle workflow source-bundle portable)
+manual_harnesses=(ai-live ai-native controller-initialization settings-ui)
 
 usage() {
   echo 'Usage: test.sh quick | all | UNIT|GROUP ...'
