@@ -1,5 +1,7 @@
 # Workspace Instructions
 
+Solo project. Keep changes small and direct; prefer deleting code over adding guards, layers or process.
+
 Develop InkFlow toward the fastest and most intelligent IME. Use these goals to guide implementation choices.
 
 - Prevent regressions in cold-start time, key-press latency and text-rendering latency.
@@ -17,15 +19,14 @@ Develop InkFlow toward the fastest and most intelligent IME. Use these goals to 
   shell tests, with an assertion that does not follow the
   [shell test assertion forms](macOS/TESTING.md#shell-test-assertions). Leave untouched code formatting as it is.
 - CI rejects new code comments. Put decisions in the nearest project doc and track implementation shortcomings
-  in GitHub issues. See [comment lint](docs/comment-cleanup.md#lint-and-inventory) and use `delete-comment` for
-  cleanup batches.
+  in GitHub issues. See [comment lint](docs/comment-cleanup.md#lint-and-inventory).
 
 ## Build and verify
 
 - For shared-core work, read the [portable runtime guide](Core/Portable/README.md). For new platforms, read the
   [migration design](docs/portable-core-migration.md).
 - The [architecture map](docs/architecture.md) lists module ownership, the single source of each shared
-  constant, the boundary rules CI enforces and the open architecture decisions.
+  constant, the boundary rules CI enforces and the options considered and rejected.
 - Follow the [macOS build guide](macOS/DEVELOPMENT.md#build-and-try-the-development-version) and
   [focused test matrix](macOS/TESTING.md#which-tests-to-run). See [known failures](macOS/DEBUGGING.md) when diagnosing.
   Develop and test the macOS app on macOS. GitHub's [macOS CI](.github/workflows/macos.yml) runs automated checks.
@@ -38,7 +39,8 @@ Develop InkFlow toward the fastest and most intelligent IME. Use these goals to 
 ## Git and GitHub
 
 - Follow the `orchestrate` skill. The issue body is the spec. Use one issue, one branch `<N>-<slug>` from
-  `origin/main` and one PR with the [PR template](.github/pull_request_template.md).
+  `origin/main` and one PR with the [PR template](.github/pull_request_template.md). A small change (docs, a
+  single-file fix) may skip its own issue; its PR says `Refs #N` to a tracking issue. CI checks the reference.
 - Use `.worktrees/<name>/` for extra worktrees and run commands in the intended worktree. Stage files by name so
   untracked tool output stays out of commits.
 - The Main Required Checks ruleset requires six CI checks on `main`. Repository admins can bypass it.

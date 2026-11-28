@@ -2,7 +2,7 @@
 
 Put code decisions and cross-language contracts in the closest maintained project documentation.
 Use GitHub issues to track shortcuts that leave a defect. Delete comments that repeat the code or describe
-superseded behavior. Use the [`delete-comment` skill](../.agents/skills/delete-comment/SKILL.md) for a cleanup pass.
+superseded behavior.
 
 ## Lint and inventory
 
@@ -29,35 +29,6 @@ tables. Quoted values, shell heredoc data and markup payloads retain their conte
 shebangs, SwiftPM tools versions, recognized tool directives, and Rime's `# no comment` switch.
 Generated lockfiles, dictionary data, standalone license material, documentation and ignored build output
 are outside this inventory.
-
-## First pass
-
-The initial inventory at `c7842ea` covers 387 files and 69,690 physical lines. It found 2,606 comment nodes.
-Deleting them would remove about 2,697 physical lines (3.9% of the covered files). Inline comments occupy
-code lines and add zero to that estimate. Lines added to documentation and the lint tooling are counted separately.
-
-The first batch reviews the four GitHub workflows, Linux sources and scripts, and the portable Rust dictionary crate.
-It removes 181 physical comment-only lines and 182 comment nodes. A multiline block is one node and each `//`
-or `#` line is a separate node.
-
-| Classification | Nodes | Action |
-| --- | ---: | --- |
-| Redundant | 24 | Deleted |
-| Excuse | 2 | Deleted and tracked in [#227](https://github.com/nervouna/InkFlow/issues/227) |
-| Stale | 5 | Deleted |
-| Decision record | 151 | Captured in the project docs below or already recorded there |
-
-The next batches cover the 2,424 nodes that remained after the first pass.
-
-- [Portable runtime #229](https://github.com/nervouna/InkFlow/issues/229)
-- [Shared Swift #230](https://github.com/nervouna/InkFlow/issues/230)
-- [macOS application #231](https://github.com/nervouna/InkFlow/issues/231)
-- [Rime and tooling #232](https://github.com/nervouna/InkFlow/issues/232)
-
-Component decisions are in the
-[Fcitx5 adapter guide](../Linux/fcitx5/README.md), [Linux guide](../Linux/README.md),
-[dictionary generation contract](../Core/Portable/dictionary/README.md) and
-[release configuration](../.agents/skills/inkflow-release/references/configuration.md).
 
 ## CI decisions
 

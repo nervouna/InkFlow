@@ -106,3 +106,10 @@ jobs:
         run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/style-lint.py --base "$BASE"'
       - name: Test style lint
         run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/tests/test_style_lint.py'
+      - name: Test PR body check
+        run: bash scripts/tests/test_pr_body_check.sh
+      - name: Require an issue reference in the PR body
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: bash scripts/pr-body-check.sh
