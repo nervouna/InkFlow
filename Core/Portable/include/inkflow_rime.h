@@ -76,28 +76,6 @@ enum {
   IFR_OPTION_TRADITIONAL = 1u << 13
 };
 
-enum {
-  IFR_ACTION_KEY = 0,
-  IFR_ACTION_SELECT = 1,
-  IFR_ACTION_HIGHLIGHT = 2,
-  IFR_ACTION_COMMIT = 3,
-  IFR_ACTION_CLEAR = 4,
-  IFR_ACTION_TOGGLE_ASCII = 5
-};
-
-typedef struct {
-  uint64_t session;
-  int action;
-  int32_t key;
-  int32_t modifiers;
-  size_t index;
-  int handled;
-  const IFRSnapshot* before;
-  const IFRSnapshot* after;
-} IFRMutation;
-
-typedef void (*IFRObserver)(void* user_data, const IFRMutation* mutation);
-
 uint32_t ifr_abi_version(void);
 const char* ifr_last_error(void);
 uint32_t ifr_input_options_default(void);
@@ -106,7 +84,6 @@ const char* ifr_rime_version(void);
 IFRStatus ifr_engine_create(const IFREngineConfig* config, IFREngine** engine);
 void ifr_engine_destroy(IFREngine* engine);
 int ifr_engine_context_ranking_ready(const IFREngine* engine);
-IFRStatus ifr_engine_set_observer(const IFREngine* engine, IFRObserver callback, void* user_data);
 
 IFRStatus ifr_session_create(const IFREngine* engine, IFRSession** session);
 void ifr_session_destroy(IFRSession* session);
@@ -148,7 +125,6 @@ IFRStatus ifr_session_highlight(const IFRSession* session, const IFRSnapshot* sn
 IFRStatus ifr_session_change_page(const IFRSession* session, int backward, int* handled);
 IFRStatus ifr_session_commit(const IFRSession* session, int* handled);
 IFRStatus ifr_session_clear(const IFRSession* session);
-IFRStatus ifr_session_clear_unobserved(const IFRSession* session);
 IFRStatus ifr_session_take_commit(const IFRSession* session, char** commit);
 void ifr_string_free(char* string);
 

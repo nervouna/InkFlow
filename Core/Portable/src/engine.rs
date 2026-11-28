@@ -163,27 +163,6 @@ impl Snapshot {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Action {
-    Key { key: i32, modifiers: i32 },
-    Select(usize),
-    Highlight(usize),
-    Commit,
-    Clear,
-    ToggleAscii,
-}
-
-#[derive(Debug, Clone)]
-pub struct Mutation {
-    pub session: u64,
-    pub action: Action,
-    pub handled: bool,
-    pub before: Snapshot,
-    pub after: Snapshot,
-}
-
-pub type Observer = dyn Fn(&Mutation) + Send + Sync;
-
 struct Core {
     session: Option<Session>,
     lost: bool,
@@ -316,7 +295,6 @@ pub enum LearningError {
 
 pub struct Engine {
     state: Mutex<State>,
-    observer: Mutex<Option<Arc<Observer>>>,
     runtime: Runtime,
     ranker: Option<ContextRanker>,
     user: PathBuf,
@@ -379,16 +357,11 @@ impl Engine {
         state.loaded_phrases = state.requested_phrases.clone();
         Ok(Arc::new(Self {
             state: Mutex::new(state),
-            observer: Mutex::new(None),
             runtime,
             ranker,
             user: configuration.user,
             compiled,
         }))
-    }
-
-    pub fn set_observer(&self, observer: Option<Arc<Observer>>) {
-        *self.observer.lock().unwrap_or_else(|e| e.into_inner()) = observer;
     }
 
     pub fn context_ranking_ready(&self) -> bool {
@@ -1095,39 +1068,6 @@ impl InputSession {
         self.id
     }
 
-    fn mutate<T>(
-        &self,
-        action: Action,
-        handled: impl Fn(&T) -> bool,
-        body: impl FnOnce(&mut State, u64) -> Result<T>,
-    ) -> Result<T> {
-        let observer = self
-            .engine
-            .observer
-            .lock()
-            .map_err(|_| Error::Poisoned)?
-            .clone();
-        let mut state = self.engine.lock()?;
-        let before = match &observer {
-            Some(_) => Some(Engine::display(state.sessions.get_mut(&self.id).unwrap())?),
-            None => None,
-        };
-        let result = body(&mut state, self.id)?;
-        let Some(observer) = observer else {
-            return Ok(result);
-        };
-        let after = Engine::display(state.sessions.get_mut(&self.id).unwrap())?;
-        drop(state);
-        observer(&Mutation {
-            session: self.id,
-            action,
-            handled: handled(&result),
-            before: before.unwrap(),
-            after,
-        });
-        Ok(result)
-    }
-
     pub fn available(&self) -> bool {
         self.engine
             .lock()
@@ -1136,91 +1076,60 @@ impl InputSession {
     }
 
     pub fn key(&self, key: i32, modifiers: i32) -> Result<bool> {
-        let engine = self.engine.clone();
-        self.mutate(
-            Action::Key { key, modifiers },
-            |h| *h,
-            |state, id| {
-                engine.recover(state, id)?;
-                if !state.sessions[&id].available() {
-                    return Ok(false);
-                }
-                engine.apply_configuration_if_idle(state, id)?;
-                engine.perform_key(state, id, key, modifiers)
-            },
-        )
+        let id = self.id;
+        let mut state = self.engine.lock()?;
+        self.engine.recover(&mut state, id)?;
+        if !state.sessions[&id].available() {
+            return Ok(false);
+        }
+        self.engine.apply_configuration_if_idle(&mut state, id)?;
+        self.engine.perform_key(&mut state, id, key, modifiers)
     }
 
     pub fn select(&self, snapshot: &Snapshot, index: usize) -> Result<bool> {
-        let engine = self.engine.clone();
-        let token = snapshot.token.clone();
-        self.mutate(
-            Action::Select(index),
-            |h| *h,
-            |state, id| {
-                let core = state.sessions.get_mut(&id).unwrap();
-                if !core.available() {
-                    return Ok(false);
-                }
-                if !Arc::ptr_eq(&core.token, &token) {
-                    return Err(Error::StaleSnapshot);
-                }
-                if index >= core.order.len() {
-                    return Err(Error::InvalidCandidate);
-                }
-                engine.select_display(state, id, index)
-            },
-        )
+        let id = self.id;
+        let mut state = self.engine.lock()?;
+        let core = state.sessions.get_mut(&id).unwrap();
+        if !core.available() {
+            return Ok(false);
+        }
+        if !Arc::ptr_eq(&core.token, &snapshot.token) {
+            return Err(Error::StaleSnapshot);
+        }
+        if index >= core.order.len() {
+            return Err(Error::InvalidCandidate);
+        }
+        self.engine.select_display(&mut state, id, index)
     }
 
     pub fn highlight(&self, snapshot: &Snapshot, index: usize) -> Result<()> {
-        let token = snapshot.token.clone();
-        self.mutate(
-            Action::Highlight(index),
-            |_| true,
-            |state, id| {
-                let core = state.sessions.get_mut(&id).unwrap();
-                if !core.available() {
-                    return Ok(());
-                }
-                if !Arc::ptr_eq(&core.token, &token) {
-                    return Err(Error::StaleSnapshot);
-                }
-                if index >= core.order.len() {
-                    return Err(Error::InvalidCandidate);
-                }
-                Engine::highlight_display(core, index)
-            },
-        )
+        let mut state = self.engine.lock()?;
+        let core = state.sessions.get_mut(&self.id).unwrap();
+        if !core.available() {
+            return Ok(());
+        }
+        if !Arc::ptr_eq(&core.token, &snapshot.token) {
+            return Err(Error::StaleSnapshot);
+        }
+        if index >= core.order.len() {
+            return Err(Error::InvalidCandidate);
+        }
+        Engine::highlight_display(core, index)
     }
 
     pub fn commit(&self) -> Result<bool> {
-        let engine = self.engine.clone();
-        self.mutate(
-            Action::Commit,
-            |h| *h,
-            |state, id| {
-                let core = state.sessions.get_mut(&id).unwrap();
-                if !core.available() {
-                    return Ok(false);
-                }
-                let handled = core.session.as_mut().unwrap().commit_composition()?;
-                engine.update_ordering(state, id, false)?;
-                Ok(handled)
-            },
-        )
+        let id = self.id;
+        let mut state = self.engine.lock()?;
+        let core = state.sessions.get_mut(&id).unwrap();
+        if !core.available() {
+            return Ok(false);
+        }
+        let handled = core.session.as_mut().unwrap().commit_composition()?;
+        self.engine.update_ordering(&mut state, id, false)?;
+        Ok(handled)
     }
 
     pub fn clear(&self) -> Result<()> {
-        let engine = self.engine.clone();
-        self.mutate(
-            Action::Clear,
-            |_| true,
-            |state, id| engine.clear_session(state, id),
-        )
-    }
-
-    pub fn clear_unobserved(&self) -> Result<()> {
         let mut state = self.engine.lock()?;
         self.engine.clear_session(&mut state, self.id)
     }
@@ -1355,20 +1264,15 @@ impl InputSession {
     }
 
     pub fn toggle_ascii_mode(&self) -> Result<bool> {
-        let engine = self.engine.clone();
-        self.mutate(
-            Action::ToggleAscii,
-            |h| *h,
-            |state, id| {
-                let core = state.sessions.get_mut(&id).unwrap();
-                if !core.available() {
-                    return Ok(false);
-                }
-                core.saved_ascii = !core.saved_ascii;
-                engine.apply_configuration_if_idle(state, id)?;
-                Ok(true)
-            },
-        )
+        let id = self.id;
+        let mut state = self.engine.lock()?;
+        let core = state.sessions.get_mut(&id).unwrap();
+        if !core.available() {
+            return Ok(false);
+        }
+        core.saved_ascii = !core.saved_ascii;
+        self.engine.apply_configuration_if_idle(&mut state, id)?;
+        Ok(true)
     }
 
     pub fn call(

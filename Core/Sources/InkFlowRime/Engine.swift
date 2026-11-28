@@ -456,7 +456,7 @@ package final class IFEngine {
         guard available else { return }
         defer { Self.signalIdle() }
         let clear = {
-            _ = recordQuality ? ifr_session_clear(self.session) : ifr_session_clear_unobserved(self.session)
+            _ = ifr_session_clear(self.session)
             self.trackOrdering()
             return true
         }
