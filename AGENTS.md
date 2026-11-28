@@ -13,9 +13,9 @@ Develop InkFlow toward the fastest and most intelligent IME. Use these goals to 
 
 ## Code style
 
-- Write one statement per line, with shell syntax such as `if …; then` and `do` allowed. Keep new and edited code
-  within 120 columns. Leave untouched code formatting as it is.
-- Use the [shell test assertion forms](macOS/TESTING.md#shell-test-assertions) in shell tests.
+- `scripts/style-lint.py` fails CI on added or edited lines over 120 columns, with more than one statement, or, in
+  shell tests, with an assertion that does not follow the
+  [shell test assertion forms](macOS/TESTING.md#shell-test-assertions). Leave untouched code formatting as it is.
 - CI rejects new code comments. Put decisions in the nearest project doc and track implementation shortcomings
   in GitHub issues. See [comment lint](docs/comment-cleanup.md#lint-and-inventory) and use `delete-comment` for
   cleanup batches.
