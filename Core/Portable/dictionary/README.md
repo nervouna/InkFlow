@@ -5,7 +5,7 @@ This crate ports the Chinese dictionary generator, all 32 spelling profiles and 
 Context index version 2 keeps separate frequencies for a phrase's terminal readings. Each fixed-width record contains
 the NFC phrase key (three bytes per scalar), six bytes of zero-padded lowercase terminal Pinyin and the eight-byte
 little-endian frequency. The 40-byte header and phrase-length tables keep their layout. The ranker also accepts
-version 1; preparing resources upgrades the index. The Swift reference emits the same version-2 bytes.
+version 1; preparing resources upgrades the index.
 An unsplit or unsupported code has an all-zero syllable, retaining its text evidence without claiming a terminal reading.
 The index accepts 2–8 Han graphemes, each a single scalar. The sorted fixed-width tables let the ranker
 load the index directly.
@@ -18,7 +18,17 @@ From the repository root:
 bash Core/Portable/dictionary/test.sh
 ```
 
-On Linux, the script tests Rust against the recorded Swift contract and pinned corpus. On macOS, it first runs the existing Swift dictionary-generator tests, exports a fresh contract, then compares Rust against those live results and the recorded fixtures. Both use the repository's Rust toolchain and this crate's `Cargo.lock`.
+The script tests Rust against the recorded fixtures and pinned corpus on every platform, then checks the Swift bridge on macOS. It uses the repository's Rust toolchain and this crate's `Cargo.lock`.
+
+## Re-record the fixtures
+
+The fixtures are the reference. Rust output is the only generator, so a rule change in `src/` or an edit to `Core/config/chinese-overrides.tsv` moves the hashes in `fixtures/reference.json` and `fixtures/corpus.json`. After an intended change, re-record both from the Rust generator:
+
+```sh
+bash Core/Portable/dictionary/test.sh --record
+```
+
+Re-record only for an intended rule or data change, and explain every moved case in the PR. Change a case in `fixtures/cases.json` only for a reasoned behaviour change. `catalog.json` is the pinned copy of `Core/config/chinese-sources.json`; update it by hand when the catalog changes.
 
 Preparation may download the pinned public dictionary sources. Downloads go under ignored
 `build/dictionary-parity/inputs/`. Preparation checks byte counts and SHA-256 before use, and Rust checks
@@ -42,7 +52,7 @@ Callers stage this new directory before publishing prepared resources.
 
 ## In-process preparation boundary
 
-`include/inkflow_dictionary.h` and its Clang module map expose an experimental C ABI from `libinkflow_dictionary.a`. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. `Core/Sources/InkFlowDomain/DictionaryGenerator.swift` is the Swift production wrapper. The old Swift algorithm is retained only in the dictionary test target.
+`include/inkflow_dictionary.h` and its Clang module map expose an experimental C ABI from `libinkflow_dictionary.a`. It calls the same Rust generation, receipt validation, and spelling functions as the CLI. It does not launch a process, touch the filesystem, or initialize Rime. Call it from preparation/update workers, never from key handling. `Core/Sources/InkFlowDomain/DictionaryGenerator.swift` is the Swift production wrapper.
 
 Inputs are borrowed pointer/length buffers. The C caller supplies valid, aligned, readable storage for
 nonempty buffers and arrays. Null input pointers are accepted for empty buffers and arrays. Catalog and receipt buffers contain UTF-8 JSON; dictionary and correction inputs remain raw bytes so validation can reject malformed text. The boundary accepts at most 64 inputs, 1 MiB of catalog/corrections, 16 KiB per receipt, and the existing 128 MiB per source. Malformed transport inputs return `bridge-input` or `bridge-json`; domain failures retain their code, source, and line. Recoverable Rust panics return `bridge-panic`. Invalid foreign pointers, allocator aborts, and process crashes are outside that guarantee.
@@ -53,13 +63,13 @@ are UTF-8 basenames. The error buffer is empty on success and contains JSON with
 `line` on failure. The immutable buffer returned by `ifd_catalog` lives for the process lifetime.
 Independent calls and results may be used on different threads because they share no mutable generator state.
 
-The test script compiles and links a C consumer on both desktops. On macOS it also builds a standalone Swift consumer, releases input storage before reading results, and compares the complete corpus and all spelling bytes through the ABI against the Rust CLI and original Swift implementation. `swift-ffi-corpus.json` retains that consumer's actual summary. This proves the preparation boundary, not shipping worker sandbox, packaging, or resource activation behavior.
+The test script compiles and links a C consumer on both desktops. On macOS it also builds a standalone Swift consumer, releases input storage before reading results, and compares the complete corpus and all spelling bytes through the ABI against the Rust CLI. `swift-ffi-corpus.json` retains that consumer's actual summary. This proves the preparation boundary, not shipping worker sandbox, packaging, or resource activation behavior.
 
 ## Reference and compatibility contract
 
-`Core/config/chinese-sources.json` is the authoritative production catalog. Rust embeds it; `IFDictionaryCatalog` reads it through the ABI without filesystem access. Rust also owns the recipe version and maximum source size. `fixtures/cases.json` supplies 43 inputs to both implementations. The test-only Swift reference exports `catalog.json` and `reference.json`; the copied catalog is a pinned fixture, and checks reject drift from the production catalog.
+`Core/config/chinese-sources.json` is the authoritative production catalog. Rust embeds it; `IFDictionaryCatalog` reads it through the ABI without filesystem access. Rust also owns the recipe version and maximum source size. `fixtures/cases.json` supplies 43 inputs. The recorded `catalog.json` is a pinned copy of the production catalog, and checks reject drift from it.
 
-`reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles and the context index for successful cases. `corpus.json` records the Swift output for the complete pinned source set and current Chinese corrections. Both fixture generation and actual output comparison use isolated build directories.
+`reference.json` records parser errors, complete provenance manifests, dictionary hashes, and the hashes of all 32 spelling profiles and the context index for successful cases. `corpus.json` records the output for the complete pinned source set and current Chinese corrections. Comparison uses isolated build directories.
 
 The checks cover normalized readings, canonical Unicode key equality with the first display spelling retained, source/group precedence, specialty gap filling, zero weights, log-median calibration, the 100-pair bucket boundary, rounding/saturation, corrections, line/text/reading limits, and malformed input. Separate Rust tests cover receipts, invalid UTF-8, CLI replacement refusal, and output ownership. Source headers remain uninterpreted text; only the tab-separated body is read.
 
@@ -70,8 +80,8 @@ consonant-only syllables so syllable coverage leaves abbreviations available.
 
 Two details are deliberately preserved:
 
-- Swift String keys use canonical equivalence, but generated output keeps the first spelling of a key. The Rust map stores a normalized lookup key separately from its emitted text.
-- The existing Swift parser splits on the LF Character. CRLF is one grapheme and is not that separator, so CRLF source dictionaries currently fail validation. The port keeps that behavior; changing it would be a separate parser fix.
+- Keys use canonical Unicode equivalence, but generated output keeps the first spelling of a key. The Rust map stores a normalized lookup key separately from its emitted text.
+- The parser splits on the LF character, treating CRLF as one grapheme, so CRLF source dictionaries fail validation. Changing it would be a separate parser fix.
 
 Generated schema headers retain the existing `IFSpellingGenerator` wording for byte compatibility. This port does not change the Pinyin algebra, English admission, ranking, or dictionary identities.
 
