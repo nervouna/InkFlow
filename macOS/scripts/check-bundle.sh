@@ -89,7 +89,7 @@ inkflow_test_timing_report bundle fast "$stage_started"
 stage_started=$(inkflow_test_timing_now)
 cmp build/AppIcon.icns "$app/Contents/Resources/$app_icon"
 cmp macOS/Resources/MenuIconTemplate.tiff "$app/Contents/Resources/MenuIconTemplate.tiff"
-bash macOS/scripts/prepare-rime.sh build/expected-rime
+bash Core/scripts/prepare-rime.sh build/expected-rime
 diff -qr build/expected-rime "$app/Contents/Resources/Rime"
 bash macOS/scripts/prepare-packaged-cache.sh "$app" --verify
 for license in boost.txt esdb.txt librime.txt librime-lua.txt lua.txt glog.txt leveldb.txt marisa.txt yaml-cpp.txt darts-clone.txt utf8-cpp.txt rapidjson.txt inkflow-rime-crates.txt wordfreq.txt rime-ice.txt rime-frost.txt chinese-dictionaries-NOTICE.txt technology-english-NOTICE.txt pinyin-simp.txt opencc.txt; do

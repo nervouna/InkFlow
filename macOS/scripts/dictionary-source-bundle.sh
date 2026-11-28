@@ -31,8 +31,7 @@ cp "$staging/chinese/dictionary-manifest.json" "$root/generated/"
 content_version=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["contentVersion"])' "$root/generated/dictionary-manifest.json")
 
 git archive --format=tar -o "$staging/recipe.tar" HEAD LICENSE NOTICE Core schemas macOS/Licenses macOS/DICTIONARIES.md macOS/DEPENDENCIES.md \
-  docs/shared-dictionary-preparation.md macOS/scripts/dependencies.sh macOS/scripts/prepare-rime.sh \
-  macOS/scripts/prepare-chinese.sh macOS/scripts/prepare-spelling.sh \
+  docs/shared-dictionary-preparation.md macOS/scripts/dependencies.sh \
   macOS/scripts/snapshot-english-frequency.py
 tar -xf "$staging/recipe.tar" -C "$root/inkflow"
 cp macOS/Licenses/* "$root/LICENSES/"
