@@ -121,9 +121,9 @@ record reproduces its report and that record creation preserves the original whe
 
 ## Performance
 
-`performance.sh` runs `src/bin/performance-baseline.rs`, the Rust counterpart of `Core/Tests/PerformanceBaseline/PerformanceBaseline.swift`: five fresh release processes, an absent user directory each, the 24-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS, converted to bytes from KiB on Linux. Darwin already reports bytes. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
+`performance.sh` runs `src/bin/performance-baseline.rs`: five fresh release processes, an absent user directory each, the 24-sample quality corpus typed five times with nine candidates, no commits, context and custom phrases empty. Each key operation is `key` + `take_commit` + `snapshot`; startup covers engine creation (prepared cache, context index, Rime start) and the first configured session. Memory is `getrusage` peak RSS, converted to bytes from KiB on Linux. Darwin already reports bytes. The summary prints the distributions beside the [approved review limits](../Fixtures/MigrationBaseline/README.md#approved-review-limits) without failing on them.
 
-Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on freshly prepared production resources, at faee8df. The Swift column ran `performance-baseline` in release from this checkout; the recorded M5 Pro baseline is not comparable to either.
+Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on freshly prepared production resources, at faee8df. The Swift column was measured with the Swift baseline product before it was removed (#259); the recorded M5 Pro baseline is not comparable to either.
 
 | Measurement | Swift engine | Rust engine | Approved limit |
 | --- | ---: | ---: | ---: |
@@ -133,7 +133,7 @@ Same host (Apple M1 Pro, 32 GiB, macOS 27.0.1), same protocol, both engines on f
 | Repeated-pass key median / p95 / p99, ms | 0.582 / 1.879 / 2.289 | 0.547 / 1.759 / 2.153 | p95 1.8, p99 2.3 |
 | First key of each process, ms | 13.35–15.33 | 14.19–20.24 | 25 |
 
-Key latency is the same Rime work in both engines; the Rust engine's lower startup and RSS come from mapping no Swift runtime and reading only the prepared index. The one 20 ms first key was the first process after a rebuild (cold file cache); the other four match Swift. Recapture both columns on the same machine after toolchain or OS changes.
+Key latency is the same Rime work in both engines; the Rust engine's lower startup and RSS come from mapping no Swift runtime and reading only the prepared index. The one 20 ms first key was the first process after a rebuild (cold file cache); the other four match Swift. Recapture the Rust column on the same machine after toolchain or OS changes.
 
 ## Replay
 
