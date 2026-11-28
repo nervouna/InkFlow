@@ -189,7 +189,7 @@
     "fuzzyZ" : false,
     "ideographicComma" : true,
     "middleDot" : true,
-    "minusEqualPaging" : true,
+    "minusEqualPaging" : false,
     "traditional" : false,
     "typoTolerance" : true
   },

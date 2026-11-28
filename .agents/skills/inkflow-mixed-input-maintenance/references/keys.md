@@ -26,7 +26,7 @@ Patterns are case-sensitive and anchored at the start of the unconfirmed input (
 | : (`colon`) | Commits ： | Commits the highlighted candidate and ：, unless the input is `http`, `https`, `ftp`, `mailto` or `file`, which starts a URL | Appended raw |
 | / (`slash`) | Passes through | Commits the highlighted candidate and passes through | Appended raw |
 | Page Up, Page Down (`paging-keys`) | Pass through | Page the candidates | Swallowed, no effect |
-| `[` `]` `-` `=` (`paging-bound-keys`) | `[` `]` commit 【 】; `-` `=` pass through | Page up and down (both pairs are on by default) | Appended raw |
+| `[` `]` `-` `=` (`paging-bound-keys`) | `[` `]` commit 【 】; `-` `=` pass through | Page up and down while that pair is on (`[` `]` by default) | Appended raw |
 | Up, Down (`arrows-vertical`) | Pass through | Move the highlight, across pages | Swallowed, no effect |
 | Left, Right (`arrows-horizontal`) | Pass through | Move the caret in the preedit | Move the caret in the raw text |
 | Home (`home`) | Passes through | Moves the caret to the start of the input in one press, whatever the highlight or the page order, and highlights the page's first candidate. Rime rebuilds the composition at the start and cannot keep a later candidate highlighted there, so that page keeps Rime's order, also when Left reaches the start | Moves the caret to the start of the raw text |

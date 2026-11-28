@@ -1661,8 +1661,9 @@ package enum EngineRegression {
             check(press(idle, char("[")) && idle.takeCommit() == "【" && press(idle, char("]")) && idle.takeCommit() == "】",
                   "paging-bound-keys idle: brackets are Chinese punctuation")
             idleIgnores(char("-"), "paging-bound-keys"); idleIgnores(char("="), "paging-bound-keys")
-            for (next, previous) in [("]", "["), ("=", "-")] {
-                let engine = composing("shi"), first = engine.snapshot().candidates
+            let minusEqual = InputPreferences().setting(.minusEqualPaging, to: true)
+            for (next, previous, preferences) in [("]", "[", nil), ("=", "-", minusEqual)] {
+                let engine = composing("shi", preferences), first = engine.snapshot().candidates
                 check(press(engine, char(Character(next))) && engine.snapshot().page == 1 && engine.takeCommit().isEmpty,
                       "paging-bound-keys composing: \(next) pages forward")
                 check(press(engine, char(Character(previous))) && engine.snapshot().page == 0

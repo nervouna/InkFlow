@@ -20,7 +20,7 @@ FCITX_CONFIGURATION(
     fcitx::Option<bool> fuzzyS{this, "FuzzyS", "Fuzzy s/sh", false};
     fcitx::Option<bool> emoji{this, "Emoji", "Emoji suggestions", true};
     fcitx::Option<bool> bracketPaging{this, "BracketPaging", "Page with [ and ]", true};
-    fcitx::Option<bool> minusEqualPaging{this, "MinusEqualPaging", "Page with - and =", true};
+    fcitx::Option<bool> minusEqualPaging{this, "MinusEqualPaging", "Page with - and =", false};
     fcitx::Option<bool> englishPunctuation{this, "EnglishPunctuation", "English punctuation", false};
     fcitx::Option<bool> cornerQuotes{this, "CornerQuotes", "Corner quotes for braces", true};
     fcitx::Option<bool> middleDot{this, "MiddleDot", "Middle dot for backquote", true};
