@@ -8,7 +8,7 @@ Linux/Fcitx5 and the macOS cutover are done. Mobile comes next, then Windows, th
 
 The migration preserves existing macOS features and personal data. New platforms start with offline typing and portable backup/import; optional-feature parity follows separately. Cloud synchronization is out of scope.
 
-This document records the architecture, rationale, and remaining work; [Core/Portable/README.md](../Core/Portable/README.md) describes the runtime as built. The issues own the roadmap and progress: phases 0–4 (#33–#37: reproducible baseline, desktop runtime, portable offline behavior, Linux frontend, macOS cutover) are done and recorded in the closed [tracking issue #32](https://github.com/nervouna/InkFlow/issues/32); mobile is #38, Windows #39, Steam Deck #70, and Linux parity with macOS #153. Do not maintain a second progress checklist here.
+This document records the architecture and rationale; [Core/Portable/README.md](../Core/Portable/README.md) describes the runtime as built. The issues own the roadmap and progress: mobile is #38, Windows #39, Steam Deck #70 and Linux parity with macOS #153. Do not maintain a second progress checklist here.
 
 ## Architecture
 
@@ -77,34 +77,6 @@ The product rules in [AGENTS.md](../AGENTS.md) apply to every platform. In addit
 | Port every optional feature initially | Expands dependencies and delays offline input | Defer on new platforms; preserve macOS behavior |
 | Add cloud sync | Requires conflict resolution, privacy, and network design | Exclude from this migration |
 
-## Remaining work
-
-### Mobile (#38)
-
-Build minimal Android and iOS hosts and test on devices. Measure real-dictionary startup, resident memory, extension/service recreation, and persistent learning. Review current platform restrictions, resource-distribution options, and dependency licensing before implementing downloads or voice.
-
-An iOS keyboard extension must support offline input without depending on a running containing app or network permission. Its lifecycle, secure-field restrictions, and lack of direct microphone access require platform-specific behavior. Android also requires handling service recreation and limited or sensitive editor context.
-
-If needed, generate mobile resource profiles from shared source policy; compile and verify resources for the target runtime through the one preparation pipeline ([shared preparation recipe](shared-dictionary-preparation.md)) instead of copying macOS caches. Build touch layouts, editing gestures, candidate interaction, accessibility, and minimum settings as platform products. Choose the Android versus iOS order before starting.
-
-Completion is per platform: a usable offline keyboard, validated persistence/import, and measured resource behavior. Desktop feature parity is not required for the first mobile release.
-
-### Windows (#39)
-
-Build the native dependency chain and shared core for Windows, then implement TSF integration, candidate presentation, configuration, and packaging. Validate composition/focus lifetime and data compatibility in real Windows applications.
-
-Completion means a usable offline Windows IME backed by the same core. Windows-specific build and integration risks are intentionally deferred until after mobile.
-
-### Linux
-
-- Steam Deck Desktop Mode (#70) with a physical keyboard: verify the actual SteamOS session and Flatpak client compatibility; package without disabling SteamOS system protection and check persistence across OS updates. Gaming Mode and controller/on-screen keyboard integration are out of scope.
-- GNOME/IBus follows Windows. The GNOME development host does not establish compatibility with either target desktop.
-- Parity with the macOS feature set is backlog #153.
-
-### Optional follow-up work
-
-Track quality recording/export, dictionary downloads, AI, voice backends, and additional Linux adapters as separate issues; #153 lists the Linux ones. Implement them without changing offline input availability or privacy guarantees. Their priority can be decided independently of platform rollout.
-
 ## Validation and operating rules
 
 Check each platform against the shared regression cases for preedit and caret position, candidate order, commits, partial selection, paging, cancellation, configuration boundaries, and learning after restart. The recorded Swift-engine results are frozen references ([Core/Portable/README.md](../Core/Portable/README.md)). Preserve observable behavior; do not require byte-identical databases or caches.
@@ -115,8 +87,3 @@ slow cases as well as typical timing. Use the
 and [approved headless-core review limits](../Core/Fixtures/MigrationBaseline/README.md#approved-review-limits).
 
 Build, test and installation follow [AGENTS.md](../AGENTS.md). Keep another keyboard input source enabled for development testing.
-
-## Remaining choices
-
-- Choose Android versus iOS order.
-- Arrange mobile device/toolchain access and, later, Windows development/test access.
