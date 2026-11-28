@@ -34,15 +34,15 @@ ln -s Versions/Current/Resources "$sparkle_framework/Resources"
 for name in dependencies prepare-packaged-cache; do printf '#!/bin/bash\nexit 0\n' > "$repo/macOS/scripts/$name.sh"; done
 printf '#!/bin/bash\nexit 0\n' > "$repo/Core/scripts/build-portable.sh"
 printf 'import os, sys\nos.makedirs(sys.argv[1], exist_ok=True)\n' > "$repo/Core/scripts/dictionary-notices.py"
-cat > "$repo/macOS/scripts/prepare-chinese.sh" <<'STUB'
+cat > "$repo/Core/scripts/prepare-chinese.sh" <<'STUB'
 #!/bin/bash
 [[ "${1:-}" == --sources-only ]] || exit 2
 mkdir -p build/dictionary-sources
 printf 'pinned dictionary source\n' > build/dictionary-sources/fresh.yaml
 STUB
-cat > "$repo/macOS/scripts/prepare-rime.sh" <<'STUB'
+cat > "$repo/Core/scripts/prepare-rime.sh" <<'STUB'
 #!/bin/bash
-bash macOS/scripts/prepare-chinese.sh --sources-only
+bash Core/scripts/prepare-chinese.sh --sources-only
 STUB
 cat > "$repo/macOS/scripts/quality-metadata.sh" <<'STUB'
 #!/bin/bash

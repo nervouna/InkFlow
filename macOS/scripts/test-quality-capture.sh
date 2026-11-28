@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 if [[ $# == 0 ]]; then
   macOS/scripts/dependencies.sh
-  bash macOS/scripts/prepare-rime.sh build/test-shared
+  bash Core/scripts/prepare-rime.sh build/test-shared
   shared="$PWD/build/test-shared"
 elif [[ $# == 2 && $1 == --prepared && $2 == /* ]]; then
   shared="$2"

@@ -133,7 +133,7 @@ struct QualityBuildMetadataTool {
             "macOS/Design/", "Core/Data/", "Core/config/", "macOS/Licenses/", "schemas/"]
         if prefixes.contains(where: path.hasPrefix) { return true }
         let scripts = ["build.sh", "build-number.sh", "build-summary.sh", "build-icon.sh", "build-dictionary-worker.sh",
-            "dependencies.sh", "prepare-rime.sh", "prepare-chinese.sh", "prepare-spelling.sh", "prepare-packaged-cache.sh",
+            "dependencies.sh", "prepare-packaged-cache.sh",
             "quality-metadata.sh", "swift-package.sh"]
         if path.hasPrefix("macOS/scripts/") && scripts.contains(String(path.dropFirst("macOS/scripts/".count))) { return true }
         return false

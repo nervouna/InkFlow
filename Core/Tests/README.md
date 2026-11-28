@@ -54,7 +54,7 @@ learning untouched. A rejected management read may not close an ordinary undo wi
 English deletion and restoration count as learning effectiveness acts, while voice aliases and
 failed undo do not. Effectiveness checks use a separate quality store outside the Rime user
 directory. The export command reads one named database in a closed fixture, producing empty output
-when it is absent. A test-only Lua module owns the `learning_contract` command. Native end-to-end
+when it is absent. A test-only Lua module owns the `learning_contract` command ([fixture rules](../../macOS/Docs/TestHarnessContracts.md#test-fixture-constraints)). Native end-to-end
 cases verify versioned property transport in addition to the portable channel tests.
 
 The carrier fixtures keep a real Chinese prefix. They use keypad movement when a source-character

@@ -18,7 +18,7 @@ fi
 inkflow_test_timing_report dictionary-updates dependencies-worker-fixture "$stage_started"
 if [[ $mode == all || $mode == --source ]]; then
   stage_started=$(inkflow_test_timing_now)
-  bash macOS/scripts/prepare-chinese.sh "$scratch/source-resources"
+  bash Core/scripts/prepare-chinese.sh "$scratch/source-resources"
   inkflow_test_timing_report dictionary-updates source-resources "$stage_started"
 fi
 stage_started=$(inkflow_test_timing_now)

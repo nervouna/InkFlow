@@ -8,7 +8,7 @@ build_number=$(bash macOS/scripts/build-number.sh)
 macOS/scripts/dependencies.sh
 bash Core/scripts/build-portable.sh
 export INKFLOW_PORTABLE_BUILT=1
-bash macOS/scripts/prepare-chinese.sh --sources-only
+bash Core/scripts/prepare-chinese.sh --sources-only
 source macOS/scripts/swift-package.sh
 build_swift_product quality-build-metadata build/quality-build-metadata debug
 build_snapshot=$(build/quality-build-metadata "$PWD" --build-snapshot)
@@ -32,7 +32,7 @@ ditto macOS/Resources "$app/Contents/Resources"
 cp macOS/Info.plist "$app/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$build_number" "$app/Contents/Info.plist"
 cp build/portable/prefix/lib/librime.1.dylib "$app/Contents/Frameworks/librime.1.dylib"
-bash macOS/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
+bash Core/scripts/prepare-rime.sh "$app/Contents/Resources/Rime"
 cp macOS/Licenses/* "$app/Contents/Resources/Licenses/"
 python3 Core/scripts/dictionary-notices.py "$app/Contents/Resources/Licenses/Rust"
 build_swift_product InkFlow "$app/Contents/MacOS/InkFlow" debug

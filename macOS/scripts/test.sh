@@ -48,7 +48,7 @@ if $needs_dependencies || $needs_shared; then
   bash Core/scripts/build-portable.sh
   export INKFLOW_PORTABLE_BUILT=1
 fi
-if $needs_shared; then bash macOS/scripts/prepare-rime.sh build/test-shared; fi
+if $needs_shared; then bash Core/scripts/prepare-rime.sh build/test-shared; fi
 source macOS/scripts/swift-test.sh
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-test-units.XXXXXX")
 trap 'for pid in ${background_pids[@]+"${background_pids[@]}"}; do kill -- "-$pid" 2>/dev/null || true; done; rm -rf "$scratch"' EXIT
@@ -87,7 +87,7 @@ run_unit() {
     quality-capture-query)
       bash macOS/scripts/test-quality-capture.sh --prepared "$PWD/build/test-shared"
       bash macOS/scripts/test-quality-query.sh ;;
-    preparation) bash macOS/scripts/test-prepare-rime.sh ;;
+    preparation) bash Core/scripts/test-prepare-rime.sh ;;
     deployment)
       build_swift_test deployment-tests build/deployment-tests
       ungated="$scratch/ungated.dict.yaml"
