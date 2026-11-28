@@ -23,7 +23,7 @@ struct VoiceLexiconTests {
         precondition(select([["张伟，伟大的伟", "张玮，玮大的玮"]]) == "张伟，伟大的伟")
         precondition(select([["张伟，伟岸的伟", "张玮，玮岸的玮"]]) == "张伟，伟岸的伟")
         precondition(select([["张伟的朋友", "张玮的朋友"]]) == "张玮的朋友", "Ordinary possessive is not spelling guidance")
-        let custom = try CustomPhrase.validated(code: "zw", text: "张伟")
+        let custom = try IFPhraseRules.validated(code: "zw", text: "张伟")
         precondition(select([["张玮", "张伟"]], snapshot.includingCustomPhrases([custom])) == "张伟", "Explicit phrases outrank learned frequency")
         precondition(select([["张玮", "张伟"]], VoiceLexiconSnapshot.unknown().includingCustomPhrases([custom])) == "张伟")
         let tied = VoiceLexiconSnapshot(generation: 0, revision: 0, availability: .available, entries: [

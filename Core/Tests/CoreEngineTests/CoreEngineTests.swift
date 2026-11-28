@@ -40,7 +40,7 @@ import InkFlowEngineTestSupport
         if selected("context") { EngineRegression.contextReranking(); EngineRegression.contextCustomPhrasePriority() }
         if selected("custom-phrases") {
             try EngineRegression.customPhrases(user: user)
-            let phrases = [try CustomPhrase.validated(code: "dz", text: "重启后的地址")]
+            let phrases = [try IFPhraseRules.validated(code: "dz", text: "重启后的地址")]
             let encoded = try JSONEncoder().encode(phrases)
             IFEngine.stop()
             try IFEngine.start(shared: shared, user: user)

@@ -231,7 +231,7 @@ static void export_checks(const char* fixture, const char* scratch) {
 static void fixture_checks(const char* fixture, const char* scratch) {
   IFREngine* engine = NULL;
   IFREngineConfig config = {path(0, fixture, "shared"), path(1, scratch, "fixture-user"), NULL, NULL};
-  assert(ifr_abi_version() == 3);
+  assert(ifr_abi_version() == 4);
   assert(ifr_compiled_file_count() == 70);
   assert(strcmp(ifr_compiled_file_name(0), "inkflow_pinyin.schema.yaml") == 0);
   assert(strcmp(ifr_compiled_file_name(3), "pinyin_simp.reverse.bin") == 0);
@@ -302,6 +302,48 @@ static IFREngine* production(const char* resources, const char* user) {
   return engine;
 }
 
+static void phrase_checks(void) {
+  char* code = NULL;
+  char* text = NULL;
+  expect(ifr_phrase_normalize(" Dz ", " \xe5\x9c\xb0\xe5\x9d\x80 ", &code, &text), IFR_OK, "normalize");
+  assert(strcmp(code, "dz") == 0 && strcmp(text, "\xe5\x9c\xb0\xe5\x9d\x80") == 0);
+  ifr_string_free(code);
+  ifr_string_free(text);
+  const char* family = "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d\xf0\x9f\x91\xa7";
+  expect(ifr_phrase_normalize("fam", family, &code, &text), IFR_OK, "ZWJ sequence");
+  assert(strcmp(text, family) == 0);
+  ifr_string_free(code);
+  ifr_string_free(text);
+  code = NULL;
+  text = NULL;
+  expect(ifr_phrase_normalize("\xe2\x84\xaa", "x", &code, &text), IFR_PHRASES, "Kelvin sign");
+  assert(strcmp(ifr_last_error(), "invalid-code") == 0 && code == NULL && text == NULL);
+  expect(ifr_phrase_normalize("dz", "a\tb", &code, &text), IFR_PHRASES, "tab");
+  assert(strcmp(ifr_last_error(), "control-character") == 0);
+  expect(ifr_phrase_normalize("dz", "  ", &code, &text), IFR_PHRASES, "empty text");
+  assert(strcmp(ifr_last_error(), "empty-text") == 0);
+  expect(ifr_phrase_normalize(NULL, "x", &code, &text), IFR_INVALID_ARGUMENT, "null code");
+  expect(ifr_phrase_normalize("a", "x", NULL, &text), IFR_INVALID_ARGUMENT, "null output");
+
+  IFRPhrase good[] = {{"a", "dz", "x"}, {"b", "dz", "y"}};
+  expect(ifr_phrases_validate(good, 2), IFR_OK, "valid list");
+  expect(ifr_phrases_validate(NULL, 0), IFR_OK, "empty list");
+  expect(ifr_phrases_validate(NULL, 1), IFR_INVALID_ARGUMENT, "null list");
+  IFRPhrase duplicate[] = {{"a", "dz", "x"}, {"b", "dz", "x"}};
+  expect(ifr_phrases_validate(duplicate, 2), IFR_PHRASES, "duplicate pair");
+  assert(strcmp(ifr_last_error(), "duplicate") == 0);
+  IFRPhrase repeated[] = {{"a", "dz", "x"}, {"a", "dz", "y"}};
+  expect(ifr_phrases_validate(repeated, 2), IFR_PHRASES, "repeated id");
+  assert(strcmp(ifr_last_error(), "invalid-data") == 0);
+  IFRPhrase raw[] = {{"a", "Dz", "x"}};
+  expect(ifr_phrases_validate(raw, 1), IFR_PHRASES, "not normalised");
+  assert(strcmp(ifr_last_error(), "invalid-data") == 0);
+  IFRPhrase bad[] = {{"a", "d1", "x"}};
+  expect(ifr_phrases_validate(bad, 1), IFR_PHRASES, "bad code");
+  assert(strcmp(ifr_last_error(), "invalid-code") == 0);
+  puts("PASS C ABI: phrase normalisation and list validation");
+}
+
 static void resource_checks(const char* resources, const char* scratch) {
   const char* user = path(6, scratch, "user");
   IFREngine* engine = production(resources, user);
@@ -322,7 +364,7 @@ static void resource_checks(const char* resources, const char* scratch) {
   assert(ifr_session_input_options(session, &applied) == 1 && applied == options);
   IFRPhrase invalid[] = {{"b", "", "x"}};
   expect(ifr_session_set_configuration(session, 9, invalid, 1, NULL), IFR_OK, "invalid phrases");
-  assert(strcmp(ifr_session_configuration_error(session), "invalid-data") == 0);
+  assert(strcmp(ifr_session_configuration_error(session), "invalid-code") == 0);
   expect(ifr_session_set_configuration(session, 9, phrases, 1, NULL), IFR_OK, "reconfigure");
   assert(ifr_session_configuration_error(session) == NULL);
 
@@ -791,6 +833,7 @@ int main(int argc, char** argv) {
     return 2;
   }
   fixture_checks(argv[1], argv[2]);
+  phrase_checks();
   backup_checks(argv[2]);
   export_checks(argv[1], argv[2]);
   if (argc > 3) {

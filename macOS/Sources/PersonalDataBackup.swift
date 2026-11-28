@@ -57,7 +57,7 @@ struct PersonalBackupSettings: Codable, Sendable {
               integers["input.fuzzyZ"] == integers["input.fuzzyC"], integers["input.fuzzyC"] == integers["input.fuzzyS"],
               integers["input.bracketPaging"] != integers["input.minusEqualPaging"] else { throw PersonalDataError("settings") }
         try KeyboardShortcuts.validateBackup(shortcuts)
-        try CustomPhrase.validate(phrases)
+        try IFPhraseRules.validate(phrases)
         try VoicePolishRule.validate(voiceRules)
     }
     func encodedPreferences() throws -> [String: Data] {

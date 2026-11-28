@@ -225,7 +225,7 @@ final class IFSettings: ObservableObject {
         do {
             guard let data = stored as? Data else { throw CustomPhraseError("数据格式无效。") }
             let phrases = try JSONDecoder().decode([CustomPhrase].self, from: data)
-            try CustomPhrase.validate(phrases)
+            try IFPhraseRules.validate(phrases)
             customPhrases = phrases
         } catch {
             customPhrasesLoadError = "无法读取已保存的自定义短语，原数据已保留。请先恢复偏好设置的备份。"
@@ -246,7 +246,7 @@ final class IFSettings: ObservableObject {
 
     @discardableResult
     func saveCustomPhrase(id: UUID? = nil, code: String, text: String) throws -> CustomPhrase {
-        let phrase = try CustomPhrase.validated(id: id ?? UUID(), code: code, text: text)
+        let phrase = try IFPhraseRules.validated(id: id ?? UUID(), code: code, text: text)
         var updated = customPhrases
         if let id {
             guard let index = updated.firstIndex(where: { $0.id == id }) else {
@@ -268,7 +268,7 @@ final class IFSettings: ObservableObject {
     private func persistCustomPhrases(_ phrases: [CustomPhrase]) throws {
         guard !personalDataWriteBlocked else { throw PersonalDataError("recovery-required") }
         if let customPhrasesLoadError { throw CustomPhraseError(customPhrasesLoadError) }
-        try CustomPhrase.validate(phrases)
+        try IFPhraseRules.validate(phrases)
         let data = try JSONEncoder().encode(phrases)
         objectWillChange.send()
         defaults.set(data, forKey: "customPhrases")

@@ -906,11 +906,11 @@ package enum EngineRegression {
         savePhrase: ((CustomPhrase) throws -> CustomPhrase)? = nil
     ) throws {
         var phrases = try ["地址甲", "地址乙", "地址丙", "地址丁", "地址戊", "地址己", "地址庚", "地址辛", "地址壬", "地址癸", "地址十一", "地址十二"].map {
-            let phrase = try CustomPhrase.validated(code: "dz", text: $0)
+            let phrase = try IFPhraseRules.validated(code: "dz", text: $0)
             return try savePhrase?(phrase) ?? phrase
         }
         for (code, text) in [("nihao", "您好朋友"), ("nihao", "你好"), ("bq", "#标签"), ("zw", "# no comment")] {
-            let phrase = try CustomPhrase.validated(code: code, text: text)
+            let phrase = try IFPhraseRules.validated(code: code, text: text)
             phrases.append(try savePhrase?(phrase) ?? phrase)
         }
         phrases = storedPhrases?() ?? phrases
@@ -955,7 +955,7 @@ package enum EngineRegression {
         type(a, "dz"); check(a.snapshot().candidates.count == 9)
         a.key(57); check(a.takeCommit() == "地址壬")
         type(a, "dz"); let old = a.snapshot()
-        let replacement = try CustomPhrase.validated(id: phrases[0].id, code: "dz", text: "更新地址")
+        let replacement = try IFPhraseRules.validated(id: phrases[0].id, code: "dz", text: "更新地址")
         let changed = try savePhrase?(replacement) ?? replacement
         phrases[0] = changed
         phrases = storedPhrases?() ?? phrases
@@ -1001,7 +1001,7 @@ package enum EngineRegression {
         a.setConfiguration(candidateCount: 3, customPhrases: [changed])
         check(a.configurationError != nil && a.candidateCount == 5,
               "Pushing the same request again must not retry the write")
-        let retried = try CustomPhrase.validated(id: changed.id, code: "dz", text: "重试地址")
+        let retried = try IFPhraseRules.validated(id: changed.id, code: "dz", text: "重试地址")
         a.setConfiguration(candidateCount: 3, customPhrases: [retried])
         check(a.configurationError == nil, "A changed request writes the file again")
         type(a, "dz"); check(a.snapshot().candidates.first == retried.text && a.candidateCount == 3); a.clear()

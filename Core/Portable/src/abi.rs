@@ -5,7 +5,7 @@ use crate::{
         LearningSource, LearningUndo, Snapshot,
     },
     personal::{self, Backup, PersonalError},
-    phrases::CustomPhrase,
+    phrases::{CustomPhrase, PhraseError},
     preferences::{InputOption, InputPreferences},
     ranking::PersonalSource,
     resources::{self, ResourceError},
@@ -20,7 +20,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-pub const ABI_VERSION: u32 = 3;
+pub const ABI_VERSION: u32 = 4;
 
 pub type Status = i32;
 pub const OK: Status = 0;
@@ -640,6 +640,73 @@ pub unsafe extern "C" fn ifr_session_start_document_context(
     })
 }
 
+unsafe fn owned_phrases(
+    phrases: *const Phrase,
+    phrase_count: usize,
+) -> Result<Vec<CustomPhrase>, Failure> {
+    if phrase_count != 0 && phrases.is_null() {
+        return Err(Failure::argument("phrases is NULL"));
+    }
+    if phrase_count > 65_536 {
+        return Err(Failure::argument("too many phrases"));
+    }
+    let mut owned = Vec::with_capacity(phrase_count);
+    for index in 0..phrase_count {
+        let phrase = unsafe { &*phrases.add(index) };
+        owned.push(CustomPhrase {
+            id: unsafe { text(phrase.id, "phrase id") }?.to_owned(),
+            code: unsafe { text(phrase.code, "phrase code") }?.to_owned(),
+            text: unsafe { text(phrase.text, "phrase text") }?.to_owned(),
+        });
+    }
+    Ok(owned)
+}
+
+fn phrase_failure(error: PhraseError) -> Failure {
+    Failure::new(PHRASES, error.code().to_string_lossy())
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_phrase_normalize(
+    code: *const c_char,
+    text_in: *const c_char,
+    normalized_code: *mut *mut c_char,
+    normalized_text: *mut *mut c_char,
+) -> Status {
+    guard(|| {
+        let code = unsafe { text(code, "code") }?;
+        let text_in = unsafe { text(text_in, "text") }?;
+        if normalized_code.is_null() || normalized_text.is_null() {
+            return Err(Failure::argument("output is NULL"));
+        }
+        let phrase = CustomPhrase::validated("", code, text_in).map_err(phrase_failure)?;
+        let code = c_string(&phrase.code)?.into_raw();
+        let text = match c_string(&phrase.text) {
+            Ok(text) => text.into_raw(),
+            Err(error) => {
+                drop(unsafe { CString::from_raw(code) });
+                return Err(error);
+            }
+        };
+        unsafe {
+            write(normalized_code, code);
+            write(normalized_text, text);
+        }
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn ifr_phrases_validate(
+    phrases: *const Phrase,
+    phrase_count: usize,
+) -> Status {
+    guard(|| {
+        let owned = unsafe { owned_phrases(phrases, phrase_count) }?;
+        CustomPhrase::validate(&owned).map_err(phrase_failure)
+    })
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn ifr_session_set_configuration(
     session: *const InputSession,
@@ -650,21 +717,7 @@ pub unsafe extern "C" fn ifr_session_set_configuration(
 ) -> Status {
     guard(|| {
         let session = unsafe { reference(session, "session") }?;
-        if phrase_count != 0 && phrases.is_null() {
-            return Err(Failure::argument("phrases is NULL"));
-        }
-        if phrase_count > 65_536 {
-            return Err(Failure::argument("too many phrases"));
-        }
-        let mut owned = Vec::with_capacity(phrase_count);
-        for index in 0..phrase_count {
-            let phrase = unsafe { &*phrases.add(index) };
-            owned.push(CustomPhrase {
-                id: unsafe { text(phrase.id, "phrase id") }?.to_owned(),
-                code: unsafe { text(phrase.code, "phrase code") }?.to_owned(),
-                text: unsafe { text(phrase.text, "phrase text") }?.to_owned(),
-            });
-        }
+        let owned = unsafe { owned_phrases(phrases, phrase_count) }?;
         let input = unsafe { options.as_ref() }.map(|mask| options_from_mask(*mask));
         Ok(session.set_configuration(candidate_count, &owned, input.as_ref())?)
     })
