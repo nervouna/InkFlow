@@ -70,7 +70,7 @@ The comment lint rejects new code comments ([comment cleanup](comment-cleanup.md
 ## Task pool
 
 Status: `done` (committed on the governance branch), `open` (safe, not started), `dropped` (examined, not
-worth changing), `pending` (needs a decision).
+worth changing), `pending` (needs a decision, see #254).
 
 | ID | Area | Change | Status |
 | --- | --- | --- | --- |
@@ -99,9 +99,12 @@ worth changing), `pending` (needs a decision).
 | G1 | Swift | Drop always-true `#if SWIFT_PACKAGE` guards | done |
 | D1 | Domain | Delete `schemaPatch`, `IFSpellingGenerator.write`, `sourceURL`; one definition of the catalog constants | done |
 | E1 | Enforcement | `check-boundaries.sh` asserts the dependency rules above | done |
+| P7 | Fix | Backup export writes the user-dictionary format version that import accepts | done |
+| P8 | macOS | Delete the one-time pre-Sparkle preference migration | done |
+| P13 | Docs | The Chinese dictionary notice names the Rust generator and the catalog file | done |
 | O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp`; `package.sh` calls `prepare-resources.sh` | open |
 | O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | open |
-| O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | open |
+| O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | pending: the rule choice is P6 |
 | O4 | Source of truth | One Swift list of compiled resource files for the store receipt, packaged cache and engine checks | open |
 | O5 | Shallow layers | Fold `EngineChannel.swift` into `EngineAI.swift`; move test-only production helpers into tests | open |
 | O6 | Docs | Keep test-fixture and build-metadata contracts in `macOS/Docs` only; drop thin `prepare-*` wrapper scripts | open |
@@ -110,29 +113,15 @@ Core scripts still call macOS scripts in four places (`Core/scripts/test.sh` run
 unit, `capture-migration-baseline.sh`, `Core/Portable/dictionary/test.sh` and the prepare-rime wrapper test) and
 read `macOS/Info.plist` for the deployment target. These are the remaining Core→macOS edges.
 
-## Pending decisions
+## Decisions
 
-| ID | Question | Evidence |
-| --- | --- | --- |
-| P1 | Implement [#91](https://github.com/nervouna/InkFlow/issues/91) (quality through the Rust mutation observer) or delete the observer ABI | No frontend installs `ifr_engine_set_observer`; both frontends diff snapshots themselves |
-| P2 | Port macOS backup and import to Rust `personal.rs`, or keep two implementations | `PersonalDataBackup.swift` and `PersonalDataTransaction.swift` reimplement `personal.rs`; the journals share a path with incompatible schemas |
-| P3 | Remove Swift's own learning revision and too-large checks | `EnginePersonalLearning.swift` and `VoiceLexicon.swift` re-check what `engine.rs` enforces |
-| P4 | Adopt or delete `ifr_input_options_default` | Option defaults live in Rust, Swift, the Linux config and the schema |
-| P5 | Freeze the Swift dictionary reference generator and `IFContextRanker.buildIndex` as fixtures, as was done for the Swift engine | Every generator rule is written twice (361d2d3, b3b7399) |
-| P6 | Align custom-phrase validation between Swift and Rust | Swift rejects format characters and lowercases Unicode; Rust rejects controls and lowercases ASCII |
-| P7 | Export and import must agree on the Rime version | Export writes `IFEngine.version`, validation requires `1.17.0`; a librime bump breaks macOS export |
-| P8 | Delete the one-time pre-Sparkle update-preference migration | `Info.plist` already defaults both keys to off |
-| P9 | One sandboxed worker launcher for dictionary and personal-data workers | Two launchers differ in timeout, environment and stderr capture |
-| P10 | Retire `cleanup.sh`, `macOS/Experiments/AINativePanel` and the migration-baseline performance chain | No caller outside their own tests |
-| P11 | One directory per macOS test target | Removes the remaining `macOS/Tests` source lists; about 45 moves |
-| P12 | Move the compiled-file checks into Rust engine creation | Changes Linux engine-creation errors |
-| P13 | Correct the generator paths in `macOS/Licenses/chinese-dictionaries-NOTICE.txt` | Shipped licence text names deleted Swift files |
-| P14 | Share Lua channel helpers and drop the unread `inkflow_short_conflict/inputs` key | Changes resource bytes and the ranking fingerprint |
-| P15 | Derive `personalDataRecoveryRequired` from `IFSettings`; route startup `NSLog` through the unified log | Settings gating and diagnostics the user checks |
+Decisions that need the owner, their outcome and their issues are tracked in
+[#254](https://github.com/nervouna/InkFlow/issues/254).
 
 ## Log
 
 | Date | Change |
 | --- | --- |
 | 2026-11-28 | Inventory of the macOS app, shared Swift, Rust core and toolchain at ed799ec |
+| 2026-11-28 | Decisions moved to #254; P7, P8 and P13 done |
 | 2026-11-28 | Governance pass: the task pool rows marked done; the ranking source fingerprint moves once (Rust engine files, `InputPreferences.swift`, `DictionaryGenerator.swift`) with no ranking change |
