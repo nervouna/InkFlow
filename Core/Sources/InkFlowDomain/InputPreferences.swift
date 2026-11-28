@@ -8,7 +8,7 @@ package enum InputOption: String, CaseIterable, Sendable {
 
     package var defaultValue: Bool {
         switch self {
-        case .fuzzyZ, .fuzzyC, .fuzzyS, .englishPunctuation, .traditional: false
+        case .fuzzyZ, .fuzzyC, .fuzzyS, .minusEqualPaging, .englishPunctuation, .traditional: false
         default: true
         }
     }
