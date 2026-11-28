@@ -1,20 +1,6 @@
-import CryptoKit
 import InkFlowDomain
 import Foundation
 @testable import InkFlowDomain
-
-private extension IFDictionaryHash {
-    static func gitBlob(_ data: Data) -> String {
-        var hash = Insecure.SHA1()
-        hash.update(data: Data("blob \(data.count)\0".utf8))
-        hash.update(data: data)
-        return hash.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-}
-
-private extension IFDictionaryCatalog {
-    static let initialEntryCount = 965_919
-}
 
 @main
 struct DictionaryGeneratorTests {

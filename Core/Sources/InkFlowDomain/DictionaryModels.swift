@@ -101,6 +101,12 @@ package struct IFDictionaryGeneration: Sendable {
 
 package enum IFDictionaryHash {
     package static func sha256(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    package static func gitBlob(_ data: Data) -> String {
+        var hash = Insecure.SHA1()
+        hash.update(data: Data("blob \(data.count)\0".utf8))
+        hash.update(data: data)
+        return hash.finalize().map { String(format: "%02x", $0) }.joined()
+    }
     package static func isHex(_ value: String, length: Int) -> Bool {
         value.utf8.count == length && value.utf8.allSatisfy { (48...57).contains($0) || (97...102).contains($0) }
     }
@@ -111,4 +117,5 @@ package enum IFDictionaryCatalog {
     package static let contextIndexFilename = "pinyin_simp.context.bin"
     package static let legacyFilename = "legacy-pinyin-simp.dict.yaml"
     package static let correctionsFilename = "chinese-overrides.tsv"
+    package static let initialEntryCount = 965_919
 }
