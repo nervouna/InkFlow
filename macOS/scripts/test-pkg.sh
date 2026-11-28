@@ -72,6 +72,30 @@ sentence=$(sed -n "s/.*echo '\(请在系统设置[^']*\)'.*/\1/p" macOS/scripts/
 [[ -n "$sentence" ]] || fail
 grep -Fq "$sentence" "$fixture/expanded/Resources/conclusion.html"
 [[ -s "$fixture/expanded/Resources/welcome.html" ]] || fail
+version=$(plutil -extract CFBundleShortVersionString raw macOS/Info.plist)
+grep -Fq "<b>墨流拼音 $version</b>" "$fixture/expanded/Resources/welcome.html"
+! grep -Fq '<li>' "$fixture/expanded/Resources/welcome.html" || fail
+cat > "$fixture/notes.md" <<'NOTES'
+### 更新内容
+
+- 第一条 `.json.gz` & <b>
+- 第二条见[说明](https://example.com)
+
+[安装与更新说明](https://example.com)
+NOTES
+build_pkg "$app" "$fixture/notes.pkg" --notes "$fixture/notes.md" > "$fixture/output" 2>&1
+pkgutil --expand "$fixture/notes.pkg" "$fixture/notes-expanded"
+welcome="$fixture/notes-expanded/Resources/welcome.html"
+grep -Fq "<b>$version 更新内容</b>" "$welcome"
+grep -Fxq '<li>第一条 <code>.json.gz</code> &amp; &lt;b&gt;</li>' "$welcome"
+grep -Fxq '<li>第二条见说明</li>' "$welcome"
+[[ $(grep -c '<li>' "$welcome") == 2 ]] || fail
+printf '### 其他\n\n- 不算\n' > "$fixture/other.md"
+if build_pkg "$app" "$fixture/other.pkg" --notes "$fixture/other.md" > "$fixture/output" 2>&1; then fail; fi
+grep -Fq 'Release notes have no 更新内容 items.' "$fixture/output"
+[[ ! -e "$fixture/other.pkg" && -z "$(ls -A "$repo/build")" ]] || fail
+if build_pkg "$app" "$fixture/other.pkg" --bogus > "$fixture/output" 2>&1; then fail; fi
+grep -Fq 'Usage: build-pkg.sh' "$fixture/output"
 
 scripts="${component[0]}/Scripts"
 for file in preinstall postinstall register-input-source; do [[ -x "$scripts/$file" ]] || fail; done
