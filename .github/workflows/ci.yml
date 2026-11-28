@@ -96,3 +96,9 @@ jobs:
           python3 -B Linux/scripts/test_install.py
           python3 -B Linux/scripts/test_quality.py
           bash Linux/fcitx5/test.sh
+      - name: Enforce code style on changed lines
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/style-lint.py --base "$BASE"'
+      - name: Test style lint
+        run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/tests/test_style_lint.py'

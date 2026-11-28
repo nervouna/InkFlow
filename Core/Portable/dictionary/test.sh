@@ -13,8 +13,8 @@ mkdir -p "$report"
 report=$(cd "$report" && pwd)
 export CARGO_TARGET_DIR="$root/build/dictionary/cargo"
 fixtures="$root/Core/Portable/dictionary/fixtures"
-cargo test --locked --release --manifest-path Core/Portable/dictionary/Cargo.toml -- --nocapture
-cargo build --locked --release --manifest-path Core/Portable/dictionary/Cargo.toml
+RUSTFLAGS="-D warnings" cargo test --locked --release --manifest-path Core/Portable/dictionary/Cargo.toml -- --nocapture
+RUSTFLAGS="-D warnings" cargo build --locked --release --manifest-path Core/Portable/dictionary/Cargo.toml
 include="$root/Core/Portable/dictionary/include"
 archive="$CARGO_TARGET_DIR/release/libinkflow_dictionary.a"
 bridge=()
