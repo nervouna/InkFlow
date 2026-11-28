@@ -34,7 +34,4 @@ package struct InputPreferences: Equatable, Sendable {
         return Self.spellingProfile(mask)
     }
     package static func spellingProfile(_ mask: Int) -> String { "inkflow_spelling_\(mask)" }
-    package static let compiledSpellingFiles = (0..<32).flatMap {
-        [spellingProfile($0) + ".schema.yaml", spellingProfile($0) + ".prism.bin"]
-    }
 }

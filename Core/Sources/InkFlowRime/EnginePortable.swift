@@ -14,6 +14,10 @@ func withCStrings<Result>(_ strings: [String], _ body: ([UnsafePointer<CChar>?])
     return body(copies.map { UnsafePointer($0) })
 }
 
+enum CompiledFiles {
+    static let names: [String] = (0..<ifr_compiled_file_count()).map { ifrString(ifr_compiled_file_name($0)) }
+}
+
 extension InputPreferences {
     var optionMask: UInt32 {
         InputOption.allCases.enumerated().reduce(0) { $0 | ((self[$1.element] ? 1 : 0) << UInt32($1.offset)) }

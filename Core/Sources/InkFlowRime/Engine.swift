@@ -189,11 +189,6 @@ package final class IFEngine {
         generation &+= 1
         do {
             let compiled = configuration.cache ?? URL(fileURLWithPath: user).appendingPathComponent("build")
-            for file in ["pinyin_simp.reverse.bin"] + InputPreferences.compiledSpellingFiles {
-                guard FileManager.default.isReadableFile(atPath: compiled.appendingPathComponent(file).path) else {
-                    throw IFDictionaryUpdateError(.apply, "compiled-file-missing", file: file)
-                }
-            }
             compiledDirectory = compiled
             try fault(.probe)
             try probe(native, phrases: requestedPhrases)

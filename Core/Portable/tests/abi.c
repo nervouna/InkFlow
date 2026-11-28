@@ -231,11 +231,16 @@ static void export_checks(const char* fixture, const char* scratch) {
 static void fixture_checks(const char* fixture, const char* scratch) {
   IFREngine* engine = NULL;
   IFREngineConfig config = {path(0, fixture, "shared"), path(1, scratch, "fixture-user"), NULL, NULL};
-  assert(ifr_abi_version() == 2);
+  assert(ifr_abi_version() == 3);
+  assert(ifr_compiled_file_count() == 70);
+  assert(strcmp(ifr_compiled_file_name(0), "inkflow_pinyin.schema.yaml") == 0);
+  assert(strcmp(ifr_compiled_file_name(3), "pinyin_simp.reverse.bin") == 0);
+  assert(strcmp(ifr_compiled_file_name(69), "inkflow_spelling_31.prism.bin") == 0);
+  assert(ifr_compiled_file_name(70) == NULL);
   expect(ifr_engine_create(NULL, &engine), IFR_INVALID_ARGUMENT, "null config");
   expect(ifr_engine_create(&config, NULL), IFR_INVALID_ARGUMENT, "null out");
   expect(ifr_engine_create(&config, &engine), IFR_RESOURCE, "fixture engine");
-  assert(engine == NULL && strstr(ifr_last_error(), "pinyin_simp") != NULL);
+  assert(engine == NULL && strstr(ifr_last_error(), "inkflow_pinyin") != NULL);
   expect(ifr_engine_create(&config, &engine), IFR_RESOURCE, "fixture engine again");
   config.context_index = path(2, scratch, "missing.context.bin");
   expect(ifr_engine_create(&config, &engine), IFR_IO, "missing context index");

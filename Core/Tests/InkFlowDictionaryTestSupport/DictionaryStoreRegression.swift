@@ -63,7 +63,7 @@ private enum DictionaryStoreRegression {
         try manifest.encoded().write(to: shared.appendingPathComponent(IFDictionaryManifest.filename))
         let index = try IFSpellingGenerator.generate(dictionary: dictionary)[IFDictionaryCatalog.contextIndexFilename]!
         try index.write(to: shared.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
-        for name in ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles {
+        for name in CompiledFiles.names {
             try Data("compiled fixture".utf8).write(to: cache.appendingPathComponent(name))
         }
         var hashes = [String: String]()
