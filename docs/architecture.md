@@ -126,6 +126,7 @@ worth changing), `pending` (needs a decision, see #254).
 | P3 | Swift | Drop Swift's learning revision and size checks | dropped: Swift's revision outlives engine restarts and its busy check also waits for commit delivery |
 | P4 | Source of truth | Read option defaults from `ifr_input_options_default` | dropped: the defaults agree and `InkFlowDomain` cannot import the ABI; the paging default became square brackets only everywhere (#278) |
 | P6 | Source of truth | One custom-phrase validator, in Rust | done (#277) |
+| P14 | Lua | One Rime `Memory` helper in `inkflow_channel.lua`; drop the unread `inkflow_short_conflict/inputs` key | done |
 
 The remaining Core→macOS edges: `Core/scripts/test.sh` runs the macOS dictionary-generator and AI-learning
 scripts, `build-portable.sh` reads `macOS/Info.plist` for the deployment target, and `portable-notices.py`

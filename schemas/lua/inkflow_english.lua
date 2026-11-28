@@ -13,16 +13,6 @@ local function update(memory, code, text, commits)
   return written and result and finished
 end
 
-local function with_voice(env, operation)
-  local memory
-  local called, status, body = pcall(function()
-    memory = Memory(env.engine, env.engine.schema, "voice_learning")
-    return operation(memory)
-  end)
-  if memory then memory:disconnect() end
-  return called, status, body
-end
-
 local function voice_aliases(memory)
   if not memory.user_dict or not memory.user_dict.loaded then return "unknown" end
   local iterator = memory.user_dict:lookup_words("", true, 513)
@@ -115,7 +105,7 @@ local function manage_learning(env, payload)
     return update(memory, code, text, action == "delete" and -1 or 1) and "ok" or "failed"
   end
   if payload ~= "list" and source == "english" then return operate(env.memory, source) or "failed" end
-  local called, status, body = with_voice(env, function(voice)
+  local called, status, body = channel.with_memory(env, "voice_learning", function(voice)
     if payload ~= "list" then return operate(voice, source) end
     local shared, aliases = operate(env.memory, "english"), operate(voice, "voice")
     if not shared or not aliases then return "failed" end
@@ -128,7 +118,7 @@ end
 local function clear_learning(env)
   local shared = positive_records(env.memory)
   if not shared then return false end
-  local called, cleared = with_voice(env, function(voice)
+  local called, cleared = channel.with_memory(env, "voice_learning", function(voice)
     local aliases = positive_records(voice)
     if not aliases then return false end
     if not apply_records(env.memory, shared, -1) then return false end
@@ -263,7 +253,7 @@ function M.init(env)
       return cleared and "ok" or "failed"
     end,
     voice_aliases = function()
-      local called, status, body = with_voice(env, voice_aliases)
+      local called, status, body = channel.with_memory(env, "voice_learning", voice_aliases)
       if not called then return "unknown" end
       return status, body
     end,
@@ -271,7 +261,7 @@ function M.init(env)
       local source, canonical, text = table.concat(fields, "\t"):match("^([a-z]+)\t([a-z]+)\t([A-Za-z]+)$")
       if not source or not canonical or #source > 64 or #canonical > 64 or #text > 64 then return "failed" end
       if not update(env.memory, canonical, text, 1) then return "failed" end
-      local voiceCalled, voiceUpdated = with_voice(env, function(memory)
+      local voiceCalled, voiceUpdated = channel.with_memory(env, "voice_learning", function(memory)
         return update(memory, source, text, 1)
       end)
       if not voiceCalled or not voiceUpdated then
