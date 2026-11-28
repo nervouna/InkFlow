@@ -46,9 +46,10 @@ struct IFSandboxedWorkerLauncher {
         let readers = DispatchGroup()
         let diagnostics = Capture()
         if let stdout, let stdoutLimit {
+            let onLine = onStdoutLine
             readers.enter()
             DispatchQueue.global().async {
-                Self.readLines(stdout.fileHandleForReading, limit: stdoutLimit, onLine: onStdoutLine)
+                Self.readLines(stdout.fileHandleForReading, limit: stdoutLimit, onLine: onLine)
                 readers.leave()
             }
         }
