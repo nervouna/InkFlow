@@ -1,7 +1,7 @@
 # Python quality query fixtures
 
 `QualityQueryTests.py` creates fixtures with the SQLite schema of the Swift engine/controller
-capture. The [quality export contract](../QUALITY-EXPORT.md) defines the record format. The observed
+capture. The [query contract](../../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format) defines the record format. The observed
 window belongs to the commit named by its ID even when its carrier is outside a selected date range.
 The base fixture's four windows ride the `raw-only` composition and describe commits a–d.
 Commit a reverts with two leading Backspaces for one character and d reverts with Cmd+Z.

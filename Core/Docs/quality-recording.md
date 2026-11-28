@@ -4,8 +4,9 @@
 worker owns JSON, disk and SQLite. The process owns the recorder's store across runtime recovery
 and dictionary replacement. Effectiveness counters from outside a composition, including explicit
 learning management, use the same utility worker with a separate bounded buffer. Measurement
-failures do not affect typing. The persisted fields and privacy controls are defined in the
-[query contract](../../.agents/skills/inkflow-quality-analysis/references/query-contract.md).
+failures do not affect typing. The persisted fields are defined in the
+[query contract](../../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format)
+and the privacy controls in [quality export](../../macOS/QUALITY-EXPORT.md).
 
 ## Capture and evidence
 
@@ -59,7 +60,18 @@ failures do not affect typing. The persisted fields and privacy controls are def
 
 The worker enforces encoded byte limits independently of the recorder's conservative retained
 byte budget. The memory estimate accounts for string UTF-16 storage and object/collection overhead.
-It stops early on oversized observations. The same active cap covers transient page caches,
+It stops early on oversized observations. Event data has a 64 KiB budget. Unique applied configurations
+within each envelope have a separate 256 KiB budget, including input options and configurations carried by
+reference-only pages. Equal values under the same revision ID share Swift copy-on-write storage after
+validation. These are conservative logical retained-byte limits, not measurements of process RSS. At most
+128 envelopes and 8 MiB of total logical bytes may be pending or in flight, and the accepted byte charge is
+released only when its batch finishes or fails. Configuration overflow is checked before history trimming, and
+conflicts are invalid evidence. Event overflow removes history first, then drops an oversized core. The worker
+separately checks compact event and unique configuration encoded-byte limits before persistence, including
+JSON escaping growth. Batches contain at most 16 envelopes or flush on a 1-second timer, atomically writing
+referenced revisions, composition, decisions and commits. Busy writes wait up to 250 ms on the worker, then
+roll back and drop. Fatal FULL, CORRUPT and IO errors disable recording for that run, and persistence of the
+error itself is best effort. SQLite uses DELETE rollback journaling. The same active cap covers transient page caches,
 prioritizing decision and first-page evidence. The producer lock guards bounded memory and queues
 at most one outstanding batch wakeup. Queue and timer creation use only memory. Keep connection
 opening and manifest reads on the serial worker.
@@ -70,13 +82,10 @@ or text. The redacted configuration has a different stored revision ID. Configur
 fingerprints are computed by the worker, which stores a revision once and reuses that identity
 only when applied values match. Conflicting or missing page-revision evidence is invalid.
 Build metadata fingerprints the unsigned app payload, excluding the metadata file itself and
-later signing or notarization envelopes. Persisted timestamps use UTC ISO 8601 with milliseconds.
+later signing or notarization envelopes.
 
-Only decisions can receive pair hashes, one over the selected candidate's consumed normalized code
-and one over its text. Compute both or neither before text redaction, using HMAC-SHA256 truncated
-to 128 bits (32 lowercase hexadecimal characters). The 32-byte device key lives beside the database
-in the worker-managed `quality-pair-key` file. Exports, backups, records and logs never carry it.
-Create the file owner-only. If it cannot be read or written, omit hashes. Clearing records rotates
+Pair hashes ([derivation and key](../../macOS/QUALITY-EXPORT.md#pair-hashes)) are computed before text
+redaction, both or neither. If the key file cannot be read or written, omit hashes. Clearing records rotates
 the key and advances the producer generation, invalidating envelopes hashed under the old key.
 Turning text capture off removes stored text-bearing records, including those predating text-free mode.
 
@@ -93,13 +102,3 @@ at invocation, so later submissions need not be processed yet. Only lifecycle, t
 await it. Close stops acceptance immediately. A timeout ends the caller's wait, leaving SQLite
 owned by the worker. Incomplete persistence cannot veto application termination. A failed final
 update still closes the connection, and explicit close reports the failure.
-
-## Diagnostic events
-
-Diagnostic storage is platform-injected. Importing the engine creates no persistent diagnostics.
-Automatic events accept source-defined finite labels, UUIDs and numbers. Run ID and PID separate
-client switches from process startups. Do not conform user-text wrappers as labels or include
-arbitrary error descriptions, URL or app identifiers, paths, SQL, configuration or document text.
-Dictionary source and worker errors cross process boundaries with string codes. Only the allowlisted
-codes reach diagnostics. Omit uncontrolled `userInfo`, file names and stderr. Diagnostic fields
-stay separate from the dictionary journal and manifest.
