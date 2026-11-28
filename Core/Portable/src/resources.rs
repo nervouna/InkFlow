@@ -31,6 +31,25 @@ impl From<std::io::Error> for ResourceError {
     }
 }
 
+pub fn compiled_files() -> Vec<String> {
+    let mut files: Vec<String> = [
+        "inkflow_pinyin.schema.yaml",
+        "pinyin_simp.table.bin",
+        "pinyin_simp.prism.bin",
+        "pinyin_simp.reverse.bin",
+        "easy_en.table.bin",
+        "inkflow_mixed.table.bin",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect();
+    for mask in 0..32 {
+        files.push(format!("{}.schema.yaml", spelling_profile(mask)));
+        files.push(format!("{}.prism.bin", spelling_profile(mask)));
+    }
+    files
+}
+
 pub fn compile(shared: &Path, user: &Path, cache: &Path) -> Result<(), ResourceError> {
     fs::create_dir_all(user)?;
     fs::create_dir_all(cache)?;
@@ -38,19 +57,10 @@ pub fn compile(shared: &Path, user: &Path, cache: &Path) -> Result<(), ResourceE
         let mut runtime = Runtime::with_cache(shared, user, cache)?;
         runtime.prepare()?;
     }
-    let mut required = vec![
-        "default.yaml".to_owned(),
-        "inkflow_pinyin.schema.yaml".to_owned(),
-        "pinyin_simp.table.bin".to_owned(),
-        "pinyin_simp.prism.bin".to_owned(),
-        "easy_en.table.bin".to_owned(),
-        "inkflow_mixed.table.bin".to_owned(),
-    ];
-    for mask in 0..32 {
-        required.push(format!("{}.schema.yaml", spelling_profile(mask)));
-        required.push(format!("{}.prism.bin", spelling_profile(mask)));
+    if !fs::metadata(cache.join("default.yaml")).is_ok_and(|meta| meta.len() > 0) {
+        return Err(ResourceError::Missing("default.yaml".to_owned()));
     }
-    for file in required {
+    for file in compiled_files() {
         if !fs::metadata(cache.join(&file)).is_ok_and(|meta| meta.len() > 0) {
             return Err(ResourceError::Missing(file));
         }

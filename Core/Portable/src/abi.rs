@@ -20,7 +20,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-pub const ABI_VERSION: u32 = 2;
+pub const ABI_VERSION: u32 = 3;
 
 pub type Status = i32;
 pub const OK: Status = 0;
@@ -734,6 +734,23 @@ pub unsafe extern "C" fn ifr_session_toggle_ascii_mode(
         unsafe { write(handled, c_int::from(result)) };
         Ok(())
     })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ifr_compiled_file_count() -> usize {
+    crate::resources::compiled_files().len()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn ifr_compiled_file_name(index: usize) -> *const c_char {
+    static NAMES: OnceLock<Vec<CString>> = OnceLock::new();
+    let names = NAMES.get_or_init(|| {
+        crate::resources::compiled_files()
+            .into_iter()
+            .filter_map(|name| CString::new(name).ok())
+            .collect()
+    });
+    names.get(index).map_or(ptr::null(), |name| name.as_ptr())
 }
 
 #[unsafe(no_mangle)]

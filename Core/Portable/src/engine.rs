@@ -324,14 +324,7 @@ impl Engine {
         if configuration.cache.is_none() {
             runtime.prepare()?;
         }
-        for file in
-            ["pinyin_simp.table.bin", "pinyin_simp.prism.bin"]
-                .into_iter()
-                .map(str::to_owned)
-                .chain((0..32).map(|mask| {
-                    format!("{}.prism.bin", crate::preferences::spelling_profile(mask))
-                }))
-        {
+        for file in crate::resources::compiled_files() {
             if !compiled.join(&file).is_file() {
                 return Err(EngineError::MissingResource(file));
             }

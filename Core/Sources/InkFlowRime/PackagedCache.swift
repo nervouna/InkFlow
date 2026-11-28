@@ -20,9 +20,7 @@ package struct IFPackagedCache: Codable {
               receipt.compiled == (try compiledHashes(cache)) else {
             throw IFDictionaryUpdateError(.recovery, "packaged-cache-integrity")
         }
-        let required = ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin",
-                        "pinyin_simp.reverse.bin", "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles
-        guard required.allSatisfy({ receipt.compiled[$0] != nil }) else {
+        guard CompiledFiles.names.allSatisfy({ receipt.compiled[$0] != nil }) else {
             throw IFDictionaryUpdateError(.recovery, "packaged-cache-incomplete")
         }
         return .init(version: nil, manifest: manifest, sharedData: resources, cache: cache)

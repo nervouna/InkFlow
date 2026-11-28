@@ -80,6 +80,8 @@ uint32_t ifr_abi_version(void);
 const char* ifr_last_error(void);
 uint32_t ifr_input_options_default(void);
 const char* ifr_rime_version(void);
+size_t ifr_compiled_file_count(void);
+const char* ifr_compiled_file_name(size_t index);
 
 IFRStatus ifr_engine_create(const IFREngineConfig* config, IFREngine** engine);
 void ifr_engine_destroy(IFREngine* engine);

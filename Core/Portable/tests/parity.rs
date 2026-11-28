@@ -1020,6 +1020,28 @@ fn swift_engine_regressions() {
 }
 
 #[test]
+fn engine_creation_requires_every_compiled_file() {
+    use inkflow_rime::engine::EngineError;
+    let Some((resources, _runtime)) = resources() else {
+        println!("SKIP compiled file parity: INKFLOW_PORTABLE_RESOURCES is not set");
+        return;
+    };
+    let user = scratch("compiled-files");
+    let reverse = resources.join("prepared/cache/pinyin_simp.reverse.bin");
+    let hidden = reverse.with_extension("test-backup");
+    fs::rename(&reverse, &hidden).unwrap();
+    let failure = Engine::new(Configuration::prepared(&resources, user.clone())).err();
+    fs::rename(&hidden, &reverse).unwrap();
+    fs::remove_dir_all(&user).unwrap();
+    match failure {
+        Some(error @ EngineError::MissingResource(_)) => {
+            assert_eq!(error.to_string(), "missing resource pinyin_simp.reverse.bin");
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
 fn swift_personal_learning_and_data() {
     use inkflow_rime::engine::{LearningError, LearningSource};
     use inkflow_rime::personal::{self, Backup, DICTIONARIES, PersonalError};
