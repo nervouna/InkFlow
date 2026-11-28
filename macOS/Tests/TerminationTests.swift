@@ -1,10 +1,8 @@
 @testable import InkFlowRime
 import AppKit
 import SQLite3
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 @main struct TerminationTests {
     @MainActor static func main() throws {

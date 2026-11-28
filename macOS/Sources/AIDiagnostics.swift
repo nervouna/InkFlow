@@ -59,7 +59,7 @@ struct AIDiagnosticRecord: Sendable {
 }
 
 enum AIDiagnostics {
-    private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "ai")
+    private static let logger = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "ai")
     @TaskLocal static var attempt: UUID?
     @TaskLocal static var session: UUID?
     @TaskLocal static var observe: (@Sendable (AIDiagnosticRecord) -> Void)?

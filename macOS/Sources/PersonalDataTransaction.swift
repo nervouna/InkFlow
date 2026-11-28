@@ -122,7 +122,7 @@ final class PersonalDataController {
         return root
     }
     func export(to destination: URL) async throws {
-        let preferences = try settings.personalBackupSettings(), version = IFEngine.version
+        let preferences = try settings.personalBackupSettings()
         let root = try await staging(), user = self.user, helper = self.helper
         defer { Task.detached { try? FileManager.default.removeItem(at: root) } }
         guard IFInputControllerVoice.personalDataIdle else { throw PersonalDataError("voice-busy") }
@@ -155,7 +155,7 @@ final class PersonalDataController {
                     dictionaries[name] = .some(text)
                 } else { dictionaries[name] = .some(nil) }
             }
-            let document = PersonalBackupDocument(rime: version, settings: preferences, dictionaries: dictionaries)
+            let document = PersonalBackupDocument(settings: preferences, dictionaries: dictionaries)
             try document.write(to: destination)
         }.value
     }

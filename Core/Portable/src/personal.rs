@@ -38,7 +38,9 @@ pub enum PersonalError {
 impl std::fmt::Display for PersonalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PersonalError::Phrases(error) => write!(f, "phrases: {}", error.code()),
+            PersonalError::Phrases(error) => {
+                write!(f, "phrases: {}", error.code().to_string_lossy())
+            }
             PersonalError::Io(error) => write!(f, "io: {error}"),
             other => write!(f, "{other:?}"),
         }

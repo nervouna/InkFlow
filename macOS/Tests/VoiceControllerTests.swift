@@ -1,11 +1,9 @@
 @testable import InkFlowRime
 @testable import InkFlowDomain
 import InputMethodKit
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowNativeTestSupport
 import InkFlowTestSupport
-#endif
 
 @MainActor
 private final class FakeVoice: VoiceRecognitionServing {

@@ -8,11 +8,9 @@ mode=${1:-all}
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-dictionary-updates.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
 source macOS/scripts/swift-test.sh
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
-if [[ "${INKFLOW_TEST_DEPENDENCIES_PREPARED:-}" != 1 ]]; then
-  bash macOS/scripts/dependencies.sh
-fi
+bash macOS/scripts/dependencies.sh
 if [[ $mode == all || $mode == --worker ]]; then
   [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
   build_swift_test dictionary-worker-fixture build/dictionary-worker-fixture

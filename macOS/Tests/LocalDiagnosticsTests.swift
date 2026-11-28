@@ -1,9 +1,7 @@
 @testable import InkFlowRime
 import Foundation
 import Darwin
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private final class TestClock: @unchecked Sendable {
     let lock = NSLock()

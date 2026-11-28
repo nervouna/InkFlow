@@ -2,11 +2,9 @@ import InkFlowRime
 import InkFlowDomain
 import Foundation
 import SQLite3
-#if SWIFT_PACKAGE
 @testable import InkFlowDomain
 @testable import InkFlowRime
 import InkFlowCoreTestSupport
-#endif
 
 @main
 struct AIAdoptionLearningTests {

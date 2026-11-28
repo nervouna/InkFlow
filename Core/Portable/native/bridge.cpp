@@ -123,10 +123,6 @@ extern "C" int ifp_prepare(void) {
     return -3;
   }
 }
-extern "C" int ifp_deploy(const char* schema_path) {
-  try { return api()->deploy_schema(schema_path) ? 0 : -1; }
-  catch (...) { return -3; }
-}
 extern "C" int ifp_session_create(const char* schema, uintptr_t* session) {
   RimeSessionId id = 0;
   try {

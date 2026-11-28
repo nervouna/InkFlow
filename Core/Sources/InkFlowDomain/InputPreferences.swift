@@ -37,45 +37,4 @@ package struct InputPreferences: Equatable, Sendable {
     package static let compiledSpellingFiles = (0..<32).flatMap {
         [spellingProfile($0) + ".schema.yaml", spellingProfile($0) + ".prism.bin"]
     }
-
-    package var schemaPatch: String {
-        var bindings: [String] = []
-        if self[.bracketPaging] {
-            bindings += ["{ when: has_menu, accept: bracketleft, send: Page_Up }",
-                         "{ when: has_menu, accept: bracketright, send: Page_Down }"]
-        }
-        if self[.minusEqualPaging] {
-            bindings += ["{ when: has_menu, accept: minus, send: Page_Up }",
-                         "{ when: has_menu, accept: equal, send: Page_Down }"]
-        }
-        return """
-        key_binder:
-          bindings: [\(bindings.joined(separator: ", "))]
-        punctuator:
-          half_shape:
-            ',': '，'
-            '.': '。'
-            '?': '？'
-            '!': '！'
-            ':': '：'
-            ';': '；'
-            '(': '（'
-            ')': '）'
-            '{': '\(self[.cornerQuotes] ? "「" : "{")'
-            '}': '\(self[.cornerQuotes] ? "」" : "}")'
-            '[': '【'
-            ']': '】'
-            '<': '《'
-            '>': '》'
-            '\\': '\(self[.ideographicComma] ? "、" : "\\")'
-            '|': '\(self[.fullwidthPipe] ? "｜" : "|")'
-            '`': '\(self[.middleDot] ? "·" : "`")'
-            '~': '～'
-            '$': '¥'
-            '^': '……'
-            '_': '——'
-            '"': { pair: ['“', '”'] }
-            "'": { pair: ['‘', '’'] }
-        """
-    }
 }

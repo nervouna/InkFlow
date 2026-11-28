@@ -1,9 +1,7 @@
 @testable import InkFlowRime
 import Foundation
 import SQLite3
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private let qualityTimingBuildMetadata = QualityBuildMetadata(sourceRevision: "test",
     sourceTreeSHA256: String(repeating: "a", count: 64), sourceDirty: false,

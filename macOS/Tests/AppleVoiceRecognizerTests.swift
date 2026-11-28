@@ -3,9 +3,7 @@ import AVFoundation
 import CoreMedia
 import Foundation
 import Speech
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 @MainActor
 private final class PreparationService: VoiceRecognitionServing {

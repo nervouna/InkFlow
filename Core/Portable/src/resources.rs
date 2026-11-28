@@ -89,7 +89,9 @@ fn smoke(runtime: &Runtime) -> Result<(), String> {
                 .position(|c| c.text == target)
                 && (!first_only || index == 0)
             {
-                session.select_candidate(&snapshot, index).map_err(step)?;
+                if !session.select_native(index).map_err(step)? {
+                    return Err(step(Error::Native(-1)));
+                }
                 if session.take_commit().map_err(step)?.as_deref() != Some(target)
                     || session.take_commit().map_err(step)?.is_some()
                 {

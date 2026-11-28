@@ -22,7 +22,7 @@ Run `test.sh all` only for a release or when the user explicitly asks for it. Th
 failing unit. Fix it and rerun that unit. `dictionary-worker`, `dictionary-activation`, `personal-data` and
 `termination` need a current `build.sh` app.
 
-Every unit that builds Swift also builds the Rust core and its librime first (`Core/scripts/build-portable.sh`, once per `test.sh` run; the first run takes about 4 minutes longer and needs CMake and Ninja). GitHub Actions restores `build/portable` from the cache it shares with the portable job, runs `test.sh quick` and, in a second job, `test.sh portable` on `macos-26` runners for every pull request and push to `main` (docs-only changes skip them). The ubuntu jobs run the shared-core boundary check, the portable `cargo test` and the remote-runner tests.
+Every unit that builds Swift also builds the Rust core and its librime first (`Core/scripts/build-portable.sh`, once per `test.sh` run; the first run takes about 4 minutes longer and needs CMake and Ninja). GitHub Actions restores `build/portable` from the cache it shares with the portable job, runs `test.sh quick` and, in a second job, `test.sh portable` on `macos-26` runners for every pull request and push to `main` (docs-only changes skip them). The ubuntu jobs run the shared-core boundary check, the portable and dictionary `cargo test`, the Fcitx5 build and the script tests with the comment lint.
 
 ## What the units cover
 

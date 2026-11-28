@@ -1,9 +1,7 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowAITestSupport
 import InkFlowTestSupport
-#endif
 
 @main
 struct AISuggestionTests {

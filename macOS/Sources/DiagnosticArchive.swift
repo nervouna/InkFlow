@@ -1,9 +1,9 @@
+import InkFlowRime
 import Foundation
 import Darwin
 
 struct DiagnosticArchivePayload: Sendable {
     let snapshot: DiagnosticSnapshot
-    let incident: DiagnosticIncident?
     let requestedStart: Date?
     let requestedEnd: Date
     let exportedAt: Date
@@ -17,7 +17,6 @@ struct DiagnosticArchivePayload: Sendable {
             let requestedStart: Date?
             let requestedEnd: Date
             let exportedAt: Date
-            let incidentID: UUID?
             let exporter: DiagnosticProcess
             let eventCount: Int
             let oldestEvent: Date?
@@ -28,7 +27,6 @@ struct DiagnosticArchivePayload: Sendable {
             let attachments = ["README.txt", "manifest.json", "events.jsonl", "summary.json"]
         }
         struct Summary: Encodable {
-            let note: String?
             let processVersions: [DiagnosticProcess]
             let modules: [String: String]
         }
@@ -36,12 +34,13 @@ struct DiagnosticArchivePayload: Sendable {
         encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
         var processes: [DiagnosticProcess] = [], runs = Set<UUID>()
         for record in snapshot.records where runs.insert(record.process.run).inserted { processes.append(record.process) }
-        let modules = ["startup", "input", "ai", "voice", "dictionary", "update", "termination", "statistics", "diagnostics"]
+        let modules = LocalDiagnosticEvent.Module.allCases.map(\.rawValue)
         let observed = Set(snapshot.records.map { $0.module.rawValue })
         let manifest = Manifest(requestedStart: requestedStart, requestedEnd: requestedEnd, exportedAt: exportedAt,
-            incidentID: incident?.id, exporter: DiagnosticProcess(), eventCount: snapshot.records.count, oldestEvent: snapshot.oldest, newestEvent: snapshot.newest,
+            exporter: DiagnosticProcess(), eventCount: snapshot.records.count,
+            oldestEvent: snapshot.oldest, newestEvent: snapshot.newest,
             storage: snapshot.status, invalidRecordsObserved: snapshot.invalidRecordCount, crashCollection: crashes)
-        let summary = Summary(note: incident?.note, processVersions: processes,
+        let summary = Summary(processVersions: processes,
             modules: Dictionary(uniqueKeysWithValues: modules.map { ($0, observed.contains($0) ? "observed" : "notObserved") }))
         return ["README.txt": Data(Self.readme.utf8), "manifest.json": try encoder.encode(manifest),
                 "events.jsonl": try snapshot.jsonLines(), "summary.json": try encoder.encode(summary)]
@@ -53,13 +52,13 @@ struct DiagnosticArchivePayload: Sendable {
     Read manifest.json first: requested and actual event windows, collection status, attachments and observed losses.
     Dates are Unix milliseconds (UTC), independent of the exporting computer's time zone.
     events.jsonl contains one complete structured event per line. Correlation IDs join related stages.
-    summary.json contains observed process versions, per-module observation status and the optional user-written note.
-    A saved incident freezes its event window. Crash summaries are collected during export for that same window.
+    summary.json contains observed process versions and per-module observation status.
+    Crash summaries are collected during export for the requested window.
 
     Evidence boundaries / 证据边界
     History completeness is UNKNOWN, even when every loss counter is zero. Recording starts only when InkFlow runs;
     a prior process may have lost its last buffered events or failed to persist loss counters (for example disk full).
-    Rolling events and saved incidents share at most 7 days / 50 MiB. Earlier eviction is possible.
+    Rolling events are kept for at most 7 days / 50 MiB. Earlier eviction is possible.
     Loss counters are observed cumulative bookkeeping, not an exact count of missing events in the requested window.
     invalidRecordsObserved counts malformed records encountered in this snapshot, not unique lifetime losses.
     A readable store after restart does not prove the preceding process recorded continuously.
@@ -69,7 +68,6 @@ struct DiagnosticArchivePayload: Sendable {
     a finite exception type. Missing/unsupported/permission-denied/nonfatal/truncated reports are declared explicitly.
 
     No original system logs, crash reports, database files, configuration contents, input text or credentials are attached.
-    The optional note is user supplied and may contain sensitive text: review it before sharing.
     This archive is saved locally; InkFlow does not upload it or automatically submit a GitHub issue.
     """
 }

@@ -1,8 +1,6 @@
 import InkFlowDomain
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowDomain
-#endif
 
 @main
 struct DictionaryGeneratorTests {

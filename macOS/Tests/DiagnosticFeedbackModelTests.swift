@@ -1,8 +1,6 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
 import InkFlowTestSupport
-#endif
 
 @MainActor enum DiagnosticFeedbackModelTests {
     static func run() async {
@@ -13,12 +11,10 @@ import InkFlowTestSupport
         var destination: URL?
         var partial = false, failure = false
         let dependencies = DiagnosticFeedbackDependencies(
-            save: { _, _, _ in preconditionFailure("The simplified model must not save incidents") },
-            incidents: { .init(incidents: [], invalidIncidentCount: 0) },
             export: { selection, clicked, url in
                 exports += 1; selected = selection; capturedClick = clicked
                 if failure { throw NSError(domain: "secret-provider-error", code: 9) }
-                return .init(url: url, incidentID: nil, eventCount: 2, isPartial: partial)
+                return .init(url: url, eventCount: 2, isPartial: partial)
             },
             chooseDestination: { clock.addTimeInterval(20); return destination }, now: { clock })
         let model = DiagnosticFeedbackModel(dependencies: dependencies)
@@ -54,8 +50,7 @@ import InkFlowTestSupport
     private static func duplicateActions() async {
         var release: CheckedContinuation<URL?, Never>?
         var chooserCalls = 0
-        let dependencies = DiagnosticFeedbackDependencies(save: { _, _, _ in throw DiagnosticFeedbackError.unavailable },
-            incidents: { .init(incidents: [], invalidIncidentCount: 0) },
+        let dependencies = DiagnosticFeedbackDependencies(
             export: { _, _, _ in preconditionFailure("Cancelled panel must not export") },
             chooseDestination: { chooserCalls += 1; return await withCheckedContinuation { release = $0 } })
         let model = DiagnosticFeedbackModel(dependencies: dependencies)

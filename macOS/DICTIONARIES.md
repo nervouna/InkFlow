@@ -183,7 +183,7 @@ Retry remains available even after a displayed diagnostic has been dismissed.
 
 A displayed error clears when the Settings window closes or the next operation
 starts; it is never persisted. Sanitized diagnostics go to the unified log (see
-[DEBUGGING.md](DEBUGGING.md#logs-and-incident-archives)).
+[DEBUGGING.md](DEBUGGING.md#logs-and-diagnostic-archives)).
 
 Startup discards interrupted pending work, validates the last confirmed cache,
 and rebuilds incompatible caches using current application resources. Recovery

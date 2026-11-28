@@ -10,7 +10,7 @@ output=$(cd "$1" && pwd)
 [[ -z "$(git status --porcelain --untracked-files=all)" ]] || {
   echo 'Baseline requires a clean, committed source revision.' >&2; exit 2;
 }
-bash macOS/scripts/dependencies.sh
+bash Core/scripts/resource-dependencies.sh
 bash Core/scripts/check-boundaries.sh --standalone
 source Core/scripts/swift-package.sh
 for product in quality-baseline performance-baseline packaged-cache-tool; do

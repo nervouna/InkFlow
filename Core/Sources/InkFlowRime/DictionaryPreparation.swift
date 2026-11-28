@@ -2,10 +2,7 @@ import InkFlowDomain
 import Foundation
 
 package enum IFDictionaryPreparation {
-    package typealias EngineOperation = (_ shared: String, _ user: String, _ cache: String) -> Int32
-
     package static func prepare(request: IFDictionaryWorkerRequest, runtime: IFDictionaryRuntime,
-                                compile: EngineOperation, probe: EngineOperation,
                                 emit: (IFDictionaryWorkerEvent) throws -> Void = { _ in }) throws -> IFDictionaryWorkerResult {
         let root = request.candidate
         var stage = IFDictionaryStage.prepare
@@ -79,20 +76,14 @@ package enum IFDictionaryPreparation {
             }
             try emit(.init(progress: .init(stage: .prepare, completed: 1, total: 2)))
             operation = "compile"
-            guard compile(shared.path, compiler.path, cache.path) == 0 else {
+            guard IFPortableResources.compile(shared.path, compiler.path, cache.path) else {
                 throw IFDictionaryUpdateError(.prepare, "rime-compile")
             }
             stage = .verify
             try emit(.init(progress: .init(stage: .verify, completed: 0, total: 1)))
             operation = "clean-smoke"
-            let status = probe(shared.path, probeRoot.path, cache.path)
-            guard status == 0 else {
-                throw IFDictionaryUpdateError(.verify, "smoke-probe", detail: "probe=\(status)")
-            }
-            let required = ["inkflow_pinyin.schema.yaml", "pinyin_simp.table.bin", "pinyin_simp.prism.bin",
-                            "easy_en.table.bin", "inkflow_mixed.table.bin"] + InputPreferences.compiledSpellingFiles
-            for name in required where !FileManager.default.fileExists(atPath: cache.appendingPathComponent(name).path) {
-                throw IFDictionaryUpdateError(.verify, "compiled-file-missing", file: name)
+            if let failure = IFPortableResources.probe(shared.path, probeRoot.path, cache.path) {
+                throw IFDictionaryUpdateError(.verify, "smoke-probe", detail: "probe=\(failure)")
             }
             operation = "remove-isolated-scratch"
             for name in ["compile-user", "probe-user", "rebuild", "request.json"] {

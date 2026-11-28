@@ -41,7 +41,6 @@ unsafe extern "C" {
     ) -> c_int;
     pub fn ifp_prepare() -> c_int;
     pub fn ifp_finalize() -> c_int;
-    pub fn ifp_deploy(schema: *const c_char) -> c_int;
     pub fn ifp_session_create(schema: *const c_char, session: *mut usize) -> c_int;
     pub fn ifp_session_destroy(session: usize) -> c_int;
     pub fn ifp_process_key(

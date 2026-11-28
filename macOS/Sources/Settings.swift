@@ -59,25 +59,12 @@ package final class IFUpdaterAccess: ObservableObject {
     }
 }
 
-package enum IFUpdateDiagnosticOutcome: Sendable {
-    case begin, ready, completed, failed, cancelled, skipped, handled
-}
-
 package enum IFUpdateDiagnostics {
-    package static func record(event: StaticString, outcome: IFUpdateDiagnosticOutcome,
+    package static func record(event: StaticString, outcome: LocalDiagnosticEvent.Outcome,
                                reason: StaticString? = nil, correlation: UUID?,
                                elapsedMilliseconds: Double? = nil, error: (any Error)? = nil) {
-        let diagnosticOutcome: LocalDiagnosticEvent.Outcome = switch outcome {
-        case .begin: .begin
-        case .ready: .ready
-        case .completed: .completed
-        case .failed: .failed
-        case .cancelled: .cancelled
-        case .skipped: .skipped
-        case .handled: .handled
-        }
         let safeError = error.map(LocalDiagnosticEvent.safeError)
-        LocalDiagnostics.shared.submit(.init(module: .update, event: event, outcome: diagnosticOutcome,
+        LocalDiagnostics.shared.submit(.init(module: .update, event: event, outcome: outcome,
             reason: reason, correlation: correlation, elapsedMilliseconds: elapsedMilliseconds,
             errorDomain: safeError?.0, errorCode: safeError?.1))
     }
@@ -106,8 +93,8 @@ final class IFSettings: ObservableObject {
         }
         return settings
     }()
-    static let candidateCounts = Array(3...9)
-    static let fontSizes = [14, 16, 18, 24, 36]
+    nonisolated static let candidateCounts = Array(3...9)
+    nonisolated static let fontSizes = [14, 16, 18, 24, 36]
     private let defaults: UserDefaults
     let shortcuts: KeyboardShortcuts
     let smart: IFSmartSettings
@@ -126,11 +113,6 @@ final class IFSettings: ObservableObject {
 
     var qualityRecordingPaused: Bool { integer(for: "qualityRecordingPaused", allowed: [0, 1], fallback: 0) != 0 }
     var qualityTextCapture: Bool { integer(for: "qualityTextCapture", allowed: [0, 1], fallback: 0) != 0 }
-    var qualityRecordingStatus: String {
-        guard qualityStore != nil else { return "未启动" }
-        if qualityStore?.statistics().disabled == true { return "本次记录不可用" }
-        return qualityRecordingPaused ? "已暂停" : "已开启"
-    }
 
     func setQualityRecordingPaused(_ paused: Bool) async {
         guard !qualityCommandPending, let qualityStore else { return }
@@ -174,8 +156,7 @@ final class IFSettings: ObservableObject {
     var qualityAutoExportFolder: String? { defaults.string(forKey: "qualityAutoExportFolder") }
     var qualityAutoExportLastSuccess: Date? { defaults.object(forKey: "qualityAutoExportLastSuccess") as? Date }
     var qualityAutoExportMessage: String? { defaults.string(forKey: "qualityAutoExportMessage") }
-    var qualityDatabase = URL(fileURLWithPath: NSHomeDirectory())
-        .appendingPathComponent("Library/Application Support/InkFlow/quality.sqlite3")
+    var qualityDatabase = IFApplicationPaths.user.appendingPathComponent("quality.sqlite3")
     private var qualityAutoExportTimer: Timer?
     private var qualityAutoExportRunning = false
 
@@ -410,18 +391,6 @@ final class IFSettings: ObservableObject {
     var thunderMode: Bool {
         get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "thunderMode") }
-    }
-    @discardableResult
-    func migrateLegacyAutomaticUpdateChecks(to updater: IFUpdaterAccess) -> Bool? {
-        let migrationKey = "sparkleAutomaticChecksMigrationCompleted"
-        guard defaults.object(forKey: migrationKey) == nil else { return nil }
-
-        let legacyValue = defaults.object(forKey: "automaticUpdateChecksEnabled") as? NSNumber
-        let migratedValue = legacyValue == NSNumber(value: 1)
-        updater.automaticallyChecksForUpdates = migratedValue
-        updater.automaticallyDownloadsUpdates = false
-        defaults.set(true, forKey: migrationKey)
-        return migratedValue
     }
     var voicePolishEnabled: Bool {
         get { integer(for: "voicePolishEnabled", allowed: [0, 1], fallback: 0) != 0 }

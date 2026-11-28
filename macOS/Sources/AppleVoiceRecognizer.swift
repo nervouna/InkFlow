@@ -36,7 +36,7 @@ enum VoiceDiagnostics {
     }
     enum Stage: String, DiagnosticLabel { case preparing, recording, stopping, finalized, cancelled, failed, tail, correcting, corrected, submitted, fallback, startRejected, resourcePreparation, availability, authorization, resources, insertionReturned }
     enum Reason: String, DiagnosticLabel { case none, unavailable, permission, audio, overflow, recognition, invalidRange, targetChanged, secureInput, editing, escape, deactivated, settingsChanged, engineChanged, correction, cancellation }
-    private static let logger = Logger(subsystem: "io.damao.inputmethod.inkflow", category: "voice")
+    private static let logger = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "voice")
     static func emit(_ stage: Stage, id: UUID, reason: Reason = .none, milliseconds: Int? = nil, sequence: Int? = nil,
                      outcome: LocalDiagnosticEvent.Outcome? = nil, error: (any Error)? = nil) {
         let result: LocalDiagnosticEvent.Outcome = outcome ?? (stage == .cancelled ? .cancelled : stage == .failed ? .failed

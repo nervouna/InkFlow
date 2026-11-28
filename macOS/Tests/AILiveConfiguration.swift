@@ -1,7 +1,5 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 package enum AILiveConfiguration {
     private enum FixtureError: Error { case invalidInput }

@@ -4,7 +4,7 @@ fail() { echo "FAIL ${BASH_SOURCE[1]##*/}:${BASH_LINENO[0]}" >&2; exit 1; }
 cd "$(dirname "$0")/../.."
 awk() { LC_ALL=C command awk "$@"; }
 source macOS/scripts/swift-test.sh
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
 build_swift_test ai-pronunciation-tests build/ai-pronunciation-tests
 build/ai-pronunciation-tests

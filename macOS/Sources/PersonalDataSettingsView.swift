@@ -38,8 +38,8 @@ struct PersonalDataSettingsView: View {
     }
     private func controller() -> PersonalDataController? {
         guard let coordinator else { return nil }
-        return .init(user: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow"),
-            helper: Bundle.main.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker"), settings: settings, coordinator: coordinator)
+        return .init(user: IFApplicationPaths.user, helper: IFApplicationPaths.dictionaryWorker,
+            settings: settings, coordinator: coordinator)
     }
     private func perform(_ operation: @escaping @MainActor (PersonalDataController) async throws -> Void) {
         guard let controller = controller() else { return }

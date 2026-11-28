@@ -19,9 +19,7 @@ import InkFlowRime
             try events.write(contentsOf: data)
         }
         do {
-            _ = try IFDictionaryPreparation.prepare(request: request, runtime: runtime,
-                compile: { IFPortableResources.compile($0, $1, $2) },
-                probe: { IFPortableResources.probe($0, $1, $2) }, emit: emit)
+            _ = try IFDictionaryPreparation.prepare(request: request, runtime: runtime, emit: emit)
         } catch {
             try emit(.init(failure: .wrapping(error, stage: .prepare)))
             exit(1)

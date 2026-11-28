@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 source macOS/scripts/swift-test.sh
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 [[ -x build/InkFlow.app/Contents/MacOS/InkFlowDictionaryWorker ]] || { echo 'Run build.sh first.' >&2; exit 1; }
 stage_started=$(inkflow_test_timing_now)
 build_swift_test dictionary-activation-tests build/dictionary-activation-tests

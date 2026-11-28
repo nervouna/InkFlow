@@ -1,10 +1,17 @@
 import InkFlowRime
 import InputMethodKit
 
+enum IFApplicationPaths {
+    static let user = URL(fileURLWithPath: NSHomeDirectory())
+        .appendingPathComponent("Library/Application Support/InkFlow")
+    static let dictionaryWorker = Bundle.main.bundleURL
+        .appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
+}
+
 package enum InkFlowApplicationBootstrap {
     @MainActor package static func run(updaterAccess: IFUpdaterAccess) -> Int32 {
         autoreleasepool {
-            let user = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support/InkFlow")
+            let user = IFApplicationPaths.user
             do { try PersonalDataTransaction.recover(user: user, defaults: .standard) }
             catch { NSLog("InkFlow personal-data recovery requires attention; input startup stopped."); return 1 }
             if let abandoned = try? PersonalDataFiles.abandonedStaging(user: user) {
@@ -16,7 +23,7 @@ package enum InkFlowApplicationBootstrap {
             let processSpan = startup.begin(.process)
             _ = NSApplication.shared
             let bundle = Bundle.main
-            let helper = bundle.bundleURL.appendingPathComponent("Contents/MacOS/InkFlowDictionaryWorker")
+            let helper = IFApplicationPaths.dictionaryWorker
             let qualityStore = QualityStore(url: user.appendingPathComponent("quality.sqlite3"), engineVersion: IFEngine.version,
                 paused: IFSettings.sharedSettings.qualityRecordingPaused,
                 textCapture: IFSettings.sharedSettings.qualityTextCapture)
@@ -34,7 +41,6 @@ package enum InkFlowApplicationBootstrap {
             let settingsWindow = IFSettingsWindowController.sharedController
             settingsWindow.dictionaries = dictionaries
             settingsWindow.updaterAccess = updaterAccess
-            _ = IFSettings.sharedSettings.migrateLegacyAutomaticUpdateChecks(to: updaterAccess)
             updaterAccess.startUpdater()
             let lifecycle = IFApplicationLifecycle(stopDictionaries: { try await dictionaries.shutdown() },
                 stopEngine: { IFEngine.stop() },

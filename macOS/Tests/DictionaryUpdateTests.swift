@@ -2,9 +2,7 @@ import InkFlowDictionaryTestSupport
 @testable import InkFlowRime
 @testable import InkFlowDomain
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private func check(_ value: Bool, _ message: String, file: StaticString = #filePath, line: UInt = #line) {
     if !value { fatalError(message, file: (file), line: line) }

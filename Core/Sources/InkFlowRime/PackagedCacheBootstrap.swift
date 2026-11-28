@@ -2,9 +2,7 @@ import InkFlowDomain
 import Foundation
 
 package enum IFPackagedCacheToolBootstrap {
-    package typealias EngineOperation = (_ shared: String, _ user: String, _ cache: String) -> Int32
-
-    package static func run(arguments: [String], compile: EngineOperation, probe: EngineOperation) throws {
+    package static func run(arguments: [String]) throws {
         guard arguments.count == 4 else { throw CocoaError(.fileReadInvalidFileName) }
         let resources = URL(fileURLWithPath: arguments[1])
         let scratch = URL(fileURLWithPath: arguments[2])
@@ -17,7 +15,7 @@ package enum IFPackagedCacheToolBootstrap {
             try fm.createDirectory(at: cache, withIntermediateDirectories: false)
             let compiler = scratch.appendingPathComponent("compiler")
             try fm.createDirectory(at: compiler, withIntermediateDirectories: false)
-            guard compile(resources.path, compiler.path, cache.path) == 0 else {
+            guard IFPortableResources.compile(resources.path, compiler.path, cache.path) else {
                 throw IFDictionaryUpdateError(.prepare, "packaged-cache-compile")
             }
             let manifest = try IFDictionaryFiles.decode(IFDictionaryManifest.self,
@@ -31,7 +29,7 @@ package enum IFPackagedCacheToolBootstrap {
         let before = try IFPackagedCache.compiledHashes(cache)
         let probeRoot = scratch.appendingPathComponent("probe")
         try fm.createDirectory(at: probeRoot, withIntermediateDirectories: false)
-        guard probe(resources.path, probeRoot.path, cache.path) == 0 else {
+        guard IFPortableResources.probe(resources.path, probeRoot.path, cache.path) == nil else {
             throw IFDictionaryUpdateError(.verify, "packaged-cache-probe")
         }
         guard try IFPackagedCache.compiledHashes(cache) == before else {

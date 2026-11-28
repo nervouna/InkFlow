@@ -1,8 +1,6 @@
 @testable import InkFlowRime
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 @main
 struct QualityIdentityTests {

@@ -1,3 +1,4 @@
+import InkFlowRime
 import AppKit
 import Foundation
 
@@ -34,7 +35,7 @@ struct FeedbackLogCollector: Sendable {
         try await run(
             URL(fileURLWithPath: "/usr/bin/log"),
             ["show", "--last", "10m", "--style", "compact", "--predicate",
-             "subsystem == \"io.damao.inputmethod.inkflow\""]
+             "subsystem == \"\(LocalDiagnosticEvent.logSubsystem)\""]
         )
     }
 

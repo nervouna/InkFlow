@@ -1,8 +1,6 @@
 @testable import InkFlowRime
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 private final class Capture: @unchecked Sendable {
     private let lock = NSLock()

@@ -1,7 +1,5 @@
 import Foundation
-#if SWIFT_PACKAGE
 @testable import InkFlowCore
-#endif
 
 package final class AIDiagnosticCapture: @unchecked Sendable {
     private let lock = NSLock()

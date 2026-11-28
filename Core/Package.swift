@@ -26,11 +26,11 @@ let package = Package(
         .executable(name: "core-engine-tests", targets: ["CoreEngineTests"]),
         .library(name: "InkFlowDomain", targets: ["InkFlowDomain"]),
         .library(name: "InkFlowRime", targets: ["InkFlowRime"]),
-        .executable(name: "dictionary-generator", targets: ["DictionaryGeneratorTool"]),
         .executable(name: "packaged-cache-tool", targets: ["PackagedCacheTool"]),
         .executable(name: "dictionary-generator-tests", targets: ["DictionaryGeneratorTests"]),
         .executable(name: "ai-pronunciation-tests", targets: ["AIPronunciationTests"]),
-        .executable(name: "ai-adoption-learning-tests", targets: ["AIAdoptionLearningTests"])
+        .executable(name: "ai-adoption-learning-tests", targets: ["AIAdoptionLearningTests"]),
+        .executable(name: "portable-abi-tests", targets: ["PortableABITests"])
     ],
     targets: [
         .executableTarget(name: "QualityBaseline", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Tests/QualityBaseline", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
@@ -44,12 +44,14 @@ let package = Package(
         .executableTarget(name: "CoreEngineTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport", "InkFlowEngineTestSupport"], path: "Tests/CoreEngineTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .target(name: "InkFlowEngineTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Tests/InkFlowEngineTestSupport", swiftSettings: strictSwiftSettings),
         .target(name: "InkFlowCoreTestSupport", dependencies: ["InkFlowDomain", "InkFlowRime"], path: "Tests/InkFlowCoreTestSupport", swiftSettings: strictSwiftSettings),
-        .executableTarget(name: "DictionaryGeneratorTool", dependencies: ["InkFlowDomain"], path: "Tools/DictionaryGeneratorTool", swiftSettings: strictSwiftSettings),
         .executableTarget(name: "PackagedCacheTool", dependencies: ["InkFlowRime"], path: "Tools/PackagedCacheTool", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
         .executableTarget(name: "DictionaryGeneratorTests", dependencies: ["InkFlowDomain"], path: "Tests/DictionaryGeneratorTests", swiftSettings: strictSwiftSettings),
         .executableTarget(name: "AIPronunciationTests", dependencies: ["InkFlowDomain"], path: "Tests/AIPronunciationTests", swiftSettings: strictSwiftSettings),
         .executableTarget(name: "AIAdoptionLearningTests", dependencies: ["InkFlowDomain", "InkFlowRime", "InkFlowCoreTestSupport"], path: "Tests/AIAdoptionLearningTests", swiftSettings: strictSwiftSettings, linkerSettings: portableRuntime),
 
+        .executableTarget(name: "PortableABITests", dependencies: ["InkFlowPortable", "InkFlowDictionary"],
+                          path: "Tests/PortableABITests", swiftSettings: strictSwiftSettings,
+                          linkerSettings: portableRuntime),
         .target(name: "InkFlowDictionary", path: "Sources/InkFlowDictionary",
                 publicHeadersPath: "include",
                 cSettings: [.unsafeFlags(["-I\(repository.path)/build/dictionary/include"])],

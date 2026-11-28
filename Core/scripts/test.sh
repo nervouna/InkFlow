@@ -1,9 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-source macOS/scripts/test-timing.sh
+source Core/scripts/test-timing.sh
 stage_started=$(inkflow_test_timing_now)
-bash macOS/scripts/dependencies.sh
+bash Core/scripts/resource-dependencies.sh
 bash Core/scripts/check-boundaries.sh --standalone
 inkflow_test_timing_report shared-core dependencies-boundaries "$stage_started"
 source Core/scripts/swift-package.sh

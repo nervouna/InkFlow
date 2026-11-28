@@ -15,7 +15,7 @@ from statistics import NormalDist, median
 import sys
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[4] / 'macOS/Tools'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import quality_exchange
 
 DEFAULT_DB = Path.home() / 'Library/Application Support/InkFlow/quality.sqlite3'

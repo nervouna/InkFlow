@@ -1,8 +1,7 @@
 import InputMethodKit
 import Sparkle
-#if SWIFT_PACKAGE
 import InkFlowCore
-#endif
+import InkFlowRime
 
 @MainActor
 private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate {
@@ -126,7 +125,7 @@ private final class InkFlowSparkleUpdaterDelegate: NSObject, SPUUpdaterDelegate 
         reportedTerminalOutcome = false
     }
 
-    private func record(_ event: StaticString, outcome: IFUpdateDiagnosticOutcome,
+    private func record(_ event: StaticString, outcome: LocalDiagnosticEvent.Outcome,
                         reason: StaticString? = nil, correlation: UUID? = nil,
                         error: (any Error)? = nil) {
         let knownCorrelation = correlation ?? activeCorrelation ?? currentUpdateCorrelation ?? scheduledInstallCorrelation

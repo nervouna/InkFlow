@@ -56,9 +56,7 @@ fn desktop_runtime_contract() {
         Runtime::new(&fixture.0.join("shared"), &fixture.0.join("user")),
         Err(Error::AlreadyRunning)
     ));
-    runtime
-        .deploy(&fixture.0.join("shared/probe.schema.yaml"))
-        .unwrap();
+    runtime.prepare().unwrap();
     assert!(fixture.0.join("user/build/probe.table.bin").exists());
     assert!(matches!(
         runtime.session("bad\0schema"),
@@ -67,10 +65,6 @@ fn desktop_runtime_contract() {
     assert!(matches!(runtime.session("missing"), Err(Error::Native(-2))));
     let mut session = runtime.session("probe").unwrap();
     assert_eq!(runtime.prepare(), Err(Error::SessionsActive));
-    assert_eq!(
-        runtime.deploy(&fixture.0.join("shared/probe.schema.yaml")),
-        Err(Error::SessionsActive)
-    );
     assert!(session.snapshot().unwrap().preedit.is_empty());
     assert_eq!(session.take_commit().unwrap(), None);
     for byte in b"nihao" {
@@ -103,102 +97,15 @@ fn desktop_runtime_contract() {
     let first_page = session.snapshot().unwrap();
     assert_eq!(first_page.candidates.len(), 5);
     assert!(!first_page.last_page);
-    assert_eq!(
-        second.select_candidate(&first_page, 0),
-        Err(Error::StaleSnapshot)
-    );
-    let other = second.snapshot().unwrap();
-    assert_eq!(
-        session.select_candidate(&other, 0),
-        Err(Error::StaleSnapshot)
-    );
-    assert_eq!(
-        session.select_candidate(&first_page, usize::MAX),
-        Err(Error::InvalidCandidate)
-    );
     assert!(session.change_page(false).unwrap());
-    assert_eq!(
-        session.select_candidate(&first_page, 0),
-        Err(Error::StaleSnapshot)
-    );
     let last_page = session.snapshot().unwrap();
     assert_eq!(last_page.page, 1);
     assert!(last_page.last_page);
     assert_eq!(last_page.candidates[0].text, "腻");
     assert!(session.change_page(true).unwrap());
-    assert_eq!(
-        session.select_candidate(&last_page, 0),
-        Err(Error::StaleSnapshot)
-    );
-    let current = session.snapshot().unwrap();
-    let refreshed = session.snapshot().unwrap();
-    assert_eq!(
-        session.select_candidate(&current, 0),
-        Err(Error::StaleSnapshot)
-    );
-    session.select_candidate(&refreshed.clone(), 1).unwrap();
-    assert_eq!(session.take_commit().unwrap().as_deref(), Some("尼"));
-    assert_eq!(session.take_commit().unwrap(), None);
-    assert_eq!(
-        session.select_candidate(&refreshed, 1),
-        Err(Error::StaleSnapshot)
-    );
-    second.clear().unwrap();
-    assert_eq!(
-        second.select_candidate(&other, 0),
-        Err(Error::StaleSnapshot)
-    );
-    for byte in b"ni" {
-        session.process_key(*byte as i32, 0).unwrap();
-    }
-    let edited = session.snapshot().unwrap();
-    session.process_key('h' as i32, 0).unwrap();
-    assert_eq!(
-        session.select_candidate(&edited, 0),
-        Err(Error::StaleSnapshot)
-    );
     session.clear().unwrap();
-    let empty = session.snapshot().unwrap();
-    assert_eq!(
-        session.select_candidate(&empty, 0),
-        Err(Error::InvalidCandidate)
-    );
-    assert!(!session.process_key(0xff1b, 0).unwrap());
-    assert_eq!(
-        session.select_candidate(&empty, 0),
-        Err(Error::StaleSnapshot)
-    );
-    let no_page = session.snapshot().unwrap();
+    second.clear().unwrap();
     assert!(!session.change_page(false).unwrap());
-    assert_eq!(
-        session.select_candidate(&no_page, 0),
-        Err(Error::StaleSnapshot)
-    );
-    let destroyed = {
-        let mut temporary = runtime.session("probe").unwrap();
-        for byte in b"ni" {
-            temporary.process_key(*byte as i32, 0).unwrap();
-        }
-        temporary.snapshot().unwrap()
-    };
-    let mut replacement = runtime.session("probe").unwrap();
-    for byte in b"ni" {
-        replacement.process_key(*byte as i32, 0).unwrap();
-    }
-    let mut displayed = replacement.snapshot().unwrap();
-    assert_eq!(
-        replacement.select_candidate(&destroyed, 0),
-        Err(Error::StaleSnapshot)
-    );
-    displayed
-        .candidates
-        .resize(20, displayed.candidates[0].clone());
-    assert_eq!(
-        replacement.select_candidate(&displayed, 19),
-        Err(Error::InvalidCandidate)
-    );
-    replacement.clear().unwrap();
-    drop(replacement);
     let thread = std::thread::spawn(move || {
         for _ in 0..25 {
             for byte in b"ni" {
@@ -260,7 +167,7 @@ fn desktop_runtime_contract() {
     drop(prepared_session);
     drop(prepared);
     println!(
-        "PASS explicit-cache preparation/serving, lifetime, target deployment, Lua, UTF-8 ownership, commits, snapshot-safe selection, paging, serialized sessions, restart"
+        "PASS cache preparation/serving, lifetime, Lua, UTF-8 ownership, commits, paging, serialized sessions, restart"
     );
 }
 

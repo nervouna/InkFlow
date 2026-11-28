@@ -3,7 +3,7 @@
 Known failures: symptom, cause, fix, and where to look. Git history has the full investigation notes.
 See [application contracts](Docs/ApplicationContracts.md) and the [test harness notes](Docs/TestHarnessContracts.md) for implementation details.
 
-## Logs and incident archives
+## Logs and diagnostic archives
 
 Unified log subsystem `io.damao.inputmethod.inkflow`; categories `startup`, `input`, `dictionary`, `ai`:
 
@@ -22,7 +22,7 @@ Logs contain only fixed labels, random correlation IDs, status and timing — ne
 - **AI:** gate → `scheduled` → `dispatched` → HTTP status/elapsed → `shown` → `adoptionRequested` → `insertionIssued` → `insertionReturned`, all with the same attempt ID. No dispatch: check the gate reason (config, secure input, candidate visibility, mark). `insertionReturned` doesn't prove the editor displayed the text. Paid live check (explicit approval only): `test-ai-headless.sh --live /abs/path/ignored/.env`.
 - **Dictionary:** errors at error level, long payloads split into `part=i/n` chunks sharing an event ID.
 
-**Incident archive:** Settings → 反馈 → **保存问题现场** freezes the preceding 30 minutes; **导出诊断包…** exports a ZIP (open `manifest.json` first, then `events.jsonl`, `summary.json`; timestamps are UTC Unix ms). Stored in `~/Library/Application Support/InkFlow/Diagnostics/`, capped at 7 days / 50 MiB. If InkFlow can't start, copy only that directory plus matching DiagnosticReports. Archives exclude `quality.sqlite3`, preferences, document text and audio. Nothing is uploaded automatically.
+**Diagnostic archive:** Settings → 反馈与诊断 → 导出日志: pick 最近半小时, 最近24小时 or 最近七天, then **导出** saves a ZIP (open `manifest.json` first, then `events.jsonl`, `summary.json`; timestamps are UTC Unix ms). Stored in `~/Library/Application Support/InkFlow/Diagnostics/`, capped at 7 days / 50 MiB. If InkFlow can't start, copy only that directory plus matching DiagnosticReports. Archives exclude `quality.sqlite3`, preferences, document text and audio. Nothing is uploaded automatically.
 
 ## Input disappears until switching to ABC and back
 

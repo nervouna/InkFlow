@@ -1,7 +1,6 @@
 import Foundation
 import InkFlowDomain
 import InkFlowRime
-import InkFlowPortable
 import Darwin
 
 struct PersonalDataError: LocalizedError, Sendable {
@@ -52,7 +51,8 @@ struct PersonalBackupSettings: Codable, Sendable {
     static let keys = integerKeys.union(ShortcutAction.allCases.map { "shortcut.\($0.rawValue)" }).union(["customPhrases", "voicePolishRules"])
     func validate() throws {
         guard Set(integers.keys) == Self.integerKeys,
-              (3...9).contains(integers["candidateCount"]!), [14,16,18,24,36].contains(integers["fontSize"]!),
+              IFSettings.candidateCounts.contains(integers["candidateCount"]!),
+              IFSettings.fontSizes.contains(integers["fontSize"]!),
               integers.allSatisfy({ ["candidateCount", "fontSize"].contains($0.key) || [0,1].contains($0.value) }),
               integers["input.fuzzyZ"] == integers["input.fuzzyC"], integers["input.fuzzyC"] == integers["input.fuzzyS"],
               integers["input.bracketPaging"] != integers["input.minusEqualPaging"] else { throw PersonalDataError("settings") }
@@ -72,11 +72,12 @@ struct PersonalBackupSettings: Codable, Sendable {
 }
 
 struct PersonalBackupDocument: Codable, Sendable {
+    static let rimeFormat = "1.17.0"
     var format: Int = 1
-    var rime: String
+    var rime = PersonalBackupDocument.rimeFormat
     var settings: PersonalBackupSettings
     var dictionaries: [String: String?]
-    static let names = ["pinyin_simp", "inkflow_shared_english", "inkflow_voice_alias"]
+    static let names = IFPortablePersonalData.names
     static let maximumBytes = 128 * 1024 * 1024
     func write(to url: URL) throws {
         try validate()
@@ -96,7 +97,7 @@ struct PersonalBackupDocument: Codable, Sendable {
         }.joined(separator: "\n")
     }
     func validate() throws {
-        guard format == 1, rime == "1.17.0", Set(dictionaries.keys) == Set(Self.names) else { throw PersonalDataError("incompatible") }
+        guard format == 1, rime == Self.rimeFormat, Set(dictionaries.keys) == Set(Self.names) else { throw PersonalDataError("incompatible") }
         try settings.validate()
         for snapshot in dictionaries.values.compactMap({ $0 }) {
             guard snapshot.utf8.count <= 32 * 1024 * 1024, snapshot.hasPrefix("# Rime user dictionary\n"),
@@ -224,7 +225,9 @@ package enum IFPersonalDataWorkerBootstrap {
                 guard try !PersonalDataFiles.exists(database),
                       String(data: try PersonalDataFiles.read(snapshot, limit: 32 * 1024 * 1024), encoding: .utf8) != nil else { throw PersonalDataError("snapshot") }
                 try PersonalDataFiles.safe(snapshot)
-                guard IFPersonalDataSnapshot(databaseRoot.path, name, snapshot.path, 1) == 0 else { throw PersonalDataError("native-snapshot") }
+                guard IFPortablePersonalData.restore(user: databaseRoot.path, name: name, snapshot: snapshot.path) else {
+                    throw PersonalDataError("native-snapshot")
+                }
             }
             return 0
         } catch {
