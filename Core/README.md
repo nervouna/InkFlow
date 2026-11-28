@@ -25,9 +25,7 @@ archive-identity include. The standalone build helper expects the repository roo
 directory. Top-level build and test drivers set `INKFLOW_PORTABLE_BUILT` when they have already built
 the runtime for their Swift targets.
 
-License packaging uses the actual target's locked Cargo dependency graph, including build
-dependencies. The lockfile can include crates outside that graph. For marisa, the notice source
-is `COPYING.md`, which contains the BSD-2-Clause and LGPL-2.1-or-later texts.
+License packaging is described in the [distribution review](Portable/licenses.md).
 
 ## Contracts and tests
 
@@ -35,11 +33,3 @@ is `COPYING.md`, which contains the BSD-2-Clause and LGPL-2.1-or-later texts.
 - [Dictionary preparation and activation](Docs/dictionary-lifecycle.md)
 - [Local quality recording](Docs/quality-recording.md)
 - [Shared regression fixtures](Tests/README.md)
-
-## Prepared resources
-
-Source extraction can restore changed or absent files from verified archives. Verify the raw
-inputs even when a generated Chinese dictionary is cached. Its cache key includes the generator
-executable, exact legacy bytes and local corrections. Rebuild the spelling profiles and context
-index after the generated dictionary changes. The profiles use that dictionary's syllable
-inventory and the same generator as the update worker.

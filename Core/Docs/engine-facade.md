@@ -21,8 +21,8 @@ Starting or finishing a capture sequence does not change how commits are deliver
 User-requested preferences, ASCII mode and candidate count take effect at composition boundaries.
 A composition uses its captured preference values until it ends. Replacing whole schema
 configuration nodes lets existing Rime components retain their old snapshots. Requested custom
-phrases outlive a runtime restart. The core writes `custom_phrase.txt` and reloads it at shared idle.
-A failed phrase-file write keeps the configuration waiting. The fresh runtime's probe establishes
+phrases outlive a runtime restart; the [runtime contract](../Portable/runtime-contract.md#session-configuration-and-navigation)
+owns the phrase file and its idle reload. A failed phrase-file write keeps the configuration waiting. The fresh runtime's probe establishes
 the requested phrase file before sessions are restored, so restoration only reads it. A learned
 user's first candidate can differ from the clean preparation worker's first candidate.
 The preceding context set for ranking belongs to the active composition and clears with its content.
@@ -48,10 +48,10 @@ separate from the portable session ABI. Validation compares all data and metadat
 `TsvReader` trims the trailing delimiter for a metadata key with an empty value, so restore explicitly
 writes those keys from the independently validated map before comparison.
 
-Lifecycle learning-management calls use the active Rime memories without filesystem enumeration or
-a second database. They refer to entries by an index in a particular learning revision. External
-changes invalidate cached listings and undo tokens. After a failed native write the dictionaries
-may have applied part of the operation, so the frontend drops its old listing and undo eligibility.
+Lifecycle learning-management calls follow the [personal-data contract](../Portable/runtime-contract.md#personal-data)
+and use the active Rime memories without filesystem enumeration or a second database. After a failed native
+write the dictionaries may have applied part of the operation, so the frontend drops its old listing and
+undo eligibility.
 An explicit reset of the two English learning memories leaves the public dictionaries and ordinary
 `pinyin_simp` user dictionary open.
 
@@ -80,7 +80,7 @@ The voice lexicon is a disposable view of Rime learning. Explicit custom phrases
 priority. Refresh is triggered by deferred engine idle independently of dictionary activation.
 A check for idle can drain a new commit, so test the undo guard after checking idle. The guard measures
 wall and monotonic time before reading, accounting for Rime's whole-second native clock and backward
-system-clock adjustments. A learning revision invalidates management listings and undo tokens.
+system-clock adjustments.
 Explicit management invalidation advances the lexicon epoch without shortening the normal undo grace
 period.
 
@@ -92,26 +92,5 @@ the fixed prefix, so unrelated personal entries cannot affect scoring.
 
 ## Rime channel and mixed translator
 
-Swift and Lua exchange one versioned request/reply pair through the core's
-[`InputSession::call`](../Portable/README.md#interface-contract). Lua replies synchronously
-through a context property with a status and body. Unavailable sessions, unanswered operations,
-oversized replies and invalid framing yield no result. Use the channel outside key callbacks.
-
-The [mixed-input rules](../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md)
-describe admission, boundaries and ranking. The C++ extension registers after Rime initialization
-and before sessions are created. It enumerates normal lexical spans through the native prism before
-the Syllabifier prunes paths. This keeps viable syllable boundaries that a winning homophone could
-otherwise hide. A normal span excludes abbreviation, fuzzy, completion and corrected spellings.
-One span graph supports both technical-input and complete-lowercase-Pinyin verdicts and the
-personal lookup. Each Lua-visible verdict stores the exact input it describes or the empty string.
-This keeps old context properties from applying to a different composition.
-
-A read-only mixed sentence still carries its lexical provenance and original cursor spans.
-Its distinct language has no Memory and supplies no shared native syllable-code namespace. Keep
-its language object valid because the Lua `Phrase.lang_name` binding dereferences it. The entry's
-custom code passes each ASCII run as display and lowercase code to the learner. Its weakest usable
-personal run supplies the confirmation bucket, so one unconfirmed run removes the sentence's
-personal evidence. A public run counts only when it comprises whole public entries and shares
-its exact display/span with an admissible confirmed edge. Validate runs across adjacent native
-entries. The translator retains its reader for its lifetime, letting queries reuse it without
-destructing a native UserDictionary or closing the shared transaction during a query.
+Swift calls Lua through `InputSession::call`; the [Lua channel](../Portable/runtime-contract.md#lua-channel) owns the wire format and bounds, and the [schemas guide](../../schemas/README.md#property-channel-and-ranking-evidence) the operations.
+The C++ mixed translator is specified by [rule 8](../../.agents/skills/inkflow-mixed-input-maintenance/references/rules.md) of the mixed-input rules.

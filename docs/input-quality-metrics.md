@@ -26,7 +26,7 @@ Design rules:
   weekly export files are deleted after 35 days, each covering at most 14 days, so keep an earlier export and read it
   with `--exports-only` to assemble the second 28-day window.
 - **Raising the bar.** The aggregate target moves to 96.5% only after two non-overlapping 28-day windows with the lower bound at least 96.0% and the 1-char bucket at least 94%. 97% is the long-term goal, not a near-term acceptance line. It is adopted only after a paired replay arm (list or engine mode) holds at least 97% across two such windows.
-- **Ship rule.** Any ranking change ships when paired `fixed - broken > 0` and the McNemar `p < 0.05` on distinct `(raw_input, selected_text)` pairs, in list or engine [replay](../Core/Portable/README.md#replay). Report it with the distinct count and the per-class and per-bucket breakdown, never as a comparison of two unpaired windows.
+- **Ship rule.** Any ranking change ships when paired `fixed - broken > 0` and the McNemar `p < 0.05` on distinct `(raw_input, selected_text)` pairs, in list or engine [replay](../Core/Portable/replay.md#replay). Report it with the distinct count and the per-class and per-bucket breakdown, never as a comparison of two unpaired windows.
 - **Sample size.** About 2.4k, 6.3k and 13k decisions are needed to see +1, +0.5 and +0.3 percentage points at disagreement rates of 3%, 2% and 1.5%. This is `n = d * (2.8 / delta)^2` for 80% power at two-sided 0.05, with `d` the share of decisions on which the two arms differ in outcome and `delta` the net gain.
 
 ### Scorecard
@@ -44,7 +44,7 @@ Per bucket, each with its interval; targets exist today only for the R family.
 
 ## 1. Sources of the numbers
 
-- Field records: `quality.py` and its [query contract](../.agents/skills/inkflow-quality-analysis/references/query-contract.md). Replay: [Replay](../Core/Portable/README.md#replay).
+- Field records: `quality.py` and its [query contract](../.agents/skills/inkflow-quality-analysis/references/query-contract.md). Replay: [Replay](../Core/Portable/replay.md#replay).
 - Fixed benchmark: [Core/Fixtures/QualityBaseline](../Core/Fixtures/QualityBaseline/README.md). Latency and memory limits are not quality metrics: `Core/Portable/performance.sh`.
 
 ## 2. Event model
