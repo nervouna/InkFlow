@@ -1,11 +1,19 @@
 #!/bin/bash
 set -euo pipefail
+[[ $# -le 1 ]] || { echo 'Usage: prepare-resources.sh [OUTPUT_DIRECTORY]' >&2; exit 2; }
+output=${1:-}
+[[ -z $output || $output == /* ]] || output="$PWD/$output"
 cd "$(dirname "$0")/../.."
 bash Core/scripts/resource-dependencies.sh
 bash Core/scripts/prepare-chinese.sh --sources-only
 python3 Core/Portable/build-native.py
-mkdir -p build/portable
-work=$(mktemp -d "$PWD/build/portable/resources.XXXXXX")
+if [[ -n $output ]]; then
+  work=$output
+  mkdir -p "$work"
+else
+  mkdir -p build/portable
+  work=$(mktemp -d "$PWD/build/portable/resources.XXXXXX")
+fi
 bash Core/scripts/prepare-rime.sh "$work/shared"
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
 cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin prepare-resources -- \
@@ -28,4 +36,3 @@ report = {'platform': platform.system(), 'architecture': platform.machine(),
 (root / 'resources.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n')
 print(f'PASS production resources: {root}')
 PY
-if [[ $# -eq 1 ]]; then cp "$work/resources.json" "$1/resources.json"; fi

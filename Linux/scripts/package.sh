@@ -21,16 +21,14 @@ mkdir -p build/linux
 work=$(mktemp -d "$PWD/build/linux/package-work.XXXXXX")
 trap 'rm -rf "$work"' EXIT
 export CARGO_TARGET_DIR="$PWD/build/portable/cargo"
-python3 Core/Portable/build-native.py
-bash Core/scripts/resource-dependencies.sh
-bash Core/scripts/prepare-chinese.sh --sources-only
 resources=${1:-$work/resources}
 resources=$(realpath -m "$resources")
 if [[ $# == 0 ]]; then
-  bash Core/scripts/prepare-rime.sh "$resources/shared"
-  cargo run --locked --release --manifest-path Core/Portable/Cargo.toml --bin prepare-resources -- \
-    "$resources/shared" "$resources/prepared"
+  bash Core/Portable/prepare-resources.sh "$resources"
 else
+  python3 Core/Portable/build-native.py
+  bash Core/scripts/resource-dependencies.sh
+  bash Core/scripts/prepare-chinese.sh --sources-only
   bash Core/scripts/prepare-rime.sh build/linux/package-shared
 fi
 python3 Linux/scripts/package-notices.py --check-resources "$resources" "${1:+reused}"
