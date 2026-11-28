@@ -44,7 +44,7 @@ and [application contracts](../macOS/Docs/ApplicationContracts.md) describe each
 - Drift between a target declared in both the root and the Core manifest.
 - A root-manifest target under `Core/` that `Core/Package.swift` does not declare. Core tests and tools are
   defined once, in the Core manifest; the root re-declares only the libraries the app links.
-- A root-manifest target outside `macOS/Tests` with a `sources` or `exclude` list. Each target is its directory,
+- A root-manifest target with a `sources` or `exclude` list. Each target is its directory,
   so a new file cannot silently compile into no target.
 - `import InkFlowPortable` outside `InkFlowRime` and the ABI smoke test. Swift reaches the Rust core through the
   `IFEngine`, `IFPortableResources` and `IFPortablePersonalData` facades.
@@ -66,6 +66,10 @@ The comment lint rejects new code comments ([comment cleanup](comment-cleanup.md
 | Resource probe cases and messages | `resources.rs`; Swift reports the message as-is |
 | SwiftPM build flags for both manifests | `Core/scripts/swift-package.sh` |
 | Test timing helpers | `Core/scripts/test-timing.sh` |
+| Compiled Rime resource files | `resources::compiled_files` in Rust, read by Swift through `ifr_compiled_file_*` |
+| Dictionary generator reference | `Core/Portable/dictionary/fixtures`, re-recorded from Rust with `test.sh --record` |
+| Sandboxed worker launch | `IFSandboxedWorkerLauncher` |
+| Fcitx5 option to bit mapping | `kOptionBits` in `Linux/fcitx5/src/engine.cpp` |
 
 ## Task pool
 
@@ -102,16 +106,24 @@ worth changing), `pending` (needs a decision, see #254).
 | P7 | Fix | Backup export writes the user-dictionary format version that import accepts | done |
 | P8 | macOS | Delete the one-time pre-Sparkle preference migration | done |
 | P13 | Docs | The Chinese dictionary notice names the Rust generator and the catalog file | done |
-| O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp`; `package.sh` calls `prepare-resources.sh` | open |
-| O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | open |
+| O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp` | done (#261) |
+| O1b | Linux | `package.sh` repeats `prepare-resources.sh` | open: `prepare-resources.sh` takes no output directory |
+| O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | dropped: `sign_sparkle` is shared; the rest differs on purpose |
 | O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | pending: the rule choice is P6 |
-| O4 | Source of truth | One Swift list of compiled resource files for the store receipt, packaged cache and engine checks | open |
-| O5 | Shallow layers | Fold `EngineChannel.swift` into `EngineAI.swift`; move test-only production helpers into tests | open |
-| O6 | Docs | Keep test-fixture and build-metadata contracts in `macOS/Docs` only; drop thin `prepare-*` wrapper scripts | open |
+| O4 | Source of truth | One list of compiled resource files for the receipts and engine checks | done (#264, with P12) |
+| O5 | Shallow layers | Move test-only production helpers into tests | done (#262); folding `EngineChannel.swift` dropped: `VoiceLexicon` uses it too |
+| O6 | Docs | Test-fixture contracts in `macOS/Docs`; callers run the Core `prepare-*` scripts directly | done (#263) |
+| P1 | Rust | Delete the unused mutation observer ABI | done (#256) |
+| P5 | Tooling | Freeze the Swift dictionary reference generator as fixtures | done (#257) |
+| P9 | macOS | One sandboxed launcher for both workers | done (#260) |
+| P10 | Tooling | Retire `cleanup.sh`, the AI native panel experiment and the Swift migration-baseline chain | done (#259) |
+| P11 | Build | One directory per macOS test target | done (#271) |
+| P12 | Rust | Engine creation checks the one compiled-file list | done (#264) |
+| P15 | macOS | One shortcut write gate; startup messages through the unified log | done (#258) |
 
-Core scripts still call macOS scripts in four places (`Core/scripts/test.sh` runs the macOS dictionary-generator
-unit, `capture-migration-baseline.sh`, `Core/Portable/dictionary/test.sh` and the prepare-rime wrapper test) and
-read `macOS/Info.plist` for the deployment target. These are the remaining Core→macOS edges.
+The remaining Core→macOS edges: `Core/scripts/test.sh` runs the macOS dictionary-generator and AI-learning
+scripts, `build-portable.sh` reads `macOS/Info.plist` for the deployment target, and `portable-notices.py`
+writes `macOS/Licenses`.
 
 ## Decisions
 
@@ -125,3 +137,4 @@ Decisions that need the owner, their outcome and their issues are tracked in
 | 2026-11-28 | Inventory of the macOS app, shared Swift, Rust core and toolchain at ed799ec |
 | 2026-11-28 | Decisions moved to #254; P7, P8 and P13 done |
 | 2026-11-28 | Governance pass: the task pool rows marked done; the ranking source fingerprint moves once (Rust engine files, `InputPreferences.swift`, `DictionaryGenerator.swift`) with no ranking change |
+| 2026-11-28 | Decided items delivered (#256–#264, #271); P2, P3, P4 and P6 reopened in #254; the ranking source fingerprint moves again (`engine.rs`, `CandidateRanking.swift`) with no ranking change |
