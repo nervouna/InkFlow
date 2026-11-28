@@ -93,7 +93,7 @@ full cache compile and probe as well as maintenance, AI, voice, and quality acce
 writes InkFlow's distribution identity without creating log files.
 
 The fixture databases in `fixtures/swift-user` were restored from the synthetic snapshots in
-`macOS/Tests/PersonalDataTests.swift` by the macOS dictionary worker (0.6.2 build 164). Its TSV snapshots
+`macOS/Tests/PersonalDataTests/PersonalDataTests.swift` by the macOS dictionary worker (0.6.2 build 164). Its TSV snapshots
 are the byte-for-byte export reference. Tests compare equivalent synthetic rows without ordering
 where the expected text was authored manually, since Rime exports in native key order. Import restores
 the rows into a second directory, and rejection leaves the existing databases in place. The format-1

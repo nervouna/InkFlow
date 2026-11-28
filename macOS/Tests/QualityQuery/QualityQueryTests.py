@@ -16,7 +16,7 @@ import time
 from unittest import mock
 import unittest
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / '.agents/skills/inkflow-quality-analysis/scripts/quality.py'
 ENGINE_DB = ROOT / 'build/quality-evidence/engine-controller.sqlite3'
 with contextlib.closing(sqlite3.connect(ENGINE_DB.as_uri() + '?mode=ro', uri=True)) as schema_db:
