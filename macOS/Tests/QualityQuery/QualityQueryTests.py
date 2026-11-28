@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import sys
 import tempfile
 import time
@@ -803,6 +804,18 @@ class QueryTests(unittest.TestCase):
             self.assertLess(packed.stat().st_size, len(payload))
             error = self.run_cli('summary', '--exports-only', '--input', str(packed), success=False)
             self.assertIn('Export exceeds 1 GiB', error)
+
+    def test_cli_export_is_owner_only_and_never_replaces_a_file(self):
+        previous = os.umask(0o022)
+        self.addCleanup(os.umask, previous)
+        for suffix in ('.json', '.json.gz'):
+            with self.subTest(suffix=suffix):
+                output = Path(self.temp.name) / f'private{suffix}'
+                self.run_cli('export', '--output', str(output), '--format', 'json')
+                self.assertEqual(stat.S_IMODE(output.stat().st_mode), 0o600)
+                output.write_bytes(b'kept')
+                self.run_cli('export', '--output', str(output), '--format', 'json', success=False)
+                self.assertEqual(output.read_bytes(), b'kept')
 
     def test_native_settings_export_is_readable_and_preserves_database(self):
         executable = os.environ.get('INKFLOW_QUALITY_EXPORT_FIXTURE')

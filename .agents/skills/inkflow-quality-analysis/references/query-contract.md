@@ -293,4 +293,4 @@ filter, match the composition and its commits to the fingerprint attributed thro
 A decisionless composition inherits the unique fingerprint seen in the run when available. Most
 cancels and raw Returns have no decision kind, so rates depending on those compositions are suppressed
 under kind filtering. A candidate commit has a decision, so the revert rate remains meaningful.
-Private typed-text exports are owner-only and published atomically without replacing an existing file.
+Private typed-text exports are created owner-only (mode 0600) and never replace an existing file.
