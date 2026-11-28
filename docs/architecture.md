@@ -50,6 +50,11 @@ and [application contracts](../macOS/Docs/ApplicationContracts.md) describe each
 - `import InkFlowPortable` outside `InkFlowRime` and the ABI smoke test. Swift reaches the Rust core through the
   `IFEngine`, `IFPortableResources` and `IFPortablePersonalData` facades.
 - `#if SWIFT_PACKAGE` in any Swift source. Everything builds through SwiftPM.
+- A file bundled from `schemas/` that `macOS/Quality/ranking-resources.txt` does not list, so the
+  `rankingResourcesSHA256` fingerprint covers every bundled schema, Lua and OpenCC file.
+- A `Memory(` in `schemas/lua/` outside `inkflow_channel.lua` other than `env.memory = Memory(`. Short-lived
+  memories go through `channel.with_memory`, which disconnects them under `pcall`.
+- A `macOS/scripts/test-*.sh` that no `test.sh` unit reaches and `manual_harnesses` in `test.sh` does not list.
 
 The comment lint rejects new code comments ([comment cleanup](comment-cleanup.md)).
 

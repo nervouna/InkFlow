@@ -36,7 +36,7 @@ Every unit that builds Swift also builds the Rust core and its librime first (`C
 - `portable`: not in `quick`. Runs the Rust tests, old/new parity on freshly prepared production resources, the notices check and a Swift binary linking both Rust staticlibs, on the librime and release Rust core that every unit now uses. The first run builds librime from source (about 4 minutes, then about 2.5 minutes with `build/portable` reused); CI caches that directory.
 - `settings`, `personal-data`, `startup-diagnostics`, `local-diagnostics`, `diagnostic-archive`, `termination`.
 
-GUI harnesses (`test-settings-ui.sh`, AI native/live scripts) are manual diagnostics only; live AI scripts cost money and need explicit approval.
+GUI harnesses (`test-controller-initialization.sh`, `test-settings-ui.sh`, AI native/live scripts) are manual diagnostics only, declared in `manual_harnesses` in `test.sh`; live AI scripts cost money and need explicit approval.
 
 ## Python query checks
 

@@ -205,24 +205,25 @@ local function forget_sentence(env, context, text, step)
   end
   if not heaviest then return "unknown" end
   if step == "0" or not env.forgotten then env.forgotten = {} end
-  local memory = Memory(env.engine, env.engine.schema, "translator")
-  local forgotten = memory:update_userdict(heaviest, -1, "")
-  memory:disconnect()
-  if forgotten then env.forgotten[#env.forgotten + 1] = heaviest end
+  local called, forgotten = channel.with_memory(env, "translator", function(memory)
+    return memory:update_userdict(heaviest, -1, "")
+  end)
+  if called and forgotten then env.forgotten[#env.forgotten + 1] = heaviest end
   context:refresh_non_confirmed_composition()
-  return forgotten and "ok" or "failed"
+  return called and forgotten and "ok" or "failed"
 end
 
 local function unforget_sentence(env, context)
   local words = env.forgotten or {}
   env.forgotten = {}
   if #words == 0 then return "unknown" end
-  local memory = Memory(env.engine, env.engine.schema, "translator")
-  local revived = true
-  for _, entry in ipairs(words) do revived = memory:update_userdict(entry, 1, "") and revived end
-  memory:disconnect()
+  local called, revived = channel.with_memory(env, "translator", function(memory)
+    local all = true
+    for _, entry in ipairs(words) do all = memory:update_userdict(entry, 1, "") and all end
+    return all
+  end)
   context:refresh_non_confirmed_composition()
-  return revived and "ok" or "failed"
+  return called and revived and "ok" or "failed"
 end
 
 function M.init(env)
