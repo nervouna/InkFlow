@@ -26,7 +26,8 @@ def distribution(values):
             "p99": round(ordered[math.ceil(len(ordered) * 0.99) - 1], 3), "max": round(ordered[-1], 3)}
 keys = [key for trial in trials for key in trial["timings"]]
 summary = {
-    "protocol": "Core/Tests/PerformanceBaseline/PerformanceBaseline.swift on the Rust engine: release build, five processes, five corpus passes, absent user directory, no commits",
+    "protocol": "Rust engine via src/bin/performance-baseline.rs: release build, five processes, "
+                "five corpus passes, absent user directory, no commits",
     "startupMilliseconds": distribution([t["startupMilliseconds"] for t in trials]),
     "peakResidentMiBAfterInput": distribution([t["peakResidentBytesAfterInput"] / 1048576 for t in trials]),
     "firstPassKeyMilliseconds": distribution([k["milliseconds"] for k in keys if k["pass"] == 0]),

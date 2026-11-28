@@ -59,4 +59,4 @@ Overall `1/3 = 33.3% [6.1, 79.2]`, mean R-char `0.556`. `ordinary-control 1/2 = 
 
 ## Result: pending the first user run
 
-Replace this section after the first real run, in the style of [the AI panel probe](../AINativePanel/README.md): the input method and version, the declared state, the date, whether the input method received the `NSApp.sendEvent` key events (a CGEvent/HID-tap path is a follow-up issue only if it did not), the table next to the `--score` reference above, and the decision.
+Replace this section after the first real run: the input method and version, the declared state, the date, whether the input method received the `NSApp.sendEvent` key events (a CGEvent/HID-tap path is a follow-up issue only if it did not), the table next to the `--score` reference above, and the decision.

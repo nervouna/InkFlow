@@ -7,7 +7,7 @@
 - Source revision: `c918273edf1341199cf2b5a6bd84f98c5e473b79` (#53: prepared context-ranking index, bounded resource hashing).
 - Host: Apple M5 Pro, 24 GiB RAM, macOS 27.0, Xcode 27.0, Swift 6.4, SDK 27.0, no Rust toolchain.
 - Measurement build: release, `arm64-apple-macosx26.0`.
-- Command: `bash Core/scripts/capture-migration-baseline.sh OUTPUT` run locally on the worktree.
+- Command: the Swift capture chain, run locally on the worktree; its scripts and products were removed in #259 and the recorded data is kept as is.
 - Outcome: exit 0. Standalone boundaries, packaged-cache probe, ranking assertions, quality-baseline comparison, performance capture, and all seven selected regression units passed. `preparation`, `dictionary-generator`, `dictionary-store`, `dictionary-worker`, `dictionary-activation` and `check-bundle.sh` also passed on the PR branch.
 - Regression units: `voice-lexicon`, `ai-learning`, `engine-basic`, `engine-options`, `engine-english`, `engine-context`, `engine-custom-phrases`.
 
@@ -60,4 +60,4 @@ Approved for #33 as regression-review thresholds for this headless protocol.
 | First-pass key p99 | 2.6 ms |
 | Maximum first-key latency across five processes | 25 ms |
 
-A breach calls for a focused repeat on the same machine. Also investigate new stalls that percentiles hide. The capture script reports; it does not fail on thresholds.
+A breach calls for a focused repeat on the same machine. Also investigate new stalls that percentiles hide. The measurement protocol reports; it does not fail on thresholds.
