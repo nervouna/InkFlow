@@ -1,5 +1,6 @@
 import InkFlowRime
 import InputMethodKit
+import os
 
 enum IFApplicationPaths {
     static let user = URL(fileURLWithPath: NSHomeDirectory())
@@ -9,11 +10,15 @@ enum IFApplicationPaths {
 }
 
 package enum InkFlowApplicationBootstrap {
+    private static let startupLog = Logger(subsystem: LocalDiagnosticEvent.logSubsystem, category: "startup")
     @MainActor package static func run(updaterAccess: IFUpdaterAccess) -> Int32 {
         autoreleasepool {
             let user = IFApplicationPaths.user
             do { try PersonalDataTransaction.recover(user: user, defaults: .standard) }
-            catch { NSLog("InkFlow personal-data recovery requires attention; input startup stopped."); return 1 }
+            catch {
+                Self.startupLog.error("personal-data recovery requires attention; input startup stopped")
+                return 1
+            }
             if let abandoned = try? PersonalDataFiles.abandonedStaging(user: user) {
                 Task.detached(priority: .utility) { PersonalDataFiles.cleanupStaging(abandoned) }
             }
@@ -55,7 +60,7 @@ package enum InkFlowApplicationBootstrap {
                                          bundleIdentifier: bundle.bundleIdentifier) else {
                 startup.end(serverSpan, .failed)
                 startup.end(processSpan, .failed)
-                NSLog("InkFlow could not create its input method server.")
+                Self.startupLog.error("could not create the input method server")
                 IFEngine.stop()
                 let drained = DispatchSemaphore(value: 0)
                 Task.detached {
@@ -64,7 +69,7 @@ package enum InkFlowApplicationBootstrap {
                     drained.signal()
                 }
                 if drained.wait(timeout: .now() + 3) == .timedOut {
-                    NSLog("InkFlow startup statistics cleanup timed out")
+                    Self.startupLog.error("startup statistics cleanup timed out")
                 }
                 IFEngine.configureQualityRecording(nil)
                 return 1
