@@ -128,3 +128,13 @@ keyboard, mouse or trackpad action. The CoreGraphics any-event selector uses the
 Installation requires no composition, pending delivery, voice session, personal-data
 transaction or open InkFlow window. The newest handler replaces the old one. Sparkle terminates, installs
 and relaunches. If termination cleanup fails, a new attempt waits for the quiet period again.
+
+## Diagnostic events
+
+Diagnostic storage is platform-injected. Importing the engine creates no persistent diagnostics.
+Automatic events accept source-defined finite labels, UUIDs and numbers. Run ID and PID separate
+client switches from process startups. Do not conform user-text wrappers as labels or include
+arbitrary error descriptions, URL or app identifiers, paths, SQL, configuration or document text.
+Dictionary source and worker errors cross process boundaries with string codes. Only the allowlisted
+codes reach diagnostics. Omit uncontrolled `userInfo`, file names and stderr. Diagnostic fields
+stay separate from the dictionary journal and manifest.
