@@ -19,6 +19,9 @@ five bullets when the scope supports them, include only observable changes, omit
 empty sections, and exclude release, test, documentation, dependency, skill and
 repository-maintenance work unless it changes the shipped product.
 
+The `### 更新内容` bullets also fill the installer's welcome page under `X.Y.Z 更新内容`; links there
+show as plain text, so each bullet must read on its own.
+
 The GitHub title supplies the version. Keep stable installation and update steps
 in the README and link to them instead of repeating them. Add `运行要求` or
 `升级提示` only when platform requirements, installation, compatibility, migration

@@ -109,7 +109,8 @@ for name in sidecars:
 if "InkFlow.app/Contents/Info.plist" not in names:
     raise SystemExit("Sparkle update ZIP is missing its app bundle Info.plist.")
 PY
-bash macOS/scripts/build-pkg.sh "$app" "$scratch/$pkg_name" --sign "$identity" "$installer_identity"
+bash macOS/scripts/build-pkg.sh "$app" "$scratch/$pkg_name" --sign "$identity" "$installer_identity" \
+  --notes "$PWD/build/public-release-notes.md"
 mv -f "$scratch/$update_zip_name" "$update_zip"
 mv -f "$scratch/$pkg_name" "$pkg"
 printf 'Signed installer package (not yet notarized): %s\n' "$pkg"
