@@ -41,7 +41,6 @@ package enum InkFlowApplicationBootstrap {
             let settingsWindow = IFSettingsWindowController.sharedController
             settingsWindow.dictionaries = dictionaries
             settingsWindow.updaterAccess = updaterAccess
-            _ = IFSettings.sharedSettings.migrateLegacyAutomaticUpdateChecks(to: updaterAccess)
             updaterAccess.startUpdater()
             let lifecycle = IFApplicationLifecycle(stopDictionaries: { try await dictionaries.shutdown() },
                 stopEngine: { IFEngine.stop() },

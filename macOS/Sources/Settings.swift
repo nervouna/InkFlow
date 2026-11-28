@@ -392,18 +392,6 @@ final class IFSettings: ObservableObject {
         get { integer(for: "thunderMode", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "thunderMode") }
     }
-    @discardableResult
-    func migrateLegacyAutomaticUpdateChecks(to updater: IFUpdaterAccess) -> Bool? {
-        let migrationKey = "sparkleAutomaticChecksMigrationCompleted"
-        guard defaults.object(forKey: migrationKey) == nil else { return nil }
-
-        let legacyValue = defaults.object(forKey: "automaticUpdateChecksEnabled") as? NSNumber
-        let migratedValue = legacyValue == NSNumber(value: 1)
-        updater.automaticallyChecksForUpdates = migratedValue
-        updater.automaticallyDownloadsUpdates = false
-        defaults.set(true, forKey: migrationKey)
-        return migratedValue
-    }
     var voicePolishEnabled: Bool {
         get { integer(for: "voicePolishEnabled", allowed: [0, 1], fallback: 0) != 0 }
         set { set(newValue ? 1 : 0, for: "voicePolishEnabled") }
