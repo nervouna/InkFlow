@@ -3,7 +3,10 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-core-boundaries.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
-boundary_fail() { echo "FAIL boundary: $1" >&2; exit 1; }
+boundary_fail() {
+  echo "FAIL boundary: $1" >&2
+  exit 1
+}
 manifest=macOS/Quality/ranking-resources.txt
 for bundled in schemas/*.yaml schemas/lua/*.lua schemas/opencc/*; do
   grep -qxF "Rime/${bundled#schemas/}" "$manifest" || boundary_fail "$bundled is bundled but missing from $manifest"
