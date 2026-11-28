@@ -96,6 +96,13 @@ grep -Fq 'Release notes have no 更新内容 items.' "$fixture/output"
 [[ ! -e "$fixture/other.pkg" && -z "$(ls -A "$repo/build")" ]] || fail
 if build_pkg "$app" "$fixture/other.pkg" --bogus > "$fixture/output" 2>&1; then fail; fi
 grep -Fq 'Usage: build-pkg.sh' "$fixture/output"
+placeholder="$fixture/placeholder.md"
+bash .agents/skills/inkflow-release/scripts/placeholder-notes.sh HEAD > "$placeholder"
+[[ $(head -n 1 "$placeholder") == '<!-- inkflow-ci-placeholder-notes -->' ]] || fail
+build_pkg "$app" "$fixture/placeholder.pkg" --notes "$placeholder" > "$fixture/output" 2>&1
+pkgutil --expand "$fixture/placeholder.pkg" "$fixture/placeholder-expanded"
+[[ $(grep -Fc '<li>Placeholder from a CI dry run. Replace it with the public notes before publishing.</li>' \
+  "$fixture/placeholder-expanded/Resources/welcome.html") == 1 ]] || fail
 
 scripts="${component[0]}/Scripts"
 for file in preinstall postinstall register-input-source; do [[ -x "$scripts/$file" ]] || fail; done
