@@ -46,7 +46,7 @@ import InkFlowRime
         expect(synchronized, "synchronize")
         let process = Process(); process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0]); process.arguments = ["--preferences", suite]
         try process.run(); process.waitUntilExit(); expect(process.terminationStatus == 0, "independent preferences reader")
-        var document = PersonalBackupDocument(rime: "1.17.0", settings: preferences,
+        var document = PersonalBackupDocument(settings: preferences,
             dictionaries: Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map { ($0, Optional(snapshot($0))) }))
         let fixture = URL(fileURLWithPath: "/private/tmp").appendingPathComponent("personal-data-" + UUID().uuidString)
         try PersonalDataFiles.directory(fixture)
@@ -77,7 +77,7 @@ import InkFlowRime
             let snapshots = Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map {
                 ($0, Optional(snapshot($0, rows: false) + rows))
             })
-            let escaped = PersonalBackupDocument(rime: "1.17.0", settings: preferences, dictionaries: snapshots)
+            let escaped = PersonalBackupDocument(settings: preferences, dictionaries: snapshots)
             for text in snapshots.values.compactMap({ $0 }) {
                 expect(text.utf8.count <= 32 * 1024 * 1024, "escape fixture fits snapshot budget")
                 let lines = text.split(separator: "\n")
@@ -177,7 +177,7 @@ import InkFlowRime
         expect(coordinator.personalDataLifecycleReady, "synthetic engine lifecycle settled")
         let retainedEngine = IFEngine()!
         let controller = PersonalDataController(user: engineUser, helper: URL(fileURLWithPath: CommandLine.arguments[0]), settings: settings, coordinator: coordinator)
-        let complete = PersonalBackupDocument(rime: IFEngine.version, settings: preferences,
+        let complete = PersonalBackupDocument(settings: preferences,
             dictionaries: Dictionary(uniqueKeysWithValues: PersonalBackupDocument.names.map { ($0, Optional(snapshot($0))) }))
         try FileHandle.standardError.write(contentsOf: Data("TEST first production restore\n".utf8))
         try await controller.restore(complete)

@@ -72,8 +72,9 @@ struct PersonalBackupSettings: Codable, Sendable {
 }
 
 struct PersonalBackupDocument: Codable, Sendable {
+    static let rimeFormat = "1.17.0"
     var format: Int = 1
-    var rime: String
+    var rime = PersonalBackupDocument.rimeFormat
     var settings: PersonalBackupSettings
     var dictionaries: [String: String?]
     static let names = IFPortablePersonalData.names
@@ -96,7 +97,7 @@ struct PersonalBackupDocument: Codable, Sendable {
         }.joined(separator: "\n")
     }
     func validate() throws {
-        guard format == 1, rime == "1.17.0", Set(dictionaries.keys) == Set(Self.names) else { throw PersonalDataError("incompatible") }
+        guard format == 1, rime == Self.rimeFormat, Set(dictionaries.keys) == Set(Self.names) else { throw PersonalDataError("incompatible") }
         try settings.validate()
         for snapshot in dictionaries.values.compactMap({ $0 }) {
             guard snapshot.utf8.count <= 32 * 1024 * 1024, snapshot.hasPrefix("# Rime user dictionary\n"),
