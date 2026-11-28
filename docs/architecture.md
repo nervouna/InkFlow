@@ -34,6 +34,7 @@ and [application contracts](../macOS/Docs/ApplicationContracts.md) describe each
 | Custom phrases | `IFSettings`; written by the engine as Rime's `custom_phrase.txt` | |
 | Quality records | `QualityStore` (SQLite, macOS); the Linux backend | Analysis skill reads exports |
 | Prepared resources | The dictionary store's active generation | Engine reads them read-only |
+| macOS personal backup and restore | `PersonalDataBackup.swift` and `PersonalDataTransaction.swift` | Linux imports macOS backups through `personal.rs`, a subset that skips the macOS-only settings |
 
 ## Enforced rules
 
@@ -70,6 +71,7 @@ The comment lint rejects new code comments ([comment cleanup](comment-cleanup.md
 | Dictionary generator reference | `Core/Portable/dictionary/fixtures`, re-recorded from Rust with `test.sh --record` |
 | Sandboxed worker launch | `IFSandboxedWorkerLauncher` |
 | Fcitx5 option to bit mapping | `kOptionBits` in `Linux/fcitx5/src/engine.cpp` |
+| Custom-phrase rules | `phrases.rs`; Swift calls it through `IFPhraseRules`, messages in `configurationMessage` |
 
 ## Task pool
 
@@ -109,7 +111,7 @@ worth changing), `pending` (needs a decision, see #254).
 | O1 | Linux | One option table for both directions in `Linux/fcitx5/src/engine.cpp` | done (#261) |
 | O1b | Linux | `package.sh` repeats `prepare-resources.sh` | open: `prepare-resources.sh` takes no output directory |
 | O2 | Release | One app signing sequence shared by `install.sh` and the release skill's `package.sh` | dropped: `sign_sparkle` is shared; the rest differs on purpose |
-| O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | pending: the rule choice is P6 |
+| O3 | Source of truth | One custom-phrase message table for `CustomPhrase.swift` and `EnginePortable.swift` | done (#277, with P6) |
 | O4 | Source of truth | One list of compiled resource files for the receipts and engine checks | done (#264, with P12) |
 | O5 | Shallow layers | Move test-only production helpers into tests | done (#262); folding `EngineChannel.swift` dropped: `VoiceLexicon` uses it too |
 | O6 | Docs | Test-fixture contracts in `macOS/Docs`; callers run the Core `prepare-*` scripts directly | done (#263) |
@@ -120,6 +122,10 @@ worth changing), `pending` (needs a decision, see #254).
 | P11 | Build | One directory per macOS test target | done (#271) |
 | P12 | Rust | Engine creation checks the one compiled-file list | done (#264) |
 | P15 | macOS | One shortcut write gate; startup messages through the unified log | done (#258) |
+| P2 | macOS | Run macOS backup and import through Rust `personal.rs` | dropped: `personal.rs` is a subset (no shortcuts, display or voice settings, no committed phase or preference rollback, no path hardening) and macOS never runs its import or recover |
+| P3 | Swift | Drop Swift's learning revision and size checks | dropped: Swift's revision outlives engine restarts and its busy check also waits for commit delivery |
+| P4 | Source of truth | Read option defaults from `ifr_input_options_default` | dropped: the defaults agree and `InkFlowDomain` cannot import the ABI; the paging default became square brackets only everywhere (#278) |
+| P6 | Source of truth | One custom-phrase validator, in Rust | done (#277) |
 
 The remaining Core→macOS edges: `Core/scripts/test.sh` runs the macOS dictionary-generator and AI-learning
 scripts, `build-portable.sh` reads `macOS/Info.plist` for the deployment target, and `portable-notices.py`
@@ -138,3 +144,4 @@ Decisions that need the owner, their outcome and their issues are tracked in
 | 2026-11-28 | Decisions moved to #254; P7, P8 and P13 done |
 | 2026-11-28 | Governance pass: the task pool rows marked done; the ranking source fingerprint moves once (Rust engine files, `InputPreferences.swift`, `DictionaryGenerator.swift`) with no ranking change |
 | 2026-11-28 | Decided items delivered (#256–#264, #271); P2, P3, P4 and P6 reopened in #254; the ranking source fingerprint moves again (`engine.rs`, `CandidateRanking.swift`) with no ranking change |
+| 2026-11-28 | Owner decisions: P2, P3 and P4 dropped; P6 done with Rust's rules (#277); paging defaults to square brackets only (#278). ABI version 4 |
