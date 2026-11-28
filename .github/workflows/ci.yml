@@ -11,6 +11,7 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   boundaries:
@@ -106,3 +107,14 @@ jobs:
         run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/style-lint.py --base "$BASE"'
       - name: Test style lint
         run: '"$RUNNER_TEMP/comment-lint/bin/python" -B scripts/tests/test_style_lint.py'
+      - name: Test PR body check
+        run: bash scripts/tests/test_pr_body_check.sh
+      - name: Require an issue reference in the PR body
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          PR_BODY=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+          export PR_BODY
+          bash scripts/pr-body-check.sh

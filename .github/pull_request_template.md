@@ -1,6 +1,6 @@
 ## Summary
 
-Fixes #
+Fixes #N, Closes #N or Refs #N
 
 ## Acceptance
 
