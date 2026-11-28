@@ -60,6 +60,7 @@ impl InputOption {
             InputOption::FuzzyZ
                 | InputOption::FuzzyC
                 | InputOption::FuzzyS
+                | InputOption::MinusEqualPaging
                 | InputOption::EnglishPunctuation
                 | InputOption::Traditional
         )
@@ -158,7 +159,7 @@ mod tests {
             .with(InputOption::FuzzyS, true);
         assert_eq!(all.spelling_profile(), "inkflow_spelling_31");
         let patch = defaults.schema_patch();
-        assert!(patch.starts_with("key_binder:\n  bindings: [{ when: has_menu, accept: bracketleft, send: Page_Up }, { when: has_menu, accept: bracketright, send: Page_Down }, { when: has_menu, accept: minus, send: Page_Up }, { when: has_menu, accept: equal, send: Page_Down }]\npunctuator:\n  half_shape:\n    ',': '，'\n"));
+        assert!(patch.starts_with("key_binder:\n  bindings: [{ when: has_menu, accept: bracketleft, send: Page_Up }, { when: has_menu, accept: bracketright, send: Page_Down }]\npunctuator:\n  half_shape:\n    ',': '，'\n"));
         assert!(patch.contains("    '{': '「'\n    '}': '」'\n    '[': '【'"));
         assert!(patch.contains("    '\\': '、'\n    '|': '｜'\n    '`': '·'\n    '~': '～'"));
         let plain = defaults

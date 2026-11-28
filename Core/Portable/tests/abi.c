@@ -36,7 +36,7 @@ static char* take(const IFRSession* session) {
 static const char* backup_json =
     "{\"format\":1,\"rime\":\"1.17.0\",\"settings\":{\"integers\":{\"candidateCount\":7,\"fontSize\":18,"
     "\"input.abbreviation\":1,\"input.typoTolerance\":1,\"input.fuzzyZ\":0,\"input.fuzzyC\":0,"
-    "\"input.fuzzyS\":0,\"input.emoji\":1,\"input.bracketPaging\":1,\"input.minusEqualPaging\":1,"
+    "\"input.fuzzyS\":0,\"input.emoji\":1,\"input.bracketPaging\":1,\"input.minusEqualPaging\":0,"
     "\"input.englishPunctuation\":0,\"input.cornerQuotes\":1,\"input.middleDot\":1,"
     "\"input.fullwidthPipe\":1,\"input.ideographicComma\":1,\"input.traditional\":1},"
     "\"phrases\":[{\"id\":\"p1\",\"code\":\"dz\",\"text\":\"地址\"}]},"
