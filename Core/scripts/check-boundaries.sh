@@ -3,6 +3,39 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/inkflow-core-boundaries.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT
+boundary_fail() {
+  echo "FAIL boundary: $1" >&2
+  exit 1
+}
+manifest=macOS/Quality/ranking-resources.txt
+for bundled in schemas/*.yaml schemas/lua/*.lua schemas/opencc/*; do
+  grep -qxF "Rime/${bundled#schemas/}" "$manifest" || boundary_fail "$bundled is bundled but missing from $manifest"
+done
+memory_uses=$(grep -nE 'Memory\(' schemas/lua/*.lua | grep -v '^schemas/lua/inkflow_channel.lua:' \
+  | grep -vF 'env.memory = Memory(' || true)
+[[ -z "$memory_uses" ]] || boundary_fail "open a short-lived Memory through channel.with_memory: $memory_uses"
+units=$(sed -n '/^all_units=(/,/)$/p' macOS/scripts/test.sh | sed 's/^all_units=(//; s/)$//')
+manual=$(grep '^manual_harnesses=(' macOS/scripts/test.sh | sed 's/^manual_harnesses=(//; s/)$//')
+registered=" "
+pending=$(grep -o 'test-[a-z0-9-]*\.sh' macOS/scripts/test.sh || true)
+for unit in $units $manual; do
+  pending+=" test-$unit.sh"
+done
+while [[ -n "${pending// /}" ]]; do
+  next=""
+  for script in $pending; do
+    [[ "$registered" != *" $script "* ]] || continue
+    registered+="$script "
+    [[ ! -f "macOS/scripts/$script" ]] || next+=" $(grep -o 'test-[a-z0-9-]*\.sh' "macOS/scripts/$script" || true)"
+  done
+  pending=$next
+done
+for path in macOS/scripts/test-*.sh; do
+  [[ "$registered" == *" ${path##*/} "* ]] || boundary_fail "${path##*/} is in no test.sh unit or manual_harnesses"
+done
+for name in $manual; do
+  [[ -f "macOS/scripts/test-$name.sh" ]] || boundary_fail "manual_harnesses names missing script test-$name.sh"
+done
 swift=(swift); ! command -v xcrun >/dev/null || swift=(xcrun swift)
 export CLANG_MODULE_CACHE_PATH="$PWD/build/core-swiftpm/module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$CLANG_MODULE_CACHE_PATH"
