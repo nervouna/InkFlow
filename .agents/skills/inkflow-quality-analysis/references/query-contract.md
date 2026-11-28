@@ -116,7 +116,7 @@ database or empty filter result, exits 0. Help is available at each command.
 - `learning`: the L family over pair identities (design: `docs/input-quality-metrics.md` section 6), for
   known-rank regular committed decisions that carry a `pair_id`, ordered by composition start, decision time and
   sequence. It takes the shared filters (`--kind` defaults to all kinds), `--input` and `--days` (default 28, a window
-  derived like `trend`, so `--since` is refused), selects the latest known measurement cohort as `trend` does and
+  derived like `trend`), selects the latest known measurement cohort as `trend` does and
   reports the exclusions: `metric_scope` (`excluded_decisions`, `excluded_unknown_decisions`) and `pair_coverage`
   (`pair_identity` and `pair_unavailable` inside the cohort, and `text_without_hash`, the text-mode rows among them
   with a literal pair but no hash, which is every text record written before pair hashes existed). Hashes are keyed per
@@ -159,7 +159,8 @@ DST rules. Timestamp input must have `Z` or an explicit offset, e.g.
 `2026-09-07T00:00:00+08:00`. The writer stores UTC ISO timestamps to milliseconds.
 Finer boundaries are rounded upward to the next stored millisecond, preserving
 inclusive/exclusive comparisons against that storage precision. All-time is the
-default; `--until 2026-09-08` includes local September 7.
+default; `--until 2026-09-08` includes local September 7. `trend` and `learning` derive
+`--since` from `--days`, so both refuse `--since`, and they require `--until` on a local-midnight boundary.
 
 JSON is a nested object with `command`, `filters` and command data. Table output is
 a vertical `FIELD | VALUE` table, retaining complete fingerprints and escaped
@@ -216,10 +217,9 @@ evidence. The AI sample expiry policy does not change ordinary quality retention
 
 Schema v4 has application ID `0x49465131` (IFQ1). The query requires v4, checks the
 identity, required columns and exact six table names, and accepts measurement
-cohorts distinguished by their persisted fingerprints. A v1 database must first be
-migrated by the writer; v2 is migrated by the writer by adding the effectiveness
-table, and v3 by adding two columns, `commits.character_count` and
-`candidate_decisions.selected_character_count`, which stay NULL on rows written before v4. The query never creates or migrates a database. Foreign, malformed
+cohorts distinguished by their persisted fingerprints. The writer owns migration; the query never creates or migrates a database.
+The character counts `commits.character_count` and `candidate_decisions.selected_character_count` are Unicode
+scalar values and NULL on rows written before v4. Foreign, malformed
 or unknown schemas are not repaired or reset. The canonical writer/models are
 `Core/Sources/InkFlowRime/QualityStore.swift` and `QualityRecords.swift`; query fixture tests
 extract their current DDL and full acceptance verifies actual engine-written DDL.
@@ -270,15 +270,18 @@ Pair identity: a decision with a known pair carries `snapshot.codeHash` and, on 
 
 ## Manual exchange
 
-Exporting and cross-device joint analysis (export file format v1, the repeatable `--input`, `--exports-only` and `--source` flags, source identity and validation rules) are specified in [quality export and joint-analysis contract](../../../../macOS/QUALITY-EXPORT.md).
+The export file format v1, source identity and validation rules are in the [quality export contract](../../../../macOS/QUALITY-EXPORT.md); its examples use these flags.
+
+- `--input` is repeatable, takes a file or a folder, and is accepted by `summary`, `trend`, `ranking-issues`, `inspect`, `timing`, `learning` and `replay-cases`. Unless `--exports-only` is present, the local database participates and must exist. `--exports-only` needs at least one `--input`; on the exporting Mac, always pass it when reading that Mac's own weekly folder, because the local database shares its `quality-source-id` and the overlap is refused with exit 2.
+- Combined output includes `sources`: each source's retained time range, input file paths, distinct version/build metadata and deduplicated record counts. `by_source` applies the same command and filters to each device separately; `inspect`, `replay-cases` and `learning` omit it. `--source` isolates one device. Before the first export, an unmarked local database is labeled `local`.
+- Inspection IDs are namespaced as `SOURCE_ID:ORIGINAL_ID`; use the IDs returned by `ranking-issues`.
+- Different devices may have different available metric cohorts. Read each device's cohort and exclusion fields before comparing rates.
 
 ## Query implementation
 
-The recorder's rollback journal allows a reader on the live file to delay its writes. Start a read
-transaction with the configured busy timeout, acquire the read lock before copying, and run analysis
-on the private in-memory copy. The upfront read makes lock contention bounded because SQLite's
-backup operation can otherwise retry a busy source indefinitely. Take one snapshot and close the
-live database before formatting output. Timestamps are recorded at millisecond precision, while
+Start a read transaction with the configured busy timeout and acquire the read lock before copying.
+The upfront read makes lock contention bounded because SQLite's backup operation can otherwise retry a
+busy source indefinitely. Take one snapshot and close the live database before formatting output. Timestamps are recorded at millisecond precision, while
 filters preserve finer precision supplied by the caller.
 
 A first-page snapshot is comparable when its reported generation and composition evidence match the
@@ -290,7 +293,5 @@ Python.
 
 Composition and commit rates deduplicate by composition and use pooled counters. With a fingerprint
 filter, match the composition and its commits to the fingerprint attributed through its decisions.
-A decisionless composition inherits the unique fingerprint seen in the run when available. Most
-cancels and raw Returns have no decision kind, so rates depending on those compositions are suppressed
-under kind filtering. A candidate commit has a decision, so the revert rate remains meaningful.
+A decisionless composition inherits the unique fingerprint seen in the run when available.
 Private typed-text exports are owner-only and published atomically without replacing an existing file.

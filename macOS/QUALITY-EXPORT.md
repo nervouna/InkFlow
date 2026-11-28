@@ -1,12 +1,12 @@
 # Quality data export and cross-device analysis
 
-Manual quality exports let you analyze the records retained on several computers together. They do not transfer personal learning or change candidate ranking.
+Manual quality exports let you analyze the records retained on several computers together. They do not transfer personal learning or change candidate ranking. This page covers macOS records only. Linux has its own reporter, [Linux/scripts/quality.py](../Linux/README.md#local-chinese-selection-quality), whose aggregate export this contract rejects.
 
 ## Export and transfer
 
 In InkFlow Settings, open 「备份与恢复」 and choose 「导出质量数据」 under 「输入质量记录」. Choose a file location; the file is the JSON document compressed with gzip (`.json.gz`), because a month of records with text is several hundred megabytes of JSON (about 370 MB for 74,000 compositions). The result reports the saved path, composition and learning-event counts, and the earliest/latest retained record time in UTC. An empty database exports an explicit empty range and zero counts.
 
-The file includes candidate ranks and indices, selections by index, text kinds, app/client identifiers, operations/timing, content-free learning-effectiveness events (learning acts among them, as counts only: Shift+Backspace forgets and Settings deletions and restores of English entries), build/version metadata, statistical fingerprints, and record timestamps. Each candidate the engine ranked also carries three content-free facts, `type`, `corrected` and `evidence`, and each decision with a known pair carries two keyed hashes, `codeHash` and `textHash`. Text-free records keep all of them; older records lack them ([candidate facts](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format), [pair hashes](#pair-hashes)). Each commit and each selection also carries its length, `character_count` and `selected_character_count`: the number of Unicode scalar values of the text (`❤️` is 2), kept in text-free records too and null in records written before schema v4. Each commit also has a content-free post-commit window: counts of the keys typed after it and how the window ended ([details](../.agents/skills/inkflow-quality-analysis/references/interpretation.md#deletions-and-post-commit-windows)). Input codes/text, input before the first deletion, candidate text, committed text, preceding text and custom-phrase codes/text in the stored applied configuration are present only in records saved while 「同时保存输入文本」 was on; by default those strings are empty or null, each page carries `textCaptured: false`, and the configuration revision ID ends in `/text-free`. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
+The file includes candidate ranks and indices, selections by index, text kinds, app/client identifiers, operations/timing, content-free learning-effectiveness events (learning acts among them, as counts only: Shift+Backspace forgets and Settings deletions and restores of English entries), build/version metadata, statistical fingerprints, and record timestamps. Each candidate the engine ranked also carries three content-free facts, `type`, `corrected` and `evidence`, and each decision with a known pair carries two keyed hashes, `codeHash` and `textHash`. Text-free records keep all of them; older records lack them ([candidate facts](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format), [pair hashes](#pair-hashes)). Each commit and each selection also carries its length, `character_count` and `selected_character_count`, kept in text-free records too ([character counts](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#storage-and-record-format)). Each commit also has a content-free post-commit window: counts of the keys typed after it and how the window ended ([details](../.agents/skills/inkflow-quality-analysis/references/interpretation.md#deletions-and-post-commit-windows)). Input codes/text, input before the first deletion, candidate text, committed text, preceding text and custom-phrase codes/text in the stored applied configuration are present only in records saved while 「同时保存输入文本」 was on; by default those strings are empty or null, each page carries `textCaptured: false`, and the configuration revision ID ends in `/text-free`. Full applied settings, custom-phrase configuration copies, personal dictionaries, AI service configuration and credentials are excluded. Transfer the file yourself; InkFlow does not upload it.
 
 Only records still present in the local quality database are included: composition records retain 28 days; learning-effectiveness events retain 90 days, capped at 16,384. Turning text recording off removes every stored record that still carries text. In-progress input and unwritten records are not included. Local cleanup does not delete exported copies, nor the [replay files](../Core/Portable/README.md#replay-files) of `quality.py replay-cases`.
 
@@ -30,7 +30,7 @@ Settings → 「输入质量记录」 → 「每周自动导出」 (off by defau
 - **Cleanup.** After a successful export, this device's dated files older than 35 days are removed from the folder. Other files are never touched.
 - **Failure.** A missing or unwritable folder, a busy database or a document over 1 GiB leaves recording and input alone; Settings shows the reason and the next daily check retries.
 
-Analysis takes the folder as an input: `python3 "$query" trend --days 28 --exports-only --input /path/to/folder`. Do not combine a device's text-free weekly files with a manual text export of the same device: the same record differs between them and the merge is refused.
+Analysis takes the folder as an input: `python3 "$query" trend --days 28 --exports-only --input /path/to/folder`. Do not combine a device's text-free weekly files with a manual text export of the same device: the same record differs between them and the merge is refused. The same holds for the local database of the exporting Mac, which carries the same `quality-source-id`: on that Mac, always pass `--exports-only` when reading its own weekly folder, or the command fails with exit 2.
 
 ## Storage protection
 
@@ -54,11 +54,11 @@ The hashes trade part of the text-free guarantee for the learning metrics (`qual
 
 `quality-pair-key` is 32 random bytes in a file created `0600` (whatever the directory's mode), generated once per device. It is never exported, never part of the personal-data backup and never in a record or log, and both exports refuse it as a destination. 「清除记录」 deletes it and generates a new one, so cleared records cannot be linked to later ones; turning text recording on or off leaves it alone. Deleting the file by hand has the same effect from the next start. It is not stored in the Keychain, for the reason above.
 
-Recording the hashes in the text-free default is a privacy decision, not an instrument detail, adopted 2026-10-21 with #137; the text-free default itself was adopted deliberately (#54). Open question for the user: restricting the hashes to text-free records.
+Recording the hashes in the text-free default is a privacy decision, not an instrument detail, adopted 2026-10-21 with #137; the text-free default itself was adopted deliberately (#54).
 
 ## Analyze on another computer
 
-Run these commands from the InkFlow repository. Use the analysis script and the `quality_exchange.py` next to it from this feature revision or a later version that supports export format v1.
+Run these commands from the InkFlow repository, with the analysis script and the `quality_exchange.py` next to it.
 
 ```sh
 query=.agents/skills/inkflow-quality-analysis/scripts/quality.py
@@ -75,17 +75,15 @@ python3 "$query" summary --exports-only \
 python3 "$query" trend --exports-only --input /path/to/work.json \
   --input /path/to/home.json --source DEVICE_UUID --days 7 --format json
 
-# Existing evidence investigation works with the same input flags.
+# Evidence investigation works with the same input flags.
 python3 "$query" ranking-issues --input /path/to/work.json --format json
 python3 "$query" inspect 'DEVICE_UUID:COMPOSITION_ID' \
   --input /path/to/work.json --format json
 ```
 
-`--input` may be repeated on `summary`, `trend`, `ranking-issues`, `inspect`, `timing`, `learning` and `replay-cases`. Unless `--exports-only` is present, the local database participates and must exist. The existing `--since`, exclusive `--until`, app, kind and fingerprint filters still apply. Calendar days use the analysis computer's local timezone; persisted record timestamps stay in UTC. Choose the same analysis timezone when comparing reports.
+Flags, `sources`, `by_source` and the namespaced inspection IDs are specified in the [query contract](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#manual-exchange). Choose the same analysis timezone when comparing reports.
 
-Combined output includes `sources` with each source's retained time range, input file paths, distinct version/build metadata and deduplicated record counts. `by_source` applies the same command and filters separately to each device. `--source` isolates one device. Inspection IDs are namespaced as `SOURCE_ID:ORIGINAL_ID`; use the IDs returned by `ranking-issues`. Local-only commands without exchange flags retain their original output and IDs. Before the first export, an unmarked local database is labeled `local` in joint analysis.
-
-The combined and per-device results reuse the original query functions. Statistical-rule fingerprints remain compatibility boundaries: never pool quality rates across incompatible or unknown metric definitions. The existing trend command selects the latest known metric-definition cohort in each requested scope and reports exclusions. Different devices may have different available cohorts; consult their cohort/exclusion fields before comparing rates. App versions remain annotations, not causal evidence.
+Combined and per-device results reuse the original query functions, so rates are [never pooled across fingerprints](../.agents/skills/inkflow-quality-analysis/references/interpretation.md#measurement-fingerprints-and-pooled-rates): different devices may have different available cohorts, so read each device's cohort and exclusion fields before comparing rates.
 
 Imported records are loaded into an ephemeral in-memory SQLite database. No external rows, tables or migrations enter the local daily quality database. Export uses a [read-only committed snapshot](https://www.sqlite.org/lang_transaction.html) on a utility task; neither exporting nor analysis adds work to key-event handling.
 
@@ -103,9 +101,9 @@ The UTF-8 JSON root contains:
 | `range.first`, `range.last` | Earliest/latest composition start or learning-event time, or both null when empty |
 | `tables` | Arrays of records for the six quality tables described in the query contract |
 
-The first export creates `quality-source-id` beside `quality.sqlite3`; later exports reuse it. This marker is source metadata, not a quality-database migration. All retained records, including those collected before this feature, acquire the file's source ID during export/analysis. No backfill into the local database is needed. Keep this marker on its original device and do not copy it to another device; deleting it creates a new identity on the next export, preventing deduplication with older exports. It is outside personal-data backup/restore and quality-record clearing.
+The first export creates `quality-source-id` beside `quality.sqlite3`; later exports reuse it. This marker is source metadata, not a quality-database migration. All retained records acquire the file's source ID during export and analysis. Keep this marker on its original device and do not copy it to another device; deleting it creates a new identity on the next export, preventing deduplication with older exports. It is outside personal-data backup/restore and quality-record clearing.
 
-Record timestamps use the writer's UTC millisecond form (`YYYY-MM-DDTHH:MM:SS.sssZ`). Rows keep their original IDs, timestamps, version/build metadata and statistical fingerprints in the file. `config_revisions.applied_config_json` is replaced with `{}`; legacy page `configuration` objects are removed. `configurationRevisionID` links and recorded fingerprints remain. This deliberate omission prevents exporting full settings or custom-phrase inventories; it limits configuration-detail inspection to identities and metadata.
+Rows keep their original IDs, timestamps ([UTC milliseconds](../.agents/skills/inkflow-quality-analysis/references/query-contract.md#cli-and-output)), version/build metadata and statistical fingerprints in the file. `config_revisions.applied_config_json` is replaced with `{}`; legacy page `configuration` objects are removed. `configurationRevisionID` links and recorded fingerprints remain. This deliberate omission prevents exporting full settings or custom-phrase inventories; it limits configuration-detail inspection to identities and metadata.
 
 Deduplication keys are `(source_id, table, original_id)`. Learning-effectiveness events additionally use `run_id` and `occurred_at`, because their integer IDs may be reused after retention cleanup. Identical repeated files and overlapping exports count each record once. Records from different devices remain separate even if their original IDs match. Different JSON key order/whitespace does not change equality. A recording run's cumulative counters/status come from its latest snapshot and are never summed repeatedly. Conflicting immutable records with the same identity reject the whole command instead of choosing silently.
 
@@ -113,7 +111,7 @@ Each document is limited to 1 GiB, measured uncompressed, because analysis loads
 
 ## Tests
 
-`test.sh quality-capture-query` covers the Settings exporter, roundtrips, deduplication across sources and overlapping files, and rejected corruption.
+`test.sh quality-capture-query` covers the Settings exporter, roundtrips, deduplication across sources and overlapping files, and rejected corruption. The fixtures of the Python query tests are described in [Python quality query fixtures](Docs/QualityQueryFixtures.md).
 
 ## Writer implementation
 
