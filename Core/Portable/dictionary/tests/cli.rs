@@ -58,9 +58,7 @@ fn cli_checks_inputs_before_publishing_and_refuses_replacement() {
     ));
     fs::create_dir(&root).unwrap();
     let _scratch = Scratch(root.clone());
-    let references = std::env::var_os("INKFLOW_DICTIONARY_REFERENCE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures"));
+    let references = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures");
     let mut catalog: Vec<SourceSpec> =
         serde_json::from_slice(&fs::read(references.join("catalog.json")).unwrap()).unwrap();
     let data = "---\n...\n甲\tjia\t100\n".as_bytes();

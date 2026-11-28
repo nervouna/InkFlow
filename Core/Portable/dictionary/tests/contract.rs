@@ -14,9 +14,7 @@ struct Case {
 }
 
 fn references() -> PathBuf {
-    std::env::var_os("INKFLOW_DICTIONARY_REFERENCE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures"))
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
 }
 fn catalog() -> Vec<SourceSpec> {
     serde_json::from_slice(&fs::read(references().join("catalog.json")).unwrap()).unwrap()
