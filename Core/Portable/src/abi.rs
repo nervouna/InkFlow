@@ -13,7 +13,7 @@ use crate::{
 use std::{
     cell::RefCell,
     collections::BTreeMap,
-    ffi::{CStr, CString, c_char, c_int, c_void},
+    ffi::{CStr, CString, c_char, c_int},
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
     ptr, slice,
