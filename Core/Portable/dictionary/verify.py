@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the Rust generator with explicit Swift reference outputs and pinned inputs."""
+"""Compare the Rust generator with the recorded corpus fixture and pinned inputs, or re-record it."""
 import argparse
 import hashlib
 import json
@@ -65,7 +65,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', type=Path, required=True)
     parser.add_argument('--catalog', type=Path, required=True)
-    parser.add_argument('--swift', type=Path)
+    parser.add_argument('--record', action='store_true')
     parser.add_argument('--bridge', type=Path)
     parser.add_argument('--report', type=Path, required=True)
     args = parser.parse_args()
@@ -79,17 +79,16 @@ def main():
         subprocess.run([str(args.binary), 'spelling', str(generated / 'pinyin_simp.dict.yaml'), str(schemas)], check=True)
         actual = snapshot(generated, schemas)
         assert len(actual['spellingSHA256']) == 33
-        if args.swift:
-            assert (generated / 'pinyin_simp.dict.yaml').read_bytes() == (args.swift / 'pinyin_simp.dict.yaml').read_bytes(), 'Dictionary bytes differ from Swift'
-            expected = snapshot(args.swift, args.swift)
-            equivalent(actual, expected)
-        else:
-            expected = json.loads((FIXTURES / 'corpus.json').read_text())
-            equivalent(actual, expected)
+        if args.record:
+            (FIXTURES / 'corpus.json').write_text(json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + '\n')
+            print('Recorded corpus.json')
+            return
+        expected = json.loads((FIXTURES / 'corpus.json').read_text())
+        equivalent(actual, expected)
         args.report.mkdir(parents=True, exist_ok=True)
         (args.report / 'corpus.json').write_text(json.dumps(expected, ensure_ascii=False, indent=2) + '\n')
         (args.report / 'rust-corpus.json').write_text(json.dumps(actual, ensure_ascii=False, indent=2) + '\n')
-        print(f"PASS pinned corpus: {actual['manifest']['entryCount']} rows, dictionary, all 32 profiles and the context index match Swift")
+        print(f"PASS pinned corpus: {actual['manifest']['entryCount']} rows, dictionary, all 32 profiles and the context index match the recorded corpus")
         if args.bridge:
             native_dictionary, native_schemas = root / 'native-dictionary', root / 'native-spelling'
             subprocess.run([str(args.bridge), 'generate', str(args.catalog), str(source), str(source / 'legacy.yaml'),
@@ -104,10 +103,6 @@ def main():
             assert (native_schemas / 'pinyin_simp.context.bin').read_bytes() == (schemas / 'pinyin_simp.context.bin').read_bytes()
             (args.report / 'swift-ffi-corpus.json').write_text(json.dumps(native, ensure_ascii=False, indent=2) + '\n')
             print('PASS Swift in-process Rust ABI: complete dictionary, manifest, 32 spelling profiles and context index')
-    if args.swift:
-        for name in ('catalog.json', 'reference.json', 'corpus.json'):
-            equivalent(json.loads((args.report / name).read_text()), json.loads((FIXTURES / name).read_text()), name)
-        print('PASS recorded fixtures match the current Swift reference')
 
 
 if __name__ == '__main__':

@@ -31,11 +31,6 @@ struct DictionaryGeneratorTests {
     }
     static func text(_ result: IFDictionaryGeneration) -> String { String(decoding: result.dictionary, as: UTF8.self) }
     static func main() throws {
-        if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--export-reference" {
-            try exportReference(cases: URL(fileURLWithPath: CommandLine.arguments[2]),
-                                output: URL(fileURLWithPath: CommandLine.arguments[3]))
-            return
-        }
         try spellingGeneration()
         expect(IFDictionaryHash.gitBlob(Data("hello\n".utf8)) == "ce013625030ba8dba906f756967f9e9ca394464a", "Git blob includes byte-count header")
         for reading in ["  LÜ\u{a0}SE  ", "LU\u{308} SE"] {
@@ -176,21 +171,12 @@ struct DictionaryGeneratorTests {
         expect(try JSONDecoder().decode(IFDictionaryManifest.self,
             from: Data(contentsOf: destination.appendingPathComponent(IFDictionaryManifest.filename))) == result.manifest,
                "Build CLI and shared runtime module generate equivalent metadata")
-        let reference = try IFReferenceDictionaryGenerator.generate(inputs: inputs, corrections: corrections)
-        expect(reference.dictionary == result.dictionary, "Production Rust retains Swift dictionary bytes")
-        expect(reference.manifest == result.manifest, "Production Rust retains pinned Swift manifest values")
-        let referenceDirectory = destination.deletingLastPathComponent().appendingPathComponent("test-chinese-reference")
-        try FileManager.default.createDirectory(at: referenceDirectory, withIntermediateDirectories: true)
-        try reference.dictionary.write(to: referenceDirectory.appendingPathComponent(IFDictionaryCatalog.dictionaryFilename))
-        try reference.manifest.encoded().write(to: referenceDirectory.appendingPathComponent(IFDictionaryManifest.filename))
-        try IFReferenceSpellingGenerator.write(dictionary: reference.dictionary, to: referenceDirectory)
-        try IFContextRanker.buildIndex(dictionary: reference.dictionary)
-            .write(to: referenceDirectory.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
-        for (name, bytes) in try IFSpellingGenerator.generate(dictionary: result.dictionary) {
+        let spelling = try IFSpellingGenerator.generate(dictionary: result.dictionary)
+        for (name, bytes) in spelling {
             expect(try Data(contentsOf: destination.appendingPathComponent(name)) == bytes, "Build CLI and runtime spelling bytes match: \(name)")
         }
         expect(try Data(contentsOf: destination.appendingPathComponent(IFDictionaryCatalog.contextIndexFilename))
-               == IFContextRanker.buildIndex(dictionary: result.dictionary), "Build CLI and runtime context index bytes match")
+               == spelling[IFDictionaryCatalog.contextIndexFilename], "Build CLI and runtime context index bytes match")
         expect(text(result).contains("歇后语\txie hou yu\t72\n"), "Preserve Frost 歇后语 weight")
         expect(text(result).contains("肃然起敬\tsu ran qi jing\t337\n"), "Preserve Frost 肃然起敬 weight")
         print("PASS pinned corpus: \(result.manifest.entryCount) records, CLI/runtime byte parity, required term weights")

@@ -14,9 +14,7 @@ struct Case {
 }
 
 fn references() -> PathBuf {
-    std::env::var_os("INKFLOW_DICTIONARY_REFERENCE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures"))
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
 }
 fn catalog() -> Vec<SourceSpec> {
     serde_json::from_slice(&fs::read(references().join("catalog.json")).unwrap()).unwrap()
@@ -79,45 +77,52 @@ fn equivalent(actual: &Value, expected: &Value, path: &str) {
     }
 }
 
+fn outcome(case: &Case) -> Value {
+    let (inputs, catalog) = fixture(case);
+    match generate(&inputs, case.corrections.as_bytes(), &catalog) {
+        Ok(result) => {
+            let schemas: BTreeMap<_, _> = spelling(&result.dictionary)
+                .unwrap()
+                .into_iter()
+                .map(|(name, bytes)| (name, sha256(&bytes)))
+                .collect();
+            serde_json::json!({"manifest": result.manifest, "spellingSHA256": schemas})
+        }
+        Err(error) => {
+            let mut failure = serde_json::json!({"code": error.code});
+            if let Some(source) = &error.source {
+                failure["source"] = Value::from(source.as_str());
+            }
+            if let Some(line) = error.line {
+                failure["line"] = Value::from(line as u64);
+            }
+            serde_json::json!({"error": failure})
+        }
+    }
+}
+
 #[test]
-fn swift_reference_contract() {
+fn recorded_reference_contract() {
     let cases: Vec<Case> = serde_json::from_str(include_str!("../fixtures/cases.json")).unwrap();
+    if std::env::var_os("INKFLOW_RECORD_REFERENCE").is_some() {
+        let recorded: BTreeMap<_, _> = cases
+            .iter()
+            .map(|case| (case.name.clone(), outcome(case)))
+            .collect();
+        let mut text = serde_json::to_string_pretty(&recorded).unwrap();
+        text.push('\n');
+        let target = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures/reference.json");
+        fs::write(target, text).unwrap();
+        return;
+    }
     let expected: BTreeMap<String, Value> =
         serde_json::from_slice(&fs::read(references().join("reference.json")).unwrap()).unwrap();
     assert_eq!(cases.len(), expected.len());
     for case in &cases {
-        let (inputs, catalog) = fixture(case);
-        match generate(&inputs, case.corrections.as_bytes(), &catalog) {
-            Ok(result) => {
-                let schemas: BTreeMap<_, _> = spelling(&result.dictionary)
-                    .unwrap()
-                    .into_iter()
-                    .map(|(name, bytes)| (name, sha256(&bytes)))
-                    .collect();
-                let actual =
-                    serde_json::json!({"manifest": result.manifest, "spellingSHA256": schemas});
-                equivalent(&actual, &expected[&case.name], &case.name);
-            }
-            Err(error) => {
-                let expected = &expected[&case.name]["error"];
-                assert_eq!(Some(error.code), expected["code"].as_str(), "{}", case.name);
-                assert_eq!(
-                    error.source.as_deref(),
-                    expected["source"].as_str(),
-                    "{}",
-                    case.name
-                );
-                assert_eq!(
-                    error.line.map(|v| v as u64),
-                    expected["line"].as_u64(),
-                    "{}",
-                    case.name
-                );
-            }
-        }
+        equivalent(&outcome(case), &expected[&case.name], &case.name);
     }
     println!(
-        "PASS {} Swift/Rust contract cases, manifests, 32 spelling profiles and context indexes",
+        "PASS {} recorded contract cases, manifests, 32 spelling profiles and context indexes",
         cases.len()
     );
 }
