@@ -1,6 +1,6 @@
 ---
 name: inkflow-release
-description: Publish or draft an InkFlow macOS release from main. Use for release requests with a version or major/minor/patch. For a local trial build, use the macOS development guide.
+description: Publish or draft an InkFlow macOS release from main, or publish a drafted Linux release. Use for release requests with a version or major/minor/patch. For a local trial build, use the macOS development guide.
 ---
 
 # InkFlow release
@@ -25,14 +25,18 @@ and confirm the intended bump. For a request naming a bump, use it directly.
 
 ## Local release
 
-Run commands from the repository root in the release checkout.
+Run commands from the repository root in the release checkout. From a worktree, export
+`INKFLOW_RELEASE_CONFIG=<main checkout>/.release.local.plist`. `release.sh` pushes `HEAD` to `main` and requires
+`HEAD` to contain `origin/main`, so the `main` branch need not be checked out.
 
 ```sh
 release_scripts=.agents/skills/inkflow-release/scripts
 ```
 
-1. **Preflight.** On clean `main`, run `git fetch origin --tags` and fast-forward only. Confirm the proposed
-   tag is free. Run `gh auth status` and `bash "$release_scripts/check-credentials.sh"`.
+1. **Preflight.** On a clean checkout at `origin/main`, run `git fetch origin --tags` and fast-forward only. Confirm
+   the proposed tag is free. Run `gh auth status` and `bash "$release_scripts/check-credentials.sh"`.
+   `gh api repos/nervouna/InkFlow/releases/latest --jq .tag_name` must start with `v`; if not, restore it first
+   ([Linux release](references/linux.md)).
 2. **Bump.** Set `bump` to the selected component and run `bash "$release_scripts/bump-version.sh" "$bump"`.
    Verify the resulting version. Commit only `macOS/Info.plist` as `chore(release): vX.Y.Z (build N)`.
 3. **Verify once.** Run `bash macOS/scripts/release-verification.sh` to build, run `test.sh all`, check the
@@ -42,11 +46,9 @@ release_scripts=.agents/skills/inkflow-release/scripts
    its notarization ZIP under `build/releases/InkFlow-X.Y.Z-BUILD/`.
 5. **Notes.** Write Chinese user-facing notes to `build/public-release-notes.md`. See [public notes](references/public-notes.md).
 6. **Ship.** Run `bash "$release_scripts/release.sh"` for a stable release. Add `--draft` to leave the GitHub
-   draft, or `--prerelease` to publish while keeping the previous stable release in Sparkle's feed. The script
-   checks the package and embedded tool signatures, notarizes and staples the app and installer, generates
-   the Sparkle app-only ZIP and appcast, and bundles the dictionary corresponding source. It writes
-   `SHA256SUMS` and checks downloaded assets against the local files. A later publishing run reuses the
-   draft. To promote a pre-release without a rebuild, run `gh release edit vX.Y.Z --prerelease=false --latest`.
+   draft, or `--prerelease` to publish while keeping the previous stable release in Sparkle's feed. A later
+   publishing run reuses the draft. To promote a pre-release without a rebuild, run
+   `gh release edit vX.Y.Z --prerelease=false --latest`.
 
 ## Release from GitHub Actions
 
@@ -70,3 +72,7 @@ number above earlier release builds and uses [configured credentials](references
 
 Read [release recovery](references/recovery.md) before retrying an interrupted run. Report the release or draft
 URL, version/build and verification result.
+
+## Linux release
+
+Publish a drafted `linux-vX.Y.Z` as described in [Linux release](references/linux.md). Keep it off Latest.

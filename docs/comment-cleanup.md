@@ -58,20 +58,3 @@ Component decisions are in the
 [Fcitx5 adapter guide](../Linux/fcitx5/README.md), [Linux guide](../Linux/README.md),
 [dictionary generation contract](../Core/Portable/dictionary/README.md) and
 [release configuration](../.agents/skills/inkflow-release/references/configuration.md).
-
-## CI decisions
-
-On Linux, the shared-core boundary check dumps the root Swift manifest and checks it against the standalone Core
-manifest. Manifest evaluation avoids resolving Sparkle. The root products need the macOS SDK, CryptoKit, AppKit,
-InputMethodKit, the Sparkle framework and macOS librime. The dictionary job pairs the Rust checks with frozen Swift
-fixtures. The [Fcitx5 job](../Linux/fcitx5/README.md#continuous-integration) reuses the ABI test's debug archive.
-
-The PR workflow always decides whether to run the two required macOS jobs. It skips them for docs-only changes,
-which lets GitHub satisfy the required checks without allocating a Mac. The quick group builds and exercises the root
-products. The parallel portable group checks the source-built native runtime, production-resource parity and the
-Swift link. The full suite is a release step. The jobs use the same pinned CMake and Ninja versions as Linux.
-GitHub-hosted macOS runners need the pipx bin directory added to the Actions path.
-
-The native cache retains dependencies, librime and the Cargo target directory. Prepared-resource directories are
-per-run. The resource cache keys follow the pinned dependencies and the preparation recipe. Resource inputs are
-verified by SHA-256, so stale caches can require a download or rebuild.

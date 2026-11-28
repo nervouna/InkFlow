@@ -15,4 +15,15 @@ Launch Services can then identify the original installed URL for a graceful quit
 
 Atomically swap the incoming app with the old one so the installed path remains present. The old
 bundle remains at the candidate path. A first install uses an exclusive rename to prevent overwrite.
+Installer scripts run as the logged-in user with that user's home directory. Preinstall requests a
+graceful application shutdown through the lifecycle tool so the incumbent app can run its termination
+handler. Postinstall can remove the staging directory after either swap outcome. It contains the old
+app after success or the staged app after a failure. The swap keeps the registered path continuously
+present, which macOS 27's input menu requires, and the update never restarts the menu agent, because
+restarting it can make the input menu disappear. `refresh-menu.sh` is a separate current-user diagnostic
+for that agent.
+
+Local update checks process and input-source observations in the real login session. It checks for
+an installed-app replacement even when the helper exits before confirming success.
+
 See [the packaging workflow](../DEVELOPMENT.md#building-the-installer-package) for the shell entry points.

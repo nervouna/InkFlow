@@ -7,7 +7,7 @@ InkFlow uses Fcitx5 on Linux. ARM64 Omarchy/Hyprland is working; Steam Deck, KDE
 In [Linux releases](https://github.com/nervouna/InkFlow/releases?q=linux-v), choose a published
 `linux-vX.Y.Z` for ARM64 Omarchy/Hyprland. Download the aarch64 archive and `SHA256SUMS-linux` to the same
 directory. The separate `InkFlow-X.Y.Z-linux-source.tar.xz` contains the corresponding source and rebuild instructions.
-With Fcitx5 and Python 3.11.4 or newer installed, replace the example version below:
+With Fcitx5 and Python 3 installed, replace the example version below:
 
 ```sh
 version=0.1.0
@@ -21,7 +21,7 @@ Select **InkFlow Pinyin** in Fcitx5. Installing preserves your other input metho
 
 ## Build a local package
 
-Use a committed checkout and the [native build requirements](../Core/Portable/README.md#build-and-test), plus the Fcitx5 development files (`fcitx5` on Arch, `libfcitx5core-dev` on Ubuntu). Python 3.11 or newer, `ldd`, `pgrep` and an existing Fcitx5 installation are required on the installation target.
+Use a committed checkout and the [native build requirements](../Core/Portable/README.md#build-and-test), plus the Fcitx5 development files (`fcitx5` on Arch, `libfcitx5core-dev` on Ubuntu). `python3`, `ldd`, `pgrep` and an existing Fcitx5 installation are required on the installation target.
 
 ```sh
 bash Linux/scripts/package.sh
@@ -76,7 +76,7 @@ python3 ~/.local/share/inkflow/current/install.py update
 python3 ~/.local/share/inkflow/current/install.py update --tag linux-vX.Y.Z --service NAME
 ```
 
-Update uses the network only when you run it; there is no background or automatic check. It downloads the release's package and `SHA256SUMS-linux` over HTTPS, verifies the archive's SHA-256 before extracting it, and then runs that package's own `install.py install`. If the installed version already matches the release, it reports that and downloads nothing else. The exit status is the install's.
+Update needs Python 3.11.4 or newer (safe tar extraction). It uses the network only when you run it; there is no background or automatic check. It downloads the release's package and `SHA256SUMS-linux` over HTTPS, verifies the archive's SHA-256 before extracting it, and then runs that package's own `install.py install`. If the installed version already matches the release, it reports that and downloads nothing else. The exit status is the install's.
 
 ## Roll back or uninstall
 
@@ -139,34 +139,21 @@ Paths below use the default XDG directories; `XDG_DATA_HOME` and `XDG_CONFIG_HOM
 | `~/.local/share/fcitx5/inputmethod/inkflow-pinyin.conf` | Input-method entry |
 | `~/.config/fcitx5/conf/inkflow.conf` | Options, custom phrases and explicit backup-import request |
 
-## Prepare a Linux release
+## Publish a release
 
-Run **Linux Release** in GitHub Actions on `main` and enter an independent `X.Y.Z` version. The native ARM64
-runner builds against the Omarchy ARM stable mirror, checks both archives, loads the extracted addon on a private
-D-Bus, and exercises install, upgrade, rollback and uninstall. A successful run links its GitHub Release draft
-in the run summary. The CI container uses Arch4Edu's import of the upstream generic Arch Linux ARM
-rootfs. On upload failure, rerun the failed job to resume with the same verified artifact. The job keeps
-completed uploads and clears an empty GitHub starter asset before retrying it.
-
-For input-path changes, compare the previous published package and the draft on the same target using the
-[frontend latency probe](fcitx5/README.md#frontend-latency).
-
-While signed in, open the draft and follow its install instructions on an ARM64 Omarchy/Hyprland machine.
-Check that selecting InkFlow Pinyin and committing a candidate work. After confirming the install, edit the draft,
-leave **Set as the latest release** unchecked and publish it. Alternatively, promote it with
-`gh release edit linux-vX.Y.Z --draft=false --latest=false`. This keeps the repository's Latest link on macOS.
-The Linux updater discovers the published Linux tag.
+Maintainers publish a release through the [Linux release steps](../.agents/skills/inkflow-release/references/linux.md).
 
 ## Focused checks
 
 ```sh
 python3 -B Linux/scripts/test_install.py
+python3 -B Linux/scripts/test_quality.py
 bash Linux/fcitx5/test.sh
 PYTHON=/path/to/python-with-dbus-next bash Linux/fcitx5/test-installed.sh
 PYTHON=/path/to/python-with-dbus-next python3 -B Linux/scripts/test_package.py build/linux/package
 ```
 
-Run release verification on the target userspace from a clean checkout with the final archives.
+Run release verification on the target userspace from a clean checkout with the final archives from `bash Linux/scripts/package.sh --release VERSION`: `bash Linux/scripts/check-release.sh VERSION`.
 `Linux/scripts/preflight.sh` is read-only and can inspect the target over SSH as the desktop user.
 
 The installer tests use temporary directories and a fake service. The real-package test installs into a temporary prefix, upgrades to a test-only package identity containing the same binaries, rolls back, and uninstalls. It loads the addon after each switch and checks that personal files survive. The installed-addon tests use a private D-Bus, disposable configuration and personal data; they do not type into desktop applications. See [the adapter README](fcitx5/README.md) for coverage and the remaining target checks.

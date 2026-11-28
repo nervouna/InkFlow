@@ -90,9 +90,10 @@ store, filesystem and reporting boundaries.
 
 `DictionaryCoordinator` owns requests across Settings window closure. Restrict its unified logs to
 source, protocol and worker diagnostics and split payloads at scalar boundaries to stay within the
-OS's roughly 1 KiB log entry size. Document context and learning data are excluded. `DictionaryWorkerRunner` launches its
-configured local executable with a controlled environment that excludes inherited credentials, user
-paths and dynamic-loader overrides. `sandbox-exec` launch failure is fatal to the request. Startup's
+OS's roughly 1 KiB log entry size. Document context and learning data are excluded. `IFSandboxedWorkerLauncher`,
+used by `DictionaryWorkerRunner` and the personal-data backup worker, launches its configured local executable
+through `sandbox-exec` with a controlled environment that excludes inherited credentials, user paths and
+dynamic-loader overrides. `sandbox-exec` launch failure is fatal to the request. Startup's
 synchronous bootstrap reads inert data only, never executable code from an old bundle.
 
 The personal-data backup uses an explicit missing value for an absent dictionary, distinct from an
@@ -116,9 +117,16 @@ production initializer harness. Canonicalize old independent input preferences b
 a composition snapshot. Persist the user's quality-recording preference even if the writer has failed
 for the current process. See [quality export](../QUALITY-EXPORT.md) for retention and scheduling.
 
+Accessory apps have no storyboard main menu. An Edit-only menu handles Command-V but leaves Command-W and
+Command-M unbound. Settings and personal-learning presentation install the application, File, Edit and Window
+menus with standard nil-target actions, so AppKit routes commands to the active window or field editor.
+Repeated presentation reuses the same menu items. The background input method has no Quit command. Check
+closing, minimizing, hiding and field editing in the app.
+
 AppKit owns the window constraints across SwiftUI pages. Shortcut capture uses the native button
 under the accessibility proxy and receives events only while the button is first responder. The
-[debugging index](../DEBUGGING.md) covers menu routing and regular activation for permission prompts.
+[debugging index](../DEBUGGING.md#settings-disappears-after-first-microphone-authorization-github-3) covers
+regular activation for permission prompts.
 The About view uses the version and build to locate the corresponding source archive attached
 to the release.
 

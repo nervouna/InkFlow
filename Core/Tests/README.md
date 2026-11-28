@@ -71,8 +71,7 @@ session. Use valid synthetic identity for lifecycle tests; malformed metadata is
 store tests. A new syllable must rebuild the spelling guard in both downloaded and dictionary-only
 preparation even when the bundle still uses its old inventory.
 
-The retained Swift generator is a compatibility reference for the [Rust generator](../Portable/dictionary/README.md).
-It consumes only the tab-separated body, treating remote headers and imports as inert.
+The [Rust generator](../Portable/dictionary/README.md) is the only dictionary generator. It consumes only the tab-separated body, treating remote headers and imports as inert.
 Specialty dictionaries fill weights only where the calibrated base union has a gap and cannot feed
 back into overlap calibration. Saturation is applied at the signed Rime weight boundary to mapped
 source weights. A single spelling inventory supplies normal equivalents, enabled fuzzy pairs and
@@ -80,7 +79,7 @@ the full-spelling collision set. Only typo copies carry transformations. Validat
 aliases and remove the marker before compiling, preserving original and fuzzy paths.
 
 [`test-prepare-rime.sh`](../scripts/test-prepare-rime.sh) compares CJK data by bytes under
-`LC_ALL=C` because macOS AWK locale collation can compare distinct strings as equal. It builds
+the C locale ([why](../../macOS/Docs/TestHarnessContracts.md#test-fixture-constraints)). It builds
 stand-in generators in a discarded fixture repository so the English policy tests are isolated
 from the Chinese/spelling generator tests. It verifies that spelling generation sees the replaced
 Chinese dictionary and that empty admission data cannot fall back to historical weights.
